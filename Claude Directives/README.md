@@ -49,32 +49,23 @@ Claude Directives/
 ### パッケージ操作制約 (`rules/80-package-operations.md`)
 パッケージの更新は `ClaudeUpdatePackage` 経由で行い、`Import`/`Export` による手動読み書きは禁止。関数名は `_info/docs/api.md` に記載されたもののみ使用し、推測で生成しない。
 
-## 配置先
-
-このフォルダの内容を `~/.claude/` にコピーして使用する。
-
-```
-~/.claude/
-  CLAUDE.md
-  rules/
-    01-wolfram-general.md
-    10-nbaccess.md
-    ...
-  skills/
-    wolfram-general/SKILL.md
-    nbaccess-notebook-access/SKILL.md
-    ...
-```
-
 ## インストール
 
-`install-claude-directives.wl` を Mathematica で読み込み、以下を実行する:
+このディレクトリを `$packageDirectory` に配置します。claudecode.wl 関数が自動的にディレクティブを検出・活用します。
 
-```mathematica
-InstallClaudeDirectives[]
 ```
-
-デフォルトでは `FileNameJoin[{$packageDirectory, "Claude Directives"}]` から `FileNameJoin[{$HomeDirectory, ".claude"}]` へ再帰コピーする。
+$packageDirectory/
+  Claude Directives/
+    CLAUDE.md
+    rules/
+      01-wolfram-general.md
+      10-nbaccess.md
+      ...
+    skills/
+      wolfram-general/SKILL.md
+      nbaccess-notebook-access/SKILL.md
+      ...
+```
 
 GitHub 連携で `Claude Directives` フォルダをリポジトリに含める場合:
 

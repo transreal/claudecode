@@ -10,10 +10,10 @@
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[       154,          7]
-NotebookDataLength[      6468,        175]
-NotebookOptionsPosition[      4842,        140]
-NotebookOutlinePosition[      5259,        157]
-CellTagsIndexPosition[      5216,        154]
+NotebookDataLength[     11143,        274]
+NotebookOptionsPosition[      8573,        224]
+NotebookOutlinePosition[      8993,        241]
+CellTagsIndexPosition[      8950,        238]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
@@ -68,35 +68,79 @@ Cell["Github\:30ea\:30dd\:30b8\:30c8\:30ea\:306e\:4f5c\:6210", "Subsection",
   3.9827247098219795`*^9}},ExpressionUUID->"f110b9b2-2479-2b4d-8685-\
 9d148435f314"],
 
+Cell[CellGroupData[{
+
 Cell[BoxData[
- RowBox[{"GitHubCreateRepository", "[", 
-  RowBox[{"\"\<claudecode\>\"", ",", 
-   RowBox[{"ExtraDirectories", "->", 
-    RowBox[{"{", "\"\<Claude Directives\>\"", "}"}]}], ",", 
-   RowBox[{"Public", "->", "True"}]}], "]"}]], "Input",
- CellChangeTimes->{{3.982713255343195*^9, 
-  3.9827132905358143`*^9}},ExpressionUUID->"2bdf9d16-0dea-dd42-a106-\
+ RowBox[{"(*", 
+  RowBox[{"GitHubCreateRepository", "[", 
+   RowBox[{"\"\<claudecode\>\"", ",", 
+    RowBox[{"ExtraDirectories", "->", 
+     RowBox[{"{", "\"\<Claude Directives\>\"", "}"}]}], ",", 
+    RowBox[{"Public", "->", "True"}]}], "]"}], "*)"}]], "Input",
+ CellChangeTimes->{{3.982713255343195*^9, 3.9827132905358143`*^9}, 
+   3.98272602005455*^9},ExpressionUUID->"2bdf9d16-0dea-dd42-a106-\
 6331233fa7b5"],
 
-Cell[BoxData[
- RowBox[{"GitHubCreateRepository", "[", 
-  RowBox[{"\"\<NBAccess\>\"", ",", 
-   RowBox[{"ExtraDirectories", "->", 
-    RowBox[{"{", "\"\<Claude Directives\>\"", "}"}]}], ",", 
-   RowBox[{"Public", "->", "True"}]}], "]"}]], "Input",
- CellChangeTimes->{{3.982724939967951*^9, 
-  3.98272494426091*^9}},ExpressionUUID->"f3bc1d09-2698-214f-b9ef-\
-9d11922c0b66"],
+Cell[BoxData["\<\"upload_manifest.json \:306b\:8ffd\:52a0: Claude \
+Directives\"\>"], "Print",
+ CellChangeTimes->{3.982724985362953*^9},
+ CellLabel->
+  "\:8a55\:4fa1\:4e2d\:ff1aIn[3]:=",ExpressionUUID->"0c20abdd-d7a1-3045-8f28-\
+71d13e3058fd"]
+}, Open  ]],
 
 Cell[BoxData[
- RowBox[{"GitHubCreateRepository", "[", 
-  RowBox[{"\"\<github\>\"", ",", 
-   RowBox[{"ExtraDirectories", "->", 
-    RowBox[{"{", "\"\<Claude Directives\>\"", "}"}]}], ",", 
-   RowBox[{"Public", "->", "True"}]}], "]"}]], "Input",
- CellChangeTimes->{{3.982724953426199*^9, 
-  3.982724954703556*^9}},ExpressionUUID->"10a946cb-b30d-7e43-95cd-\
-7e5b3032aa8d"]
+ RowBox[{"(*", 
+  RowBox[{"GitHubCreateRepository", "[", 
+   RowBox[{"\"\<NBAccess\>\"", ",", 
+    RowBox[{"Public", "->", "True"}]}], "]"}], "*)"}]], "Input",
+ CellChangeTimes->{{3.982724953426199*^9, 3.982724954703556*^9}, 
+   3.982725055722912*^9, {3.982726007844536*^9, 
+   3.982726017155655*^9}},ExpressionUUID->"10a946cb-b30d-7e43-95cd-\
+7e5b3032aa8d"],
+
+Cell[BoxData[
+ RowBox[{"(*", 
+  RowBox[{"GitHubCreateRepository", "[", 
+   RowBox[{"\"\<github\>\"", ",", 
+    RowBox[{"Public", "->", "True"}]}], "]"}], "*)"}]], "Input",
+ CellChangeTimes->{
+  3.982726014235363*^9},ExpressionUUID->"795db096-c730-c248-8581-\
+335893186a59"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["", "Subsection",ExpressionUUID->"60859bc6-5d9b-7b48-abb0-8208581604f7"],
+
+Cell["\<\
+ClaudeCreatePackage, ClaudeUpdatePackage\:3067\:3082\:30ea\:30d5\:30a1\:30ec\
+\:30f3\:30b9\:3092\:8ffd\:52a0\:3067\:304d\:308b\:3088\:3046\:306b\:3057\:3066\
+\:307b\:3057\:3044\:3002\:305d\:308c\:306f\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\
+\:306e\:30ea\:30d5\:30a1\:30ec\:30f3\:30b9\:3068\:5171\:7528\:3067\:69cb\:308f\
+\:306a\:3044\:3002
+
+ClaudeCreatePackage[\[OpenCurlyDoubleQuote]Hyperbolic CA\
+\[CloseCurlyDoubleQuote], \[OpenCurlyDoubleQuote]\:30d5\:30a1\:30a4\:30eb\
+\:540d\:306exxxx\:3092\:53c2\:8003\:306b\:3057\:3066\:3001...\
+\[CloseCurlyDoubleQuote], References->{\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\
+\:540d, URL, \
+...}]\:306a\:3069\:3068\:3059\:308b\:3068\:3001\:305d\:306e\:30d1\:30b9\:306b\
+\:3042\:308b\:30d5\:30a1\:30a4\:30eb\:3092 references\:30d5\:30a9\:30eb\:30c0\
+\:306b\:30b3\:30d4\:30fc\:3057\:3001\:30d7\:30ed\:30f3\:30d7\:30c8\:3067\:305d\
+\:308c\:306b\:3064\:3044\:3066\:5f15\:7528\:3057\:3066\:30b3\:30fc\:30c9\:751f\
+\:6210\:304c\:3067\:304d\:308b\:3088\:3046\:306b\:3057\:3066\:307b\:3057\:3044\
+\:3002
+
+\:3053\:306e\:30ea\:30d5\:30a1\:30ec\:30f3\:30b9\:306f`\
+ClaudeCreateDocumentation` / `ClaudeUpdateDocumentation`\:306b\:3082\:305d\
+\:306e\:307e\:307e\:5f15\:304d\:7d99\:304c\:308c\:308b\:306e\:3067\:3001\
+references/doc_options.json \:306b\:8ffd\:8a18\:3057\:3066\:307b\:3057\:3044\
+\:3002\
+\>", "Text",
+ CellChangeTimes->{{3.982730464215473*^9, 
+  3.9827304813975945`*^9}},ExpressionUUID->"c0d05901-2bb4-ea43-8cce-\
+42023dfc03e6"]
 }, Open  ]],
 
 Cell[CellGroupData[{
@@ -134,12 +178,52 @@ Cell["\<\
  CellChangeTimes->{{3.9826525459047146`*^9, 3.982652575178093*^9}, {
   3.9826526097767124`*^9, 3.9826527014404354`*^9}, {3.9826527641321926`*^9, 
   3.9826527785106697`*^9}},ExpressionUUID->"172dfe90-3f52-7048-8088-\
-bf1888eabcb1"]
+bf1888eabcb1"],
+
+Cell[CellGroupData[{
+
+Cell[BoxData[
+ RowBox[{"$ClaudeModel", "=", "\"\<claude-opus-4-6\>\""}]], "Input",
+ CellChangeTimes->{{3.9827291954404716`*^9, 3.982729221521721*^9}},
+ CellLabel->"In[24]:=",ExpressionUUID->"c6a01452-1e88-eb4e-8c66-ef96f5f5dedb"],
+
+Cell[BoxData["\<\"claude-opus-4-6\"\>"], "Output",
+ CellChangeTimes->{{3.9827292039613533`*^9, 3.982729222526102*^9}, 
+   3.9827298987983284`*^9, 3.98273021025004*^9, 3.982730748652319*^9, 
+   3.9827310666686745`*^9},
+ CellLabel->"Out[24]=",ExpressionUUID->"35ffaf01-17cf-b249-806d-43ebab90ef58"]
+}, Open  ]],
+
+Cell[BoxData[
+ RowBox[{"ClaudeUpdateDirective", 
+  "[", "\"\<README.md\:306b\:300cinstall-claude-directives.wl \:3092 \
+Mathematica \
+\:3067\:8aad\:307f\:8fbc\:307f\:3001\:4ee5\:4e0b\:3092\:5b9f\:884c\:3059\:308b\
+\:300d\:3068\:3042\:308b\:304c\:3001\:3059\:3067\:306b\:305d\:306e\:3088\:3046\
+\:306a\:30d5\:30a1\:30a4\:30eb\:306f\:5b58\:5728\:305b\:305a\:3001Claude \
+Directives\:3092$packageDirectory\:306b\:7f6e\:304f\:3060\:3051\:3067\:3042\
+\:3068\:306fclaudcode\:306e\:95a2\:6570\:304c\:52dd\:624b\:306b\:3084\:3063\
+\:3066\:304f\:308c\:308b\:306f\:305a\:3002\n\n\:30a4\:30f3\:30b9\:30c8\:30fc\
+\:30eb\:306e\:90e8\:5206\:3092\:66f8\:304d\:76f4\:3057\:3066\:307b\:3057\:3044\
+\:3002\>\"", "]"}]], "Input",
+ CellChangeTimes->{{3.9827283931598873`*^9, 3.9827284193713913`*^9}, {
+  3.9827284570317287`*^9, 3.982728570185339*^9}},
+ CellLabel->"In[25]:=",ExpressionUUID->"238062a5-1a63-444d-bf63-ae6d72587390"],
+
+Cell["[ClaudeUpdateDirective] Claude \:3067\:6307\:793a\:3092\:89e3\:6790\
+\:4e2d\[Ellipsis]", "Text",ExpressionUUID->"3ff80ae1-e50c-dd46-9571-\
+30d451740751"],
+
+Cell["  replace: README.md", "Text",ExpressionUUID->"d11eca61-89f5-fd4d-b71b-811908f3afe1"],
+
+Cell["\:30bd\:30fc\:30b9\:30d5\:30a1\:30a4\:30eb\:3092\:66f4\:65b0\:3057\:307e\
+\:3057\:305f\:3002", "Text",ExpressionUUID->"6a2a46a7-ecf0-c846-a05f-\
+867fc7929a78"]
 }, Open  ]]
 }, Open  ]]
 },
 WindowSize->{971.5, 835},
-WindowMargins->{{Automatic, 84}, {Automatic, 124}},
+WindowMargins->{{66.5, Automatic}, {Automatic, 61.5}},
 FrontEndVersion->"14.3 for Microsoft Windows (64-bit) (2025\:5e747\:67088\
 \:65e5)",
 StyleDefinitions->"Normal use.nb",
@@ -166,15 +250,30 @@ Cell[1768, 56, 247, 4, 55, "Text",ExpressionUUID->"c5c87f7f-5085-eb41-90a1-dcc0a
 }, Open  ]],
 Cell[CellGroupData[{
 Cell[2052, 65, 204, 3, 54, "Subsection",ExpressionUUID->"f110b9b2-2479-2b4d-8685-9d148435f314"],
-Cell[2259, 70, 375, 8, 28, "Input",ExpressionUUID->"2bdf9d16-0dea-dd42-a106-6331233fa7b5"],
-Cell[2637, 80, 370, 8, 28, "Input",ExpressionUUID->"f3bc1d09-2698-214f-b9ef-9d11922c0b66"],
-Cell[3010, 90, 369, 8, 28, "Input",ExpressionUUID->"10a946cb-b30d-7e43-95cd-7e5b3032aa8d"]
+Cell[CellGroupData[{
+Cell[2281, 72, 426, 9, 28, "Input",ExpressionUUID->"2bdf9d16-0dea-dd42-a106-6331233fa7b5"],
+Cell[2710, 83, 243, 5, 22, "Print",ExpressionUUID->"0c20abdd-d7a1-3045-8f28-71d13e3058fd"]
+}, Open  ]],
+Cell[2968, 91, 372, 8, 28, "Input",ExpressionUUID->"10a946cb-b30d-7e43-95cd-7e5b3032aa8d"],
+Cell[3343, 101, 273, 7, 28, "Input",ExpressionUUID->"795db096-c730-c248-8581-335893186a59"]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[3416, 103, 180, 3, 54, "Subsection",ExpressionUUID->"026638d7-b9d8-ff44-91d7-d67df4828284"],
-Cell[3599, 108, 243, 4, 28, "Input",ExpressionUUID->"0795af23-83bf-7442-8912-7253198fc2a9"],
-Cell[3845, 114, 423, 7, 30, "Input",ExpressionUUID->"6e6decd7-45c9-534c-af9f-25defd98ed0f"],
-Cell[4271, 123, 543, 13, 119, "Text",ExpressionUUID->"172dfe90-3f52-7048-8088-bf1888eabcb1"]
+Cell[3653, 113, 77, 0, 54, "Subsection",ExpressionUUID->"60859bc6-5d9b-7b48-abb0-8208581604f7"],
+Cell[3733, 115, 1475, 27, 205, "Text",ExpressionUUID->"c0d05901-2bb4-ea43-8cce-42023dfc03e6"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[5245, 147, 180, 3, 54, "Subsection",ExpressionUUID->"026638d7-b9d8-ff44-91d7-d67df4828284"],
+Cell[5428, 152, 243, 4, 28, "Input",ExpressionUUID->"0795af23-83bf-7442-8912-7253198fc2a9"],
+Cell[5674, 158, 423, 7, 30, "Input",ExpressionUUID->"6e6decd7-45c9-534c-af9f-25defd98ed0f"],
+Cell[6100, 167, 543, 13, 119, "Text",ExpressionUUID->"172dfe90-3f52-7048-8088-bf1888eabcb1"],
+Cell[CellGroupData[{
+Cell[6668, 184, 229, 3, 28, "Input",ExpressionUUID->"c6a01452-1e88-eb4e-8c66-ef96f5f5dedb"],
+Cell[6900, 189, 296, 4, 32, "Output",ExpressionUUID->"35ffaf01-17cf-b249-806d-43ebab90ef58"]
+}, Open  ]],
+Cell[7211, 196, 910, 14, 109, "Input",ExpressionUUID->"238062a5-1a63-444d-bf63-ae6d72587390"],
+Cell[8124, 212, 159, 2, 33, "Text",ExpressionUUID->"3ff80ae1-e50c-dd46-9571-30d451740751"],
+Cell[8286, 216, 91, 0, 33, "Text",ExpressionUUID->"d11eca61-89f5-fd4d-b71b-811908f3afe1"],
+Cell[8380, 218, 165, 2, 33, "Text",ExpressionUUID->"6a2a46a7-ecf0-c846-a05f-867fc7929a78"]
 }, Open  ]]
 }, Open  ]]
 }

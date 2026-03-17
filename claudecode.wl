@@ -2242,7 +2242,7 @@ iQueryAnthropicAPI[apiKey_String, model_String, prompt_String] :=
 " <>
         "    model = $Model
 " <>
-        "    max_tokens = 8192
+        "    max_tokens = 16384
 " <>
         "    messages = @(@{ role = 'user'; content = $promptText })
 " <>
@@ -2255,6 +2255,8 @@ iQueryAnthropicAPI[apiKey_String, model_String, prompt_String] :=
         "  $handler = New-Object System.Net.Http.HttpClientHandler
 " <>
         "  $client = New-Object System.Net.Http.HttpClient($handler)
+" <>
+        "  $client.Timeout = [System.TimeSpan]::FromSeconds(300)
 " <>
         "  $client.DefaultRequestHeaders.Add('x-api-key', $ApiKey)
 " <>
@@ -2297,6 +2299,20 @@ iQueryAnthropicAPI[apiKey_String, model_String, prompt_String] :=
         "    }
 " <>
         "  }
+" <>
+        "  try {
+" <>
+        "    $trimmed = $text.Trim()
+" <>
+        "    if ($trimmed.StartsWith('{') -or $trimmed.StartsWith('[')) {
+" <>
+        "      $innerObj = $trimmed | ConvertFrom-Json
+" <>
+        "      $text = $innerObj | ConvertTo-Json -Depth 20 -Compress
+" <>
+        "    }
+" <>
+        "  } catch {}
 " <>
         "  [System.IO.File]::WriteAllText($OutFile, $text, $utf8)
 " <>
@@ -2431,7 +2447,7 @@ iQueryAnthropicAPIWithWebSearch[apiKey_String, model_String, prompt_String] :=
 " <>
         "    model = $Model
 " <>
-        "    max_tokens = 8192
+        "    max_tokens = 16384
 " <>
         "    tools = @(@{ type = 'web_search_20250305'; name = 'web_search'; max_uses = 5 })
 " <>
@@ -2447,7 +2463,7 @@ iQueryAnthropicAPIWithWebSearch[apiKey_String, model_String, prompt_String] :=
 " <>
         "  $client = New-Object System.Net.Http.HttpClient($handler)
 " <>
-        "  $client.Timeout = [System.TimeSpan]::FromSeconds(120)
+        "  $client.Timeout = [System.TimeSpan]::FromSeconds(300)
 " <>
         "  $client.DefaultRequestHeaders.Add('x-api-key', $ApiKey)
 " <>
@@ -2731,7 +2747,7 @@ iPrepareAnthropicPS1[apiKey_String, model_String, prompt_String,
       "  $promptText = $utf8.GetString($promptBytes)
 " <>
       If[isAnthropic,
-        "  $payloadObj = @{ model = $Model; max_tokens = 8192; messages = @(@{ role = 'user'; content = $promptText }) }
+        "  $payloadObj = @{ model = $Model; max_tokens = 16384; messages = @(@{ role = 'user'; content = $promptText }) }
 ",
         "  $payloadObj = @{ model = $Model; messages = @(@{ role = 'user'; content = $promptText }) }
 "
@@ -2743,6 +2759,8 @@ iPrepareAnthropicPS1[apiKey_String, model_String, prompt_String,
       "  $handler = New-Object System.Net.Http.HttpClientHandler
 " <>
       "  $client = New-Object System.Net.Http.HttpClient($handler)
+" <>
+      "  $client.Timeout = [System.TimeSpan]::FromSeconds(300)
 " <>
       If[isAnthropic,
         "  $client.DefaultRequestHeaders.Add('x-api-key', $ApiKey)
@@ -7406,7 +7424,7 @@ iCheckAndFixDirectiveConsistency[nb_NotebookObject, srcDir_String] :=
       "3. Wrong option names or default values (correct them)\n" <>
       "4. Missing natural language mappings in github-operations SKILL.md\n" <>
       "5. Any factual errors about function behavior\n" <>
-      "If NO changes are needed, output: {\"files\": []}\n" <>
+      "If NO changes are needed, output exactly: NO_CHANGES_NEEDED\n" <>
       "Only output files that actually need changes.\n\n" <>
       "=== SOURCE CODE PUBLIC API ===\n" <> sourceSummaries <> "\n" <>
       "=== CURRENT DIRECTIVE FILES ===\n" <> directiveContents;
@@ -7415,15 +7433,13 @@ iCheckAndFixDirectiveConsistency[nb_NotebookObject, srcDir_String] :=
     If[iIsAPIErrorResponse[response],
       nbPrint[nb, "  \:26a0 API \:30a8\:30e9\:30fc\:306e\:305f\:3081\:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3057\:305f\:3002"];
       Return[]];
-    (* JSON パース *)
-    parsed = Quiet @ Check[ImportString[
-      StringReplace[response, {"```json" -> "", "```" -> ""}], "RawJSON"], $Failed];
-    If[!AssociationQ[parsed],
-      nbPrint[nb, "  \:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af\:5b8c\:4e86: \:4e0d\:6574\:5408\:306a\:3057\:3002"];
-      Return[]];
-    files = Lookup[parsed, "files", {}];
-    If[Length[files] === 0,
+    (* デリミタ形式パース *)
+    If[StringContainsQ[response, "NO_CHANGES_NEEDED"],
       nbPrint[nb, "  \:2713 \:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af\:5b8c\:4e86: \:4e0d\:6574\:5408\:306a\:3057\:3002"];
+      Return[]];
+    files = iParseDelimitedFileBlocks[response];
+    If[Length[files] === 0,
+      nbPrint[nb, "  \:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af\:5b8c\:4e86: \:4e0d\:6574\:5408\:306a\:3057\:3002"];
       Return[]];
     (* 修正を適用 *)
     workDir = iEnsureClaudeWorkingDirectory[];
@@ -7457,26 +7473,95 @@ iCheckAndFixDirectiveConsistency[nb_NotebookObject, srcDir_String] :=
   ];
 
 (* テキスト指示によるディレクティブ更新 *)
+
+(* JSON 文字列値の中の生改行/タブだけをエスケープする (構造的改行はそのまま) *)
+iRepairJSONStringLiterals[json_String] :=
+  Module[{chars, n, result, inStr = False, i, ch, prev = ""},
+    chars = Characters[json];
+    n = Length[chars];
+    result = Internal`Bag[];
+    Do[
+      ch = chars[[i]];
+      If[ch === "\"" && prev =!= "\\", inStr = !inStr];
+      If[inStr,
+        Switch[ch,
+          "\n", Internal`StuffBag[result, "\\"]; Internal`StuffBag[result, "n"],
+          "\r", Internal`StuffBag[result, "\\"]; Internal`StuffBag[result, "r"],
+          "\t", Internal`StuffBag[result, "\\"]; Internal`StuffBag[result, "t"],
+          _, Internal`StuffBag[result, ch]],
+        Internal`StuffBag[result, ch]];
+      prev = ch,
+      {i, n}];
+    StringJoin[Internal`BagPart[result, All]]
+  ];
+
+(* デリミタ形式のファイルブロックをパースする *)
+(* <<<FILE: path>>> / <<<ACTION: action>>> / content / <<<END_FILE>>> *)
+iParseDelimitedFileBlocks[response_String] :=
+  Module[{blocks, result = {}, i, block, lines, pathVal, actionVal,
+          contentLines, j, headersDone},
+    blocks = StringSplit[response, "<<<END_FILE>>>"];
+    Do[
+      block = blocks[[i]];
+      If[StringContainsQ[block, "<<<FILE:"],
+        lines = StringSplit[block, "\n"];
+        pathVal = None; actionVal = "replace";
+        headersDone = 0;
+        Do[
+          Which[
+            StringMatchQ[lines[[j]], "<<<FILE:" ~~ __ ~~ ">>>"],
+            pathVal = StringTrim @ First[
+              StringCases[lines[[j]], "<<<FILE:" ~~ p__ ~~ ">>>" :> p], ""];
+            headersDone = j,
+            StringMatchQ[lines[[j]], "<<<ACTION:" ~~ __ ~~ ">>>"],
+            actionVal = StringTrim @ First[
+              StringCases[lines[[j]], "<<<ACTION:" ~~ a__ ~~ ">>>" :> a], "replace"];
+            headersDone = j
+          ],
+          {j, Length[lines]}];
+        If[StringQ[pathVal] && pathVal =!= "",
+          contentLines = If[headersDone < Length[lines],
+            lines[[headersDone + 1 ;;]],
+            {}];
+          (* 先頭末尾の空行を除去 *)
+          While[Length[contentLines] > 0 && StringTrim[First[contentLines]] === "",
+            contentLines = Rest[contentLines]];
+          While[Length[contentLines] > 0 && StringTrim[Last[contentLines]] === "",
+            contentLines = Most[contentLines]];
+          AppendTo[result,
+            <|"path" -> pathVal,
+              "action" -> actionVal,
+              "content" -> StringRiffle[contentLines, "\n"]|>]]],
+      {i, Length[blocks]}];
+    result
+  ];
+
 $directiveUpdatePrompt = "\
 You are updating Claude Code directive files for a Wolfram Language power user.\n\
 The directives are organized as:\n\
+- README.md: Project overview, installation instructions, usage guide\n\
 - CLAUDE.md: Entry point with skill list and basic policies\n\
 - rules/XX-name.md: Absolute constraints (must never be violated)\n\
 - skills/name/SKILL.md: Concrete procedures and patterns\n\n\
-Given the user's instruction and the current file contents below, output ONLY a JSON object with this structure:\n\
-{\"files\": [{\"path\": \"relative/path\", \"action\": \"replace\"|\"create\"|\"append\", \"content\": \"full file content\"}]}\n\
+Given the user's instruction and the current file contents below, output the updated files using the following EXACT delimiter format. Do NOT use JSON. Do NOT add any explanation before or after the file blocks.\n\n\
+For each file that needs updating, output:\n\
+<<<FILE: relative/path>>>\n\
+<<<ACTION: replace|create|append>>>\n\
+(full file content here, with actual newlines as-is)\n\
+<<<END_FILE>>>\n\n\
 Rules for deciding where to write:\n\
+- Installation/usage/overview changes -> README.md\n\
 - Absolute prohibitions/constraints -> rules/\n\
 - Concrete procedures/patterns/examples -> skills/\n\
 - Skill list updates -> CLAUDE.md\n\
 - If a rule or skill already exists for the topic, update it rather than creating a new one.\n\
 - For new rules, use the next available number prefix (e.g. 80-name.md)\n\
 - For new skills, create skillname/SKILL.md with proper frontmatter\n\
-- Output raw JSON only, no markdown fences, no explanation.\n\n";
+- Output ONLY the file blocks in the delimiter format above. No other text.\n\n";
 
 ClaudeUpdateDirective[text_String] :=
   Module[{nb, srcDir, prompt, allFiles, fileContents, response,
-          parsed, files, path, action, content, fullPath, dir,
+          files, path, action, content, fullPath, dir,
           nbCtx, enrichedText},
     nb = Quiet[InputNotebook[]];
     srcDir = iDirectivesSourceDir[];
@@ -7493,6 +7578,8 @@ ClaudeUpdateDirective[text_String] :=
 
     (* 現在の全ファイル内容を収集 *)
     allFiles = Join[
+      If[FileExistsQ[FileNameJoin[{srcDir, "README.md"}]],
+        {FileNameJoin[{srcDir, "README.md"}]}, {}],
       If[FileExistsQ[FileNameJoin[{srcDir, "CLAUDE.md"}]],
         {FileNameJoin[{srcDir, "CLAUDE.md"}]}, {}],
       FileNames["*.md", FileNameJoin[{srcDir, "rules"}]],
@@ -7523,22 +7610,13 @@ ClaudeUpdateDirective[text_String] :=
       nbPrint[nb, "\:26a0 Claude API \:5fdc\:7b54\:306e\:53d6\:5f97\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002"];
       Return[$Failed]];
 
-    (* JSON をパース *)
-    parsed = Quiet @ Check[
-      ImportString[
-        StringReplace[response,
-          {RegularExpression["^```json\\s*"] -> "",
-           RegularExpression["\\s*```$"] -> ""}],
-        "RawJSON"],
-      $Failed];
-    If[parsed === $Failed || !AssociationQ[parsed],
-      nbPrint[nb, "\:26a0 \:5fdc\:7b54\:306e\:30d1\:30fc\:30b9\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002"];
-      Print[StringTake[response, UpTo[500]]];
-      Return[$Failed]];
-
-    files = Lookup[parsed, "files", {}];
+    (* デリミタ形式をパース *)
+    files = iParseDelimitedFileBlocks[response];
     If[!ListQ[files] || Length[files] === 0,
-      nbPrint[nb, "\:26a0 \:66f4\:65b0\:5bfe\:8c61\:30d5\:30a1\:30a4\:30eb\:304c\:3042\:308a\:307e\:305b\:3093\:3002"];
+      nbPrint[nb, "\:26a0 \:5fdc\:7b54\:306e\:30d1\:30fc\:30b9\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002"];
+      nbPrint[nb, "  (\:5fdc\:7b54\:9577: " <> ToString[StringLength[response]] <>
+        " \:6587\:5b57\:3001\:5148\:982d: " <>
+        StringTake[response, UpTo[120]] <> ")"];
       Return[$Failed]];
 
     (* \:4e8b\:524d\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: \:5909\:66f4\:5bfe\:8c61\:30d5\:30a1\:30a4\:30eb\:3092\:5c65\:6b74\:306b\:4fdd\:5b58 *)
