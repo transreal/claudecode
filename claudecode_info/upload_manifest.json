@@ -1,0 +1,14 @@
+{
+	"packageName":"claudecode",
+	"files":[
+		"claudecode.wl"
+	],
+	"directories":[
+		"claudecode_info",
+		"Claude Directives"
+	],
+	"excludePatterns":[
+		"claudecode_info\/history\/",
+		"claudecode_info\/references\/"
+	]
+}
