@@ -10,10 +10,10 @@
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[       154,          7]
-NotebookDataLength[     11143,        274]
-NotebookOptionsPosition[      8573,        224]
-NotebookOutlinePosition[      8993,        241]
-CellTagsIndexPosition[      8950,        238]
+NotebookDataLength[     69619,       1100]
+NotebookOptionsPosition[     10995,        283]
+NotebookOutlinePosition[     66930,       1059]
+CellTagsIndexPosition[     66843,       1054]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
@@ -218,12 +218,824 @@ Cell["  replace: README.md", "Text",ExpressionUUID->"d11eca61-89f5-fd4d-b71b-811
 
 Cell["\:30bd\:30fc\:30b9\:30d5\:30a1\:30a4\:30eb\:3092\:66f4\:65b0\:3057\:307e\
 \:3057\:305f\:3002", "Text",ExpressionUUID->"6a2a46a7-ecf0-c846-a05f-\
-867fc7929a78"]
+867fc7929a78"],
+
+Cell[CellGroupData[{
+
+Cell[BoxData[
+ RowBox[{"ClaudeEval", 
+  "[", "\"\<github\:306bclaudecode\:3092\:30b3\:30df\:30c3\:30c8\:3057\:3066\
+\:307b\:3057\:3044: Claude Directives\:306b\:95a2\:3057\:3066\:3001Claude \
+Directives\:306eREADME.md\:306e\:8a18\:8f09\:306e\:30df\:30b9\:306e\:4fee\
+\:6b63\>\"", "]"}]], "Input",
+ CellChangeTimes->{{3.9827311980300865`*^9, 3.982731264231226*^9}},
+ CellLabel->"In[26]:=",ExpressionUUID->"384b15ae-da94-bd4c-a929-c0e7466390c6"],
+
+Cell[BoxData[
+ DynamicBox[ToBoxes[
+   If[
+    AssociationQ[
+     ClaudeCode`Private`$claudeProgress["1773742500x27575"]], 
+    ClaudeCode`Private`$claudeProgress["1773742500x27575"]["disp"], ""]],
+  ImageSizeCache->{0., {0., 5.45703125}},
+  UpdateInterval->1]], "Print",
+ FontSize->11,
+ FontWeight->Bold,
+ FontColor->RGBColor[0.8, 0.4, 0],
+ CellTags->
+  "cjob1773742500x10803-s1",ExpressionUUID->"e8dd60ce-2b04-8440-9852-\
+8a4b5bde9d35"]
+}, Open  ]],
+
+Cell["\<\
+README.md \:306e\:5185\:5bb9\:3092\:78ba\:8a8d\:3057\:307e\:3057\:305f\:3002\
+\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\:624b\:9806\:306f\:65e2\:306b\:4fee\:6b63\
+\:6e08\:307f\:3067\:3059\:ff08install-claude-directives.wl \:306e\:8a18\:8f09\
+\:304c\:524a\:9664\:3055\:308c\:3001$packageDirectory \
+\:306b\:914d\:7f6e\:3059\:308b\:3060\:3051\:3068\:3044\:3046\:6b63\:3057\:3044\
+\:624b\:9806\:306b\:306a\:3063\:3066\:3044\:307e\:3059\:ff09\:3002
+
+\:3053\:306e\:4fee\:6b63\:3092GitHub\:306b\:30b3\:30df\:30c3\:30c8\:3059\:308b\
+\:30b3\:30fc\:30c9\:3092\:751f\:6210\:3057\:307e\:3059\:3002\
+\>", "Text",ExpressionUUID->"c2f372c9-a625-b846-a596-48140765bcd1"],
+
+Cell[BoxData[
+ RowBox[{"GitHubRefreshAndCommit", "[", 
+  RowBox[{"\"\<claudecode\>\"", ",", 
+   " ", "\"\<Fix Claude Directives README.md: correct installation \
+instructions\>\""}], "]"}]], "Input",
+ CellLabel->"In[27]:=",ExpressionUUID->"244ebd0c-2621-0344-8485-f4b47cfe02f2"],
+
+Cell[TextData[{
+ "\:5b8c\:4e86\:3002\:30b3\:30fc\:30c9\:3092\:5b9f\:884c\:3057\:3066\:78ba\
+\:8a8d\:3057\:3001\:5fc5\:8981\:306a\:3089 ",
+ ButtonBox["ContinueEval",
+  BaseStyle->"Hyperlink",
+  Evaluator->Automatic,
+  Method->"Queued",
+  ButtonFunction:>Module[{ClaudeCode`Private`target$ = InputNotebook[]}, 
+    NBAccess`NBWriteInputCellAndMaybeEvaluate[ClaudeCode`Private`target$, 
+     RowBox[{"ContinueEval", "[", "]"}], True]]],
+ "[] \:3067\:7d99\:7d9a\:3067\:304d\:307e\:3059\:3002"
+}], "Text",ExpressionUUID->"b88b8a2d-8c0d-2e48-96ab-ae20f837c6af"]
 }, Open  ]]
 }, Open  ]]
 },
 WindowSize->{971.5, 835},
 WindowMargins->{{66.5, Automatic}, {Automatic, 61.5}},
+TaggingRules-><|
+ "history" -> <|
+   "header" -> <||>, 
+    "entries" -> {<|
+      "step" -> 0, "time" -> 3.9827637004812602`17.352759529407756*^9, 
+       "instruction" -> 
+       "=== Web \:691c\:7d22\:7d50\:679c ===\nClaude Directives\:306b\:95a2\
+\:3059\:308b\:60c5\:5831\:3068README.md\:306e\:8a18\:8f09\:30df\:30b9\:306b\
+\:3064\:3044\:3066\:8abf\:3079\:3066\:307f\:307e\:3059\:3002\nClaude \
+Directives\:3068\:3044\:3046\:5177\:4f53\:7684\:306a\:6982\:5ff5\:306b\:3064\
+\:3044\:3066\:3001\:3088\:308a\:8a73\:3057\:3044\:60c5\:5831\:3092\:691c\:7d22\
+\:3057\:3066\:307f\:307e\:3059\:3002\n\:300cClaude Directives\:300d\:3068\
+\:3044\:3046\:7279\:5b9a\:306e\:6982\:5ff5\:306b\:3064\:3044\:3066\:3088\:308a\
+\:5177\:4f53\:7684\:306b\:691c\:7d22\:3057\:3066\:307f\:307e\:3059\:3002\n\
+\:7533\:3057\:8a33\:3054\:3056\:3044\:307e\:305b\:3093\:304c\:3001\:691c\:7d22\
+\:7d50\:679c\:304b\:3089\:300cClaude Directives\:300d\:3068\:3044\:3046\:7279\
+\:5b9a\:306e\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:3084\:30b3\:30f3\:30bb\:30d7\
+\:30c8\:3092\:898b\:3064\:3051\:308b\:3053\:3068\:304c\:3067\:304d\:307e\:305b\
+\:3093\:3067\:3057\:305f\:3002\:691c\:7d22\:7d50\:679c\:3067\:306f\:3001\
+Claude Code\:3084Claude\:95a2\:9023\:306e\:69d8\:3005\:306a\:30d7\:30ed\:30b8\
+\:30a7\:30af\:30c8\:304c\:898b\:3064\:304b\:308a\:307e\:3057\:305f\:304c\:3001\
+\:300cClaude Directives\:300d\:3068\:3044\:3046\:660e\:78ba\:306a\:540d\:524d\
+\:306e\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:306f\:7279\:5b9a\:3067\:304d\:307e\
+\:305b\:3093\:3067\:3057\:305f\:3002\n\n\:4ee5\:4e0b\:306e\:60c5\:5831\:3092\
+\:6574\:7406\:3044\:305f\:3057\:307e\:3059\:ff1a\n\n## Claude \
+Code\:95a2\:9023\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:6982\:8981\n\n\:691c\
+\:7d22\:7d50\:679c\:304b\:3089\:5f97\:3089\:308c\:305f\:4e3b\:8981\:306a\:60c5\
+\:5831\:ff1a\n\n### \:4e3b\:8981\:306aClaude Code\:95a2\:9023\:30ea\:30dd\
+\:30b8\:30c8\:30ea\n1. **anthropics/claude-code** - \nClaude Code is an \
+agentic coding tool that lives in your terminal, understands your codebase, \
+and helps you code faster by executing routine tasks, explaining complex \
+code, and handling git workflows - all through natural language commands.\n\n\
+\n2. **anthropics/claude-plugins-official** - \nOfficial, Anthropic-managed \
+directory of high quality Claude Code Plugins.\n\n\n### \:4e00\:822c\:7684\
+\:306aREADME.md\:306e\:8a18\:8f09\:30df\:30b9\:306e\:30d1\:30bf\:30fc\:30f3\n\
+\:691c\:7d22\:7d50\:679c\:304b\:3089\:767a\:898b\:3055\:308c\:305f\:5178\:578b\
+\:7684\:306a\:554f\:984c\:ff1a\n\n1. **\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\
+\:624b\:9806\:306e\:554f\:984c**\n   - \nInstallation via npm is deprecated. \
+Use one of the recommended methods below.\n\n\n2. **\:30c9\:30ad\:30e5\:30e1\
+\:30f3\:30c8\:306e\:4e0d\:6574\:5408**\n   - \nThe attention budget (why less \
+is more) Anthropic's official include/exclude table\n\n\n3. **\:8a2d\:5b9a\
+\:30d5\:30a1\:30a4\:30eb\:306e\:8a18\:8f09\:30a8\:30e9\:30fc**\n   - \nThis \
+documentation uses \"skills\" as the primary term, but you may see both used \
+interchangeably. They both refer to markdown files in .claude/commands/ that \
+you invoke with /skill-name.\n\n\n## \:63d0\:6848\:3055\:308c\:308b\:30a2\
+\:30af\:30b7\:30e7\:30f3\n\n\:300cClaude Directives\:300d\:306e\:5177\:4f53\
+\:7684\:306a\:7279\:5b9a\:304c\:3067\:304d\:306a\:304b\:3063\:305f\:305f\:3081\
+\:3001\:4ee5\:4e0b\:306e\:78ba\:8a8d\:3092\:304a\:52e7\:3081\:3057\:307e\:3059\
+\:ff1a\n\n1. **\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:540d\:306e\:518d\:78ba\
+\:8a8d** - \:300cClaude Directives\:300d\:304c\:6b63\:78ba\:306a\:30d7\:30ed\
+\:30b8\:30a7\:30af\:30c8\:540d\:304b\:3069\:3046\:304b\n2. **\:30ea\:30dd\
+\:30b8\:30c8\:30eaURL\:306e\:63d0\:4f9b** - \:5177\:4f53\:7684\:306aGitHub\
+\:30ea\:30dd\:30b8\:30c8\:30ea\:306e\:30ea\:30f3\:30af\n3. **\:5177\:4f53\
+\:7684\:306a\:30a8\:30e9\:30fc\:5185\:5bb9** - README.md\:306e\:4f55\:304c\
+\:9593\:9055\:3063\:3066\:3044\:308b\:306e\:304b\:306e\:8a73\:7d30\n\n\:3053\
+\:308c\:3089\:306e\:60c5\:5831\:304c\:3042\:308c\:3070\:3001\:3088\:308a\:5177\
+\:4f53\:7684\:3067\:6709\:7528\:306a\:4fee\:6b63\:63d0\:6848\:3092\:884c\:3046\
+\:3053\:3068\:304c\:3067\:304d\:307e\:3059\:3002\n\n=== \:30bf\:30b9\:30af \
+===\ngithub\:306bclaudecode\:3092\:30b3\:30df\:30c3\:30c8\:3057\:3066\:307b\
+\:3057\:3044: Claude Directives\:306b\:95a2\:3057\:3066\:3001Claude \
+Directives\:306eREADME.md\:306e\:8a18\:8f09\:306e\:30df\:30b9\:306e\:4fee\
+\:6b63", "fullPrompt" -> 
+       "## Project guidelines (CLAUDE.md)\n\n# CLAUDE.md\n\n## \:30bb\:30c3\
+\:30b7\:30e7\:30f3\:958b\:59cb\:6642\:306e\:57fa\:672c\:65b9\:91dd\n\n- \
+\:307e\:305a\:5bfe\:8c61\:30d5\:30a1\:30a4\:30eb\:3068\:305d\:306e\:5468\:8fba\
+\:4f9d\:5b58\:3092\:8aad\:3093\:3067\:304b\:3089\:7de8\:96c6\:3059\:308b\:3002\
+\n- \:516c\:958b\:30b7\:30f3\:30dc\:30eb\:30fb\:30ce\:30fc\:30c8\:30d6\:30c3\
+\:30af UX\:30fb\:65e2\:5b58\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:3092\:58ca\
+\:3055\:306a\:3044\:6700\:5c0f\:5dee\:5206\:3092\:512a\:5148\:3059\:308b\:3002\
+\n\n## \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:69cb\:9020\n\n- `rules/` \
+\[LongDash] \
+\:7d76\:5bfe\:306b\:7834\:3063\:3066\:306f\:3044\:3051\:306a\:3044\:8a2d\:8a08\
+\:30fb\:5b89\:5168\:30fb\:30a2\:30af\:30bb\:30b9\:5236\:7d04\:3002\n- \
+`skills/` \[LongDash] \:7279\:5b9a\:306e\:89e3\:6790\:30fb\:4fee\:6b63\:30fb\
+\:30ec\:30d3\:30e5\:30fc\:306e\:5177\:4f53\:624b\:9806\:3068\:30d1\:30bf\:30fc\
+\:30f3\:96c6\:3002\n- \:30bf\:30b9\:30af\:306b\:6700\:3082\:8fd1\:3044\:30b9\
+\:30ad\:30eb\:3092\:53c2\:7167\:3057\:3001\:5e38\:306b rules \:306e\:5236\
+\:7d04\:3092\:9075\:5b88\:3059\:308b\:3002\n\n## \:30a4\:30f3\:30b9\:30c8\
+\:30fc\:30eb\:6e08\:307f\:30b9\:30ad\:30eb\n\n- `wolfram-general` \[LongDash] \
+Wolfram Language \:30b3\:30fc\:30c7\:30a3\:30f3\:30b0\:624b\:9806\:30fb\:51fa\
+\:529b\:65b9\:91dd\n- `notebook-path-policy` \[LongDash] \:30d5\:30a1\:30a4\
+\:30eb\:30d1\:30b9\:89e3\:6c7a\:30d1\:30bf\:30fc\:30f3\n- \
+`nbaccess-notebook-access` \[LongDash] NBAccess API \:30ea\:30d5\:30a1\:30ec\
+\:30f3\:30b9\:3068\:63a8\:5968\:30d1\:30bf\:30fc\:30f3\n- `api-key-handling` \
+\[LongDash] API \:30ad\:30fc\:53d6\:5f97\:306e\:6b63\:3057\:3044\:5b9f\:88c5\
+\:624b\:9806\n- `wl-encoding-and-regex` \[LongDash] \:30a8\:30b9\:30b1\:30fc\
+\:30d7\:30fb\:6b63\:898f\:8868\:73fe\:306e\:691c\:8a3c\:624b\:9806\n- \
+`pde-modeling` \[LongDash] PDE \:5b9f\:88c5\:30b9\:30c6\:30c3\:30d7\n- \
+`confidential-data-handling` \[LongDash] \:6a5f\:5bc6\:30c7\:30fc\:30bf\:306e\
+\:30e9\:30c3\:30d4\:30f3\:30b0\:624b\:9806\n\n## \:30d5\:30a1\:30a4\:30eb\
+\:8aad\:307f\:8fbc\:307f\:30eb\:30fc\:30eb\n\n- \
+\:30d5\:30a1\:30a4\:30eb\:540d\:3060\:3051\:304c\:6307\:5b9a\:3055\:308c\:305f\
+\:5834\:5408\:ff08\:30d5\:30eb\:30d1\:30b9\:3067\:306a\:3044\:5834\:5408\:ff09\
+\:306f\:3001\n  `FileNameJoin[{Quiet @ Check[NotebookDirectory[], \
+$packageDirectory], \:30d5\:30a1\:30a4\:30eb\:540d}]`\n  \:3067\:30d1\:30b9\
+\:3092\:69cb\:7bc9\:3059\:308b\:3002`Import[\"\:30d5\:30a1\:30a4\:30eb\:540d\"\
+]` \:306e\:3088\:3046\:306b\:30ab\:30ec\:30f3\:30c8\:30c7\:30a3\:30ec\:30af\
+\:30c8\:30ea\:4f9d\:5b58\:306e\:30b3\:30fc\:30c9\:3092\:751f\:6210\:3057\:306a\
+\:3044\:3002\n- Excel \:30d5\:30a1\:30a4\:30eb\:3092 Import \
+\:3059\:308b\:3068\:304d\:3001\:7d50\:679c\:306b `First` \:307e\:305f\:306f \
+`[[1]]` \:3092\:4ed8\:3051\:3066\:30b7\:30fc\:30c8\:306e\:30ea\:30b9\:30c8\
+\:3092\:5916\:3059\:3002\n  XLSX \:3092\:30a4\:30f3\:30dd\:30fc\:30c8\:3059\
+\:308b\:3068\:304d\:306f Sheets \:306f\:5b58\:5728\:3057\:306a\:3044\:306e\
+\:3067\:3001{\"Dataset\"} \:3092\:6307\:5b9a\:3059\:308b\:3002\n\n---\n\nYou \
+are an expert Wolfram Language / Mathematica programmer. Your response will \
+be parsed by a program that extracts ```mathematica ... ``` blocks and \
+inserts them as executable Input cells in the user's notebook.\n\nCRITICAL \
+RULE: You MUST ALWAYS include at least one ```mathematica ... ``` code block \
+in your response. Responses without any code block are USELESS to the user \
+because only code blocks are inserted into the notebook. Plain text without \
+code blocks will be discarded.\n\n- If the task requires computation, data \
+processing, or file output: write the Mathematica code that does it.\n- If \
+the task asks for information, a summary, or a list (e.g. 'list what we did', \
+'explain X'): wrap the answer as a Mathematica expression using \
+Column[{...}], Print[...], or assign it to a variable like result = {...}. Do \
+NOT use CellPrint, TextCell, or Cell[...] to create text cells \[LongDash] \
+text is placed automatically. Example: Instead of writing a plain text list, \
+write:\n```mathematica\nColumn[{\n  Style[\"\\:4f5c\\:696d\\:5c65\\:6b74\", \
+Bold, 16],\n  \"1. \\:968e\\:4e57\\:306e\\:5b9f\\:88c5\",\n  \"2. \
+\\:30d5\\:30a3\\:30dc\\:30ca\\:30c3\\:30c1\\:6570\\:5217\"\n}, Spacings -> 1]\
+\n```\n\nUse idiomatic Wolfram Language style. For brief explanatory text \
+OUTSIDE code blocks (a few sentences only): do NOT use markdown tables (no \
+|---|); do not use markdown bold (**text**) or heading syntax (# ##). All \
+explanatory text must be written in Japanese.\n\nWhen data (Dataset, \
+Association, List, etc.) is provided in the prompt, treat it as Mathematica \
+data available in the current session. If the user refers to 'this dataset' \
+or similar, the data shown in the prompt is the target.\n\nIMPORTANT: When \
+asked to produce PDF, image, or any file output, always generate Mathematica \
+CODE that creates the output, rather than attempting to return the binary \
+data directly. For example, use Export[\"output.pdf\", ...] to create a PDF \
+file. The user will execute the generated code in their Mathematica notebook.\
+\n\nNOTE: Some cells in the notebook are marked as confidential and excluded \
+from this prompt. Do NOT ask the user to share confidential data. Reference \
+excluded data by variable name only.\nSYMBOL REFERENCE: <<n>> in the prompt \
+refers to a specific symbol in the user's kernel. Metadata is appended at the \
+end. Use the symbol name directly in your code.\nDo NOT add any final \
+guidance like 'ContinueEval', 'ContinueEval[]', '\:7d99\:7d9a\:3067\:304d\
+\:307e\:3059', '\:4e0b\:306e\:30dc\:30bf\:30f3', or '\:30b3\:30fc\:30c9\:3092\
+\:5b9f\:884c\:3057\:3066\:78ba\:8a8d'.\nThe notebook front end adds the \
+continuation UI automatically, so your response must NOT mention it.\n\n\
+EXTERNAL LANGUAGE CODE:\nWhen the user asks for code entirely in Python, R, \
+Julia, Ruby, or JavaScript (NodeJS):\n- Use the appropriate fenced code \
+block: ```python, ```r, ```julia, ```ruby, or ```javascript\n- Do NOT wrap it \
+in ExternalEvaluate[]. The notebook has native cells for these languages.\n\
+When the user asks for Mathematica code that CALLS an external language for \
+part of the task:\n- Use ```mathematica blocks with ExternalEvaluate[] as \
+needed.\n\nEXCEL IMPORT CONVENTION (CRITICAL):\nWhen importing Excel \
+(.xlsx/.xls) files:\n- ALWAYS use {\"Dataset\"} format unless the user \
+explicitly requests Table, List, etc.\n  The first row is used as column keys \
+by default.\n  If the first row contains data (same type as subsequent rows), \
+generate column keys from column numbers.\n- Single sheet (result length=1): \
+use First @ Import[...] to unwrap and return a single Dataset.\n- Multiple \
+sheets (result length>=2): return the list of Datasets as-is.\n- Example:\n   \
+ data = First @ Import[FileNameJoin[{Quiet @ Check[NotebookDirectory[], \
+$packageDirectory], \"file.xlsx\"}], {\"Dataset\"}]\n\nCONFIDENTIAL VARIABLE \
+ASSIGNMENT (CRITICAL):\nWhen the user's instruction contains ANY of these \
+patterns:\n  \:79d8\:5bc6\:5909\:6570, \:6a5f\:5bc6\:5909\:6570, \:79d8\:533f\
+\:5909\:6570, \:79d8\:5bc6, \:6a5f\:5bc6, \:79d8\:533f,\n  Confidential\:306b\
+\:3059\:308b, Confidential\:306b\:4ee3\:5165, Confidential\:3078\:4ee3\:5165,\
+\n  \:79d8\:5bc6\:306b\:3059\:308b, \:6a5f\:5bc6\:306b\:3059\:308b, \:79d8\
+\:533f\:306b\:3059\:308b, \:79d8\:533f\:305b\:3088, \:79d8\:5bc6\:3078\:4ee3\
+\:5165, \:6a5f\:5bc6\:3078\:4ee3\:5165\nYou MUST wrap the assigned value with \
+Confidential[...].\nIMPORTANT: When importing a Dataset as confidential, \
+ALWAYS output the column keys\nusing NonConfidential[] in a SEPARATE code \
+block AFTER the Confidential assignment.\nThis allows ClaudeEval/ContinueEval \
+to know the Dataset structure for subsequent tasks.\nExamples:\n  '\:6210\
+\:7e3e.xlsx \:3092\:79d8\:5bc6\:5909\:6570 \:6210\:7e3e \:3078\:4ee3\:5165' \
+-> TWO code blocks:\n    Block 1:\n    \:6210\:7e3e = Confidential[First @ \
+Import[FileNameJoin[{Quiet @ Check[NotebookDirectory[], $packageDirectory], \
+\"\:6210\:7e3e.xlsx\"}], {\"Dataset\"}]]\n    Block 2:\n    \
+NonConfidential[Row[{\"\:6210\:7e3e\:306e\:30ad\:30fc: \", Normal[Keys[\:6210\
+\:7e3e[[1]]]]}, \" \"]]\n  \
+'\:30c7\:30fc\:30bf\:3092<<data>>\:306b\:4ee3\:5165\:3057\:3066\:79d8\:533f\
+\:305b\:3088' ->\n    data = Confidential[expr]\n  '<<x>>\:3092Confidential\
+\:306b\:3059\:308b' -> x = Confidential[x]\nThe Confidential[] wrapper \
+automatically marks cells and registers the variable as confidential.\nDo NOT \
+assign the value first and mark it later. Always wrap at assignment time.\nTo \
+DECLASSIFY a result that depends on confidential variables, use \
+NonConfidential[]:\n  result = NonConfidential[Mean[secretData]]\n\
+NonConfidential[] explicitly clears the confidential mark on the cell and its \
+output.\n\nCONFIDENTIAL VARIABLE STRUCTURE PROBE:\nWhen the task requires \
+using a confidential variable whose structure is unknown (marked as \
+excluded/confidential in the prompt, with no type info available):\n1. Do NOT \
+guess or fabricate the variable's structure.\n2. Output a structure-probing \
+code block ONLY:\n3. Add brief text: '\:4e0a\:306e\:69cb\:9020\:8abf\:67fb\
+\:7d50\:679c\:3092\:78ba\:8a8d\:5f8c\:3001ContinueEval[] \:3067\:672c\:30b3\
+\:30fc\:30c9\:3092\:751f\:6210\:3057\:307e\:3059\:3002'\n4. When ContinueEval \
+is called with the structure results in history, generate the actual code \
+using the revealed structure.\n\nR CODE OUTPUT CONVENTION:\nWhen generating R \
+code for Mathematica ExternalLanguage cells, Mathematica does not display R's \
+stdout in Out[]. Always end R code with an expression that returns a value, \
+typically using list() to collect named results:\n  list(\"varname\" = value, \
+\"result\" = computed_value)\nThis ensures the result appears in \
+Mathematica's Out[] as a List.\n\nPACKAGE OPERATION RULES (CRITICAL):\nWhen \
+the task mentions a package name that appears in the '$packageDirectory \
+packages' list (shown in File Access Context), you MUST use ClaudeCode \
+package management functions instead of writing raw code.\n- To UPDATE an \
+existing package: ClaudeUpdatePackage[\"PackageName\", \"update \
+instruction\"]\n- To CREATE a new package: \
+ClaudeCreatePackage[\"PackageName\", \"specification\"]\n- To generate \
+documentation: ClaudeCreateDocumentation[\"PackageName\"]\n- To update \
+documentation: ClaudeUpdateDocumentation[\"PackageName\", \"update \
+instruction\"]\nNEVER read package source files manually with \
+Import/ReadString.\nNEVER attempt to rewrite package files with Export/Put.\n\
+These functions handle backup, validation, reload, and history automatically.\
+\nIf the task is a QUESTION about a package (not modification), answer using \
+the docs context or suggest ClaudeQuery with the package name.\nExample: User \
+says 'Maildb\:306eshowMails\:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:8868\:793a\
+\:6570\:309230\:306b\:5909\:66f4' -> Output:\n```mathematica\n\
+ClaudeUpdatePackage[\"Maildb\", \"showMails\:306a\:3069\:306e\:30e1\:30fc\
+\:30eb\:8868\:793a\:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:8868\:793a\:6570\:3092\
+30\:306b\:5909\:66f4\:3059\:308b\"]\n```\n\nINFRASTRUCTURE API RULES \
+(CRITICAL):\nWhen generating code that uses GitHubREST, ClaudeCode, or \
+NBAccess functions:\n- ONLY use function names documented in the API \
+reference section (api.md) shown in this prompt.\n- NEVER invent or guess \
+function names like GitHubCreateBranch, GitHubPushFile, GitHubPushCommit.\n- \
+For pull requests, use GitHubSubmitPullRequest (one-shot: branch+commit+PR) \
+or GitHubRefreshAndCommit + GitHubCreatePullRequest (manual steps).\n- If no \
+API reference is shown and you need infrastructure functions, ask the user to \
+check with ?GitHubREST`* or similar.\n\n=== File Access Context ===\n\
+$packageDirectory: \
+C:\\Users\\imai_\\Dropbox\\Mathematica-oneDrive\\MyPackages\\\nPackages in \
+$packageDirectory (24):\n  - claudecode.wl (465123 bytes, 2026/03/17 19:10)\n \
+ - ETPCA_Simulator_unified_only.wl (121516 bytes, 2026/03/10 10:34)\n  - \
+ETPCA_Simulator_unified.wl (121774 bytes, 2026/03/09 15:52)\n  - \
+ETPCA_Simulator.wl (108062 bytes, 2026/02/26 13:38)\n  - EvaluateReports.wl \
+(28448 bytes, 2026/02/14 17:32)\n  - Exercise_2_2_Solution.wl (11204 bytes, \
+2026/02/23 20:56)\n  - fact.wl (124 bytes, 2026/03/12 14:55)\n  - fib.wl \
+(8046 bytes, 2026/03/17 12:14)\n  - formula.wl (5810 bytes, 2023/10/11 13:55)\
+\n  - github-bak.wl (92227 bytes, 2026/03/17 08:49)\n  - github.wl (125111 \
+bytes, 2026/03/17 17:00)\n  - i.wl (310 bytes, 2026/03/16 21:43)\n  - \
+localInit.wl (1440 bytes, 2026/02/28 18:56)\n  - Maildb.wl (129421 bytes, \
+2026/03/10 11:43)\n  - NBAccess.wl (106098 bytes, 2026/03/16 14:19)\n  - \
+NotebookExtensions.wl (100807 bytes, 2026/03/02 00:00)\n  - \
+PresentationListener.wl (91009 bytes, 2026/02/21 17:26)\n  - \
+recognizeAnswerSheet.wl (3450 bytes, 2026/02/15 18:35)\n  - sanbai.wl (1038 \
+bytes, 2026/03/16 13:00)\n  - VRChatPresentationUploader.wl (15513 bytes, \
+2026/02/15 12:23)\n  - \:60c5\:5831\:5de5\:5b66\:79d1\:6642\:9593\:5272.wl \
+(22466 bytes, 2026/03/13 20:15)\n  - \:6a21\:7bc4\:89e3\:7b54.wl (2670 bytes, \
+2026/02/15 19:12)\n  - \:639b\:3051\:7b97.wl (718 bytes, 2026/03/17 16:24)\n  \
+- fact/ [Paclet]\nNotebookDirectory: \
+C:\\Users\\imai_\\Dropbox\\Mathematica-oneDrive\\MyPackages\\claudecode_info\\\
+design\\\nFiles in NotebookDirectory (1):\n  - claudecode_design.nb (11580 \
+bytes, 2026/03/17 19:13)\nIMPORTANT: When files from NotebookDirectory or \
+attachments are referenced in a prompt, Claude Code reads their actual \
+content via the Read tool. The data in the generated code comes from these \
+real files, not from fabrication. Always acknowledge file sources accurately.\
+\n\n=== \:30d1\:30c3\:30b1\:30fc\:30b8 API \:30ea\:30d5\:30a1\:30ec\:30f3\
+\:30b9: claudecode ===\n(\:30bd\:30fc\:30b9\:304c\:30c9\:30ad\:30e5\:30e1\
+\:30f3\:30c8\:3088\:308a\:65b0\:3057\:3044\:304c\:3001API \:30b7\:30b0\:30cd\
+\:30c1\:30e3\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:306f\:6709\:52b9)\n\
+IMPORTANT: \:30b3\:30fc\:30c9\:3092\:751f\:6210\:3059\:308b\:969b\:306f\:3001\
+\:3053\:306e api.md \:306b\:8a18\:8f09\:3055\:308c\:305f\:95a2\:6570\:540d\
+\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:30fb\:5f15\:6570\:306e\:307f\:3092\:4f7f\
+\:7528\:3059\:308b\:3053\:3068\:3002\:5b58\:5728\:3057\:306a\:3044\:95a2\:6570\
+\:3092\:751f\:6210\:3057\:306a\:3044\:3053\:3068\:3002api.md \:3067\:4e0d\
+\:660e\:306a\:70b9\:304c\:3042\:308b\:5834\:5408\:306e\:307f\:30bd\:30fc\:30b9\
+\:30b3\:30fc\:30c9\:3092\:53c2\:7167\:3059\:308b\:3053\:3068\:3002\n\n# \
+claudecode API \:30ea\:30d5\:30a1\:30ec\:30f3\:30b9\n\n\:30d1\:30c3\:30b1\
+\:30fc\:30b8: `ClaudeCode`` `  \n\:30ea\:30dd\:30b8\:30c8\:30ea: \
+https://github.com/transreal/claudecode\n\n---\n\n## \:30b0\:30ed\:30fc\:30d0\
+\:30eb\:5909\:6570\n\n| \:5909\:6570 | \:578b | \
+\:30c7\:30d5\:30a9\:30eb\:30c8 | \:8aac\:660e |\n\
+|------|-----|-----------|------|\n| `$ClaudeModel` | String | `\"\"` | \
+Claude CLI \:306b\:6e21\:3059\:30e2\:30c7\:30eb\:540d\:3002\:7a7a\:6587\:5b57\
+\:306f CLI \:30c7\:30d5\:30a9\:30eb\:30c8 |\n| `$ClaudeTimeout` | Integer | \
+`1200` | ClaudeQuery/ClaudeEval \:7b49\:306e\:30bf\:30a4\:30e0\:30a2\:30a6\
+\:30c8\:79d2\:6570 |\n| `$ClaudeWorkingDirectory` | String | \
+`$HomeDirectory/Claude Working` | Claude Code \:306e\:4f5c\:696d\:30c7\:30a3\
+\:30ec\:30af\:30c8\:30ea |\n| `$ClaudeMDPath` | String | `\"\"` | \
+\:8aad\:307f\:8fbc\:3080 CLAUDE.md \:306e\:30d1\:30b9\:ff08\:81ea\:52d5\:691c\
+\:7d22\:307e\:305f\:306f\:624b\:52d5\:6307\:5b9a\:ff09 |\n| \
+`$ClaudeMDContent` | String | `\"\"` | \:8aad\:307f\:8fbc\:307e\:308c\:305f \
+CLAUDE.md \:306e\:5185\:5bb9 |\n| `$ClaudeAccessibleDirs` | List | \
+`{$packageDirectory}` | Claude Code \:306b Read \
+\:8a31\:53ef\:3059\:308b\:8ffd\:52a0\:30c7\:30a3\:30ec\:30af\:30c8\:30ea |\n| \
+`$ClaudeFallbackModels` | List | \
+`{{\"anthropic\",\"claude-opus-4-6\"},{\"openai\",\"gpt-5\"}}` | \:30d5\:30a9\
+\:30fc\:30eb\:30d0\:30c3\:30af\:30e2\:30c7\:30eb\:512a\:5148\:9806\:4f4d\:3002\
+\:5404\:8981\:7d20\:306f `{\"provider\",\"model\"}` |\n| `$ClaudeTestModel` | \
+String | `$ClaudeModel` \:3068\:540c\:3058 | \:5206\:96e2\:691c\:8a3c\:7528\
+\:30e2\:30c7\:30eb\:540d |\n| `$ClaudeDocRetryDelay` | Integer | `60` | \
+\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:306e\:30ea\:30c8\:30e9\:30a4\
+\:5f85\:6a5f\:79d2\:6570 |\n| `$ClaudeDocMaxRetries` | Integer | `3` | \:30c9\
+\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:306e\:6700\:5927\:30ea\:30c8\:30e9\
+\:30a4\:56de\:6570 |\n| `$ClaudeDocMaxChunkChars` | Integer | `60000` | \
+\:30d7\:30ed\:30f3\:30d7\:30c8\:4e2d\:30bd\:30fc\:30b9\:306e\:6700\:5927\:6587\
+\:5b57\:6570 |\n\n---\n\n## \:30af\:30a8\:30ea\:30fb\:30b3\:30fc\:30c9\:751f\
+\:6210\n\n| \:95a2\:6570 | \:8aac\:660e |\n|------|------|\n| \
+`ClaudeQuery[prompt]` | prompt \:3092 Claude Code \:306b\:9001\:4fe1\:3057\
+\:5fdc\:7b54\:6587\:5b57\:5217\:3092\:8fd4\:3059\:ff08\:540c\:671f\:ff09 |\n| \
+`ClaudeQuery[session, prompt]` | \:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\
+\:3092\:8003\:616e\:3057\:3066\:56de\:7b54\:3059\:308b |\n| \
+`ClaudeMath[task]` | Mathematica \:30b3\:30fc\:30c9\:751f\:6210\:306b\:7279\
+\:5316\:3057\:305f\:30d7\:30ed\:30f3\:30d7\:30c8\:3067 Claude \:3092\:547c\
+\:3073\:51fa\:3059 |\n| `ClaudeExtractCode[response]` | \:5fdc\:7b54\:304b\
+\:3089\:6700\:521d\:306e `` ```mathematica `` \:30d6\:30ed\:30c3\:30af\:3092\
+\:62bd\:51fa\:3059\:308b |\n| `ClaudeExtractAllCode[response]` | \:5fdc\:7b54\
+\:304b\:3089\:5168 `` ```mathematica `` \:30d6\:30ed\:30c3\:30af\:3092\:30ea\
+\:30b9\:30c8\:3067\:8fd4\:3059 |\n\n### ClaudeEval\n\n```\nClaudeEval[task]\n\
+ClaudeEval[{text, data, ...}]\nClaudeEval[session, task]\n```\n\n\:30b3\:30fc\
+\:30c9\:3092\:975e\:540c\:671f\:3067\:751f\:6210\:30fb\:8868\:793a\:3057\:3001\
+\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306b\:5c65\:6b74\
+\:3092\:4fdd\:5b58\:3059\:308b\:3002\n\n| \:30aa\:30d7\:30b7\:30e7\:30f3 | \
+\:30c7\:30d5\:30a9\:30eb\:30c8 | \:8aac\:660e |\n\
+|-----------|-----------|------|\n| `AutoEvaluate` | `True` | \:751f\:6210\
+\:3055\:308c\:305f Input \:30bb\:30eb\:3092\:81ea\:52d5\:5b9f\:884c\:3059\
+\:308b\:304b |\n| `StartTime` | `Now` | \:5b9f\:884c\:958b\:59cb\:6642\:523b\
+\:3092 DateObject \:3067\:6307\:5b9a |\n| `Fallback` | `False` | `True` \
+\:3067 Claude Code \:5229\:7528\:4e0d\:53ef\:6642\:306b \
+`$ClaudeFallbackModels` \:3078\:81ea\:52d5\:5207\:66ff |\n| `WebFetch` | \
+`Automatic` | `True`: \:5fc5\:305a Web \:691c\:7d22\:3002`False`: \
+\:3057\:306a\:3044\:3002`Automatic`: Claude \:304c\:81ea\:52d5\:5224\:65ad |\n\
+\n### ContinueEval\n\n```\nContinueEval[session, instruction]\n\
+ContinueEval[instruction]\nContinueEval[]\n```\n\n\:30bb\:30c3\:30b7\:30e7\
+\:30f3\:3092\:7d99\:7d9a\:3059\:308b\:3002\:5f15\:6570\:306a\:3057\:306f\:300c\
+\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\:300d\
+\:3067\:7d99\:7d9a\:3002`StartTime` \
+\:30aa\:30d7\:30b7\:30e7\:30f3\:5bfe\:5fdc\:3002\n\n---\n\n## \:30bb\:30c3\
+\:30b7\:30e7\:30f3\:7ba1\:7406\n\n| \:95a2\:6570 | \:8aac\:660e |\n\
+|------|------|\n| `CreateClaudeSession[\"name\"]` | \:540d\:524d\:4ed8\:304d\
+\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:4f5c\:6210\:ff08\:30c7\:30d5\:30a9\:30eb\
+\:30c8\:5c65\:6b74\:3092\:7d99\:627f\:ff09 |\n| \
+`CreateClaudeSession[session]` | \:65e2\:5b58\:30bb\:30c3\:30b7\:30e7\:30f3\
+\:306e\:5c65\:6b74\:3092\:7d99\:627f\:3057\:305f\:65b0\:30bb\:30c3\:30b7\:30e7\
+\:30f3\:3092\:4f5c\:6210 |\n| `CreateClaudeSession[Inherit->False]` | \:72ec\
+\:7acb\:3057\:305f\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:4f5c\:6210 |\n| \
+`ClaudeRestoreSession[]` | \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\
+\:30e7\:30f3\:3092\:30ea\:30b9\:30c8\:30a2 |\n| \
+`ClaudeRestoreSession[\"name\"]` | \:6307\:5b9a\:540d\:306e\:30bb\:30c3\:30b7\
+\:30e7\:30f3\:3092\:30ea\:30b9\:30c8\:30a2 |\n| `ClaudeListSessions[]` | \
+\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:5185\:306e\:5168\:30bb\:30c3\:30b7\:30e7\
+\:30f3\:3092\:4e00\:89a7\:8868\:793a |\n| `ClaudeDeleteSession[\"name\"]` | \
+\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:524a\:9664 |\n| \
+`ClaudeDeleteSession[\"name\",\"All\"]` | \
+\:30bb\:30c3\:30b7\:30e7\:30f3\:3068\:5168\:5c65\:6b74\:3092\:524a\:9664 |\n| \
+`ClaudeShowHistory[]` | \
+\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\
+\:3092\:8868\:793a |\n| `ClaudeShowHistory[session]` | \:6307\:5b9a\:30bb\
+\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\:3092\:8868\:793a |\n| \
+`ClaudeCompactHistory[]` | \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\
+\:30e7\:30f3\:306e\:5c65\:6b74\:3092\:624b\:52d5\:30b3\:30f3\:30d1\:30af\:30b7\
+\:30e7\:30f3\:3059\:308b |\n| `ClaudeCompactHistory[name]` | \:6307\:5b9a\
+\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\
+\:3059\:308b |\n| `ClaudeSessionStatus[]` | \:30c7\:30d5\:30a9\:30eb\:30c8\
+\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:72b6\:614b\:3092\:8868\:793a |\n| \
+`ClaudeSessionStatus[name]` | \
+\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:72b6\:614b\:3092\:8868\:793a\
+ |\n\n---\n\n## \:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\n\n| \:95a2\:6570 \
+| \:8aac\:660e |\n|------|------|\n| `ClaudeAttach[path]` | \
+\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306b\:53c2\:7167\
+\:8cc7\:6599\:3092\:30a2\:30bf\:30c3\:30c1 |\n| `ClaudeAttach[session, path]` \
+| \:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:306b\:30a2\:30bf\:30c3\:30c1 |\n\
+| `ClaudeDetach[path]` | \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\
+\:30e7\:30f3\:304b\:3089\:30c7\:30bf\:30c3\:30c1 |\n| `ClaudeDetach[session, \
+path]` | \:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:304b\:3089\:30c7\:30bf\
+\:30c3\:30c1 |\n| `ClaudeAttachments[]` | \
+\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:30a2\:30bf\
+\:30c3\:30c1\:30e1\:30f3\:30c8\:4e00\:89a7\:3092\:8fd4\:3059 |\n| \
+`ClaudeAttachments[session]` | \:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\
+\:306e\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:4e00\:89a7\:3092\:8fd4\:3059\
+ |\n| `ClearAttachments[]` | \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\
+\:30e7\:30f3\:306e\:5168\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:3092\:30af\
+\:30ea\:30a2 |\n| `ClearAttachments[session]` | \
+\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5168\:30a2\:30bf\:30c3\:30c1\
+\:30e1\:30f3\:30c8\:3092\:30af\:30ea\:30a2 |\n\n\
+\:30a2\:30bf\:30c3\:30c1\:3055\:308c\:305f\:30d5\:30a1\:30a4\:30eb\:306f \
+ClaudeQuery/ClaudeEval \:6642\:306b\:81ea\:52d5\:7684\:306b Read \:3055\:308c\
+\:308b\:3002\n\n---\n\n## \:6a5f\:5bc6\:30bb\:30eb\:7ba1\:7406\n\n| \:95a2\
+\:6570 | \:8aac\:660e |\n|------|------|\n| `MarkConfidential[]` | \:73fe\
+\:5728\:306e\:30bb\:30eb\:3092\:6a5f\:5bc6\:30de\:30fc\:30af\:3059\:308b |\n| \
+`MarkConfidential[cell]` | \:6307\:5b9a\:30bb\:30eb\:3092\:6a5f\:5bc6\:30de\
+\:30fc\:30af\:3059\:308b |\n| `UnmarkConfidential[]` | \:73fe\:5728\:306e\
+\:30bb\:30eb\:306e\:6a5f\:5bc6\:30de\:30fc\:30af\:3092\:89e3\:9664 |\n| \
+`UnmarkConfidential[cell]` | \:6307\:5b9a\:30bb\:30eb\:306e\:6a5f\:5bc6\:30de\
+\:30fc\:30af\:3092\:89e3\:9664 |\n| `IsConfidential[]` | \:73fe\:5728\:306e\
+\:30bb\:30eb\:304c\:6a5f\:5bc6\:304b\:3092\:8fd4\:3059 |\n| \
+`IsConfidential[cell]` | \:6307\:5b9a\:30bb\:30eb\:304c\:6a5f\:5bc6\:304b\
+\:3092\:8fd4\:3059 |\n| `Confidential[expr]` | \:5f0f\:3092\:8a55\:4fa1\:3057\
+\:3001Input/Output \:30bb\:30eb\:3092\:81ea\:52d5\:6a5f\:5bc6\:30de\:30fc\
+\:30af |\n| `NonConfidential[expr]` | \:5f0f\:3092\:8a55\:4fa1\:3057\:3001\
+\:6a5f\:5bc6\:30de\:30fc\:30af\:3092\:660e\:793a\:7684\:306b\:89e3\:9664 |\n| \
+`ScanConfidentialCells[]` | \:5168\:30bb\:30eb\:3092\:30b9\:30ad\:30e3\:30f3\
+\:3057\:3001\:6a5f\:5bc6\:5909\:6570\:53c2\:7167\:30bb\:30eb\:3092\:81ea\:52d5\
+\:30de\:30fc\:30af |\n\n\:6a5f\:5bc6\:30bb\:30eb\:306f ClaudeEval/ClaudeQuery \
+\:306e\:30d7\:30ed\:30f3\:30d7\:30c8\:304b\:3089\:9664\:5916\:3055\:308c\:308b\
+\:3002\n\n---\n\n## \:30c7\:30d0\:30c3\:30b0\:30fb\:30ec\:30d3\:30e5\:30fc\n\n\
+| \:95a2\:6570 | \:8aac\:660e |\n|------|------|\n| `ClaudeDebug[codeOrFile, \
+errorMsg]` | \:30c7\:30d0\:30c3\:30b0\:652f\:63f4\:3092\:975e\:540c\:671f\
+\:3067\:6c42\:3081\:308b\:ff08\:5373\:5ea7\:306b\:8fd4\:308b\:ff09 |\n| \
+`ClaudeReview[codeOrFile]` | \:30b3\:30fc\:30c9\:30ec\:30d3\:30e5\:30fc\:3092\
+\:975e\:540c\:671f\:5b9f\:884c\:ff0830000 \
+\:6587\:5b57\:8d85\:306f\:81ea\:52d5\:30c1\:30e3\:30f3\:30af\:5206\:5272\:ff09\
+ |\n| `ClaudeReviewChunked[codeOrFile]` | \
+\:30d5\:30a1\:30a4\:30eb\:3092\:30c1\:30e3\:30f3\:30af\:5206\:5272\:3057\:3066\
+\:975e\:540c\:671f\:30ec\:30d3\:30e5\:30fc |\n| `ClaudeSpec[\"task\"]` | \
+\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:5185\:5bb9\:304b\:3089\:30d7\:30ed\:30b0\
+\:30e9\:30e0\:4ed5\:69d8\:3092\:751f\:6210 |\n| `ClaudeSpec[{\"task\", image, \
+...}]` | \:753b\:50cf\:4ed8\:304d\:3067\:4ed5\:69d8\:3092\:751f\:6210 |\n\n\
+---\n\n## \:30d1\:30c3\:30b1\:30fc\:30b8\:7ba1\:7406\n\n| \:95a2\:6570 | \
+\:8aac\:660e |\n|------|------|\n| `ClaudeCreatePackage[name, prompt]` | \
+prompt \:306b\:5f93\:3044 name.wl \:3092\:65b0\:898f\:4f5c\:6210\:3057 \
+`$packageDirectory` \:306b\:4fdd\:5b58 |\n| `ClaudeUpdatePackage[name, \
+prompt]` | `$packageDirectory` \:306e name.wl \:3092 Claude \
+\:3067\:66f4\:65b0\:ff08\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:4f5c\:6210\:ff09\
+ |\n| `ClaudeRestorePackage[name]` | \:76f4\:524d\:306e\:30d0\:30c3\:30af\
+\:30a2\:30c3\:30d7\:3092\:5fa9\:5143 |\n| `ClaudeUpdatePackageHistory[]` | \
+\:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:66f4\:65b0\:5c65\:6b74\:3092\:30ea\
+\:30b9\:30c8\:3067\:8fd4\:3059 |\n| `ClaudeUpdatePackageHistory[name]` | \
+\:6307\:5b9a\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:66f4\:65b0\:5c65\:6b74\:3092\
+\:8fd4\:3059 |\n| `ClaudeBackupDataset[]` | \:5168\:30d1\:30c3\:30b1\:30fc\
+\:30b8\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:3092 \
+Review/Pull/Delete \:30dc\:30bf\:30f3\:4ed8\:304d Grid \:3067\:8868\:793a |\n\
+| `ClaudeBackupDataset[name]` | \:6307\:5b9a\:30d1\:30c3\:30b1\:30fc\:30b8\
+\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:3092\:8868\:793a |\n| \
+`ClaudeConvertToPaclet[name]` | \:5358\:4e00 .wl \:3092 Paclet \:30c7\:30a3\
+\:30ec\:30af\:30c8\:30ea\:69cb\:9020\:306b\:5909\:63db |\n\n\
+`ClaudeUpdatePackage` \:30aa\:30d7\:30b7\:30e7\:30f3: `TargetFunctions -> \
+Automatic`, `StartTime -> Now`\n\n---\n\n## \:30c9\:30ad\:30e5\:30e1\:30f3\
+\:30c8\:751f\:6210\n\n| \:95a2\:6570 | \:8aac\:660e |\n|------|------|\n| \
+`ClaudeCreateDocumentation[\"name\"]` | \:30d1\:30c3\:30b1\:30fc\:30b8\:306e\
+\:5305\:62ec\:7684\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:4e00\:5f0f\:3092\:81ea\
+\:52d5\:751f\:6210 |\n| `ClaudeUpdateDocumentation[\"name\", \
+\"\:6307\:793a\"]` | \:65e2\:5b58\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\
+\:6307\:793a\:306b\:5f93\:3063\:3066\:66f4\:65b0\:3059\:308b\:3002\:30ce\:30fc\
+\:30c8\:30d6\:30c3\:30af\:306e\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3082\:53c2\
+\:7167\:53ef\:80fd\:ff08\:300c\:4e0a\:3067\:8b70\:8ad6\:3055\:308c\:3066\:3044\
+\:308b\:5185\:5bb9\:3092\:53cd\:6620\:3057\:3066\:300d\:306a\:3069\:ff09\:3002\
+ |\n\n| \:30aa\:30d7\:30b7\:30e7\:30f3 | \:30c7\:30d5\:30a9\:30eb\:30c8 | \
+\:8aac\:660e |\n|-----------|-----------|------|\n| `References` | `{}` | \
+URL/\:66f8\:7c4d\:540d\:30ea\:30b9\:30c8\:3002\:53c2\:8003\:6587\:732e\:30bb\
+\:30af\:30b7\:30e7\:30f3\:306b\:8ffd\:52a0 |\n| `Demos` | `{}` | \:30c7\:30e2\
+\:52d5\:753b\:3084\:4f7f\:7528\:4f8b\:306e URL \:30ea\:30b9\:30c8 |\n| \
+`Disclaimer` | `{}` | \:514d\:8cac\:4e8b\:9805\:306e\:6587\:8a00\:30ea\:30b9\
+\:30c8 |\n| `License` | `\"\"` | \:7a7a\:6587\:5b57\:3067 MIT \:81ea\:52d5\
+\:633f\:5165\:3002\:6587\:5b57\:5217\:6307\:5b9a\:3067\:305d\:306e\:307e\:307e\
+\:633f\:5165 |\n\n---\n\n## \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:7ba1\
+\:7406\n\n| \:95a2\:6570 | \:8aac\:660e |\n|------|------|\n| \
+`ClaudeAddDirective[target, description]` | Claude \:3067 description \:3092\
+\:6574\:5f62\:3057\:3001target \:30d5\:30a1\:30a4\:30eb\:306b\:8ffd\:52a0 |\n\
+| `ClaudeRestoreDirective[target]` | \:76f4\:524d\:306e\:30d0\:30c3\:30af\
+\:30a2\:30c3\:30d7\:304b\:3089\:5fa9\:5143 |\n| `ClaudeListDirectives[]` | \
+CLAUDE.md \:3068\:5168\:30b9\:30ad\:30eb\:306e\:4e00\:89a7\:3092\:8868\:793a \
+|\n| `ClaudeUpdateDirective[]` | \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3068 \
+Claude Directives \
+\:306e\:6574\:5408\:6027\:3092\:30c1\:30a7\:30c3\:30af\:3057\:3001\:4e0d\:6574\
+\:5408\:3092\:81ea\:52d5\:4fee\:6b63\:3059\:308b |\n| \
+`ClaudeUpdateDirective[text]` | text \:3092 Claude \:3067\:89e3\:91c8\:3057 \
+CLAUDE.md / rules / skills \:306e\:9069\:5207\:306a\:30d5\:30a1\:30a4\:30eb\
+\:306b\:53cd\:6620\:3059\:308b\:3002\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\
+\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3082\:53c2\:7167\:53ef\:80fd\:3002 |\n| \
+`ClaudeDirectiveBackupDataset[]` | \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\
+\:306e\:66f4\:65b0\:5c65\:6b74\:3092 Review/Pull/Delete \:4ed8\:304d Grid \
+\:3067\:8868\:793a |\n\n`ClaudeAddDirective` \:30aa\:30d7\:30b7\:30e7\:30f3: \
+`DryRun -> False`\:ff08`True` \
+\:3067\:30d5\:30a1\:30a4\:30eb\:5909\:66f4\:306a\:3057\:ff09\:3002  \ntarget \
+\:306f `\"CLAUDE.md\"` \
+\:307e\:305f\:306f\:30b9\:30ad\:30eb\:540d\:ff08\:4f8b: `\"wolfram-general\"`\
+\:ff09\:3002\n\n---\n\n## Web \:691c\:7d22\:30fb\:53d6\:5f97\n\n| \
+\:95a2\:6570 | \:8aac\:660e |\n|------|------|\n| `ClaudeWebSearch[query]` | \
+Anthropic API \:306e web_search \:30c4\:30fc\:30eb\:3067\:691c\:7d22\:3057\
+\:7d50\:679c\:3092\:30c6\:30ad\:30b9\:30c8\:3067\:8fd4\:3059 |\n| \
+`ClaudeWebFetch[url]` | URL \:306e\:5185\:5bb9\:3092\:53d6\:5f97\:30fb\:8981\
+\:7d04\:3057\:3066\:8fd4\:3059 |\n| `ClaudeWebFetch[url, prompt]` | \:53d6\
+\:5f97\:5185\:5bb9\:306b\:5bfe\:3057\:3066 prompt \:306e\:6307\:793a\:3092\
+\:5b9f\:884c |\n\n---\n\n## \:5206\:96e2\:691c\:8a3c\n\n| \:95a2\:6570 | \
+\:8aac\:660e |\n|------|------|\n| `ClaudeCheckSeparation[target]` | \
+[NBAccess](https://github.com/transreal/NBAccess) \:306e\:5206\:96e2\:539f\
+\:5247\:9055\:53cd\:7b87\:6240\:3092\:30ea\:30b9\:30c8\:30a2\:30c3\:30d7 |\n| \
+`ClaudeFixSeparation[target]` | \:5206\:96e2\:9055\:53cd\:3092\:4fee\:6b63\
+\:ff08\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:306a\:3089\:30d0\:30c3\:30af\:30a2\
+\:30c3\:30d7\:5f8c\:4fee\:6b63\:3001\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:306a\
+\:3089 ClaudeUpdatePackage \:7d4c\:7531\:ff09 |\n\ntarget: \:30d5\:30a1\:30a4\
+\:30eb\:30d1\:30b9 / `$packageDirectory` \:306e .wl \:540d / \:30d1\:30af\
+\:30ec\:30c3\:30c8\:540d\:3002\n\n\:691c\:67fb\:5bfe\:8c61\:ff08\:9759\:7684\
+\:30d1\:30bf\:30fc\:30f3\:8d70\:67fb + LLM \:5224\:5b9a\:ff09:\n- a. \
+SystemCredential \:76f4\:63a5\:5229\:7528\n- b. CellObject \:76f4\:63a5\:64cd\
+\:4f5c (NotebookWrite/NotebookRead/CellGroupData \:76f4\:63a5\:69cb\:7bc9)\n- \
+c. CellEpilog/CellProlog/NotebookEventActions \:76f4\:63a5\:64cd\:4f5c\n- d. \
+NBAccess`Private` \:95a2\:6570\:547c\:3073\:51fa\:3057\n- e. NBAccess \:516c\
+\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:76f4\:63a5\:66f4\:65b0\n- f. \
+EvaluationCell[]/CellPrint[]/SetSelectedNotebook[] \:76f4\:63a5\:4f7f\:7528\n\
+- g. CurrentValue/SetOptions \:306b\:3088\:308b \
+TaggingRules/CellTags/CellEpilog \:5c5e\:6027\:76f4\:63a5\:30a2\:30af\:30bb\
+\:30b9\n- h. CellObject \:306e\:516c\:958b API\:30fb\:623b\:308a\:5024\:30fb\
+\:72b6\:614b\:4fdd\:6301\:3078\:306e\:6f0f\:6d29\n- i. \
+SelectionEvaluate/FrontEndTokenExecute \:7b49 FE \:72b6\:614b\:64cd\:4f5c\n- \
+j. NBAccess \
+\:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0\
+ (AppendTo/AssociateTo \:7b49)\n\n`$ClaudeTestModel` \:306e\:30e2\:30c7\:30eb\
+\:3067\:691c\:67fb\:3059\:308b\:3002\n\n---\n\n## \:305d\:306e\:4ed6\n\n| \
+\:95a2\:6570 | \:8aac\:660e |\n|------|------|\n| \
+`ClaudeCommand[\"/command\"]` | Claude Code CLI \
+\:306e\:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9\:3092\:5b9f\:884c\
+\:3057\:7d50\:679c\:3092\:8fd4\:3059 |\n| `ShowClaudePalette[]` | Claude Code \
+\:64cd\:4f5c\:7528\:30d1\:30ec\:30c3\:30c8\:3092\:8868\:793a |\n| \
+`ClaudeQueryShowContext[]` | \:30c7\:30d0\:30c3\:30b0\:7528: \:6b21\:306e \
+ClaudeQuery \
+\:304c\:9001\:4fe1\:3059\:308b\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\
+\:30c6\:30ad\:30b9\:30c8\:3092\:8868\:793a |\n| `ClaudeShowAccessConfig[]` | \
+\:30c7\:30d0\:30c3\:30b0\:7528: \:30d5\:30a1\:30a4\:30eb\:30a2\:30af\:30bb\
+\:30b9\:8a2d\:5b9a\:3092\:8868\:793a |\n\n---\n\n## \:4f9d\:5b58\:30d1\:30c3\
+\:30b1\:30fc\:30b8\n\n- [NBAccess](https://github.com/transreal/NBAccess) \
+\[LongDash] \
+\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:8aad\:307f\:66f8\:304d\:30fb\:30d7\:30e9\
+\:30a4\:30d0\:30b7\:30fc\:7ba1\:7406\n- \
+[github](https://github.com/transreal/github) (`GitHubREST``) \[LongDash] \
+GitHub API \:9023\:643a\:30fb\:30d1\:30c3\:30b1\:30fc\:30b8 URL \:53d6\:5f97\n\
+\n=== \:30d1\:30c3\:30b1\:30fc\:30b8 API \
+\:30ea\:30d5\:30a1\:30ec\:30f3\:30b9: github ===\n(\:30c9\:30ad\:30e5\:30e1\
+\:30f3\:30c8\:306f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3088\:308a\:65b0\:3057\
+\:3044\:305f\:3081\:53c2\:8003\:60c5\:5831\:3068\:3057\:3066\:6709\:52b9)\n\
+IMPORTANT: \:30b3\:30fc\:30c9\:3092\:751f\:6210\:3059\:308b\:969b\:306f\:3001\
+\:3053\:306e api.md \:306b\:8a18\:8f09\:3055\:308c\:305f\:95a2\:6570\:540d\
+\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:30fb\:5f15\:6570\:306e\:307f\:3092\:4f7f\
+\:7528\:3059\:308b\:3053\:3068\:3002\:5b58\:5728\:3057\:306a\:3044\:95a2\:6570\
+\:3092\:751f\:6210\:3057\:306a\:3044\:3053\:3068\:3002api.md \:3067\:4e0d\
+\:660e\:306a\:70b9\:304c\:3042\:308b\:5834\:5408\:306e\:307f\:30bd\:30fc\:30b9\
+\:30b3\:30fc\:30c9\:3092\:53c2\:7167\:3059\:308b\:3053\:3068\:3002\n\n# \
+GitHubREST` \[LongDash] API \:30ea\:30d5\:30a1\:30ec\:30f3\:30b9\n\n\:30d1\
+\:30c3\:30b1\:30fc\:30b8: [github](https://github.com/transreal/github)  \n\
+\:4f9d\:5b58: [NBAccess](https://github.com/transreal/NBAccess)\:ff08API \
+\:30ad\:30fc\:53d6\:5f97\:306b\:4f7f\:7528\:ff09\n\n## \:95a2\:6570\:4e00\
+\:89a7\n\n### URL / \:30d1\:30b9\:89e3\:6c7a\n\n| \:30b7\:30b0\:30cd\:30c1\
+\:30e3 | \:623b\:308a\:5024 | \:8aac\:660e |\n|---|---|---|\n| \
+`GitHubPackageURL[name]` | `String` | `$packageDirectory` \:5185\:30d1\:30c3\
+\:30b1\:30fc\:30b8\:306e GitHub URL \:3092\:8fd4\:3059 |\n| \
+`GitHubPackageURLs[]` | `Association` | \:5168\:30d1\:30c3\:30b1\:30fc\:30b8\
+\:306e `<\\|name -> url\\|>` \:3092\:8fd4\:3059 |\n| `GitHubRepoPath[name]` | \
+`String` | \:30ed\:30fc\:30ab\:30eb\:4f5c\:696d\:30d5\:30a9\:30eb\:30c0\:306e\
+\:30d1\:30b9\:3092\:8fd4\:3059 (`$packageDirectory/GithubRepositories/name`) \
+|\n| `GitHubEnsureLocalRepo[name]` | `String` | \
+\:30ed\:30fc\:30ab\:30eb\:4f5c\:696d\:30d5\:30a9\:30eb\:30c0\:3092\:4f5c\:6210\
+\:3057\:3066\:8fd4\:3059 |\n\n### \:30de\:30cb\:30d5\:30a7\:30b9\:30c8 / \
+\:30ed\:30fc\:30ab\:30eb\:540c\:671f\n\n| \:30b7\:30b0\:30cd\:30c1\:30e3 | \
+\:623b\:308a\:5024 | \:8aac\:660e |\n|---|---|---|\n| \
+`GitHubReadManifest[name]` | `Association` | `_info/upload_manifest.json` \
+\:3092\:8aad\:3080\:3002\:4e0d\:5728\:6642\:306f\:81ea\:52d5\:751f\:6210 |\n| \
+`GitHubRefreshLocalPackageGroup[name]` | \[LongDash] | \:30de\:30cb\:30d5\
+\:30a7\:30b9\:30c8\:306b\:5f93\:3044\:30d5\:30a1\:30a4\:30eb\:3092\:30ed\:30fc\
+\:30ab\:30eb\:4f5c\:696d\:30d5\:30a9\:30eb\:30c0\:3078\:30b3\:30d4\:30fc |\n| \
+`GitHubRefreshLocalPackage[name]` | \[LongDash] | `name.wl` \
+\:5358\:4f53\:3092\:30ed\:30fc\:30ab\:30eb\:3078\:30b3\:30d4\:30fc\:ff08\:5f8c\
+\:65b9\:4e92\:63db\:7528\:ff09 |\n\n### \:30ea\:30dd\:30b8\:30c8\:30ea\:64cd\
+\:4f5c\n\n| \:30b7\:30b0\:30cd\:30c1\:30e3 | \:623b\:308a\:5024 | \
+\:8aac\:660e |\n|---|---|---|\n| `GitHubCreateRepository[name]` | `String` | \
+GitHub \:306b\:65b0\:898f\:30ea\:30dd\:30b8\:30c8\:30ea\:3092\:4f5c\:6210\
+\:3057\:3001default branch \:3092\:8fd4\:3059 |\n| `GitHubReadFile[name, \
+path]` | `String\\|ByteArray` | GitHub \:4e0a\:306e\:30d5\:30a1\:30a4\:30eb\
+\:3092\:8aad\:307f\:53d6\:308b |\n| `GitHubPull[name]` | \[LongDash] | \:30ea\
+\:30e2\:30fc\:30c8\:306e\:5185\:5bb9\:3092\:30ed\:30fc\:30ab\:30eb\:4f5c\:696d\
+\:30d5\:30a9\:30eb\:30c0\:3078\:53d6\:5f97 |\n| `GitHubCommit[name, message]` \
+| \[LongDash] | \:30ed\:30fc\:30ab\:30eb\:4f5c\:696d\:30d5\:30a9\:30eb\:30c0\
+\:306e\:5185\:5bb9\:3092 GitHub \:3078\:4e00\:62ec\:30b3\:30df\:30c3\:30c8 |\n\
+| `GitHubRefreshAndCommit[name, message]` | \[LongDash] | \:30ea\:30d5\:30ec\
+\:30c3\:30b7\:30e5 \[RightArrow] \:30b3\:30df\:30c3\:30c8\:3092\:4e00\:62ec\
+\:5b9f\:884c |\n\n### \:30d7\:30eb\:30ea\:30af\:30a8\:30b9\:30c8\n\n| \:30b7\
+\:30b0\:30cd\:30c1\:30e3 | \:623b\:308a\:5024 | \:8aac\:660e |\n|---|---|---|\
+\n| `GitHubCreatePullRequest[name, title]` | `Association` | PR \:3092\:4f5c\
+\:6210\:3059\:308b |\n| `GitHubSubmitPullRequest[name, title, message]` | \
+\[LongDash] | refresh \[RightArrow] branch \:4f5c\:6210 \[RightArrow] commit \
+\[RightArrow] PR \:4f5c\:6210\:3092\:4e00\:62ec\:5b9f\:884c |\n| \
+`GitHubListPullRequests[name]` | `List` | \:30aa\:30fc\:30d7\:30f3 PR \:4e00\
+\:89a7\:3092\:512a\:5148\:5ea6\:30fb\:4f9d\:5b58\:95a2\:4fc2\:3067\:30bd\:30fc\
+\:30c8\:3057\:3066\:8fd4\:3059 |\n| `GitHubPullRequestDataset[name]` | `Grid` \
+| PR \:4e00\:89a7\:3092 Review/Pull/Merge/Close \
+\:30dc\:30bf\:30f3\:4ed8\:304d Grid \:3067\:8fd4\:3059 |\n| \
+`GitHubMergePullRequest[name, prNumber, reason]` | \[LongDash] | PR \:3092\
+\:30de\:30fc\:30b8\:3059\:308b |\n| `GitHubClosePullRequest[name, prNumber, \
+reason]` | \[LongDash] | PR \:3092\:30af\:30ed\:30fc\:30ba\:3059\:308b |\n| \
+`GitHubReviewPullRequest[name, prNumber]` | \[LongDash] | PR \:306e\:30b3\
+\:30fc\:30c9\:3092\:30c0\:30a6\:30f3\:30ed\:30fc\:30c9\:3057\:3066\:30ce\:30fc\
+\:30c8\:30d6\:30c3\:30af\:306b\:51fa\:529b\:3059\:308b |\n\n### \:30b3\:30df\
+\:30c3\:30c8\:5c65\:6b74\n\n| \:30b7\:30b0\:30cd\:30c1\:30e3 | \:623b\:308a\
+\:5024 | \:8aac\:660e |\n|---|---|---|\n| `GitHubListCommits[name]` | `List` \
+| \:30ea\:30dd\:30b8\:30c8\:30ea\:306e\:30b3\:30df\:30c3\:30c8\:5c65\:6b74\
+\:3092\:53d6\:5f97\:3057\:3066\:30ea\:30b9\:30c8\:3067\:8fd4\:3059\:3002\:30aa\
+\:30d7\:30b7\:30e7\:30f3: `Owner`, `Repository`, `Branch`, `MaxItems` |\n| \
+`GitHubCommitDataset[name]` | \[LongDash] | \:30b3\:30df\:30c3\:30c8\:5c65\
+\:6b74\:3092 Review/Pull/Revert \:30dc\:30bf\:30f3\:4ed8\:304d Grid \:3067\
+\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:51fa\:529b\:3059\:308b\:3002\:8d77\
+\:52d5\:6642\:306b\:73fe\:5728\:306e\:4f5c\:696d\:72b6\:614b\:3092 \
+`GithubRepositories/_local_snapshot/name/` \:3078\:81ea\:52d5\:30b9\:30ca\
+\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:4fdd\:5b58\:3057\:3001#0 \:884c\:ff08\
+\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:ff09\:306e Pull \
+\:30dc\:30bf\:30f3\:3067\:5fa9\:5143\:3067\:304d\:308b |\n| \
+`GitHubReviewCommit[name, sha]` | `Association` | \:6307\:5b9a\:30b3\:30df\
+\:30c3\:30c8\:306e\:8a73\:7d30\:30fb\:5dee\:5206\:3092\:30ce\:30fc\:30c8\:30d6\
+\:30c3\:30af\:306b\:8868\:793a\:3059\:308b\:3002Pull/Revert \
+\:30dc\:30bf\:30f3\:4ed8\:304d |\n| `GitHubRevertCommit[name, sha, reason]` | \
+`Association` | \:6307\:5b9a\:30b3\:30df\:30c3\:30c8\:306e\:89aa\:306e tree \
+\:3092\:4f7f\:3044\:30ea\:30d0\:30fc\:30c8\:30b3\:30df\:30c3\:30c8\:3092\:4f5c\
+\:6210\:3059\:308b |\n\n### \:30ea\:30dd\:30b8\:30c8\:30ea\:540d DB\n\n| \
+\:30b7\:30b0\:30cd\:30c1\:30e3 | \:623b\:308a\:5024 | \:8aac\:660e |\n\
+|---|---|---|\n| `GitHubRepoDB[]` | `Association` | `repo_database.json` \
+\:306e\:5168\:30ec\:30b3\:30fc\:30c9\:3092\:8fd4\:3059 |\n| \
+`GitHubRepoDBSet[name, repoName]` | \[LongDash] | \:30d1\:30c3\:30b1\:30fc\
+\:30b8\:540d \[RightArrow] \:30ea\:30dd\:30b8\:30c8\:30ea\:540d\:306e\:5bfe\
+\:5fdc\:3092 DB \:306b\:767b\:9332\:3059\:308b |\n| \
+`GitHubRepoDBLookup[name]` | `String` | DB \:304b\:3089\:30ea\:30dd\:30b8\
+\:30c8\:30ea\:540d\:3092\:89e3\:6c7a\:ff08\:672a\:767b\:9332\:306a\:3089 \
+`name` \:3092\:305d\:306e\:307e\:307e\:8fd4\:3059\:ff09 |\n\n\:975e ASCII \
+\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3067 `Repository -> Automatic` \:306e\
+\:5834\:5408\:3001Claude API (`iTranslateToEnglishRepoName`) \:3092\:547c\
+\:3073\:51fa\:3057\:3066\:610f\:5473\:306e\:3042\:308b\:82f1\:8a9e\:30ea\:30dd\
+\:30b8\:30c8\:30ea\:540d\:3092\:81ea\:52d5\:751f\:6210\:3057 DB \:306b\:767b\
+\:9332\:3059\:308b\:3002GitHub \:4e0a\:306e\:91cd\:8907\:3082\:81ea\:52d5\
+\:56de\:907f\:3059\:308b\:3002`Fallback -> True` \:3092\:6307\:5b9a\:3059\
+\:308b\:3068 Claude Code \:304c\:5229\:7528\:3067\:304d\:306a\:3044\:5834\
+\:5408\:306b `Transliterate` \:306b\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\
+\:3059\:308b\:3002\n\n### \:30d1\:30c3\:30b1\:30fc\:30b8\:7ba1\:7406\n\n| \
+\:30b7\:30b0\:30cd\:30c1\:30e3 | \:623b\:308a\:5024 | \:8aac\:660e |\n\
+|---|---|---|\n| `GitHubInstallPackage[name]` | \[LongDash] | GitHub \:304b\
+\:3089 `$packageDirectory` \:3078\:521d\:56de\:30c0\:30a6\:30f3\:30ed\:30fc\
+\:30c9 |\n| `GitHubUpdatePackage[name]` | \[LongDash] | \:65e2\:5b58\:30d1\
+\:30c3\:30b1\:30fc\:30b8\:3092 GitHub \:6700\:65b0\:7248\:306b\:66f4\:65b0 |\n\
+\n### \:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\n\n| \
+\:30b7\:30b0\:30cd\:30c1\:30e3 | \:578b | \:8aac\:660e |\n|---|---|---|\n| \
+`$GitHubLicenseHolder` | `String` | MIT \:30e9\:30a4\:30bb\:30f3\:30b9\:306e\
+\:8457\:4f5c\:6a29\:8005\:540d\:3002\:7a7a\:6587\:5b57\:5217 `\"\"` \:306e\
+\:5834\:5408\:306f README.md \:306b\:30e9\:30a4\:30bb\:30f3\:30b9\:30bb\:30af\
+\:30b7\:30e7\:30f3\:3092\:633f\:5165\:3057\:306a\:3044\:3002\:4f8b: \
+`$GitHubLicenseHolder = \"Katsunobu Imai\"` |\n\n## \:30aa\:30d7\:30b7\:30e7\
+\:30f3\:4e00\:89a7\n\n### \:30ea\:30dd\:30b8\:30c8\:30ea\:8b58\:5225\n\n| \
+\:30aa\:30d7\:30b7\:30e7\:30f3 | \:65e2\:5b9a\:5024 | \
+\:5bfe\:8c61\:95a2\:6570 | \:8aac\:660e |\n|---|---|---|---|\n| `Owner` | \
+`Automatic` | \:5168\:822c | GitHub \
+\:30aa\:30fc\:30ca\:30fc\:540d\:ff08Automatic \[RightArrow] \
+\:30c8\:30fc\:30af\:30f3\:304b\:3089\:81ea\:52d5\:53d6\:5f97\:ff09 |\n| \
+`Repository` | `Automatic` | \:5168\:822c | \:30ea\:30dd\:30b8\:30c8\:30ea\
+\:540d\:ff08Automatic \[RightArrow] `packageName` \:307e\:305f\:306f DB \
+\:3092\:4f7f\:7528\:ff09 |\n| `Branch` | `Automatic` | Commit/Pull/PR/Revert \
+| \:64cd\:4f5c\:5bfe\:8c61\:30d6\:30e9\:30f3\:30c1 |\n| `BaseBranch` | \
+`Automatic` | Commit/PR/Revert | \:30d9\:30fc\:30b9\:30d6\:30e9\:30f3\:30c1\
+\:ff08Automatic \[RightArrow] default branch\:ff09 |\n| `MaxItems` | `30` | \
+`GitHubListCommits` / `GitHubCommitDataset` | \:53d6\:5f97\:3059\:308b\:30b3\
+\:30df\:30c3\:30c8\:6570\:306e\:4e0a\:9650 |\n\n### \:30ea\:30dd\:30b8\:30c8\
+\:30ea\:4f5c\:6210\n\n| \:30aa\:30d7\:30b7\:30e7\:30f3 | \:65e2\:5b9a\:5024 | \
+\:8aac\:660e |\n|---|---|---|\n| `Public` | `False` | `True` \:306b\:3059\
+\:308b\:3068\:516c\:958b\:30ea\:30dd\:30b8\:30c8\:30ea\:3092\:4f5c\:6210 |\n| \
+`Description` | `\"\"` | \:30ea\:30dd\:30b8\:30c8\:30ea\:306e\:8aac\:660e\
+\:6587 |\n| `Homepage` | `\"\"` | \:30db\:30fc\:30e0\:30da\:30fc\:30b8 URL |\n\
+| `AutoInit` | `True` | README \:4ed8\:304d\:3067\:521d\:671f\:5316\:3059\
+\:308b\:304b |\n| `GitignoreTemplate` | `None` | GitHub \:306e gitignore \
+\:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:540d |\n| `LicenseTemplate` | `None` | \
+GitHub \:306e license \:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:540d |\n\n### \
+\:30b3\:30df\:30c3\:30c8\:5236\:5fa1\n\n| \:30aa\:30d7\:30b7\:30e7\:30f3 | \
+\:65e2\:5b9a\:5024 | \:8aac\:660e |\n|---|---|---|\n| `CreateBranch` | \
+`Automatic` | \:30d6\:30e9\:30f3\:30c1\:4e0d\:5728\:6642\:306b `BaseBranch` \
+\:304b\:3089\:4f5c\:6210\:3059\:308b\:304b |\n| `Force` | `False` | ref \
+\:66f4\:65b0\:6642\:306b fast-forward \:5236\:7d04\:3092\:7121\:8996\:3059\
+\:308b\:304b |\n| `DeleteMissing` | `False` | \:30ed\:30fc\:30ab\:30eb\:306b\
+\:7121\:3044\:30ea\:30e2\:30fc\:30c8 blob \
+\:3092\:524a\:9664\:3059\:308b\:304b |\n| `Author` | `Automatic` | \:30b3\
+\:30df\:30c3\:30c8 author `<\\|\"name\"->\[Ellipsis], \
+\"email\"->\[Ellipsis]\\|>` |\n| `Committer` | `Automatic` | \:30b3\:30df\
+\:30c3\:30c8 committer |\n| `ExtraDirectories` | `{}` | \
+`GitHubCreateRepository` / `GitHubRefreshAndCommit` \:3067 \
+`upload_manifest.json` \:306e `directories` \:306b\:6c38\:7d9a\:8ffd\:52a0\
+\:3059\:308b\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306e\:30ea\:30b9\:30c8\:3002\
+\:4f8b: `ExtraDirectories -> {\"Claude Directives\"}` |\n\n### \:30ed\:30fc\
+\:30ab\:30eb\:30d1\:30b9 / \:30d5\:30a1\:30a4\:30eb\n\n| \:30aa\:30d7\:30b7\
+\:30e7\:30f3 | \:65e2\:5b9a\:5024 | \:8aac\:660e |\n|---|---|---|\n| \
+`LocalRepoPath` | `Automatic` | \:30ed\:30fc\:30ab\:30eb\:4f5c\:696d\:30d5\
+\:30a9\:30eb\:30c0\:306e\:30d1\:30b9\:3092\:660e\:793a\:6307\:5b9a |\n| \
+`PackageFile` | `Automatic` | `packageName.wl` \:306e\:30d1\:30b9\:3092\:660e\
+\:793a\:6307\:5b9a |\n| `IncludePackageFile` | `True` | \:30b3\:30df\:30c3\
+\:30c8\:524d\:306b `.wl` \:3092\:30ed\:30fc\:30ab\:30eb\:3078\:30b3\:30d4\
+\:30fc\:3059\:308b\:304b |\n| `Clean` | `False` | Pull \:524d\:306b\:65e2\
+\:5b58\:30ed\:30fc\:30ab\:30eb\:30d5\:30a1\:30a4\:30eb\:3092\:524a\:9664\:3059\
+\:308b\:304b |\n\n### \:30d5\:30a1\:30a4\:30eb\:8aad\:307f\:53d6\:308a / PR\n\
+\n| \:30aa\:30d7\:30b7\:30e7\:30f3 | \:65e2\:5b9a\:5024 | \:5bfe\:8c61\:95a2\
+\:6570 | \:8aac\:660e |\n|---|---|---|---|\n| `ReturnType` | `\"Text\"` | \
+`GitHubReadFile` | `\"Text\"` / `\"ByteArray\"` / `\"Bytes\"` |\n| `Head` | \
+`Automatic` | `GitHubCreatePullRequest` | PR \:306e head \:30d6\:30e9\:30f3\
+\:30c1\:ff08Automatic \[RightArrow] `Branch`\:ff09 |\n| `Body` | `\"\"` | \
+`GitHubCreatePullRequest` | PR \:672c\:6587 |\n| `Draft` | `False` | \
+`GitHubCreatePullRequest` | \:30c9\:30e9\:30d5\:30c8 PR \:3068\:3057\:3066\
+\:4f5c\:6210\:3059\:308b\:304b |\n| `MaintainerCanModify` | `True` | \
+`GitHubCreatePullRequest` | maintainer \:306b\:3088\:308b head \:7de8\:96c6\
+\:3092\:8a31\:53ef\:3059\:308b\:304b |\n\nTask: === Web \:691c\:7d22\:7d50\
+\:679c ===\nClaude \
+Directives\:306b\:95a2\:3059\:308b\:60c5\:5831\:3068README.md\:306e\:8a18\
+\:8f09\:30df\:30b9\:306b\:3064\:3044\:3066\:8abf\:3079\:3066\:307f\:307e\:3059\
+\:3002\nClaude Directives\:3068\:3044\:3046\:5177\:4f53\:7684\:306a\:6982\
+\:5ff5\:306b\:3064\:3044\:3066\:3001\:3088\:308a\:8a73\:3057\:3044\:60c5\:5831\
+\:3092\:691c\:7d22\:3057\:3066\:307f\:307e\:3059\:3002\n\:300cClaude \
+Directives\:300d\:3068\:3044\:3046\:7279\:5b9a\:306e\:6982\:5ff5\:306b\:3064\
+\:3044\:3066\:3088\:308a\:5177\:4f53\:7684\:306b\:691c\:7d22\:3057\:3066\:307f\
+\:307e\:3059\:3002\n\:7533\:3057\:8a33\:3054\:3056\:3044\:307e\:305b\:3093\
+\:304c\:3001\:691c\:7d22\:7d50\:679c\:304b\:3089\:300cClaude Directives\:300d\
+\:3068\:3044\:3046\:7279\:5b9a\:306e\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:3084\
+\:30b3\:30f3\:30bb\:30d7\:30c8\:3092\:898b\:3064\:3051\:308b\:3053\:3068\:304c\
+\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002\:691c\:7d22\:7d50\:679c\
+\:3067\:306f\:3001Claude Code\:3084Claude\:95a2\:9023\:306e\:69d8\:3005\:306a\
+\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:304c\:898b\:3064\:304b\:308a\:307e\:3057\
+\:305f\:304c\:3001\:300cClaude Directives\:300d\:3068\:3044\:3046\:660e\:78ba\
+\:306a\:540d\:524d\:306e\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:306f\:7279\:5b9a\
+\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002\n\n\:4ee5\:4e0b\:306e\
+\:60c5\:5831\:3092\:6574\:7406\:3044\:305f\:3057\:307e\:3059\:ff1a\n\n## \
+Claude Code\:95a2\:9023\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:6982\:8981\n\n\
+\:691c\:7d22\:7d50\:679c\:304b\:3089\:5f97\:3089\:308c\:305f\:4e3b\:8981\:306a\
+\:60c5\:5831\:ff1a\n\n### \:4e3b\:8981\:306aClaude Code\:95a2\:9023\:30ea\
+\:30dd\:30b8\:30c8\:30ea\n1. **anthropics/claude-code** - \nClaude Code is an \
+agentic coding tool that lives in your terminal, understands your codebase, \
+and helps you code faster by executing routine tasks, explaining complex \
+code, and handling git workflows - all through natural language commands.\n\n\
+\n2. **anthropics/claude-plugins-official** - \nOfficial, Anthropic-managed \
+directory of high quality Claude Code Plugins.\n\n\n### \:4e00\:822c\:7684\
+\:306aREADME.md\:306e\:8a18\:8f09\:30df\:30b9\:306e\:30d1\:30bf\:30fc\:30f3\n\
+\:691c\:7d22\:7d50\:679c\:304b\:3089\:767a\:898b\:3055\:308c\:305f\:5178\:578b\
+\:7684\:306a\:554f\:984c\:ff1a\n\n1. **\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\
+\:624b\:9806\:306e\:554f\:984c**\n   - \nInstallation via npm is deprecated. \
+Use one of the recommended methods below.\n\n\n2. **\:30c9\:30ad\:30e5\:30e1\
+\:30f3\:30c8\:306e\:4e0d\:6574\:5408**\n   - \nThe attention budget (why less \
+is more) Anthropic's official include/exclude table\n\n\n3. **\:8a2d\:5b9a\
+\:30d5\:30a1\:30a4\:30eb\:306e\:8a18\:8f09\:30a8\:30e9\:30fc**\n   - \nThis \
+documentation uses \"skills\" as the primary term, but you may see both used \
+interchangeably. They both refer to markdown files in .claude/commands/ that \
+you invoke with /skill-name.\n\n\n## \:63d0\:6848\:3055\:308c\:308b\:30a2\
+\:30af\:30b7\:30e7\:30f3\n\n\:300cClaude Directives\:300d\:306e\:5177\:4f53\
+\:7684\:306a\:7279\:5b9a\:304c\:3067\:304d\:306a\:304b\:3063\:305f\:305f\:3081\
+\:3001\:4ee5\:4e0b\:306e\:78ba\:8a8d\:3092\:304a\:52e7\:3081\:3057\:307e\:3059\
+\:ff1a\n\n1. **\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:540d\:306e\:518d\:78ba\
+\:8a8d** - \:300cClaude Directives\:300d\:304c\:6b63\:78ba\:306a\:30d7\:30ed\
+\:30b8\:30a7\:30af\:30c8\:540d\:304b\:3069\:3046\:304b\n2. **\:30ea\:30dd\
+\:30b8\:30c8\:30eaURL\:306e\:63d0\:4f9b** - \:5177\:4f53\:7684\:306aGitHub\
+\:30ea\:30dd\:30b8\:30c8\:30ea\:306e\:30ea\:30f3\:30af\n3. **\:5177\:4f53\
+\:7684\:306a\:30a8\:30e9\:30fc\:5185\:5bb9** - README.md\:306e\:4f55\:304c\
+\:9593\:9055\:3063\:3066\:3044\:308b\:306e\:304b\:306e\:8a73\:7d30\n\n\:3053\
+\:308c\:3089\:306e\:60c5\:5831\:304c\:3042\:308c\:3070\:3001\:3088\:308a\:5177\
+\:4f53\:7684\:3067\:6709\:7528\:306a\:4fee\:6b63\:63d0\:6848\:3092\:884c\:3046\
+\:3053\:3068\:304c\:3067\:304d\:307e\:3059\:3002\n\n=== \:30bf\:30b9\:30af \
+===\ngithub\:306bclaudecode\:3092\:30b3\:30df\:30c3\:30c8\:3057\:3066\:307b\
+\:3057\:3044: Claude Directives\:306b\:95a2\:3057\:3066\:3001Claude \
+Directives\:306eREADME.md\:306e\:8a18\:8f09\:306e\:30df\:30b9\:306e\:4fee\
+\:6b63", "cellCount" -> 25, "response" -> 
+       "README.md \
+\:306e\:5185\:5bb9\:3092\:78ba\:8a8d\:3057\:307e\:3057\:305f\:3002\:30a4\:30f3\
+\:30b9\:30c8\:30fc\:30eb\:624b\:9806\:306f\:65e2\:306b\:4fee\:6b63\:6e08\:307f\
+\:3067\:3059\:ff08`install-claude-directives.wl` \:306e\:8a18\:8f09\:304c\
+\:524a\:9664\:3055\:308c\:3001`$packageDirectory` \:306b\:914d\:7f6e\:3059\
+\:308b\:3060\:3051\:3068\:3044\:3046\:6b63\:3057\:3044\:624b\:9806\:306b\:306a\
+\:3063\:3066\:3044\:307e\:3059\:ff09\:3002\n\n\
+\:3053\:306e\:4fee\:6b63\:3092GitHub\:306b\:30b3\:30df\:30c3\:30c8\:3059\:308b\
+\:30b3\:30fc\:30c9\:3092\:751f\:6210\:3057\:307e\:3059\:3002\n\n\
+```mathematica\nGitHubRefreshAndCommit[\"claudecode\", \"Fix Claude \
+Directives README.md: correct installation instructions\"]\n```", "code" -> 
+       "GitHubRefreshAndCommit[\"claudecode\", \"Fix Claude Directives \
+README.md: correct installation instructions\"]", 
+       "privacylevel" -> <|"AccessLevel" -> 0.5|>, "cellCountAfter" -> 
+       29|>}|>|>,
+CellEpilog:>Null,
 FrontEndVersion->"14.3 for Microsoft Windows (64-bit) (2025\:5e747\:67088\
 \:65e5)",
 StyleDefinitions->"Normal use.nb",
@@ -233,10 +1045,16 @@ ExpressionUUID->"d24db182-8b2e-214b-bc15-7a2898b3d3ea"
 
 (* Internal cache information *)
 (*CellTagsOutline
-CellTagsIndex->{}
+CellTagsIndex->{
+ "cjob1773742500x10803-s1"->{
+  Cell[9016, 233, 437, 13, 20, "Print",ExpressionUUID->"e8dd60ce-2b04-8440-9852-8a4b5bde9d35",
+   CellTags->"cjob1773742500x10803-s1"]}
+ }
 *)
 (*CellTagsIndex
-CellTagsIndex->{}
+CellTagsIndex->{
+ {"cjob1773742500x10803-s1", 66683, 1048}
+ }
 *)
 (*NotebookFileOutline
 Notebook[{
@@ -273,7 +1091,15 @@ Cell[6900, 189, 296, 4, 32, "Output",ExpressionUUID->"35ffaf01-17cf-b249-806d-43
 Cell[7211, 196, 910, 14, 109, "Input",ExpressionUUID->"238062a5-1a63-444d-bf63-ae6d72587390"],
 Cell[8124, 212, 159, 2, 33, "Text",ExpressionUUID->"3ff80ae1-e50c-dd46-9571-30d451740751"],
 Cell[8286, 216, 91, 0, 33, "Text",ExpressionUUID->"d11eca61-89f5-fd4d-b71b-811908f3afe1"],
-Cell[8380, 218, 165, 2, 33, "Text",ExpressionUUID->"6a2a46a7-ecf0-c846-a05f-867fc7929a78"]
+Cell[8380, 218, 165, 2, 33, "Text",ExpressionUUID->"6a2a46a7-ecf0-c846-a05f-867fc7929a78"],
+Cell[CellGroupData[{
+Cell[8570, 224, 443, 7, 30, "Input",ExpressionUUID->"384b15ae-da94-bd4c-a929-c0e7466390c6"],
+Cell[9016, 233, 437, 13, 20, "Print",ExpressionUUID->"e8dd60ce-2b04-8440-9852-8a4b5bde9d35",
+ CellTags->"cjob1773742500x10803-s1"]
+}, Open  ]],
+Cell[9468, 249, 660, 10, 98, "Text",ExpressionUUID->"c2f372c9-a625-b846-a596-48140765bcd1"],
+Cell[10131, 261, 278, 5, 28, "Input",ExpressionUUID->"244ebd0c-2621-0344-8485-f4b47cfe02f2"],
+Cell[10412, 268, 555, 11, 33, "Text",ExpressionUUID->"b88b8a2d-8c0d-2e48-96ab-ae20f837c6af"]
 }, Open  ]]
 }, Open  ]]
 }

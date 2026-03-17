@@ -183,11 +183,14 @@ ClaudeDebug::usage =
   "ClaudeDebug[codeOrFile, errorMsg] \:306f\:30c7\:30d0\:30c3\:30b0\:652f\:63f4\:3092\:975e\:540c\:671f\:3067\:6c42\:3081\:308b\:ff08\:5373\:5ea7\:306b\:8fd4\:308b\:ff09\:3002";ClaudeReview::usage =
   "ClaudeReview[codeOrFile] \:306f\:30b3\:30fc\:30c9\:306e\:30ec\:30d3\:30e5\:30fc\:3092\:975e\:540c\:671f\:3067\:884c\:3046\:ff0830000\:6587\:5b57\:8d85\:306f\:81ea\:52d5\:30c1\:30e3\:30f3\:30af\:5206\:5272\:ff09\:3002";ClaudeReviewChunked::usage =
   "ClaudeReviewChunked[codeOrFile] \:306f\:30d5\:30a1\:30a4\:30eb\:3092\:30c1\:30e3\:30f3\:30af\:5206\:5272\:3057\:3066\:975e\:540c\:671f\:30ec\:30d3\:30e5\:30fc\:3059\:308b\:3002";ClaudeCreatePackage::usage =
-  "ClaudeCreatePackage[name, prompt] \:306f prompt \:306b\:5f93\:3063\:3066 name.wl \:3092\:65b0\:898f\:4f5c\:6210\:3057 $packageDirectory \:306b\:4fdd\:5b58\:3059\:308b\:3002";ClaudeUpdatePackage::usage =
+  "ClaudeCreatePackage[name, prompt] \:306f prompt \:306b\:5f93\:3063\:3066 name.wl \:3092\:65b0\:898f\:4f5c\:6210\:3057 $packageDirectory \:306b\:4fdd\:5b58\:3059\:308b\:3002\n" <>
+  "Options: Fallback, References\:3002\n" <>
+  "References -> {\\\"path/to/file.pdf\\\", \\\"https://...\\\", ...} \:3067\:53c2\:8003\:30d5\:30a1\:30a4\:30eb\:3092 references/ \:306b\:30b3\:30d4\:30fc\:3057\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:542b\:3081\:308b\:3002";ClaudeUpdatePackage::usage =
   "ClaudeUpdatePackage[packageName, prompt] \:306f $packageDirectory \:306b\:3042\:308b packageName.wl \:3092\
 Claude \:306e\:652f\:63f4\:3067\:30a2\:30c3\:30d7\:30c7\:30fc\:30c8\:3057\:3001\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:4f5c\:6210\:3059\:308b\:3002\n\
 prompt \:306b\:306f\:6587\:5b57\:5217\:307e\:305f\:306f\:30ea\:30b9\:30c8 {\:6587\:5b57\:5217, Image, File[\".../file.pdf\"], ...} \:3092\:6307\:5b9a\:53ef\:80fd\:3002\n\
-Options: TargetFunctions -> Automatic, StartTime -> Now\:3002\n\
+Options: TargetFunctions -> Automatic, StartTime -> Now, References -> {}\:3002\n\
+References -> {\\\"path/to/file.wl\\\", \\\"https://...\\\", ...} \:3067\:53c2\:8003\:30d5\:30a1\:30a4\:30eb\:3092\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:542b\:3081\:308b\:3002\n\
 \:4f8b: ClaudeUpdatePackage[\"pkg\", \"\:4fee\:6b63\:6307\:793a\", StartTime -> Now + Quantity[1, \"Hours\"]]";ClaudeRestorePackage::usage =
   "ClaudeRestorePackage[packageName] \:306f\:76f4\:524d\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:5fa9\:5143\:3059\:308b\:3002";ClaudeConvertToPaclet::usage =
   "ClaudeConvertToPaclet[packageName] \:306f $packageDirectory \:306e packageName.wl \:3092 Paclet \:5f62\:5f0f\:306b\:5909\:63db\:3059\:308b\:3002\n" <>
@@ -1508,8 +1511,8 @@ Print[
   "  ClaudeShowHistory[session]       \[RightArrow] \:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\:8868\:793a\n" <>
   "  ClaudeDebug[code, errMsg]        \[RightArrow] \:30c7\:30d0\:30c3\:30b0\:4f9d\:983c\:ff08\:975e\:540c\:671f\:ff09\n" <>
   "  ClaudeReview[code]               \[RightArrow] \:30b3\:30fc\:30c9\:30ec\:30d3\:30e5\:30fc\:ff08\:975e\:540c\:671f\:ff09\n" <>
-  "  ClaudeCreatePackage[name, prompt]  \[RightArrow] \:65b0\:898f\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:751f\:6210 (Fallback)\n" <>
-  "  ClaudeUpdatePackage[name, prompt]  \[RightArrow] \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:4ed8\:304d\:66f4\:65b0 (Fallback, TargetFunctions, StartTime)\n" <>
+  "  ClaudeCreatePackage[name, prompt]  \[RightArrow] \:65b0\:898f\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:751f\:6210 (Fallback, References)\n" <>
+  "  ClaudeUpdatePackage[name, prompt]  \[RightArrow] \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:4ed8\:304d\:66f4\:65b0 (Fallback, TargetFunctions, StartTime, References)\n" <>
   "  ClaudeRestorePackage[name]       \[RightArrow] \:76f4\:524d\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306b\:623b\:3059\n" <>
   "  ClaudeUpdatePackageHistory[]     \[RightArrow] \:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:66f4\:65b0\:5c65\:6b74\:3092\:8868\:793a\n" <>
   "  ClaudeBackupDataset[name]        \[RightArrow] \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:3092 Review/Pull/Delete \:30dc\:30bf\:30f3\:4ed8\:304d Grid \:3067\:8868\:793a\n" <>
@@ -4164,6 +4167,71 @@ iEnsureReferencesAccessible[packageName_String] :=
           refDir]]]];
 
 (* ============================================================
+   ClaudeCreatePackage / ClaudeUpdatePackage 用リファレンス処理:
+   References -> {ファイルパス, URL, ...} を受け取り、
+   ・ローカルファイルは references/ フォルダにコピー
+   ・URL はそのまま保持
+   ・doc_options.json に追記して Documentation にも引き継ぐ
+   戻り値: プロンプト用のリファレンス説明テキスト
+   ============================================================ *)
+
+iProcessPackageReferences[packageName_String, refs_List] :=
+  Module[{refDir, copiedFiles = {}, urls = {}, promptLines = {}, existing, merged},
+    If[Length[refs] === 0, Return[""]];
+    refDir = iReferencesDir[packageName];
+    Quiet @ CreateDirectory[refDir, CreateIntermediateDirectories -> True];
+    (* 既存の doc_options.json からリファレンスを読み込み *)
+    existing = {};
+    With[{path = iDocOptionsPath[packageName]},
+      If[FileExistsQ[path],
+        With[{saved = Quiet @ Check[Import[path, "RawJSON"], $Failed]},
+          If[AssociationQ[saved],
+            existing = Replace[Lookup[saved, "References", {}], Except[_List] -> {}]]]]];
+    Scan[Function[ref,
+      Which[
+        (* URL *)
+        StringQ[ref] && StringMatchQ[ref, "http://*" | "https://*"],
+          AppendTo[urls, ref];
+          AppendTo[promptLines,
+            "- URL reference: " <> ref <> " (fetch and use as context)"],
+        (* ローカルファイルパス *)
+        StringQ[ref] && FileExistsQ[ref],
+          With[{dest = FileNameJoin[{refDir, FileNameTake[ref]}]},
+            Quiet @ CopyFile[ref, dest, OverwriteTarget -> True];
+            AppendTo[copiedFiles, dest];
+            AppendTo[promptLines,
+              "- File reference: " <> dest <> " (read and use as context)"]],
+        (* 存在しないパスやその他の文字列 — そのまま参考文献として記録 *)
+        StringQ[ref],
+          AppendTo[urls, ref];
+          AppendTo[promptLines,
+            "- Reference: " <> ref],
+        True, Null
+      ]
+    ], refs];
+    (* doc_options.json に追記 — Documentation にも自動引き継ぎ *)
+    merged = DeleteDuplicates @ Join[existing, urls,
+      (FileNameTake[#] & /@ copiedFiles)];
+    With[{path = iDocOptionsPath[packageName]},
+      Module[{data},
+        data = If[FileExistsQ[path],
+          Quiet @ Check[Import[path, "RawJSON"], <||>], <||>];
+        If[!AssociationQ[data], data = <||>];
+        data["References"] = merged;
+        Quiet @ Export[path, data, "RawJSON"]]];
+    (* $ClaudeAccessibleDirs に追加 *)
+    iEnsureReferencesAccessible[packageName];
+    (* プロンプト用テキストを返す *)
+    If[Length[promptLines] > 0,
+      "\n=== REFERENCE MATERIALS ===\n" <>
+      "The following reference materials are provided. " <>
+      "Read file references using the Read tool and use them as context for code generation.\n" <>
+      StringJoin[Riffle[promptLines, "\n"]] <> "\n\n",
+      ""
+    ]
+  ];
+
+(* ============================================================
    ドキュメントオプション永続化: Demos/References/Disclaimer/License を
    _info/references/doc_options.json に保存し、次回の
    ClaudeCreateDocumentation / ClaudeUpdateDocumentation で自動復元する。
@@ -4980,13 +5048,13 @@ iExpandWithDeps[targets_List, blocks_Association] :=
     result
   ];
 
-Options[ClaudeCreatePackage] = {Fallback -> False};
+Options[ClaudeCreatePackage] = {Fallback -> False, References -> {}};
 
 ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
   With[{nb = EvaluationNotebook[]},
   Module[{destFile, prompt, beginMark, endMark, sessionDir, bdir, timestamp,
-          packagePromptNorm, imgDirs, jobId},
+          packagePromptNorm, imgDirs, jobId, refsPrompt},
 
   destFile = FileNameJoin[{Global`$packageDirectory, packageName <> ".wl"}];
   If[FileExistsQ[destFile] || iPacletQ[packageName],
@@ -5011,6 +5079,10 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
       CopyFile[tmpl, designNb];
       NBAccess`NBInsertTextCells[designNb, packageName, packagePromptNorm["text"]]]];
 
+  (* References オプション処理: ファイルコピー＆doc_options.json 追記 *)
+  refsPrompt = iProcessPackageReferences[packageName,
+    Replace[OptionValue[References], Except[_List] -> {}]];
+
   beginMark = "===BEGIN_PACKAGE==="; endMark = "===END_PACKAGE===";
   prompt =
     "You are an expert Wolfram Language / Mathematica programmer.\n" <>
@@ -5033,6 +5105,7 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
     "Output format (MANDATORY):\n" <>
     beginMark <> "\n<complete package source code here>\n" <> endMark <> "\n" <>
     "(optional brief explanation after the end marker)\n\n" <>
+    refsPrompt <>
     "SPECIFICATION:\n" <> packagePromptNorm["text"];
 
   iSaveSessionMedia[sessionDir, prompt, imgDirs];
@@ -5099,26 +5172,30 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
     nb, imgDirs, jobId]
   ]]);
 
-Options[ClaudeUpdatePackage] = {TargetFunctions -> Automatic, StartTime -> Now, Fallback -> False};
+Options[ClaudeUpdatePackage] = {TargetFunctions -> Automatic, StartTime -> Now, Fallback -> False, References -> {}};
 
 ClaudeUpdatePackage[packageName_String, updatePrompt_, opts:OptionsPattern[]] := (
   $currentUseFallback = TrueQ[OptionValue[Fallback]];
   With[{st = OptionValue[StartTime]},
   iScheduleAt[
   iClaudeUpdatePackageImpl[packageName, updatePrompt,
-    OptionValue[TargetFunctions]],
+    OptionValue[TargetFunctions],
+    Replace[OptionValue[References], Except[_List] -> {}]],
   st]]);
 
-iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_] :=
+iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, refsOpt_:{} ] :=
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, currentCode, prompt,
           beginMark, endMark, timestamp, sessionDir, bdir,
           allBlocks, allNames, targets, targetCode,
-          jsPlaceholder, jsBlock, updatePromptNorm, imgDirs},
+          jsPlaceholder, jsBlock, updatePromptNorm, imgDirs, refsPrompt},
 
   srcFile = iPackageSourceFile[packageName];
   If[!FileExistsQ[srcFile],
     nbPrint[nb, "\:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> srcFile]; Return[$Failed]];
+
+  (* References オプション処理: ファイルコピー＆doc_options.json 追記 *)
+  refsPrompt = iProcessPackageReferences[packageName, refsOpt];
 
   (* references フォルダを参照可能にする *)
   iEnsureReferencesAccessible[packageName];
@@ -5184,6 +5261,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_] :=
     "Do NOT write any explanation or text before " <> beginMark <> ".\n" <>
     "After " <> endMark <> " you may add optional explanation.\n\n" <>
     "INSTRUCTION: " <> iExpandSymbolRefs[updatePromptNorm["userText"]] <> "\n\n" <>
+    refsPrompt <>
     (* \:6dfb\:4ed8\:30d5\:30a1\:30a4\:30eb\:304c\:3042\:308c\:3070\:5225\:30bb\:30af\:30b7\:30e7\:30f3\:3067\:53c2\:7167\:6307\:793a *)
     If[Length[updatePromptNorm["filePaths"]] > 0,
       "ATTACHMENTS (use the Read tool to view each file):\n" <>

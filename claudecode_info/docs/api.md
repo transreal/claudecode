@@ -143,7 +143,19 @@ ContinueEval[]
 | `ClaudeBackupDataset[name]` | 指定パッケージのバックアップ履歴を表示 |
 | `ClaudeConvertToPaclet[name]` | 単一 .wl を Paclet ディレクトリ構造に変換 |
 
-`ClaudeUpdatePackage` オプション: `TargetFunctions -> Automatic`, `StartTime -> Now`
+### ClaudeCreatePackage[name, prompt, opts]
+新規パッケージを生成する。
+Options: `Fallback -> False`, `References -> {}`
+`References` にファイルパス・URL のリストを指定すると、ローカルファイルは `references/` フォルダにコピーされ、プロンプトに参照指示として含まれる。URL はそのままプロンプトに追加される。指定したリファレンスは `doc_options.json` に保存されドキュメント生成にも引き継がれる。
+例: `ClaudeCreatePackage["MyPkg", "仕様", References -> {"path/to/spec.pdf", "https://..."}]`
+
+### ClaudeUpdatePackage[name, prompt, opts]
+既存パッケージを更新する。実行前に事前バックアップ（`pre_TIMESTAMP` フォルダ）を自動作成する。
+Options: `TargetFunctions -> Automatic`, `StartTime -> Now`, `Fallback -> False`, `References -> {}`
+`TargetFunctions`: 更新対象の関数名リスト。`Automatic` でプロンプトから自動推定。
+`References`: ファイルパス・URL のリスト。`ClaudeCreatePackage` と同様に処理され `doc_options.json` に追記される。
+例: `ClaudeUpdatePackage["pkg", "修正指示", StartTime -> Now + Quantity[1, "Hours"]]`
+例: `ClaudeUpdatePackage["pkg", "修正指示", References -> {"path/to/file.wl", "https://..."}]`
 
 ---
 
