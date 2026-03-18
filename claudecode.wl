@@ -20,11 +20,11 @@ Scan[
     If[MemberQ[Names["Global`" <> name], "Global`" <> name],
       Remove["Global`" <> name]]],
   {"ClaudeQuery","ClaudeMath","ClaudeExtractCode","ClaudeExtractAllCode",
-   "ClaudeEval","ContinueEval","ClaudeSpec","ClaudeDebug","ClaudeReview","ClaudeReviewChunked",
+   "ClaudeEval","ContinueEval","ContinueUpdate","ClaudeSpec","ClaudeDebug","ClaudeReview","ClaudeReviewChunked",
    "ClaudeUpdatePackage","ClaudeRestorePackage","ClaudeUpdatePackageHistory","ClaudeBackupDataset",
    "ClaudeConvertToPaclet","ClaudeCreateDocumentation","ClaudeUpdateDocumentation",
    "ClaudeAddDirective","ClaudeRestoreDirective","ClaudeListDirectives",
-   "ClaudeUpdateDirective","ClaudeDirectiveBackupDataset",
+   "ClaudeUpdateDirective","ClaudeDirectiveBackupDataset","ClaudeSyncDirectives",
    "CreateClaudeSession","ClaudeRestoreSession","Inherit",
    "ClaudeListSessions","ClaudeDeleteSession","ClaudeShowHistory",
    "ClaudeAttach","ClaudeDetach","ClaudeAttachments","ClearAttachments",
@@ -32,7 +32,7 @@ Scan[
    "ScanConfidentialCells","ShowClaudePalette","ClaudeQueryShowContext",
    "ClaudeShowAccessConfig","ClaudeSessionStatus","ClaudeCompactHistory",
    "ClaudeWebSearch","ClaudeWebFetch","WebFetch",
-   "ClaudeCommand","ClaudeCheckSeparation","ClaudeFixSeparation",
+   "ClaudeCommand","ClaudeCheckSeparation","ClaudeFixSeparation","ClaudeStatus",
    "$ClaudeTimeout", "$ClaudeMDPath", "$ClaudeMDContent", "$ClaudeModel",
    "$ClaudeTestModel",
    "$ClaudeFallbackModels", "$ClaudeWorkingDirectory", "$ClaudeAccessibleDirs",
@@ -153,7 +153,13 @@ ClaudeQuery::usage =
   "ContinueEval[session, instruction] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:3067\:7d99\:7d9a\:3002\n" <>
   "ContinueEval[instruction] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:3067\:7d99\:7d9a\:3002\n" <>
   "ContinueEval[] \:306f \"\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\" \:3067\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:7d99\:7d9a\:3002\n" <>
-  "Option StartTime -> Now \:3067\:5b9f\:884c\:958b\:59cb\:6642\:523b\:3092 DateObject \:3067\:6307\:5b9a\:3002";CreateClaudeSession::usage =
+  "Option StartTime -> Now \:3067\:5b9f\:884c\:958b\:59cb\:6642\:523b\:3092 DateObject \:3067\:6307\:5b9a\:3002";ContinueUpdate::usage =
+  "ContinueUpdate[] \:306f\:76f4\:524d\:306e ClaudeUpdatePackage \:306e\:7d50\:679c\:3092\:8e0f\:307e\:3048\:3066\:30d0\:30b0\:4fee\:6b63\:3092\:7d99\:7d9a\:3059\:308b\:3002\n" <>
+  "ContinueUpdate[\"instruction\"] \:306f\:8ffd\:52a0\:6307\:793a\:3092\:4ed8\:3051\:3066\:7d99\:7d9a\:3002\n" <>
+  "ContinueUpdate[\"pkgName\", \"instruction\"] \:306f\:6307\:5b9a\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:76f4\:524d\:306e\:66f4\:65b0\:3092\:7d99\:7d9a\:3002\n" <>
+  "Options: Fallback -> False, \"UpdateApiMd\" -> True, StartTime -> Now\:3002\n" <>
+  "\:4f8b: ContinueUpdate[]\n" <>
+  "\:4f8b: ContinueUpdate[\"\:4e0a\:534a\:5186\:306e\:5883\:754c\:7dda\:304c\:6b20\:3051\:3066\:3044\:308b\:306e\:3067\:4fee\:6b63\:3057\:3066\"]";CreateClaudeSession::usage =
   "CreateClaudeSession[\"name\"] \:306f\:540d\:524d\:4ed8\:304d\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:4f5c\:6210\:3059\:308b\:ff08\:30c7\:30d5\:30a9\:30eb\:30c8\:5c65\:6b74\:3092\:7d99\:627f\:ff09\:3002\n" <>
   "CreateClaudeSession[session] \:306f\:65e2\:5b58\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\:3092\:7d99\:627f\:3057\:305f\:65b0\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:4f5c\:6210\:3002\n" <>
   "CreateClaudeSession[] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:5c65\:6b74\:3092\:7d99\:627f\:3057\:305f\:65b0\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:4f5c\:6210\:3002\n" <>
@@ -183,14 +189,12 @@ ClaudeDebug::usage =
   "ClaudeDebug[codeOrFile, errorMsg] \:306f\:30c7\:30d0\:30c3\:30b0\:652f\:63f4\:3092\:975e\:540c\:671f\:3067\:6c42\:3081\:308b\:ff08\:5373\:5ea7\:306b\:8fd4\:308b\:ff09\:3002";ClaudeReview::usage =
   "ClaudeReview[codeOrFile] \:306f\:30b3\:30fc\:30c9\:306e\:30ec\:30d3\:30e5\:30fc\:3092\:975e\:540c\:671f\:3067\:884c\:3046\:ff0830000\:6587\:5b57\:8d85\:306f\:81ea\:52d5\:30c1\:30e3\:30f3\:30af\:5206\:5272\:ff09\:3002";ClaudeReviewChunked::usage =
   "ClaudeReviewChunked[codeOrFile] \:306f\:30d5\:30a1\:30a4\:30eb\:3092\:30c1\:30e3\:30f3\:30af\:5206\:5272\:3057\:3066\:975e\:540c\:671f\:30ec\:30d3\:30e5\:30fc\:3059\:308b\:3002";ClaudeCreatePackage::usage =
-  "ClaudeCreatePackage[name, prompt] \:306f prompt \:306b\:5f93\:3063\:3066 name.wl \:3092\:65b0\:898f\:4f5c\:6210\:3057 $packageDirectory \:306b\:4fdd\:5b58\:3059\:308b\:3002\n" <>
-  "Options: Fallback, References\:3002\n" <>
-  "References -> {\\\"path/to/file.pdf\\\", \\\"https://...\\\", ...} \:3067\:53c2\:8003\:30d5\:30a1\:30a4\:30eb\:3092 references/ \:306b\:30b3\:30d4\:30fc\:3057\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:542b\:3081\:308b\:3002";ClaudeUpdatePackage::usage =
+  "ClaudeCreatePackage[name, prompt] \:306f prompt \:306b\:5f93\:3063\:3066 name.wl \:3092\:65b0\:898f\:4f5c\:6210\:3057 $packageDirectory \:306b\:4fdd\:5b58\:3059\:308b\:3002";ClaudeUpdatePackage::usage =
   "ClaudeUpdatePackage[packageName, prompt] \:306f $packageDirectory \:306b\:3042\:308b packageName.wl \:3092\
 Claude \:306e\:652f\:63f4\:3067\:30a2\:30c3\:30d7\:30c7\:30fc\:30c8\:3057\:3001\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:4f5c\:6210\:3059\:308b\:3002\n\
 prompt \:306b\:306f\:6587\:5b57\:5217\:307e\:305f\:306f\:30ea\:30b9\:30c8 {\:6587\:5b57\:5217, Image, File[\".../file.pdf\"], ...} \:3092\:6307\:5b9a\:53ef\:80fd\:3002\n\
-Options: TargetFunctions -> Automatic, StartTime -> Now, References -> {}\:3002\n\
-References -> {\\\"path/to/file.wl\\\", \\\"https://...\\\", ...} \:3067\:53c2\:8003\:30d5\:30a1\:30a4\:30eb\:3092\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:542b\:3081\:308b\:3002\n\
+Options: TargetFunctions -> Automatic, StartTime -> Now, \"UpdateApiMd\" -> True\:3002\n\
+\"UpdateApiMd\" -> False \:3067 api.md \:306e\:81ea\:52d5\:66f4\:65b0\:3092\:30b9\:30ad\:30c3\:30d7\:3002\n\
 \:4f8b: ClaudeUpdatePackage[\"pkg\", \"\:4fee\:6b63\:6307\:793a\", StartTime -> Now + Quantity[1, \"Hours\"]]";ClaudeRestorePackage::usage =
   "ClaudeRestorePackage[packageName] \:306f\:76f4\:524d\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:5fa9\:5143\:3059\:308b\:3002";ClaudeConvertToPaclet::usage =
   "ClaudeConvertToPaclet[packageName] \:306f $packageDirectory \:306e packageName.wl \:3092 Paclet \:5f62\:5f0f\:306b\:5909\:63db\:3059\:308b\:3002\n" <>
@@ -224,7 +228,11 @@ ClaudeUpdateDirective::usage =
   "CLAUDE.md / rules / skills \:306e\:9069\:5207\:306a\:30d5\:30a1\:30a4\:30eb\:306b\:53cd\:6620\:3059\:308b\:3002\n" <>
   "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3082\:53c2\:7167\:53ef\:80fd\:ff08\:300c\:4e0a\:3067\:8b70\:8ad6\:3055\:308c\:3066\:3044\:308b\:5185\:5bb9\:3092\:53cd\:6620\:3057\:3066\:300d\:306a\:3069\:ff09\:3002";ClaudeDirectiveBackupDataset::usage =
   "ClaudeDirectiveBackupDataset[] \:306f Claude Directives \:306e\:66f4\:65b0\:5c65\:6b74\:3092 Review/Pull/Delete \:30dc\:30bf\:30f3\:4ed8\:304d Grid \:3067\:8868\:793a\:3059\:308b\:3002\n" <>
-  "\:5c65\:6b74\:306f ClaudeUpdateDirective[text] \:3084 ClaudeAddDirective \:306e\:5b9f\:884c\:6642\:306b\:81ea\:52d5\:4fdd\:5b58\:3055\:308c\:308b\:3002";MarkConfidential::usage =
+  "\:5c65\:6b74\:306f ClaudeUpdateDirective[text] \:3084 ClaudeAddDirective \:306e\:5b9f\:884c\:6642\:306b\:81ea\:52d5\:4fdd\:5b58\:3055\:308c\:308b\:3002";ClaudeSyncDirectives::usage =
+  "ClaudeSyncDirectives[dir] \:306f\:6307\:5b9a\:30c7\:30a3\:30ec\:30af\:30c8\:30ea dir \:306e\:30d5\:30a1\:30a4\:30eb\:3092 Claude Directives \:30d5\:30a9\:30eb\:30c0\:3068\:6bd4\:8f03\:3057\:3001\n" <>
+  "dir \:5074\:306e\:65b9\:304c\:65b0\:3057\:3044\:30d5\:30a1\:30a4\:30eb\:3067 Claude Directives \:3092\:66f4\:65b0\:3059\:308b\:3002\n" <>
+  "dir \:306b\:3060\:3051\:5b58\:5728\:3059\:308b\:30d5\:30a1\:30a4\:30eb\:3082\:30b3\:30d4\:30fc\:3059\:308b\:3002Claude Directives \:5074\:306b\:3057\:304b\:306a\:3044\:30d5\:30a1\:30a4\:30eb\:306f\:305d\:306e\:307e\:307e\:3002\n" <>
+  "\:4f8b: ClaudeSyncDirectives[\"C:\\\\Users\\\\user\\\\Claude Directives\"]";MarkConfidential::usage =
   "MarkConfidential[] \:306f\:73fe\:5728\:306e\:30bb\:30eb\:3092\:6a5f\:5bc6\:30de\:30fc\:30af\:3059\:308b\:3002\n" <>
   "MarkConfidential[cell] \:306f\:6307\:5b9a\:30bb\:30eb\:3092\:6a5f\:5bc6\:30de\:30fc\:30af\:3059\:308b\:3002\n" <>
   "\:6a5f\:5bc6\:30bb\:30eb\:306f ClaudeEval/ClaudeQuery \:306e\:30d7\:30ed\:30f3\:30d7\:30c8\:304b\:3089\:9664\:5916\:3055\:308c\:308b\:3002";UnmarkConfidential::usage =
@@ -249,6 +257,11 @@ ClaudeSessionStatus::usage =
   "ClaudeSessionStatus[] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:72b6\:614b\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
   "ClaudeSessionStatus[name] \:306f\:6307\:5b9a\:540d\:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:72b6\:614b\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
   "\:30a2\:30af\:30bb\:30b9\:53ef\:80fd\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3001\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:3001\:4f5c\:696d\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306e\:30d5\:30a1\:30a4\:30eb\:7b49\:3092\:78ba\:8a8d\:53ef\:80fd\:3002";
+ClaudeStatus::usage =
+  "ClaudeStatus[] \:306f\:73fe\:5728\:5b9f\:884c\:4e2d\:306e\:5168 Claude \:30bf\:30b9\:30af\:306e\:30ea\:30a2\:30eb\:30bf\:30a4\:30e0\:72b6\:614b\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
+  "\:5404\:30bf\:30b9\:30af\:306e\:7d4c\:904e\:6642\:9593\:3001\:73fe\:5728\:306e\:72b6\:614b\:ff08\:601d\:8003\:4e2d/\:30c6\:30ad\:30b9\:30c8\:751f\:6210\:4e2d/\:30c4\:30fc\:30eb\:5b9f\:884c\:4e2d\:ff09\:3001\n" <>
+  "\:751f\:6210\:6e08\:307f\:30c6\:30ad\:30b9\:30c8\:65ad\:7247\:6570\:3001\:601d\:8003\:65ad\:7247\:6570\:3001\:30c4\:30fc\:30eb\:4f7f\:7528\:6570\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
+  "\:5b9f\:884c\:4e2d\:306e\:30bf\:30b9\:30af\:304c\:306a\:3044\:5834\:5408\:306f\:305d\:306e\:65e8\:3092\:8868\:793a\:3059\:308b\:3002";
 ClaudeWebSearch::usage =
   "ClaudeWebSearch[query] \:306f Web \:691c\:7d22\:3092\:5b9f\:884c\:3057\:3001\:7d50\:679c\:3092\:30c6\:30ad\:30b9\:30c8\:3067\:8fd4\:3059\:3002\n" <>
   "Anthropic API \:306e web_search \:30c4\:30fc\:30eb\:3092\:4f7f\:7528\:3059\:308b\:3002";
@@ -1284,6 +1297,139 @@ iMakeBat[promptFile_String, outFile_String, imageDirs_List:{}] :=
     batFile
   ];
 
+(* stream-json 版: リアルタイムストリーミング対応 *)
+iMakeBatStreamJson[promptFile_String, outFile_String, imageDirs_List:{}] :=
+  Module[{batFile, bc, strm, addDirFlags, permFlags, workDir, allDirs},
+    batFile = FileNameJoin[{$TemporaryDirectory,
+      "claude_run_" <> ToString[UnixTime[]] <> "_" <>
+      ToString[RandomInteger[99999]] <> ".bat"}];
+    workDir = iPrepareClaudeProjectDirectory[];
+    allDirs = DeleteDuplicates[Join[imageDirs, iCollectAccessibleDirs[]]];
+    addDirFlags = StringJoin[Map[
+      Function[d, " --add-dir \"" <> d <> "\""],
+      allDirs]];
+    permFlags = iCLIPermissionFlags[];
+    bc = "@echo off\r\n" <>
+         "chcp 65001 > nul\r\n" <>
+         iClaudeEnvResetBatchLines[] <>
+         "cd /d \"" <> workDir <> "\"\r\n" <>
+         iClaudeCallPrefix[] <>
+         "\"" <> $ClaudeExe <> "\" --print" <>
+         " --output-format stream-json" <>
+         " --verbose" <>
+         " --include-partial-messages" <>
+         If[$ClaudeModel =!= "", " --model \"" <> $ClaudeModel <> "\"", ""] <>
+         permFlags <>
+         addDirFlags <>
+         " < \"" <> promptFile <> "\" > \"" <> outFile <> "\" 2>&1\r\n";
+    strm = OpenWrite[batFile, BinaryFormat -> True];
+    BinaryWrite[strm, ExportString[bc, "Text", CharacterEncoding -> "ASCII"]];
+    Close[strm];
+    batFile
+  ];
+
+(* --- stream-json パースヘルパー --- *)
+
+(* 1行のJSONLをパースしてイベント情報を返す *)
+iParseStreamJsonLine[line_String] :=
+  Quiet @ Check[Developer`ReadRawJSONString[line], $Failed];
+
+(* stream-json 出力ファイルから最終テキスト結果を抽出する。
+   text_delta を結合してテキストを復元する。 *)
+iExtractResultFromStreamJson[outFile_String] :=
+  Module[{raw, lines, textDeltas = {}, resultText = None, j, evt, delta,
+          stderrLines = {}},
+    If[!FileExistsQ[outFile] || FileByteCount[outFile] === 0, Return[""]];
+    raw = Quiet @ Check[Import[outFile, "Text"], ""];
+    If[!StringQ[raw] || raw === "", Return[""]];
+    lines = Select[StringSplit[raw, "\n"], StringLength[#] > 0 &];
+    Do[
+      j = iParseStreamJsonLine[line];
+      If[!AssociationQ[j],
+        (* JSON パース失敗: stderr 由来のプレーンテキスト行を収集 *)
+        If[StringLength[line] > 0 && !StringStartsQ[line, "{"],
+          AppendTo[stderrLines, line]];
+        Continue[]];
+      Which[
+        (* result イベントからテキストを抽出（最優先） *)
+        j["type"] === "result" && AssociationQ[Lookup[j, "result", None]],
+          Module[{res = j["result"], content},
+            content = Lookup[res, "content", {}];
+            If[ListQ[content],
+              resultText = StringJoin[
+                Lookup[#, "text", ""] & /@
+                  Select[content, AssociationQ[#] && Lookup[#, "type", ""] === "text" &]]]],
+        (* text_delta: テキスト断片を蓄積 *)
+        j["type"] === "stream_event" && AssociationQ[Lookup[j, "event", None]],
+          evt = j["event"];
+          delta = Lookup[evt, "delta", None];
+          If[AssociationQ[delta] && Lookup[delta, "type", ""] === "text_delta",
+            AppendTo[textDeltas, Lookup[delta, "text", ""]]]
+      ],
+      {line, lines}];
+    (* result があればそれを優先、なければ text_delta を結合 *)
+    Which[
+      StringQ[resultText] && resultText =!= "", resultText,
+      Length[textDeltas] > 0, StringJoin[textDeltas],
+      (* JSON結果もtext_deltaも無い場合: stderr行をエラーメッセージとして返す *)
+      Length[stderrLines] > 0,
+        "Error: " <> StringJoin[Riffle[stderrLines, "\n"]],
+      True, ""
+    ]
+  ];
+
+(* stream-json 出力ファイルの新規行を読み取り $claudeProgress を更新する *)
+iUpdateStreamProgress[key_String, outFile_String] :=
+  Module[{raw, allLines, prevCount, newLines, j, evt, delta, info},
+    If[!AssociationQ[$claudeProgress[key]], Return[]];
+    info = $claudeProgress[key];
+    prevCount = Lookup[info, "lineCount", 0];
+    If[!FileExistsQ[outFile] || FileByteCount[outFile] === 0, Return[]];
+    raw = Quiet @ Check[Import[outFile, "Text"], ""];
+    If[!StringQ[raw] || raw === "", Return[]];
+    allLines = Select[StringSplit[raw, "\n"], StringLength[#] > 0 &];
+    If[Length[allLines] <= prevCount, Return[]];
+    newLines = Drop[allLines, prevCount];
+    Do[
+      j = iParseStreamJsonLine[line];
+      If[!AssociationQ[j], Continue[]];
+      Which[
+        j["type"] === "stream_event" && AssociationQ[Lookup[j, "event", None]],
+          evt = j["event"];
+          delta = Lookup[evt, "delta", None];
+          Which[
+            (* テキスト生成中 *)
+            AssociationQ[delta] && delta["type"] === "text_delta",
+              info["status"] = "\:30c6\:30ad\:30b9\:30c8\:751f\:6210\:4e2d";
+              info["textFragments"] = Lookup[info, "textFragments", 0] + 1;
+              info["lastText"] = Lookup[delta, "text", ""],
+            (* thinking 中 *)
+            AssociationQ[delta] && delta["type"] === "thinking_delta",
+              info["status"] = "\:601d\:8003\:4e2d";
+              info["thinkingFragments"] = Lookup[info, "thinkingFragments", 0] + 1,
+            (* ツール使用開始 *)
+            evt["type"] === "content_block_start" &&
+              AssociationQ[Lookup[evt, "content_block", None]] &&
+              Lookup[evt["content_block"], "type", ""] === "tool_use",
+              info["status"] = "\:30c4\:30fc\:30eb\:5b9f\:884c\:4e2d: " <> Lookup[evt["content_block"], "name", "?"];
+              info["toolUses"] = Lookup[info, "toolUses", 0] + 1,
+            (* メッセージ終了 *)
+            evt["type"] === "message_stop",
+              info["status"] = "\:5fdc\:7b54\:5b8c\:4e86",
+            True, Null],
+        (* result *)
+        j["type"] === "result",
+          info["status"] = "\:5b8c\:4e86",
+        (* system *)
+        j["type"] === "system",
+          info["status"] = "\:521d\:671f\:5316",
+        True, Null
+      ],
+      {line, newLines}];
+    info["lineCount"] = Length[allLines];
+    $claudeProgress[key] = info;
+  ];
+
 (* verbose 版: stderr を logFile に分離してストリーミング辺を取得 *)
 iMakeBatVerbose[promptFile_String, outFile_String, logFile_String] :=
   Module[{batFile, bc, strm, addDirFlags, permFlags, workDir, allDirs},
@@ -1327,7 +1473,7 @@ iParseVerboseLog[logFile_String, prevSize_Integer] :=
     {StringJoin[texts], StringLength[raw]}
   ];
 
-(* \:30d7\:30ed\:30b0\:30ec\:30b9\:8868\:793a\:4ed8\:304d\:975e\:540c\:671f\:5b9f\:884c (Job \:30b7\:30b9\:30c6\:30e0\:5bfe\:5fdc) *)
+(* \:30d7\:30ed\:30b0\:30ec\:30b9\:8868\:793a\:4ed8\:304d\:975e\:540c\:671f\:5b9f\:884c (Job \:30b7\:30b9\:30c6\:30e0\:5bfe\:5fdc) — stream-json \:7248 *)
 iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
     extraImageDirs_List:{}, jobId_String:""] :=
   Module[{ts, outFile, promptFile, batFile, proc, startTime, progTag, norm,
@@ -1335,7 +1481,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
     useJob = (jobId =!= "");
     norm       = iNormalizePrompt[iInjectAttachments[prompt]];
     ts         = ToString[UnixTime[]] <> "x" <> ToString[RandomInteger[99999]];
-    outFile    = FileNameJoin[{$TemporaryDirectory, "claude_out_"    <> ts <> ".txt"}];
+    outFile    = FileNameJoin[{$TemporaryDirectory, "claude_out_"    <> ts <> ".jsonl"}];
     promptFile = FileNameJoin[{$TemporaryDirectory, "claude_prompt_" <> ts <> ".txt"}];
     progTag    = "claude-prog-" <> ts;
 
@@ -1346,12 +1492,25 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
       Close[strm]
     ];
 
-    batFile   = iMakeBat[promptFile, outFile, Join[norm["imageDirs"], extraImageDirs]];
+    batFile   = iMakeBatStreamJson[promptFile, outFile, Join[norm["imageDirs"], extraImageDirs]];
     proc      = StartProcess[{"cmd", "/c", batFile}];
     startTime = AbsoluteTime[];
 
-    (* \:30d7\:30ed\:30b0\:30ec\:30b9\:8868\:793a: Job \:304c\:3042\:308c\:3070\:30b9\:30ed\:30c3\:30c81\:3001\:306a\:3051\:308c\:3070\:5f93\:6765\:65b9\:5f0f *)
-    $claudeProgress[ts] = <|"disp" -> "Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s"|>;
+    (* $claudeProgress にリッチ情報を格納 *)
+    $claudeProgress[ts] = <|
+      "disp" -> "Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s",
+      "status" -> "\:521d\:671f\:5316",
+      "startTime" -> startTime,
+      "outFile" -> outFile,
+      "process" -> proc,
+      "lineCount" -> 0,
+      "textFragments" -> 0,
+      "thinkingFragments" -> 0,
+      "toolUses" -> 0,
+      "lastText" -> "",
+      "caller" -> If[useJob, "Job:" <> jobId, "Async"]
+    |>;
+
     With[{k = ts, jid = jobId, uj = useJob},
       If[uj,
         NBAccess`NBWriteSlot[jid, 1,
@@ -1373,18 +1532,27 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
             oFile = outFile, bFile = batFile, pFile = promptFile,
             pNb = nb, ptag = progTag, useFb = useFallback, sym = gSym,
             jid = jobId, uj = useJob},
-        Module[{status, raw, retries = 0, elapsed},
+        Module[{status, raw, retries = 0, elapsed, info, statusStr},
           If[!KeyExistsQ[$claudeProgress, k], Return[]];
           elapsed = Round[AbsoluteTime[] - t0, 1];
-          $claudeProgress[k] = <|"disp" ->
-            "Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... " <> ToString[elapsed] <>
-            "s | proc: " <> ToString[ProcessStatus[p]]|>;
+          (* stream-json ファイルを差分読み取りして状態を更新 *)
+          iUpdateStreamProgress[k, oFile];
+          info = $claudeProgress[k];
+          statusStr = Lookup[info, "status", "?"];
+          $claudeProgress[k]["disp"] =
+            "Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... " <> ToString[elapsed] <> "s | " <>
+            statusStr <>
+            If[Lookup[info, "thinkingFragments", 0] > 0,
+              " (\:601d\:8003:" <> ToString[info["thinkingFragments"]] <> ")", ""] <>
+            If[Lookup[info, "textFragments", 0] > 0,
+              " (\:30c6\:30ad\:30b9\:30c8:" <> ToString[info["textFragments"]] <> ")", ""] <>
+            If[Lookup[info, "toolUses", 0] > 0,
+              " (\:30c4\:30fc\:30eb:" <> ToString[info["toolUses"]] <> ")", ""];
           status = ProcessStatus[p];
           If[status === "Finished" || elapsed > $ClaudeTimeout,
             $claudeProgress = KeyDrop[$claudeProgress, k];
             Quiet[StopScheduledTask[sym]];
             Quiet[RemoveScheduledTask[sym]];
-            (* \:30d7\:30ed\:30b0\:30ec\:30b9\:30bb\:30eb\:306e\:5f8c\:59cb\:672b: Job\:306a\:3089\:30b9\:30ed\:30c3\:30c8\:306b\:4efb\:305b\:308b\:3001\:5f93\:6765\:306a\:3089\:30bf\:30b0\:3067\:524a\:9664 *)
             If[!uj, NBAccess`NBDeleteCellsByTag[pNb, ptag]];
             Quiet @ DeleteFile /@ Select[{bFile, pFile}, FileExistsQ];
             If[status =!= "Finished",
@@ -1394,17 +1562,20 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                   "Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08" <> ToString[$ClaudeTimeout] <> "\:79d2\:ff09"],
                 cb["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08" <> ToString[$ClaudeTimeout] <> "\:79d2\:ff09\:3057\:307e\:3057\:305f\:3002"]],
               While[!FileExistsQ[oFile] && retries < 3, Pause[0.5]; retries++];
-              If[FileExistsQ[oFile],
-                raw = Import[oFile, "Text"];
-                Quiet[DeleteFile[oFile]];
-                Module[{result = cleanOutput[stripANSI[raw]]},
-                  If[TrueQ[useFb] && iIsLimitError[result],
+              If[FileExistsQ[oFile] && FileByteCount[oFile] > 0,
+                Module[{result = iExtractResultFromStreamJson[oFile],
+                        isEmpty = False},
+                  Quiet[DeleteFile[oFile]];
+                  (* 空レスポンスの場合: プロセスは終了したが結果が得られなかった *)
+                  If[result === "",
+                    isEmpty = True;
+                    result = "Error: Claude Code \:304c\:7a7a\:306e\:30ec\:30b9\:30dd\:30f3\:30b9\:3092\:8fd4\:3057\:307e\:3057\:305f\:3002\:5229\:7528\:5236\:9650\:306b\:9054\:3057\:3066\:3044\:308b\:53ef\:80fd\:6027\:304c\:3042\:308a\:307e\:3059\:3002"];
+                  If[TrueQ[useFb] && (isEmpty || iIsLimitError[result]),
                     Module[{fbModels = If[ListQ[$ClaudeFallbackModels], $ClaudeFallbackModels, {}]},
                       iStartFallbackAsync[norm["text"], pNb,
                         Function[fbResult,
                           If[StringQ[fbResult] && fbResult =!= $Failed,
                             cb[fbResult],
-                            (* \:5168\:30e2\:30c7\:30eb\:5931\:6557 *)
                             If[uj,
                               NBAccess`NBAbortJob[jid, result],
                               iFlushFallbackLog[pNb];
@@ -1511,8 +1682,11 @@ Print[
   "  ClaudeShowHistory[session]       \[RightArrow] \:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\:8868\:793a\n" <>
   "  ClaudeDebug[code, errMsg]        \[RightArrow] \:30c7\:30d0\:30c3\:30b0\:4f9d\:983c\:ff08\:975e\:540c\:671f\:ff09\n" <>
   "  ClaudeReview[code]               \[RightArrow] \:30b3\:30fc\:30c9\:30ec\:30d3\:30e5\:30fc\:ff08\:975e\:540c\:671f\:ff09\n" <>
-  "  ClaudeCreatePackage[name, prompt]  \[RightArrow] \:65b0\:898f\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:751f\:6210 (Fallback, References)\n" <>
-  "  ClaudeUpdatePackage[name, prompt]  \[RightArrow] \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:4ed8\:304d\:66f4\:65b0 (Fallback, TargetFunctions, StartTime, References)\n" <>
+  "  ClaudeCreatePackage[name, prompt]  \[RightArrow] \:65b0\:898f\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:751f\:6210 (Fallback)\n" <>
+  "  ClaudeUpdatePackage[name, prompt]  \[RightArrow] \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:4ed8\:304d\:66f4\:65b0 (Fallback, TargetFunctions, StartTime)\n" <>
+  "  ContinueUpdate[]                 \[RightArrow] \:76f4\:524d\:306e ClaudeUpdatePackage \:3092\:30d0\:30b0\:4fee\:6b63\:3067\:7d99\:7d9a\n" <>
+  "  ContinueUpdate[\"\:6307\:793a\"]             \[RightArrow] \:8ffd\:52a0\:6307\:793a\:4ed8\:304d\:3067\:7d99\:7d9a\n" <>
+  "  ContinueUpdate[\"pkg\", \"\:6307\:793a\"]    \[RightArrow] \:6307\:5b9a\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:66f4\:65b0\:3092\:7d99\:7d9a\n" <>
   "  ClaudeRestorePackage[name]       \[RightArrow] \:76f4\:524d\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306b\:623b\:3059\n" <>
   "  ClaudeUpdatePackageHistory[]     \[RightArrow] \:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:66f4\:65b0\:5c65\:6b74\:3092\:8868\:793a\n" <>
   "  ClaudeBackupDataset[name]        \[RightArrow] \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:3092 Review/Pull/Delete \:30dc\:30bf\:30f3\:4ed8\:304d Grid \:3067\:8868\:793a\n" <>
@@ -1526,7 +1700,9 @@ Print[
   "  ClaudeUpdateDirective[]          \[RightArrow] \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:5168\:30b3\:30d4\:30fc\n" <>
   "  ClaudeUpdateDirective[text]      \[RightArrow] \:6307\:793a\:3067\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:66f4\:65b0\:30fb\:30b3\:30d4\:30fc\n" <>
   "  ClaudeDirectiveBackupDataset[]   \[RightArrow] \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:66f4\:65b0\:5c65\:6b74\:3092 Review/Pull/Delete \:4ed8\:304d Grid \:3067\:8868\:793a\n" <>
+  "  ClaudeSyncDirectives[dir]        \[RightArrow] dir \:304b\:3089 Claude Directives \:3078\:66f4\:65b0\:30d5\:30a1\:30a4\:30eb\:3092\:540c\:671f\n" <>
   "  ClaudeSessionStatus[]            \[RightArrow] \:30bb\:30c3\:30b7\:30e7\:30f3\:72b6\:614b\:30fb\:30a2\:30af\:30bb\:30b9\:53ef\:80fd\:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\n" <>
+  "  ClaudeStatus[]                   \[RightArrow] \:5b9f\:884c\:4e2d\:30bf\:30b9\:30af\:306e\:30ea\:30a2\:30eb\:30bf\:30a4\:30e0\:72b6\:614b\:8868\:793a\n" <>
   "  ClaudeCompactHistory[]           \[RightArrow] \:5c65\:6b74\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3 (\:901a\:5e38\:81ea\:52d5)\n" <>
   "  ClaudeWebSearch[query]           \[RightArrow] Web \:691c\:7d22 (Anthropic API)\n" <>
   "  ClaudeWebFetch[url]              \[RightArrow] URL \:5185\:5bb9\:53d6\:5f97\:30fb\:8981\:7d04\n" <>
@@ -1864,13 +2040,41 @@ iFlushQueryTextBuf[nb_NotebookObject, buf_List] :=
       Cell[StringJoin[Riffle[buf, "\n"]], "Text"]]];
 
 iWriteQueryResponse[nb_NotebookObject, text_String] :=
-  Module[{lines, i, line, trimmed, textBuf = {}, content},
+  Module[{lines, i, line, trimmed, textBuf = {}, content,
+          inCodeBlock = False, codeLang = "", codeBuf = {}},
 
     lines = StringSplit[text, "\n"];
     Do[
       line = lines[[i]];
       trimmed = StringTrim[line];
       Which[
+        (* コードブロック開始: ```lang *)
+        !inCodeBlock && StringMatchQ[trimmed, "```" ~~ ___],
+          iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
+          codeLang = StringTrim[StringReplace[trimmed,
+            RegularExpression["^```\\s*"] -> ""]];
+          inCodeBlock = True;
+          codeBuf = {},
+
+        (* コードブロック終了: ``` *)
+        inCodeBlock && StringMatchQ[trimmed, "```"],
+          inCodeBlock = False;
+          If[Length[codeBuf] > 0,
+            Module[{codeText = StringJoin[Riffle[codeBuf, "\n"]]},
+              If[MemberQ[{"mathematica", "wolfram", "wl", "mma"}, ToLowerCase[codeLang]],
+                (* Mathematica コード → Input セル *)
+                iWriteCodeCell[nb, codeText],
+                (* 他の言語やコードブロック → Program セル *)
+                NBAccess`NBWriteCell[nb, Cell[codeText, "Program"]]]]];
+          codeBuf = {};
+          codeLang = "",
+
+        (* コードブロック内: そのまま蓄積（Item等の解釈をしない） *)
+        inCodeBlock,
+          AppendTo[codeBuf, line],
+
+        (* --- 以下はコードブロック外の通常処理 --- *)
+
         (* 空行: バッファフラッシュ *)
         trimmed === "",
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {},
@@ -1935,10 +2139,6 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
         StringMatchQ[trimmed, RegularExpression["^[-*_]{3,}$"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {},
 
-        (* コードブロック開始/終了 → 無視 *)
-        StringMatchQ[trimmed, "```" ~~ ___],
-          iFlushQueryTextBuf[nb, textBuf]; textBuf = {},
-
         (* 通常テキスト → バッファに追加 *)
         True,
           content = StringReplace[trimmed, {"**" -> "", "__" -> ""}];
@@ -1946,6 +2146,12 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
       ],
       {i, Length[lines]}];
 
+    (* コードブロックが閉じられなかった場合もフラッシュ *)
+    If[inCodeBlock && Length[codeBuf] > 0,
+      Module[{codeText = StringJoin[Riffle[codeBuf, "\n"]]},
+        If[MemberQ[{"mathematica", "wolfram", "wl", "mma"}, ToLowerCase[codeLang]],
+          iWriteCodeCell[nb, codeText],
+          NBAccess`NBWriteCell[nb, Cell[codeText, "Program"]]]]];
     (* 残りをフラッシュ *)
     iFlushQueryTextBuf[nb, textBuf];
   ];
@@ -2597,9 +2803,10 @@ ClaudeWebFetch[url_String, instruction_String] :=
     iDoWebSearch[prompt]
   ];
 
-iQueryOpenAIAPI[apiKey_String, model_String, prompt_String] :=
+iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
+    customURL_String:"https://api.openai.com/v1/chat/completions"] :=
   Module[{url, body, resp, bodyStr, json, choices, msg},
-    url = "https://api.openai.com/v1/chat/completions";
+    url = customURL;
     body = "{\"model\":\"" <> model <>
       "\",\"messages\":[{\"role\":\"user\",\"content\":" <>
       ExportString[prompt, "RawJSON"] <> "}]}";
@@ -2634,16 +2841,36 @@ iQueryOpenAIAPI[apiKey_String, model_String, prompt_String] :=
   ];
 
 (* \:30d7\:30ed\:30d0\:30a4\:30c0\:306b\:5fdc\:3058\:305f API \:547c\:3073\:51fa\:3057\:30c7\:30a3\:30b9\:30d1\:30c3\:30c1 *)
-iQueryViaAPI[provider_String, model_String, prompt_String] :=
-  Module[{apiKey},
+(* provider に応じた API 呼び出しディスパッチ。
+   customURL が指定されている場合はそれを使用する（LM Studio 等のローカルモデル）。 *)
+iEnsureChatCompletionsPath[url_String] :=
+  If[StringEndsQ[url, "/v1/chat/completions"],
+    url,
+    If[StringEndsQ[url, "/"],
+      url <> "v1/chat/completions",
+      url <> "/v1/chat/completions"]];
+
+iQueryViaAPI[provider_String, model_String, prompt_String, customURL_String:""] :=
+  Module[{apiKey, url, prov = ToLowerCase[provider]},
+    (* LM Studio 等ローカルモデル: API キー不要 *)
+    If[prov === "lmstudio",
+      url = iEnsureChatCompletionsPath[
+        If[customURL =!= "", customURL, "http://localhost:1234"]];
+      Return[iQueryOpenAIAPI["lm-studio", model, prompt, url]]];
+    (* 通常プロバイダー *)
     apiKey = Quiet[NBAccess`NBGetAPIKey[provider,
       PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
     If[apiKey === $Failed || !StringQ[apiKey],
       Return["Error: " <> provider <> " \:306e API \:30ad\:30fc\:304c\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093"]];
-    Switch[ToLowerCase[provider],
-      "anthropic", iQueryAnthropicAPI[apiKey, model, prompt],
-      "openai",    iQueryOpenAIAPI[apiKey, model, prompt],
-      _,           "Error: \:672a\:5bfe\:5fdc\:30d7\:30ed\:30d0\:30a4\:30c0: " <> provider]
+    Switch[prov,
+      "anthropic",
+        iQueryAnthropicAPI[apiKey, model, prompt],
+      "openai",
+        If[customURL =!= "",
+          iQueryOpenAIAPI[apiKey, model, prompt, customURL],
+          iQueryOpenAIAPI[apiKey, model, prompt]],
+      _,
+        "Error: \:672a\:5bfe\:5fdc\:30d7\:30ed\:30d0\:30a4\:30c0: " <> provider]
   ];
 
 (* フォールバック通知: nb===None なら CellPrint (In/Out 間), NotebookObject なら NotebookWrite *)
@@ -2656,19 +2883,21 @@ iFallbackNotify[nb_NotebookObject, text_String, color_] :=
    nb=None: 同期用 (CellPrint で In/Out 間に通知)
    nb=NotebookObject: 非同期用 (NotebookWrite で通知) *)
 iQueryWithFallback[prompt_String, useFallback_, nb_:None] :=
-  Module[{response, models, provider, model, fbResponse, result},
+  Module[{response, models, provider, model, customURL, fbResponse, result},
     response = iClaudeQueryRaw[prompt];
     If[!TrueQ[useFallback] || !iIsLimitError[response],
       Return[response]];
     models = If[ListQ[$ClaudeFallbackModels], $ClaudeFallbackModels, {}];
     result = Catch[
       Do[
-        {provider, model} = fm;
+        provider  = fm[[1]];
+        model     = fm[[2]];
+        customURL = If[Length[fm] >= 3, fm[[3]], ""];
         iFallbackNotify[nb,
           "\[RightArrow] Claude Code \:5229\:7528\:4e0d\:53ef\:3002" <> provider <> "/" <> model <>
           " \:306b\:5207\:66ff\:3048\:307e\:3059\:2026",
           RGBColor[0.8, 0.4, 0]];
-        fbResponse = iQueryViaAPI[provider, model, prompt];
+        fbResponse = iQueryViaAPI[provider, model, prompt, customURL];
         If[StringQ[fbResponse] && !StringStartsQ[fbResponse, "Error:"],
           iFallbackNotify[nb,
             "\[Checkmark] " <> provider <> "/" <> model <> " \:3067\:5fdc\:7b54\:3092\:53d6\:5f97\:3057\:307e\:3057\:305f\:3002",
@@ -2687,16 +2916,18 @@ iQueryWithFallback[prompt_String, useFallback_, nb_:None] :=
 $iFallbackLog = {};
 
 iQueryFallbackOnly[prompt_String, nb_NotebookObject] :=
-  Module[{models, provider, model, fbResponse, result},
+  Module[{models, provider, model, customURL, fbResponse, result},
     $iFallbackLog = {};
     models = If[ListQ[$ClaudeFallbackModels], $ClaudeFallbackModels, {}];
     result = Catch[
       Do[
-        {provider, model} = fm;
+        provider  = fm[[1]];
+        model     = fm[[2]];
+        customURL = If[Length[fm] >= 3, fm[[3]], ""];
         AppendTo[$iFallbackLog,
           {"\[RightArrow] Claude Code \:5229\:7528\:4e0d\:53ef\:3002" <> provider <> "/" <> model <>
            " \:306b\:5207\:66ff\:3048\:307e\:3059\:2026", RGBColor[0.8, 0.4, 0]}];
-        fbResponse = iQueryViaAPI[provider, model, prompt];
+        fbResponse = iQueryViaAPI[provider, model, prompt, customURL];
         If[StringQ[fbResponse] && !StringStartsQ[fbResponse, "Error:"],
           AppendTo[$iFallbackLog,
             {"\[Checkmark] " <> provider <> "/" <> model <> " \:3067\:5fdc\:7b54\:3092\:53d6\:5f97\:3057\:307e\:3057\:305f\:3002",
@@ -2878,7 +3109,7 @@ iFallbackDeleteProgress[nb_NotebookObject, key_String] := (
 
 iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
     modelIdx_Integer:1, jobId_String:""] :=
-  Module[{provider, model, apiKey, prepared, proc, ts, startTime, progKey, useJob},
+  Module[{provider, model, customURL, apiKey, prepared, proc, ts, startTime, progKey, useJob},
     useJob = (jobId =!= "");
     (* \:6700\:521d\:306e\:547c\:3073\:51fa\:3057\:6642\:306b\:30b0\:30ed\:30fc\:30d0\:30eb\:72b6\:614b\:3092\:521d\:671f\:5316 *)
     If[modelIdx === 1,
@@ -2896,26 +3127,35 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
           "\[WarningSign] \:5168\:30e2\:30c7\:30eb\:304c\:5229\:7528\:4e0d\:53ef\:3067\:3059\:3002", Red]];
       If[!TrueQ[$iFallbackDone], $iFallbackDone = True; callback[$Failed]];
       Return[]];
-    {provider, model} = models[[modelIdx]];
-    apiKey = Quiet[NBAccess`NBGetAPIKey[provider,
-      PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
-    If[!StringQ[apiKey],
-      iStartFallbackAsync[prompt, nb, callback, models, modelIdx + 1, jobId];
-      Return[]];
-    (* \:5207\:66ff\:3048\:901a\:77e5: Job \:306a\:3089\:30b9\:30ed\:30c3\:30c81\:3001\:5f93\:6765\:306a\:3089 NotifyAndLog *)
+    (* モデル指定を展開: {provider, model} または {provider, model, url} *)
+    Module[{entry = models[[modelIdx]]},
+      provider = entry[[1]];
+      model    = entry[[2]];
+      customURL = If[Length[entry] >= 3, entry[[3]], ""]];
+    (* API キー取得: lmstudio はキー不要 *)
+    If[ToLowerCase[provider] === "lmstudio",
+      apiKey = "lm-studio",
+      apiKey = Quiet[NBAccess`NBGetAPIKey[provider,
+        PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
+      If[!StringQ[apiKey],
+        iStartFallbackAsync[prompt, nb, callback, models, modelIdx + 1, jobId];
+        Return[]]];
+    (* 切替え通知: Job ならスロット1、従来なら NotifyAndLog *)
+    Module[{noticeText = "\[RightArrow] " <> provider <> "/" <> model <> " \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d\:2026"},
     If[useJob,
       NBAccess`NBWriteSlot[jobId, 1,
-        Cell["\[RightArrow] Claude Code \:5229\:7528\:4e0d\:53ef\:3002" <> provider <> "/" <> model <>
-          " \:306b\:5207\:66ff\:3048\:307e\:3059\:2026", "Print",
+        Cell[noticeText, "Print",
           FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]],
-      iFallbackNotifyAndLog[nb,
-        "\[RightArrow] Claude Code \:5229\:7528\:4e0d\:53ef\:3002" <> provider <> "/" <> model <>
-        " \:306b\:5207\:66ff\:3048\:307e\:3059\:2026", RGBColor[0.8, 0.4, 0]]];
+      iFallbackNotifyAndLog[nb, noticeText, RGBColor[0.8, 0.4, 0]]]];
     prepared = iPrepareAnthropicPS1[apiKey, model, prompt,
-      If[ToLowerCase[provider] === "anthropic",
-        "https://api.anthropic.com/v1/messages",
-        "https://api.openai.com/v1/chat/completions"],
-      provider];
+      Which[
+        ToLowerCase[provider] === "anthropic" && customURL === "",
+          "https://api.anthropic.com/v1/messages",
+        ToLowerCase[provider] === "lmstudio",
+          iEnsureChatCompletionsPath[If[customURL =!= "", customURL, "http://localhost:1234"]],
+        customURL =!= "", customURL,
+        True, "https://api.openai.com/v1/chat/completions"],
+      If[ToLowerCase[provider] === "lmstudio", "openai", provider]];
     If[prepared === $Failed,
       iStartFallbackAsync[prompt, nb, callback, models, modelIdx + 1, jobId];
       Return[]];
@@ -3060,6 +3300,62 @@ ClaudeSessionStatus[name_String] :=
 ClaudeSessionStatus[session_Association] :=
   iClaudeSessionStatusImpl[session["Notebook"], session["SessionTag"], session["Name"]];
 
+(* ============================================================
+   ClaudeStatus: 実行中タスクのリアルタイム状態表示
+   ============================================================ *)
+
+ClaudeStatus[] :=
+  Module[{keys, nb},
+    nb = Quiet[EvaluationNotebook[]];
+    keys = If[AssociationQ[$claudeProgress], Keys[$claudeProgress], {}];
+    If[Length[keys] === 0,
+      Print[Style["\:2705 \:5b9f\:884c\:4e2d\:306e Claude \:30bf\:30b9\:30af\:306f\:3042\:308a\:307e\:305b\:3093\:3002", Bold]];
+      Return[{}]];
+    Print[Style["=== Claude \:30bf\:30b9\:30af\:72b6\:614b (" <> ToString[Length[keys]] <> " \:4ef6\:5b9f\:884c\:4e2d) ===",
+      Bold, 14]];
+    Print[""];
+    Map[Function[key,
+      Module[{info = $claudeProgress[key], elapsed, status, proc,
+              textF, thinkF, toolU, fileSize, lastTxt},
+        If[!AssociationQ[info], Return[Nothing]];
+        elapsed  = Round[AbsoluteTime[] - Lookup[info, "startTime", AbsoluteTime[]], 1];
+        status   = Lookup[info, "status", "?"];
+        proc     = Lookup[info, "process", None];
+        textF    = Lookup[info, "textFragments", 0];
+        thinkF   = Lookup[info, "thinkingFragments", 0];
+        toolU    = Lookup[info, "toolUses", 0];
+        lastTxt  = Lookup[info, "lastText", ""];
+        fileSize = If[StringQ[Lookup[info, "outFile", None]] &&
+                      FileExistsQ[info["outFile"]],
+                    FileByteCount[info["outFile"]], 0];
+
+        Print[Style["\:25b6 \:30bf\:30b9\:30af: " <> key, Bold, 12]];
+        Print["  \:7d4c\:904e\:6642\:9593: ", elapsed, " \:79d2"];
+        Print["  \:30d7\:30ed\:30bb\:30b9: ",
+          If[proc =!= None, ToString[ProcessStatus[proc]], "?"]];
+        Print["  \:73fe\:5728\:306e\:72b6\:614b: ",
+          Style[status, Bold,
+            Switch[status,
+              "\:601d\:8003\:4e2d", RGBColor[0.8, 0.5, 0],
+              "\:30c6\:30ad\:30b9\:30c8\:751f\:6210\:4e2d", RGBColor[0, 0.6, 0],
+              "\:5b8c\:4e86", RGBColor[0, 0.5, 0],
+              _, RGBColor[0.4, 0.4, 0.4]]]];
+        Print["  \:601d\:8003\:65ad\:7247: ", thinkF, " | \:30c6\:30ad\:30b9\:30c8\:65ad\:7247: ", textF,
+          " | \:30c4\:30fc\:30eb\:4f7f\:7528: ", toolU];
+        Print["  \:51fa\:529b\:30d5\:30a1\:30a4\:30eb: ", Round[fileSize / 1024., 1], " KB (",
+          Lookup[info, "lineCount", 0], " \:884c)"];
+        If[lastTxt =!= "" && textF > 0,
+          Print["  \:6700\:65b0\:30c6\:30ad\:30b9\:30c8: \:300c",
+            StringTake[lastTxt, UpTo[60]], "\:300d"]];
+        Print["  \:547c\:3073\:51fa\:3057\:5143: ", Lookup[info, "caller", "?"]];
+        Print[""];
+        <|"key" -> key, "elapsed" -> elapsed, "status" -> status,
+          "textFragments" -> textF, "thinkingFragments" -> thinkF,
+          "toolUses" -> toolU, "fileSize" -> fileSize|>
+      ]],
+      keys]
+  ];
+
 iClaudeSessionStatusImpl[nb_NotebookObject, tag_String, name_String] :=
   Module[{hdr, history, attachments, nbDir, workDir, accessDirs, nbFiles, result},
     hdr = Quiet[NBAccess`NBHistoryReadHeader[nb, tag]];
@@ -3157,12 +3453,13 @@ ClaudeCompactHistory[name_String] :=
 
 (* iMoveAfterEvalCell removed: use NBAccess`NBWriteAnchorAfterEvalCell *)
 
-Options[ClaudeQuery] = {Fallback -> False, WebFetch -> False};
+Options[ClaudeQuery] = {Fallback -> False, WebFetch -> False, Model -> Automatic};
 
 (* ClaudeQuery \:5185\:90e8\:5b9f\:88c5\:ff08\:975e\:540c\:671f\:ff09 *)
-iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFetch_] :=
+iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFetch_,
+    modelSpec_:Automatic] :=
   Module[{history, lastEntry, cellCountAfter, notebookCtx,
-          fullPrompt, step, entry, jobId},
+          fullPrompt, step, entry, jobId, queryCallback},
     $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
     history = iSessionHistoryWithInherit[nb, tag];
     lastEntry      = If[Length[history] > 0, Last[history], <||>];
@@ -3209,28 +3506,40 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
           "response"       -> response,
           "cellCountAfter" -> NBAccess`NBCellCount[nb]
         |>]],
-      (* \:901a\:5e38\:30d1\:30b9: \:975e\:540c\:671f\:3067 Claude Code \:3092\:547c\:3073\:51fa\:3057 *)
-      iClaudeQueryAsyncWithProgress[
-        fullPrompt,
-        With[{nb2 = nb, stag2 = tag, jid = jobId},
-          Function[response,
-            Module[{},
-              (* \:30a2\:30f3\:30ab\:30fc\:306e\:76f4\:5f8c\:306b\:51fa\:529b\:3092\:914d\:7f6e *)
-              NBAccess`NBJobMoveToAnchor[jid];
-              If[StringQ[response],
-                iWriteQueryResponse[nb2, response],
-                NBAccess`NBWriteCell[nb2,
-                  Cell["Error: \:5fdc\:7b54\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002", "Text"]]];
-              (* \:30b8\:30e7\:30d6\:7d42\:4e86: \:672a\:4f7f\:7528\:30b9\:30ed\:30c3\:30c8\:3068\:30a2\:30f3\:30ab\:30fc\:3092\:524a\:9664 *)
+      (* \:901a\:5e38\:30d1\:30b9: \:975e\:540c\:671f *)
+      queryCallback = With[{nb2 = nb, stag2 = tag, jid = jobId},
+        Function[response,
+          Module[{},
+            (* \:30a2\:30f3\:30ab\:30fc\:306e\:76f4\:5f8c\:306b\:51fa\:529b\:3092\:914d\:7f6e *)
+            NBAccess`NBJobMoveToAnchor[jid];
+            (* \:30a8\:30e9\:30fc/\:5236\:9650\:30ec\:30b9\:30dd\:30f3\:30b9\:306f\:901a\:77e5\:30b9\:30bf\:30a4\:30eb\:3067\:8868\:793a\:3057\:3066\:7d42\:4e86 *)
+            If[StringQ[response] && (iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"]),
+              NBAccess`NBWritePrintNotice[nb2, response, RGBColor[0.8, 0, 0]];
               NBAccess`NBEndJob[jid];
               iSessionUpdateLast[nb2, stag2, <|
-                "response"       -> response,
-                "cellCountAfter" -> NBAccess`NBCellCount[nb2]
-              |>]
-            ]
+                "response" -> response,
+                "cellCountAfter" -> NBAccess`NBCellCount[nb2]|>];
+              Return[]];
+            If[StringQ[response],
+              iWriteQueryResponse[nb2, response],
+              NBAccess`NBWriteCell[nb2,
+                Cell["Error: \:5fdc\:7b54\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002", "Text"]]];
+            (* \:30b8\:30e7\:30d6\:7d42\:4e86: \:672a\:4f7f\:7528\:30b9\:30ed\:30c3\:30c8\:3068\:30a2\:30f3\:30ab\:30fc\:3092\:524a\:9664 *)
+            NBAccess`NBEndJob[jid];
+            iSessionUpdateLast[nb2, stag2, <|
+              "response"       -> response,
+              "cellCountAfter" -> NBAccess`NBCellCount[nb2]
+            |>]
           ]
-        ],
-        nb, {}, jobId
+        ]
+      ];
+      If[modelSpec =!= Automatic && ListQ[modelSpec] && Length[modelSpec] >= 2,
+        (* Model \:6307\:5b9a\:3042\:308a: API \:7d4c\:7531\:3067\:6307\:5b9a\:30e2\:30c7\:30eb\:3092\:76f4\:63a5\:547c\:3073\:51fa\:3057 *)
+        iStartFallbackAsync[fullPrompt, nb, queryCallback,
+          {modelSpec}, 1, jobId],
+        (* \:30c7\:30d5\:30a9\:30eb\:30c8: Claude Code \:7d4c\:7531 *)
+        iClaudeQueryAsyncWithProgress[
+          fullPrompt, queryCallback, nb, {}, jobId]
       ]
     ];
   ];
@@ -3260,7 +3569,8 @@ ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
   session = iEnsureDefaultSession[nb];
   tag     = session["SessionTag"];
   iClaudeQueryImpl[nb, tag, prompt,
-    TrueQ[OptionValue[Fallback]], TrueQ[OptionValue[WebFetch]]]
+    TrueQ[OptionValue[Fallback]], TrueQ[OptionValue[WebFetch]],
+    OptionValue[Model]]
   ]]);
 
 (* \:30bb\:30c3\:30b7\:30e7\:30f3\:5bfe\:5fdc\:7248 ClaudeQuery\:ff08\:975e\:540c\:671f\:30fb\:5c65\:6b74\:4fdd\:5b58\:4ed8\:304d\:ff09 *)
@@ -3272,7 +3582,8 @@ ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
     $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
     iClaudeQueryImpl[nb, tag, prompt,
       TrueQ[OptionValue[ClaudeQuery, {opts}, Fallback]],
-      TrueQ[OptionValue[ClaudeQuery, {opts}, WebFetch]]]
+      TrueQ[OptionValue[ClaudeQuery, {opts}, WebFetch]],
+      OptionValue[ClaudeQuery, {opts}, Model]]
   ]]);
 
 (* ============================================================
@@ -3395,9 +3706,16 @@ iExtractAllCodeBlocks[response_String] := Module[{raw},
       <|"lang" -> If[tag === "mathematica", "mathematica",
                     Lookup[$iExternalLangMap, tag, "mathematica"]],
         "fenceTag" -> First[pair],
-        "code" -> code|>
+        "code" -> iFixUnicodeEscapes[code]|>
     ]], raw]
 ];
+
+(* \uXXXX 形式の JavaScript/Python 式 Unicode エスケープを実文字に変換 *)
+(* Mathematica は \:XXXX 形式なので \uXXXX はリテラルとして残ってしまう *)
+iFixUnicodeEscapes[code_String] :=
+  StringReplace[code,
+    "\\u" ~~ hex : Repeated[HexadecimalCharacter, {4}] :>
+      FromCharacterCode[FromDigits[hex, 16]]];
 
 (* ExternalLanguage セルを書き込む *)
 iWriteExternalLanguageCell[nb_NotebookObject, code_String,
@@ -3405,15 +3723,32 @@ iWriteExternalLanguageCell[nb_NotebookObject, code_String,
   NBAccess`NBWriteExternalLanguageCell[nb, code, lang, autoEvaluate];
 
 (* レスポンスからコードブロックを書き込む共通処理 *)
+(* 長時間ブロッキングする可能性のある関数パターン *)
+(* 外部サービスへの不可逆な書き込み操作: 自動実行をスキップして確認を求める *)
+$iLongRunningPatterns = {
+  "GitHubRefreshAndCommit", "GitHubPushAll", "GitHubCommit",
+  "GitHubCreatePullRequest", "GitHubMergePullRequest",
+  "GitHubSubmitPullRequest"
+};
+
+iIsLongRunningCode[code_String] :=
+  AnyTrue[$iLongRunningPatterns, StringContainsQ[code, #] &];
+
 iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
-  Module[{allBlocks, mathBlocks, extBlocks, blocks = {}},
+  Module[{allBlocks, mathBlocks, extBlocks, blocks = {}, ae},
     allBlocks = iExtractAllCodeBlocks[response];
     mathBlocks = Select[allBlocks, #["lang"] === "mathematica" &];
     extBlocks  = Select[allBlocks, #["lang"] =!= "mathematica" &];
     Which[
-      (* Mathematica ブロックがある場合: 従来通り *)
+      (* Mathematica ブロックがある場合 *)
       Length[mathBlocks] > 0,
-        Do[iWriteSmartCell[nb, b["code"], autoEvaluate], {b, mathBlocks}];
+        Do[
+          (* 長時間ブロッキング関数を含むセルは autoEvaluate を抑制 *)
+          ae = autoEvaluate && !iIsLongRunningCode[b["code"]];
+          iWriteSmartCell[nb, b["code"], ae];
+          If[!ae && autoEvaluate,
+            nbPrint[nb, "\:26a1 \:4e0a\:306e\:30bb\:30eb\:306f\:5916\:90e8\:30b5\:30fc\:30d3\:30b9\:3078\:306e\:66f8\:304d\:8fbc\:307f\:64cd\:4f5c\:3092\:542b\:3080\:305f\:3081\:81ea\:52d5\:5b9f\:884c\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3057\:305f\:3002Shift+Enter \:3067\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002"]],
+          {b, mathBlocks}];
         iWriteContinueEvalButton[nb, autoEvaluate];
         blocks = #["code"] & /@ mathBlocks,
       (* 外部言語ブロックのみの場合: ExternalLanguage セルとして書き込む *)
@@ -3476,6 +3811,11 @@ For brief explanatory text OUTSIDE code blocks (a few sentences only): \
 do NOT use markdown tables (no |---|); \
 do not use markdown bold (**text**) or heading syntax (# ##). \
 All explanatory text must be written in Japanese.\n\n\
+UNICODE IN STRINGS (CRITICAL):\n\
+When writing Mathematica string literals, ALWAYS use literal Unicode characters directly. \
+NEVER use \\uXXXX escape sequences (e.g. \\uff08, \\u30fb). \
+Mathematica does not interpret \\uXXXX; it uses \\:XXXX syntax. \
+Simply write the actual characters: \:ff08 not \\uff08, \:30fb not \\u30fb.\n\n\
 When data (Dataset, Association, List, etc.) is provided in the prompt, \
 treat it as Mathematica data available in the current session. \
 If the user refers to 'this dataset' or similar, the data shown in the prompt is the target.\n\n\
@@ -3550,6 +3890,7 @@ Do NOT add any final guidance like 'ContinueEval', 'ContinueEval[]', '継続で�
 "- To CREATE a new package: ClaudeCreatePackage[\"PackageName\", \"specification\"]\n" <>
 "- To generate documentation: ClaudeCreateDocumentation[\"PackageName\"]\n" <>
 "- To update documentation: ClaudeUpdateDocumentation[\"PackageName\", \"update instruction\"]\n" <>
+"- To continue after update: ContinueUpdate[] or ContinueUpdate[\"instruction\"]\n" <>
 "NEVER read package source files manually with Import/ReadString.\n" <>
 "NEVER attempt to rewrite package files with Export/Put.\n" <>
 "These functions handle backup, validation, reload, and history automatically.\n" <>
@@ -3557,6 +3898,17 @@ Do NOT add any final guidance like 'ContinueEval', 'ContinueEval[]', '継続で�
 "or suggest ClaudeQuery with the package name.\n" <>
 "Example: User says 'Maildb\:306eshowMails\:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:8868\:793a\:6570\:309230\:306b\:5909\:66f4' -> Output:\n" <>
 "```mathematica\nClaudeUpdatePackage[\"Maildb\", \"showMails\:306a\:3069\:306e\:30e1\:30fc\:30eb\:8868\:793a\:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:8868\:793a\:6570\:309230\:306b\:5909\:66f4\:3059\:308b\"]\n```\n\n" <>
+"OPTION ARGUMENTS (CRITICAL):\n" <>
+"When generating calls to ClaudeCode/ClaudeCreatePackage/ClaudeUpdatePackage/ClaudeEval/ContinueEval/ContinueUpdate " <>
+"or any infrastructure function, you MUST check the api.md in this prompt for the full list of supported options.\n" <>
+"- If the user's instruction contains information matching a known option " <>
+"(e.g., 'Reference: path', 'Fallback', 'StartTime', 'TargetFunctions', 'UpdateApiMd', " <>
+"'References', 'Demos', 'Disclaimer', etc.), " <>
+"pass it as a proper Mathematica option argument in the function call.\n" <>
+"- Example: User says 'ClaudeCreatePackage with Reference file C:\\path\\file.lisp' -> Output:\n" <>
+"```mathematica\nClaudeCreatePackage[\"PkgName\", \"spec...\", References -> {\"C:\\\\path\\\\file.lisp\"}]\n```\n" <>
+"- Do NOT embed option-like information only in the prompt string. " <>
+"If it maps to a documented option, use the option argument syntax.\n\n" <>
 "INFRASTRUCTURE API RULES (CRITICAL):\n" <>
 "When generating code that uses GitHubREST, ClaudeCode, or NBAccess functions:\n" <>
 "- ONLY use function names documented in the API reference section (api.md) shown in this prompt.\n" <>
@@ -3567,8 +3919,9 @@ Do NOT add any final guidance like 'ContinueEval', 'ContinueEval[]', '継続で�
 "ask the user to check with ?GitHubREST`* or similar.\n\n";
 
 (* \:30bb\:30c3\:30b7\:30e7\:30f3\:6307\:5b9a\:7248 ClaudeEval \:5185\:90e8\:5b9f\:88c5 *)
-iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}, autoEvaluate_:True] :=
-  Module[{step, entry, jobId, history, contextPrompt},
+iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
+    autoEvaluate_:True, modelSpec_:Automatic] :=
+  Module[{step, entry, jobId, history, contextPrompt, evalCallback},
     $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
     history = iSessionHistoryWithInherit[nb, tag];
     step    = Length[iSessionHistory[nb, tag]];
@@ -3599,46 +3952,60 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}, a
     (* Job \:30b7\:30b9\:30c6\:30e0\:3067\:8a55\:4fa1\:30bb\:30eb\:76f4\:5f8c\:306b\:30b9\:30ed\:30c3\:30c8\:3092\:4e88\:7d04 *)
     jobId = NBAccess`NBBeginJobAtEvalCell[nb];
 
-    iClaudeQueryAsyncWithProgress[
-      contextPrompt,
-      With[{nb2 = nb, stag2 = tag, st = step, jid = jobId},
-        Function[response,
-          Module[{textOnly, blocks},
-            (* \:30a2\:30f3\:30ab\:30fc\:306e\:76f4\:5f8c\:306b\:51fa\:529b\:3092\:914d\:7f6e *)
-            NBAccess`NBJobMoveToAnchor[jid];
-            textOnly = iStripContinueEvalGuidance @ cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
-            If[textOnly =!= "",
-              NBAccess`NBWriteCell[nb2, Cell[textOnly, "Text"]]];
-            blocks = iWriteResponseBlocks[nb2, response, autoEvaluate];
-            If[Length[blocks] === 0,
-              Module[{fallbackCode, lines},
-                lines = Select[StringSplit[textOnly, "\n"], StringTrim[#] =!= "" &];
-                If[Length[lines] > 0,
-                  fallbackCode = "Column[{\n" <>
-                    StringJoin[Riffle[
-                      ("  " <> ToString[#, InputForm]) & /@ lines,
-                      ",\n"]] <>
-                    "\n}, Spacings -> 0.5]";
-                  iWriteSmartCell[nb2, fallbackCode, autoEvaluate];
-                  blocks = {fallbackCode}
-                ]
-              ]];
-            (* \:30b8\:30e7\:30d6\:7d42\:4e86: \:672a\:4f7f\:7528\:30b9\:30ed\:30c3\:30c8\:3068\:30a2\:30f3\:30ab\:30fc\:3092\:524a\:9664 *)
+    (* \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:3092\:5171\:901a\:5316 *)
+    evalCallback = With[{nb2 = nb, stag2 = tag, st = step, jid = jobId},
+      Function[response,
+        Module[{textOnly, blocks},
+          (* \:30a2\:30f3\:30ab\:30fc\:306e\:76f4\:5f8c\:306b\:51fa\:529b\:3092\:914d\:7f6e *)
+          NBAccess`NBJobMoveToAnchor[jid];
+          (* \:30a8\:30e9\:30fc/\:5236\:9650\:30ec\:30b9\:30dd\:30f3\:30b9\:306f\:901a\:77e5\:30b9\:30bf\:30a4\:30eb\:3067\:8868\:793a\:3057\:3066\:7d42\:4e86 *)
+          If[iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"],
+            NBAccess`NBWritePrintNotice[nb2, response, RGBColor[0.8, 0, 0]];
             NBAccess`NBEndJob[jid];
             iSessionUpdateLast[nb2, stag2, <|
-              "response"       -> response,
-              "code"           -> StringJoin[Riffle[blocks, "\n\n"]],
-              "cellCountAfter" -> NBAccess`NBCellCount[nb2]
-            |>]
-          ]
+              "response" -> response, "code" -> "",
+              "cellCountAfter" -> NBAccess`NBCellCount[nb2]|>];
+            Return[]];
+          textOnly = iStripContinueEvalGuidance @ cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
+          If[textOnly =!= "",
+            NBAccess`NBWriteCell[nb2, Cell[textOnly, "Text"]]];
+          blocks = iWriteResponseBlocks[nb2, response, autoEvaluate];
+          If[Length[blocks] === 0,
+            Module[{fallbackCode, lines},
+              lines = Select[StringSplit[textOnly, "\n"], StringTrim[#] =!= "" &];
+              If[Length[lines] > 0,
+                fallbackCode = "Column[{\n" <>
+                  StringJoin[Riffle[
+                    ("  " <> ToString[#, InputForm]) & /@ lines,
+                    ",\n"]] <>
+                  "\n}, Spacings -> 0.5]";
+                iWriteSmartCell[nb2, fallbackCode, autoEvaluate];
+                blocks = {fallbackCode}
+              ]
+            ]];
+          (* \:30b8\:30e7\:30d6\:7d42\:4e86: \:672a\:4f7f\:7528\:30b9\:30ed\:30c3\:30c8\:3068\:30a2\:30f3\:30ab\:30fc\:3092\:524a\:9664 *)
+          NBAccess`NBEndJob[jid];
+          iSessionUpdateLast[nb2, stag2, <|
+            "response"       -> response,
+            "code"           -> StringJoin[Riffle[blocks, "\n\n"]],
+            "cellCountAfter" -> NBAccess`NBCellCount[nb2]
+          |>]
         ]
-      ],
-      nb, imageDirs, jobId
+      ]
+    ];
+
+    If[modelSpec =!= Automatic && ListQ[modelSpec] && Length[modelSpec] >= 2,
+      (* Model \:6307\:5b9a\:3042\:308a: API \:7d4c\:7531\:3067\:6307\:5b9a\:30e2\:30c7\:30eb\:3092\:76f4\:63a5\:547c\:3073\:51fa\:3057 *)
+      iStartFallbackAsync[contextPrompt, nb, evalCallback,
+        {modelSpec}, 1, jobId],
+      (* \:30c7\:30d5\:30a9\:30eb\:30c8: Claude Code \:7d4c\:7531 *)
+      iClaudeQueryAsyncWithProgress[
+        contextPrompt, evalCallback, nb, imageDirs, jobId]
     ]
   ];
 
 (* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:7248 ClaudeEval\:ff08\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:8fd4\:3055\:306a\:3044\:ff09 *)
-Options[ClaudeEval] = {Fallback -> False, AutoEvaluate -> True, StartTime -> Now, WebFetch -> Automatic, RepeatInterval -> None};
+Options[ClaudeEval] = {Fallback -> False, AutoEvaluate -> True, StartTime -> Now, WebFetch -> Automatic, RepeatInterval -> None, Model -> Automatic};
 
 (* StartTime \:30b9\:30b1\:30b8\:30e5\:30fc\:30ea\:30f3\:30b0\:30d8\:30eb\:30d1\:30fc:
    \:958b\:59cb\:6642\:523b\:304c\:672a\:6765\:306a\:3089 SessionSubmit + ScheduledTask \:3067\:9045\:5ef6\:5b9f\:884c\:3001
@@ -3735,6 +4102,13 @@ iEnrichWithWebSearch[task_String] :=
 (* 軽量プレフライト: タスクに Web 検索が有益かを Claude に判断させる *)
 iNeedsWebSearch[task_String] :=
   Module[{apiKey, prompt, response},
+    (* $packageDirectory 内のパッケージ名に言及するタスクは Web 検索不要 *)
+    If[AnyTrue[
+        Quiet @ Check[
+          FileBaseName /@ FileNames["*.wl", Global`$packageDirectory],
+          {}],
+        StringContainsQ[task, #, IgnoreCase -> True] &],
+      Return[False]];
     apiKey = Quiet[NBAccess`NBGetAPIKey["anthropic",
       PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
     If[!StringQ[apiKey], Return[False]];
@@ -3743,6 +4117,9 @@ iNeedsWebSearch[task_String] :=
       "decide whether a web search would provide useful information that the LLM " <>
       "likely does not already know (e.g. specific API docs, recent software updates, " <>
       "niche library details, current data, product-specific shortcuts).\n" <>
+      "If the task mentions updating/creating documentation for a local package, " <>
+      "or mentions ClaudeUpdatePackage/ClaudeCreateDocumentation/ClaudeUpdateDocumentation, " <>
+      "answer NO — these are local operations.\n" <>
       "Answer ONLY 'YES' or 'NO'. No explanation.\n\n" <>
       "Task: " <> StringTake[task, UpTo[500]];
     response = Quiet @ Check[
@@ -3771,13 +4148,14 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
   With[{nb = EvaluationNotebook[], st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate],
         actualTask = iResolveWebFetch[task, OptionValue[WebFetch]],
-        ri = OptionValue[RepeatInterval]},
+        ri = OptionValue[RepeatInterval],
+        mdl = Replace[OptionValue[Model], Except[_List] -> Automatic]},
     If[ri === None,
       iScheduleAt[
-        iClaudeEvalImpl[nb, iSessionTag[], actualTask, {}, ae],
+        iClaudeEvalImpl[nb, iSessionTag[], actualTask, {}, ae, mdl],
         st],
       iScheduleRepeating[
-        iClaudeEvalImpl[nb, iSessionTag[], actualTask, {}, ae],
+        iClaudeEvalImpl[nb, iSessionTag[], actualTask, {}, ae, mdl],
         st, ri]
     ]
   ]);
@@ -3786,19 +4164,19 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := (
 ClaudeEval[items_List, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
   With[{nb = EvaluationNotebook[], st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate],
-        wf = OptionValue[WebFetch], ri = OptionValue[RepeatInterval]},
+        wf = OptionValue[WebFetch], ri = OptionValue[RepeatInterval], mdl = OptionValue[Model]},
   Module[{norm},
     norm = iNormalizePrompt[items];
     If[ri === None,
       iScheduleAt[
         iClaudeEvalImpl[nb, iSessionTag[],
           iResolveWebFetch[norm["text"], wf],
-          norm["imageDirs"], ae],
+          norm["imageDirs"], ae, mdl],
         st],
       iScheduleRepeating[
         iClaudeEvalImpl[nb, iSessionTag[],
           iResolveWebFetch[norm["text"], wf],
-          norm["imageDirs"], ae],
+          norm["imageDirs"], ae, mdl],
         st, ri]
     ]
   ]]);
@@ -3808,13 +4186,13 @@ ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ClaudeEval, {opts}, Fallback]];
   With[{st = OptionValue[ClaudeEval, {opts}, StartTime], ae = OptionValue[ClaudeEval, {opts}, AutoEvaluate],
         actualTask = iResolveWebFetch[task, OptionValue[ClaudeEval, {opts}, WebFetch]],
-        ri = OptionValue[ClaudeEval, {opts}, RepeatInterval]},
+        ri = OptionValue[ClaudeEval, {opts}, RepeatInterval], mdl = OptionValue[ClaudeEval, {opts}, Model]},
     If[ri === None,
       iScheduleAt[
-        iClaudeEvalImpl[session["Notebook"], session["SessionTag"], actualTask, {}, ae],
+        iClaudeEvalImpl[session["Notebook"], session["SessionTag"], actualTask, {}, ae, mdl],
         st],
       iScheduleRepeating[
-        iClaudeEvalImpl[session["Notebook"], session["SessionTag"], actualTask, {}, ae],
+        iClaudeEvalImpl[session["Notebook"], session["SessionTag"], actualTask, {}, ae, mdl],
         st, ri]
     ]
   ]);
@@ -3824,17 +4202,18 @@ ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := (
   Module[{norm = iNormalizePrompt[items], st = OptionValue[ClaudeEval, {opts}, StartTime],
           ae = OptionValue[ClaudeEval, {opts}, AutoEvaluate],
           wf = OptionValue[ClaudeEval, {opts}, WebFetch],
-          ri = OptionValue[ClaudeEval, {opts}, RepeatInterval]},
+          ri = OptionValue[ClaudeEval, {opts}, RepeatInterval],
+          mdl = OptionValue[ClaudeEval, {opts}, Model]},
     If[ri === None,
       iScheduleAt[
         iClaudeEvalImpl[session["Notebook"], session["SessionTag"],
           iResolveWebFetch[norm["text"], wf],
-          norm["imageDirs"], ae],
+          norm["imageDirs"], ae, mdl],
         st],
       iScheduleRepeating[
         iClaudeEvalImpl[session["Notebook"], session["SessionTag"],
           iResolveWebFetch[norm["text"], wf],
-          norm["imageDirs"], ae],
+          norm["imageDirs"], ae, mdl],
         st, ri]
     ]
   ]);
@@ -3944,9 +4323,10 @@ ClaudeSpec[items_List] := (
   ]]);
 
 (* \:30bb\:30c3\:30b7\:30e7\:30f3\:6307\:5b9a\:7248 ContinueEval \:5185\:90e8\:5b9f\:88c5 *)
-iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String, autoEvaluate_:True] :=
+iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
+    autoEvaluate_:True, modelSpec_:Automatic] :=
   Module[{history, lastEntry, cellCountAfter, notebookCtx,
-          contextPrompt, step, entry, anchorTag},
+          contextPrompt, step, entry, anchorTag, continueCallback},
     history = iSessionHistoryWithInherit[nb, tag];
     If[Length[history] === 0,
       nbPrint[nb, "\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> tag];
@@ -3985,54 +4365,68 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String, autoEvaluat
     (* NBAccess経由: EvaluationCell直後にアンカーセル挿入 *)
     NBAccess`NBWriteAnchorAfterEvalCell[nb, anchorTag];
 
-    iClaudeQueryAsyncWithProgress[
-      contextPrompt,
-      With[{nb2 = nb, stag2 = tag, tag2 = anchorTag},
-        Function[response,
-          Module[{textOnly, blocks, anchors},
-            Module[{anchorIdxs = NBAccess`NBCellIndicesByTag[nb2, tag2]},
-              If[Length[anchorIdxs] > 0,
-                NBAccess`NBMoveAfterCell[nb2, Last[anchorIdxs]]]];
-            iFlushFallbackLog[nb2];
-            textOnly = iStripContinueEvalGuidance @ cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
-            If[textOnly =!= "",
-              NBAccess`NBWriteCell[nb2, Cell[textOnly, "Text"]]];
-            blocks = iWriteResponseBlocks[nb2, response, autoEvaluate];
-            If[Length[blocks] === 0,
-              Module[{fallbackCode, lines},
-                lines = Select[StringSplit[textOnly, "\n"], StringTrim[#] =!= "" &];
-                If[Length[lines] > 0,
-                  fallbackCode = "Column[{\n" <>
-                    StringJoin[Riffle[
-                      ("  " <> ToString[#, InputForm]) & /@ lines,
-                      ",\n"]] <>
-                    "\n}, Spacings -> 0.5]";
-                  iWriteSmartCell[nb2, fallbackCode, autoEvaluate];
-                  blocks = {fallbackCode}
-                ]
-              ]];
-            NBAccess`NBDeleteCellsByTag[nb2, tag2];
+    continueCallback = With[{nb2 = nb, stag2 = tag, tag2 = anchorTag},
+      Function[response,
+        Module[{textOnly, blocks, anchors},
+          Module[{anchorIdxs = NBAccess`NBCellIndicesByTag[nb2, tag2]},
+            If[Length[anchorIdxs] > 0,
+              NBAccess`NBMoveAfterCell[nb2, Last[anchorIdxs]]]];
+          iFlushFallbackLog[nb2];
+          (* \:30a8\:30e9\:30fc/\:5236\:9650\:30ec\:30b9\:30dd\:30f3\:30b9\:306f\:901a\:77e5\:30b9\:30bf\:30a4\:30eb\:3067\:8868\:793a\:3057\:3066\:7d42\:4e86 *)
+          If[iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"],
+            NBAccess`NBWritePrintNotice[nb2, response, RGBColor[0.8, 0, 0]];
+            (* \:30a2\:30f3\:30ab\:30fc\:3092\:524a\:9664 *)
+            anchors = NBAccess`NBCellIndicesByTag[nb2, tag2];
+            If[Length[anchors] > 0,
+              NBAccess`NBDeleteCell[nb2, Last[anchors]]];
             iSessionUpdateLast[nb2, stag2, <|
-              "response"       -> response,
-              "code"           -> StringJoin[Riffle[blocks, "\n\n"]],
-              "cellCountAfter" -> NBAccess`NBCellCount[nb2]
-            |>]
-          ]
+              "response" -> response, "code" -> "",
+              "cellCountAfter" -> NBAccess`NBCellCount[nb2]|>];
+            Return[]];
+          textOnly = iStripContinueEvalGuidance @ cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
+          If[textOnly =!= "",
+            NBAccess`NBWriteCell[nb2, Cell[textOnly, "Text"]]];
+          blocks = iWriteResponseBlocks[nb2, response, autoEvaluate];
+          If[Length[blocks] === 0,
+            Module[{fallbackCode, lines},
+              lines = Select[StringSplit[textOnly, "\n"], StringTrim[#] =!= "" &];
+              If[Length[lines] > 0,
+                fallbackCode = "Column[{\n" <>
+                  StringJoin[Riffle[
+                    ("  " <> ToString[#, InputForm]) & /@ lines,
+                    ",\n"]] <>
+                  "\n}, Spacings -> 0.5]";
+                iWriteSmartCell[nb2, fallbackCode, autoEvaluate];
+                blocks = {fallbackCode}
+              ]
+            ]];
+          NBAccess`NBDeleteCellsByTag[nb2, tag2];
+          iSessionUpdateLast[nb2, stag2, <|
+            "response"       -> response,
+            "code"           -> StringJoin[Riffle[blocks, "\n\n"]],
+            "cellCountAfter" -> NBAccess`NBCellCount[nb2]
+          |>]
         ]
-      ],
-      nb
+      ]
+    ];
+
+    If[modelSpec =!= Automatic && ListQ[modelSpec] && Length[modelSpec] >= 2,
+      (* Model \:6307\:5b9a\:3042\:308a: API \:7d4c\:7531\:3067\:6307\:5b9a\:30e2\:30c7\:30eb\:3092\:76f4\:63a5\:547c\:3073\:51fa\:3057 *)
+      iStartFallbackAsync[contextPrompt, nb, continueCallback, {modelSpec}, 1, ""],
+      (* \:30c7\:30d5\:30a9\:30eb\:30c8: Claude Code \:7d4c\:7531 *)
+      iClaudeQueryAsyncWithProgress[contextPrompt, continueCallback, nb]
     ]
   ];
 
 (* \:30bb\:30c3\:30b7\:30e7\:30f3\:6307\:5b9a\:7248 *)
-Options[ContinueEval] = {Fallback -> False, AutoEvaluate -> True, StartTime -> Now};
+Options[ContinueEval] = {Fallback -> False, AutoEvaluate -> True, StartTime -> Now, Model -> Automatic};
 
 ContinueEval[session_Association, instruction_String:"\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044",
     opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
-  With[{st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate]},
+  With[{st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate], mdl = OptionValue[Model]},
     iScheduleAt[
-      iContinueEvalImpl[session["Notebook"], session["SessionTag"], instruction, ae],
+      iContinueEvalImpl[session["Notebook"], session["SessionTag"], instruction, ae, mdl],
       st
     ]
   ]);
@@ -4044,15 +4438,136 @@ ContinueEval[session_Association] :=
 ContinueEval[instruction_String, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ContinueEval, {opts}, Fallback]];
   With[{nb = EvaluationNotebook[], st = OptionValue[ContinueEval, {opts}, StartTime],
-        ae = OptionValue[ContinueEval, {opts}, AutoEvaluate]},
+        ae = OptionValue[ContinueEval, {opts}, AutoEvaluate],
+        mdl = OptionValue[ContinueEval, {opts}, Model]},
     iScheduleAt[
-      iContinueEvalImpl[nb, iSessionTag[], instruction, ae],
+      iContinueEvalImpl[nb, iSessionTag[], instruction, ae, mdl],
       st
     ]
   ]);
 
 ContinueEval[] :=
   ContinueEval["\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044"];
+
+(* ============================================================
+   ContinueUpdate: 直前の ClaudeUpdatePackage を結果を踏まえて継続
+   ============================================================ *)
+
+Options[ContinueUpdate] = {Fallback -> False, "UpdateApiMd" -> True, StartTime -> Now};
+
+(* --- 内部ヘルパー: ノートブックの最近のセル出力をテキストで取得 --- *)
+iCaptureRecentOutput[nb_NotebookObject, afterCellCount_Integer] :=
+  Module[{ctx},
+    ctx = Quiet @ Check[iCaptureNotebookContext[nb, afterCellCount], ""];
+    If[StringQ[ctx], StringTake[ctx, UpTo[3000]], ""]
+  ];
+
+(* --- 内部ヘルパー: 直前の更新セッション情報をバックアップから復元 --- *)
+iRecoverLastUpdateFromBackup[packageName_String] :=
+  Module[{bdir, dirs, lastDir, promptFile, responseFile, promptText, responseText, instr},
+    bdir = backupDir[packageName];
+    If[!DirectoryQ[bdir], Return[None]];
+    dirs = Sort[Select[FileNames["*", bdir], DirectoryQ]];
+    dirs = Select[dirs, !StringStartsQ[FileNameTake[#], "pre_"] &];
+    If[Length[dirs] === 0, Return[None]];
+    lastDir = Last[dirs];
+    promptFile = FileNameJoin[{lastDir, "prompt.txt"}];
+    responseFile = FileNameJoin[{lastDir, "response.txt"}];
+    If[!FileExistsQ[promptFile], Return[None]];
+    promptText = Import[promptFile, "Text"];
+    responseText = If[FileExistsQ[responseFile], Import[responseFile, "Text"], ""];
+    (* INSTRUCTION: 以降を元のプロンプトとして抽出 *)
+    instr = StringTrim[Last[StringSplit[promptText, "INSTRUCTION: ", 2], ""]];
+    (* CURRENT FUNCTIONS: 以降は除去 *)
+    instr = First[StringSplit[instr, "\n\nCURRENT FUNCTIONS:", 2], instr];
+    instr = First[StringSplit[instr, "\n\nATTACHMENTS", 2], instr];
+    If[instr === "", instr = StringTake[promptText, UpTo[500]]];
+    <|
+      "packageName" -> packageName,
+      "prompt" -> StringTrim[instr],
+      "response" -> responseText,
+      "sessionDir" -> lastDir
+    |>
+  ];
+
+(* --- 継続プロンプトの構築 --- *)
+iBuildContinueUpdatePrompt[originalPrompt_, instruction_String, response_String,
+    notebookOutput_String] :=
+  Module[{origText, resultSummary, nbOut},
+    origText = If[StringQ[originalPrompt], originalPrompt,
+      If[ListQ[originalPrompt],
+        StringJoin[Select[originalPrompt, StringQ]],
+        ToString[originalPrompt]]];
+    (* response の末尾説明部分（===END_FUNCTIONS=== 以降）を要約として使用 *)
+    resultSummary = Module[{afterEnd},
+      afterEnd = Last[StringSplit[response, "===END_FUNCTIONS===", 2], ""];
+      If[afterEnd === "",
+        afterEnd = Last[StringSplit[response, "===END_PACKAGE===", 2], ""]];
+      afterEnd = StringTrim[afterEnd];
+      If[afterEnd =!= "",
+        StringTake[afterEnd, UpTo[1500]],
+        StringTake[StringTrim[response], UpTo[800]]
+      ]
+    ];
+    nbOut = StringTrim[notebookOutput];
+
+    "前回のアップデート指示とその結果を踏まえて、パッケージを修正してください。\n\n" <>
+    "=== 前回の指示 ===\n" <> StringTake[origText, UpTo[2000]] <> "\n\n" <>
+    "=== 前回の結果 (Claude の応答要約) ===\n" <> resultSummary <> "\n\n" <>
+    If[nbOut =!= "",
+      "=== 前回の実行後のノートブック出力 (エラーメッセージ等) ===\n" <> nbOut <> "\n\n",
+      ""] <>
+    "=== 今回の指示 ===\n" <> instruction <> "\n\n" <>
+    "上記の前回の変更内容と実行結果を把握した上で、今回の指示に従って修正してください。\n" <>
+    "前回正しく変更できた部分はそのまま維持し、問題のある部分のみ修正してください。"
+  ];
+
+(* --- ContinueUpdate 本体 --- *)
+
+(* ContinueUpdate["pkg", "instruction", opts] *)
+ContinueUpdate[packageName_String, instruction_String, opts:OptionsPattern[]] :=
+  Module[{info, nb, origPrompt, response, nbOutput, newPrompt},
+    $currentUseFallback = TrueQ[OptionValue[Fallback]];
+    nb = EvaluationNotebook[];
+    (* $iLastUpdateInfo が同じパッケージを指していればそこから取得 *)
+    info = If[AssociationQ[$iLastUpdateInfo] &&
+              Lookup[$iLastUpdateInfo, "packageName", ""] === packageName &&
+              KeyExistsQ[$iLastUpdateInfo, "response"],
+      $iLastUpdateInfo,
+      iRecoverLastUpdateFromBackup[packageName]
+    ];
+    If[info === None || !AssociationQ[info],
+      nbPrint[nb, "\:30a8\:30e9\:30fc: " <> packageName <> " \:306e\:76f4\:524d\:306e ClaudeUpdatePackage \:5c65\:6b74\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
+      Return[$Failed]];
+    origPrompt = Lookup[info, "prompt", ""];
+    response   = Lookup[info, "response", ""];
+    nbOutput   = iCaptureRecentOutput[nb,
+      Replace[Lookup[info, "cellCountAfter", 0], Except[_Integer] -> 0]];
+    newPrompt  = iBuildContinueUpdatePrompt[origPrompt, instruction, response, nbOutput];
+    ClaudeUpdatePackage[packageName, newPrompt,
+      Fallback -> TrueQ[OptionValue[Fallback]],
+      "UpdateApiMd" -> TrueQ[OptionValue["UpdateApiMd"]],
+      StartTime -> OptionValue[StartTime]]
+  ];
+
+(* ContinueUpdate["instruction", opts] — パッケージ名は直前の呼び出しから自動取得 *)
+ContinueUpdate[instruction_String, opts:OptionsPattern[]] :=
+  Module[{pkgName},
+    pkgName = If[AssociationQ[$iLastUpdateInfo],
+      Lookup[$iLastUpdateInfo, "packageName", ""], ""];
+    If[pkgName === "",
+      With[{nb = EvaluationNotebook[]},
+        nbPrint[nb, "\:30a8\:30e9\:30fc: \:76f4\:524d\:306e ClaudeUpdatePackage \:306e\:60c5\:5831\:304c\:3042\:308a\:307e\:305b\:3093\:3002\n" <>
+          "ContinueUpdate[\"packageName\", \"instruction\"] \:3067\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:6307\:5b9a\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
+        Return[$Failed]]];
+    ContinueUpdate[pkgName, instruction, opts]
+  ];
+
+(* ContinueUpdate[] — 引数なし: デフォルト指示で継続 *)
+ContinueUpdate[opts:OptionsPattern[]] :=
+  ContinueUpdate[
+    "\:524d\:56de\:306e\:5909\:66f4\:3067\:767a\:751f\:3057\:305f\:30d0\:30b0\:3084\:554f\:984c\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\:3002\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:51fa\:529b\:7d50\:679c\:3092\:78ba\:8a8d\:3057\:3001\:30a8\:30e9\:30fc\:3084\:4e0d\:5177\:5408\:304c\:3042\:308c\:3070\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+    opts];
 
 (* ============================================================
    \:30c7\:30d0\:30c3\:30b0\:30fb\:30ec\:30d3\:30e5\:30fc\:652f\:63f4
@@ -4165,71 +4680,6 @@ iEnsureReferencesAccessible[packageName_String] :=
       $ClaudeAccessibleDirs = DeleteDuplicates[
         Append[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}],
           refDir]]]];
-
-(* ============================================================
-   ClaudeCreatePackage / ClaudeUpdatePackage 用リファレンス処理:
-   References -> {ファイルパス, URL, ...} を受け取り、
-   ・ローカルファイルは references/ フォルダにコピー
-   ・URL はそのまま保持
-   ・doc_options.json に追記して Documentation にも引き継ぐ
-   戻り値: プロンプト用のリファレンス説明テキスト
-   ============================================================ *)
-
-iProcessPackageReferences[packageName_String, refs_List] :=
-  Module[{refDir, copiedFiles = {}, urls = {}, promptLines = {}, existing, merged},
-    If[Length[refs] === 0, Return[""]];
-    refDir = iReferencesDir[packageName];
-    Quiet @ CreateDirectory[refDir, CreateIntermediateDirectories -> True];
-    (* 既存の doc_options.json からリファレンスを読み込み *)
-    existing = {};
-    With[{path = iDocOptionsPath[packageName]},
-      If[FileExistsQ[path],
-        With[{saved = Quiet @ Check[Import[path, "RawJSON"], $Failed]},
-          If[AssociationQ[saved],
-            existing = Replace[Lookup[saved, "References", {}], Except[_List] -> {}]]]]];
-    Scan[Function[ref,
-      Which[
-        (* URL *)
-        StringQ[ref] && StringMatchQ[ref, "http://*" | "https://*"],
-          AppendTo[urls, ref];
-          AppendTo[promptLines,
-            "- URL reference: " <> ref <> " (fetch and use as context)"],
-        (* ローカルファイルパス *)
-        StringQ[ref] && FileExistsQ[ref],
-          With[{dest = FileNameJoin[{refDir, FileNameTake[ref]}]},
-            Quiet @ CopyFile[ref, dest, OverwriteTarget -> True];
-            AppendTo[copiedFiles, dest];
-            AppendTo[promptLines,
-              "- File reference: " <> dest <> " (read and use as context)"]],
-        (* 存在しないパスやその他の文字列 — そのまま参考文献として記録 *)
-        StringQ[ref],
-          AppendTo[urls, ref];
-          AppendTo[promptLines,
-            "- Reference: " <> ref],
-        True, Null
-      ]
-    ], refs];
-    (* doc_options.json に追記 — Documentation にも自動引き継ぎ *)
-    merged = DeleteDuplicates @ Join[existing, urls,
-      (FileNameTake[#] & /@ copiedFiles)];
-    With[{path = iDocOptionsPath[packageName]},
-      Module[{data},
-        data = If[FileExistsQ[path],
-          Quiet @ Check[Import[path, "RawJSON"], <||>], <||>];
-        If[!AssociationQ[data], data = <||>];
-        data["References"] = merged;
-        Quiet @ Export[path, data, "RawJSON"]]];
-    (* $ClaudeAccessibleDirs に追加 *)
-    iEnsureReferencesAccessible[packageName];
-    (* プロンプト用テキストを返す *)
-    If[Length[promptLines] > 0,
-      "\n=== REFERENCE MATERIALS ===\n" <>
-      "The following reference materials are provided. " <>
-      "Read file references using the Read tool and use them as context for code generation.\n" <>
-      StringJoin[Riffle[promptLines, "\n"]] <> "\n\n",
-      ""
-    ]
-  ];
 
 (* ============================================================
    ドキュメントオプション永続化: Demos/References/Disclaimer/License を
@@ -4668,7 +5118,7 @@ iSaveBackupSnapshot[packageName_String] :=
           FileExistsQ[#] && !DirectoryQ[#] &];
         Do[
           relPath = "docs/" <> FileNameJoin[FileNameDrop[f, FileNameDepth[docsDir]]];
-          dstF = FileNameJoin[{snapDir, StringReplace[relPath, "/" -> $PathnameSeparator]}];
+          dstF = FileNameJoin[Flatten[{snapDir, FileNameSplit[relPath]}]];
           Quiet @ CreateDirectory[DirectoryName[dstF], CreateIntermediateDirectories -> True];
           Quiet @ CopyFile[f, dstF, OverwriteTarget -> True];
           hashes[relPath] = Quiet @ Check[FileHash[f, "SHA256", "HexString"], ""],
@@ -5048,13 +5498,13 @@ iExpandWithDeps[targets_List, blocks_Association] :=
     result
   ];
 
-Options[ClaudeCreatePackage] = {Fallback -> False, References -> {}};
+Options[ClaudeCreatePackage] = {Fallback -> False};
 
 ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
   With[{nb = EvaluationNotebook[]},
   Module[{destFile, prompt, beginMark, endMark, sessionDir, bdir, timestamp,
-          packagePromptNorm, imgDirs, jobId, refsPrompt},
+          packagePromptNorm, imgDirs, jobId},
 
   destFile = FileNameJoin[{Global`$packageDirectory, packageName <> ".wl"}];
   If[FileExistsQ[destFile] || iPacletQ[packageName],
@@ -5079,10 +5529,6 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
       CopyFile[tmpl, designNb];
       NBAccess`NBInsertTextCells[designNb, packageName, packagePromptNorm["text"]]]];
 
-  (* References オプション処理: ファイルコピー＆doc_options.json 追記 *)
-  refsPrompt = iProcessPackageReferences[packageName,
-    Replace[OptionValue[References], Except[_List] -> {}]];
-
   beginMark = "===BEGIN_PACKAGE==="; endMark = "===END_PACKAGE===";
   prompt =
     "You are an expert Wolfram Language / Mathematica programmer.\n" <>
@@ -5105,7 +5551,6 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
     "Output format (MANDATORY):\n" <>
     beginMark <> "\n<complete package source code here>\n" <> endMark <> "\n" <>
     "(optional brief explanation after the end marker)\n\n" <>
-    refsPrompt <>
     "SPECIFICATION:\n" <> packagePromptNorm["text"];
 
   iSaveSessionMedia[sessionDir, prompt, imgDirs];
@@ -5172,30 +5617,36 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
     nb, imgDirs, jobId]
   ]]);
 
-Options[ClaudeUpdatePackage] = {TargetFunctions -> Automatic, StartTime -> Now, Fallback -> False, References -> {}};
+Options[ClaudeUpdatePackage] = {TargetFunctions -> Automatic, StartTime -> Now, Fallback -> False, "UpdateApiMd" -> True};
+
+(* ContinueUpdate 用: 直前の ClaudeUpdatePackage 呼び出し情報を保持 *)
+If[!AssociationQ[$iLastUpdateInfo], $iLastUpdateInfo = <||>];
 
 ClaudeUpdatePackage[packageName_String, updatePrompt_, opts:OptionsPattern[]] := (
   $currentUseFallback = TrueQ[OptionValue[Fallback]];
-  With[{st = OptionValue[StartTime]},
+  (* ContinueUpdate 用に呼び出し情報を記録 *)
+  $iLastUpdateInfo = <|
+    "packageName" -> packageName,
+    "prompt" -> updatePrompt,
+    "options" -> {opts},
+    "time" -> Now
+  |>;
+  With[{st = OptionValue[StartTime], updateApi = TrueQ[OptionValue["UpdateApiMd"]]},
   iScheduleAt[
   iClaudeUpdatePackageImpl[packageName, updatePrompt,
-    OptionValue[TargetFunctions],
-    Replace[OptionValue[References], Except[_List] -> {}]],
+    OptionValue[TargetFunctions], updateApi],
   st]]);
 
-iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, refsOpt_:{} ] :=
+iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, updateApiMd_:True] :=
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, currentCode, prompt,
           beginMark, endMark, timestamp, sessionDir, bdir,
           allBlocks, allNames, targets, targetCode,
-          jsPlaceholder, jsBlock, updatePromptNorm, imgDirs, refsPrompt},
+          jsPlaceholder, jsBlock, updatePromptNorm, imgDirs},
 
   srcFile = iPackageSourceFile[packageName];
   If[!FileExistsQ[srcFile],
     nbPrint[nb, "\:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> srcFile]; Return[$Failed]];
-
-  (* References オプション処理: ファイルコピー＆doc_options.json 追記 *)
-  refsPrompt = iProcessPackageReferences[packageName, refsOpt];
 
   (* references フォルダを参照可能にする *)
   iEnsureReferencesAccessible[packageName];
@@ -5204,7 +5655,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, ref
   NBAccess`NBWriteCell[nb, Cell[
     "\:25b6 ClaudeUpdatePackage: " <> packageName <>
     " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")",
-    "Subsection", CellGroupingRules -> {"SectionGrouping", 60}]];
+    "Subsubsection", CellGroupingRules -> {"SectionGrouping", 68}]];
 
   updatePromptNorm = iNormalizePrompt[updatePrompt];
   imgDirs = updatePromptNorm["imageDirs"];
@@ -5255,13 +5706,21 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, ref
     "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n" <>
     iLoadPackageHistory[bdir, packageName] <>
     If[iLoadPackageHistory[bdir, packageName] =!= "", "\n", ""] <>
-    "Below are selected function definitions from the Mathematica package `" <> packageName <> ".wl`.\n" <>
-    "Modify them according to the instruction. Return ONLY the modified functions.\n" <>
+    If[Length[targets] === 0,
+      (* targets未判定: ファイル全体を送信する場合 *)
+      "Below is the COMPLETE source of the Mathematica package `" <> packageName <> ".wl`.\n" <>
+      "Modify ONLY the functions that need to change according to the instruction.\n" <>
+      "Return ONLY the modified function definitions (not the entire file).\n" <>
+      "IMPORTANT: Do NOT return the entire file. Return ONLY the functions you actually changed.\n" <>
+      "All unchanged functions will be preserved automatically by the merge system.\n",
+      (* targets判定済み: 選択した関数のみ送信 *)
+      "Below are selected function definitions from the Mathematica package `" <> packageName <> ".wl`.\n" <>
+      "Modify them according to the instruction. Return ONLY the modified functions.\n"
+    ] <>
     "Your response MUST start with " <> beginMark <> " on the very first line.\n" <>
     "Do NOT write any explanation or text before " <> beginMark <> ".\n" <>
     "After " <> endMark <> " you may add optional explanation.\n\n" <>
     "INSTRUCTION: " <> iExpandSymbolRefs[updatePromptNorm["userText"]] <> "\n\n" <>
-    refsPrompt <>
     (* \:6dfb\:4ed8\:30d5\:30a1\:30a4\:30eb\:304c\:3042\:308c\:3070\:5225\:30bb\:30af\:30b7\:30e7\:30f3\:3067\:53c2\:7167\:6307\:793a *)
     If[Length[updatePromptNorm["filePaths"]] > 0,
       "ATTACHMENTS (use the Read tool to view each file):\n" <>
@@ -5269,7 +5728,10 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, ref
         Function[{fp, idx}, "  " <> ToString[First[idx]] <> ". " <> fp <> "\n"],
         updatePromptNorm["filePaths"]]] <> "\n",
       ""] <>
-    "CURRENT FUNCTIONS:\n" <>
+    If[Length[targets] === 0,
+      "COMPLETE SOURCE (modify only what is needed):\n",
+      "CURRENT FUNCTIONS:\n"
+    ] <>
     beginMark <> "\n" <> ToString[targetCode] <> "\n" <> endMark;
 
   iSaveSessionMedia[sessionDir, prompt, imgDirs];
@@ -5277,10 +5739,18 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, ref
   iClaudeQueryAsyncWithProgress[prompt,
     With[{nb2=nb, sd=sessionDir, pn=packageName, sf=srcFile,
           blks=allBlocks, tgts=targets, jp=jsPlaceholder, jb=jsBlock,
-          bm=beginMark, em=endMark, origCode=Import[srcFile, "Text"]},
+          bm=beginMark, em=endMark, origCode=Import[srcFile, "Text"],
+          doUpdateApi=updateApiMd},
       Function[response,
         Module[{newFuncs, newCode, newWlFile, validationErrors = {}},
           Export[FileNameJoin[{sd, "response.txt"}], response, "Text"];
+          (* ContinueUpdate 用: レスポンスとセッションDirを記録 *)
+          If[AssociationQ[$iLastUpdateInfo] && Lookup[$iLastUpdateInfo, "packageName", ""] === pn,
+            AssociateTo[$iLastUpdateInfo, {
+              "response" -> response,
+              "sessionDir" -> sd,
+              "cellCountAfter" -> NBAccess`NBCellCount[nb2]
+            }]];
           If[StringStartsQ[response, "Error (ExitCode="] || StringStartsQ[response, "Error:"],
             nbPrint[nb2, "Claude \:547c\:3073\:51fa\:3057\:30a8\:30e9\:30fc:\n" <> response]; Return[]];
           (* API エラー/制限メッセージの早期検出 — ファイル破損防止 *)
@@ -5307,22 +5777,60 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, ref
           ];
           newFuncs = First[newFuncs];
 
-          newCode = If[Length[tgts] === 0,
-            If[jb =!= "", StringReplace[newFuncs, jp -> jb, 1], newFuncs],
-            Module[{code = origCode, updBlks},
-              If[jb =!= "", code = StringReplace[code, jb -> jp, 1]];
-              updBlks = iExtractFunctions[newFuncs];
+          (* --- マージロジック (targets の有無にかかわらず常にマージを試みる) --- *)
+          newCode = Module[{code = origCode, updBlks, mergedCount = 0,
+                            newOnlyFuncs = {}, respIsFullFile},
+            If[jb =!= "", code = StringReplace[code, jb -> jp, 1]];
+            updBlks = iExtractFunctions[newFuncs];
+
+            (* レスポンスが全ファイルか部分か判定: BeginPackage を含むなら全ファイル *)
+            respIsFullFile = StringContainsQ[newFuncs, "BeginPackage["] &&
+                             StringContainsQ[newFuncs, "EndPackage["] &&
+                             StringLength[newFuncs] > StringLength[origCode] * 0.7;
+
+            If[respIsFullFile && Length[tgts] === 0,
+              (* Claude が全ファイルを返した場合: そのまま採用 *)
+              nbPrint[nb2, "\:30ec\:30b9\:30dd\:30f3\:30b9\:306f\:5b8c\:5168\:306a\:30d5\:30a1\:30a4\:30eb\:3067\:3059\:3002\:305d\:306e\:307e\:307e\:63a1\:7528\:3057\:307e\:3059\:3002"];
+              code = If[jb =!= "", StringReplace[newFuncs, jp -> jb, 1], newFuncs],
+              (* 部分的なレスポンス: 関数単位でマージ *)
               Scan[Function[fn,
                 Module[{oldDef, newDef},
                   oldDef = Lookup[blks, fn, ""];
                   newDef = Lookup[updBlks, fn, ""];
                   If[oldDef =!= "" && newDef =!= "",
-                    code = StringReplace[code, oldDef -> newDef, 1]]
+                    code = StringReplace[code, oldDef -> newDef, 1];
+                    mergedCount++,
+                    (* 元コードに無い新関数 *)
+                    If[oldDef === "" && newDef =!= "",
+                      AppendTo[newOnlyFuncs, fn]]
+                  ]
                 ]
               ], Keys[updBlks]];
+              (* 新規関数があれば EndPackage[] の直前に挿入 *)
+              If[Length[newOnlyFuncs] > 0,
+                Module[{insertCode},
+                  insertCode = StringJoin[
+                    Lookup[updBlks, #, ""] & /@ newOnlyFuncs];
+                  code = StringReplace[code,
+                    RegularExpression["(\\n\\s*End\\[\\]\\s*;?\\s*\\n\\s*EndPackage\\[\\])"] :>
+                    "\n" <> insertCode <> "$1", 1];
+                  nbPrint[nb2, "\:65b0\:898f\:95a2\:6570\:3092\:8ffd\:52a0: " <>
+                    StringRiffle[newOnlyFuncs, ", "]]
+                ]
+              ];
+              If[mergedCount > 0,
+                nbPrint[nb2, "\:30de\:30fc\:30b8\:5b8c\:4e86: " <> ToString[mergedCount] <>
+                  " \:500b\:306e\:95a2\:6570\:3092\:66f4\:65b0"],
+                (* マージできなかった場合の警告 *)
+                If[Length[Keys[updBlks]] > 0 && mergedCount === 0,
+                  nbPrint[nb2, Style[
+                    "\:26a0 \:30de\:30fc\:30b8\:5931\:6557: \:30ec\:30b9\:30dd\:30f3\:30b9\:306e\:95a2\:6570\:304c\:5143\:30b3\:30fc\:30c9\:306b\:5bfe\:5fdc\:3057\:307e\:305b\:3093\:3067\:3057\:305f\:3002\n" <>
+                    "\:30ec\:30b9\:30dd\:30f3\:30b9\:95a2\:6570: " <> StringRiffle[Keys[updBlks], ", "],
+                    FontColor -> RGBColor[0.8, 0.4, 0]]]]
+              ];
               If[jb =!= "", code = StringReplace[code, jp -> jb, 1]];
-              code
-            ]
+            ];
+            code
           ];
 
           (* \:5b89\:5168\:6027\:691c\:8a3c *)
@@ -5378,7 +5886,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, ref
             With[{afterEnd2 = StringTrim[Last[StringSplit[response, em, 2], ""]]},
               If[afterEnd2 =!= "", nbPrint[nb2, afterEnd2]]];
             (* api.md を自動更新 *)
-            iAutoUpdateApiMd[nb2, pn],
+            If[doUpdateApi, iAutoUpdateApiMd[nb2, pn]],
             nbPrint[nb2, "\:8b66\:544a: \:66f8\:304d\:8fbc\:307f\:5931\:6557\:3002\:624b\:52d5\:3067\:30b3\:30d4\:30fc\:3057\:3066\:304f\:3060\:3055\:3044:\n" <>
               "  \:5143: " <> newWlFile <> "\n  \:5148: " <> sf]]
         ]
@@ -6057,7 +6565,7 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     NBAccess`NBWriteCell[nb, Cell[
       "\:25b6 ClaudeCreateDocumentation: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")",
-      "Subsection", CellGroupingRules -> {"SectionGrouping", 60}]];
+      "Subsubsection", CellGroupingRules -> {"SectionGrouping", 68}]];
 
     If[resumeInfo["isResumption"] && !resumeInfo["sourceModified"],
       (* 作りかけ → 既存ファイルを保持し、未生成分のみ生成 *)
@@ -6332,7 +6840,7 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     NBAccess`NBWriteCell[nb, Cell[
       "\:25b6 ClaudeUpdateDocumentation: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")",
-      "Subsection", CellGroupingRules -> {"SectionGrouping", 60}]];
+      "Subsubsection", CellGroupingRules -> {"SectionGrouping", 68}]];
     nbPrint[nb, Style["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:81ea\:52d5\:66f4\:65b0\:958b\:59cb: " <> packageName, Bold]];
     nbPrint[nb, "\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: " <> prevBackup];
     nbPrint[nb, "\:66f4\:65b0\:5bfe\:8c61: " <> StringRiffle[allDocs, ", "]];
@@ -6407,7 +6915,7 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     NBAccess`NBWriteCell[nb, Cell[
       "\:25b6 ClaudeUpdateDocumentation: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")",
-      "Subsection", CellGroupingRules -> {"SectionGrouping", 60}]];
+      "Subsubsection", CellGroupingRules -> {"SectionGrouping", 68}]];
     nbPrint[nb, Style["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:958b\:59cb: " <> packageName, Bold]];
     nbPrint[nb, "\:66f4\:65b0\:5bfe\:8c61: " <> StringRiffle[targetDocs, ", "]];
     nbPrint[nb, "\:30bd\:30fc\:30b9\:5dee\:5206: " <> StringTake[diffText, UpTo[100]] <> "..."];
@@ -6850,6 +7358,19 @@ ClaudeConvertToPaclet[packageName_String] :=
 
 (* --- \:30d1\:30b9\:89e3\:6c7a\:30d8\:30eb\:30d1\:30fc --- *)
 
+(* \:7d76\:5bfe\:30d1\:30b9 fullPath \:304b\:3089 baseDir \:3092\:57fa\:6e96\:3068\:3057\:305f\:76f8\:5bfe\:30d1\:30b9\:3092\:8fd4\:3059\:3002
+   FileNameSplit \:30d9\:30fc\:30b9\:3067OS\:975e\:4f9d\:5b58\:3002\:672b\:5c3e\:30bb\:30d1\:30ec\:30fc\:30bf\:4ed8\:304d\:306e baseDir \:3082\:5b89\:5168\:306b\:51e6\:7406\:3059\:308b\:3002 *)
+iRelativePath[fullPath_String, baseDir_String] :=
+  Module[{baseParts, fullParts},
+    baseParts = FileNameSplit[baseDir];
+    fullParts = FileNameSplit[fullPath];
+    If[Length[fullParts] > Length[baseParts] &&
+       Take[fullParts, Length[baseParts]] === baseParts,
+      FileNameJoin[Drop[fullParts, Length[baseParts]]],
+      fullPath  (* baseDir が前方一致しない場合はそのまま返す *)
+    ]
+  ];
+
 (* Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0 *)
 iDirectivesSourceDir[] :=
   Module[{pkg},
@@ -6935,8 +7456,7 @@ iCreateDirectiveHistoryBackup[instruction_String, targetPaths_List] :=
     Scan[Function[fullPath,
       If[FileExistsQ[fullPath],
         (* srcDir \:304b\:3089\:306e\:76f8\:5bfe\:30d1\:30b9\:3092\:4fdd\:6301 *)
-        relPath = StringReplace[fullPath,
-          srcDir <> $PathnameSeparator -> ""];
+        relPath = iRelativePath[fullPath, srcDir];
         destFile = FileNameJoin[{histDir, relPath}];
         destDir = DirectoryName[destFile];
         If[!DirectoryQ[destDir],
@@ -6967,7 +7487,7 @@ iDirectiveHistoryEntries[] :=
         "DirName"   -> dirName,
         "Prompt"    -> promptText,
         "Files"     -> Map[
-          StringReplace[#, dir <> $PathnameSeparator -> ""] &, files],
+          iRelativePath[#, dir] &, files],
         "FileCount" -> Length[files]
       |>
     ], sessionDirs]
@@ -6988,7 +7508,7 @@ iDirectiveBackupReview[dir_String] :=
       "\:30c7\:30a3\:30ec\:30af\:30c8\:30ea: " <> dir <>
       "\n\:30d5\:30a1\:30a4\:30eb\:6570: " <> ToString[Length[files]] <>
       "\n\:30d5\:30a1\:30a4\:30eb: " <> StringRiffle[
-        StringReplace[#, dir <> $PathnameSeparator -> ""] & /@ files, ", "],
+        iRelativePath[#, dir] & /@ files, ", "],
       "Text"]];
     (* prompt.txt *)
     If[promptText =!= "",
@@ -6998,7 +7518,7 @@ iDirectiveBackupReview[dir_String] :=
     (* \:5404\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30d5\:30a1\:30a4\:30eb\:306e\:5185\:5bb9\:30d7\:30ec\:30d3\:30e5\:30fc *)
     Do[
       Module[{relPath, content},
-        relPath = StringReplace[f, dir <> $PathnameSeparator -> ""];
+        relPath = iRelativePath[f, dir];
         content = Quiet @ Import[f, "Text"];
         If[StringQ[content],
           AppendTo[cells, Cell[
@@ -7037,7 +7557,7 @@ iDirectiveBackupPull[dir_String] :=
     files = Select[FileNames["*", dir, Infinity],
       FileQ[#] && FileNameTake[#] =!= "prompt.txt" &];
     Scan[Function[f,
-      relPath = StringReplace[f, dir <> $PathnameSeparator -> ""];
+      relPath = iRelativePath[f, dir];
       destFile = FileNameJoin[{srcDir, relPath}];
       destDir = DirectoryName[destFile];
       If[!DirectoryQ[destDir],
@@ -7073,11 +7593,11 @@ iSaveDirectiveSnapshot[] :=
     allFiles = Select[FileNames["*", srcDir, Infinity],
       FileExistsQ[#] && !DirectoryQ[#] &];
     Do[
-      relPath = StringReplace[f, srcDir <> $PathnameSeparator -> ""];
+      relPath = iRelativePath[f, srcDir];
       dst = FileNameJoin[{snapDir, relPath}];
       Quiet @ CreateDirectory[DirectoryName[dst], CreateIntermediateDirectories -> True];
       Quiet @ CopyFile[f, dst, OverwriteTarget -> True];
-      hashes[StringReplace[relPath, $PathnameSeparator -> "/"]] =
+      hashes[StringJoin[Riffle[FileNameSplit[relPath], "/"]]] =
         Quiet @ Check[FileHash[f, "SHA256", "HexString"], ""],
       {f, allFiles}];
     Export[iDirectiveSnapshotHashPath[], hashes, "RawJSON"];
@@ -7097,7 +7617,7 @@ iRestoreDirectiveSnapshot[] :=
       FileExistsQ[#] && !DirectoryQ[#] &&
         FileNameTake[#] =!= "_snapshot_hashes.json" &];
     Do[
-      relPath = StringReplace[f, snapDir <> $PathnameSeparator -> ""];
+      relPath = iRelativePath[f, snapDir];
       dst = FileNameJoin[{srcDir, relPath}];
       Quiet @ CreateDirectory[DirectoryName[dst], CreateIntermediateDirectories -> True];
       Quiet @ CopyFile[f, dst, OverwriteTarget -> True];
@@ -7121,8 +7641,8 @@ iDetectDirectiveChanges[] :=
     allFiles = Select[FileNames["*", srcDir, Infinity],
       FileExistsQ[#] && !DirectoryQ[#] &];
     Do[
-      relPath = StringReplace[f, srcDir <> $PathnameSeparator -> ""];
-      relPath = StringReplace[relPath, $PathnameSeparator -> "/"];
+      relPath = iRelativePath[f, srcDir];
+      relPath = StringJoin[Riffle[FileNameSplit[relPath], "/"]];
       currentHash = Quiet @ Check[FileHash[f, "SHA256", "HexString"], ""];
       savedHash = Lookup[savedHashes, relPath, None];
       If[savedHash === None || currentHash =!= savedHash,
@@ -7218,11 +7738,16 @@ ClaudeDirectiveBackupDataset[] :=
           prompt = entry["Prompt"];
           dir = entry["Directory"];
           filesSummary = StringRiffle[
-            StringReplace[#, {
-              "skills" ~~ $PathnameSeparator ~~ s__ ~~ $PathnameSeparator ~~ "SKILL.md" :>
-                "skills/" <> s,
-              "rules" ~~ $PathnameSeparator ~~ r__ :> "rules/" <> r
-            }] & /@ entry["Files"], ", "];
+            Function[fp, Module[{parts = FileNameSplit[fp], idx},
+              Which[
+                MemberQ[parts, "skills"] && MemberQ[parts, "SKILL.md"],
+                  idx = FirstPosition[parts, "skills", {0}, {1}][[1]];
+                  If[idx > 0 && idx < Length[parts],
+                    "skills/" <> parts[[idx + 1]], Last[parts]],
+                MemberQ[parts, "rules"],
+                  "rules/" <> Last[parts],
+                True, Last[parts]
+              ]]] /@ entry["Files"], ", "];
           {num,
            ts,
            iTruncatePrompt[prompt],
@@ -7432,6 +7957,86 @@ ClaudeListDirectives[] :=
 
     Dataset[result]
   ];
+
+(* ============================================================
+   ClaudeSyncDirectives: 外部ディレクトリから Claude Directives への同期
+   dir 側の方が新しいファイル、または dir にだけ存在するファイルをコピーする。
+   Claude Directives 側にしかないファイルは何もしない。
+   ============================================================ *)
+
+ClaudeSyncDirectives[dir_String] :=
+  With[{nb = Quiet[EvaluationNotebook[]]},
+  Module[{srcDir, dirNorm, dirFiles, relPaths, copied = {}, skipped = 0,
+          dirPath, dstPath, dstDir, workDir, dotClaude, dotPath, dotDir},
+    (* Claude Directives ソースフォルダを取得 *)
+    srcDir = iDirectivesSourceDir[];
+    If[srcDir === $Failed,
+      nbPrint[nb, "\:26a0 Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
+      Return[$Failed]];
+    If[!DirectoryQ[dir],
+      nbPrint[nb, "\:26a0 \:6307\:5b9a\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093: " <> dir];
+      Return[$Failed]];
+    (* dir を正規化 (末尾セパレータ等を統一) *)
+    dirNorm = FileNameJoin[FileNameSplit[dir]];
+    (* dir 内の全ファイルを再帰取得し、相対パスを計算 *)
+    dirFiles = FileNames["*", dirNorm, Infinity];
+    dirFiles = Select[dirFiles, !DirectoryQ[#] &];
+    (* .directive-backups や隠しフォルダは除外 *)
+    dirFiles = Select[dirFiles,
+      !MemberQ[FileNameSplit[#], s_String /; (StringStartsQ[s, "."] || s === ".directive-backups")] &];
+    relPaths = iRelativePath[#, dirNorm] & /@ dirFiles;
+
+    nbPrint[nb, "[ClaudeSyncDirectives] " <> dirNorm <> " \[RightArrow] " <> srcDir];
+    If[!DirectoryQ[srcDir],
+      nbPrint[nb, "\:26a0 \:30b3\:30d4\:30fc\:5148\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093\:3002\:4f5c\:6210\:3057\:307e\:3059: " <> srcDir];
+      Quiet @ CreateDirectory[srcDir, CreateIntermediateDirectories -> True]];
+    nbPrint[nb, "  \:691c\:67fb\:5bfe\:8c61: " <> ToString[Length[relPaths]] <> " \:30d5\:30a1\:30a4\:30eb" <>
+      " | \:30b3\:30d4\:30fc\:5148\:65e2\:5b58: " <> ToString[Length[Select[FileNames["*", srcDir, Infinity], !DirectoryQ[#] &]]] <> " \:30d5\:30a1\:30a4\:30eb"];
+
+    (* 作業ディレクトリの .claude にもコピーするための準備 *)
+    workDir = iEnsureClaudeWorkingDirectory[];
+    dotClaude = FileNameJoin[{workDir, ".claude"}];
+
+    Do[
+      dirPath = FileNameJoin[Flatten[{dirNorm, FileNameSplit[rel]}]];
+      dstPath = FileNameJoin[Flatten[{srcDir, FileNameSplit[rel]}]];
+      If[FileExistsQ[dstPath],
+        (* 両方に存在: ファイル内容を比較 (日時はOS/コピー操作で信頼できない) *)
+        If[FileHash[dirPath, "SHA256"] =!= FileHash[dstPath, "SHA256"],
+          (* 内容が異なる: コピー *)
+          dstDir = DirectoryName[dstPath];
+          If[!DirectoryQ[dstDir],
+            Quiet @ CreateDirectory[dstDir, CreateIntermediateDirectories -> True]];
+          Quiet @ CopyFile[dirPath, dstPath, OverwriteTarget -> True];
+          AppendTo[copied, rel <> " (\:66f4\:65b0)"],
+          (* 内容が同一: スキップ *)
+          skipped++],
+        (* dir にだけ存在: 新規コピー *)
+        dstDir = DirectoryName[dstPath];
+        If[!DirectoryQ[dstDir],
+          Quiet @ CreateDirectory[dstDir, CreateIntermediateDirectories -> True]];
+        Quiet @ CopyFile[dirPath, dstPath];
+        AppendTo[copied, rel <> " (\:65b0\:898f)"]
+      ];
+      (* .claude にもコピー *)
+      If[MemberQ[copied, rel <> " (\:66f4\:65b0)"] || MemberQ[copied, rel <> " (\:65b0\:898f)"],
+        dotPath = FileNameJoin[Flatten[{dotClaude, FileNameSplit[rel]}]];
+        dotDir = DirectoryName[dotPath];
+        If[!DirectoryQ[dotDir],
+          Quiet @ CreateDirectory[dotDir, CreateIntermediateDirectories -> True]];
+        Quiet @ CopyFile[dirPath, dotPath, OverwriteTarget -> True]],
+      {rel, relPaths}];
+
+    (* 結果表示 *)
+    If[Length[copied] > 0,
+      iLoadClaudeMD[];
+      nbPrint[nb, "\:2705 \:30b3\:30d4\:30fc\:3057\:305f\:30d5\:30a1\:30a4\:30eb (" <> ToString[Length[copied]] <> " \:4ef6):"];
+      Do[nbPrint[nb, "  \:2022 " <> f], {f, copied}],
+      nbPrint[nb, "\:2705 \:66f4\:65b0\:304c\:5fc5\:8981\:306a\:30d5\:30a1\:30a4\:30eb\:306f\:3042\:308a\:307e\:305b\:3093\:3067\:3057\:305f\:3002"]];
+    If[skipped > 0,
+      nbPrint[nb, "  (\:30b9\:30ad\:30c3\:30d7: " <> ToString[skipped] <> " \:30d5\:30a1\:30a4\:30eb \:2014 \:5185\:5bb9\:540c\:4e00)"]];
+    copied
+  ]];
 
 (* Claude Directives ソースから作業ディレクトリへ全ファイルをコピーする *)
 ClaudeUpdateDirective[] :=
@@ -7665,7 +8270,7 @@ ClaudeUpdateDirective[text_String] :=
     ];
     fileContents = StringJoin @ Map[
       Function[f,
-        Module[{rel = StringReplace[f, srcDir <> $PathnameSeparator -> ""]},
+        Module[{rel = iRelativePath[f, srcDir]},
           "=== " <> rel <> " ===\n" <> Import[f, "Text"] <> "\n\n"]],
       allFiles];
 
@@ -7700,8 +8305,7 @@ ClaudeUpdateDirective[text_String] :=
     (* \:4e8b\:524d\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: \:5909\:66f4\:5bfe\:8c61\:30d5\:30a1\:30a4\:30eb\:3092\:5c65\:6b74\:306b\:4fdd\:5b58 *)
     Module[{targetPaths, histDir},
       targetPaths = Map[
-        FileNameJoin[{srcDir, StringReplace[Lookup[#, "path", ""],
-          "/" -> $PathnameSeparator]}] &, files];
+        FileNameJoin[Flatten[{srcDir, FileNameSplit[Lookup[#, "path", ""]]}]] &, files];
       targetPaths = Select[targetPaths, FileExistsQ];
       histDir = iCreateDirectiveHistoryBackup[text, targetPaths];
       If[StringQ[histDir],
@@ -7713,7 +8317,7 @@ ClaudeUpdateDirective[text_String] :=
       action  = Lookup[fe, "action", "replace"];
       content = Lookup[fe, "content", ""];
       If[path === "" || content === "", Continue[]];
-      fullPath = FileNameJoin[{srcDir, StringReplace[path, "/" -> $PathnameSeparator]}];
+      fullPath = FileNameJoin[Flatten[{srcDir, FileNameSplit[path]}]];
       dir = DirectoryName[fullPath];
       If[!DirectoryQ[dir],
         CreateDirectory[dir, CreateIntermediateDirectories -> True]];
@@ -8982,13 +9586,49 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
             "=== SOURCE ===\n" <> src;
           fixResult = iSeparationQuery[fixPrompt];
           If[StringQ[fixResult] && !StringStartsQ[fixResult, "Error:"],
-            Module[{clean},
+            Module[{clean, isFullFile, finalCode},
               clean = StringReplace[fixResult, {
                 RegularExpression["^```(?:mathematica|wolfram)?\\s*\n"] -> "",
                 RegularExpression["\n```\\s*$"] -> ""}];
-              Export[target, clean, "Text", CharacterEncoding -> "UTF-8"];
-              Print[Style["\:2705 " <> FileNameTake[target] <> " \:3092\:4fee\:6b63\:3057\:307e\:3057\:305f", Bold]];
-              $iSeparationCheckCache = KeyDrop[$iSeparationCheckCache, target]],
+              (* 全ファイルか部分的レスポンスかを判定 *)
+              isFullFile = StringContainsQ[clean, "BeginPackage["] &&
+                           StringContainsQ[clean, "EndPackage["] &&
+                           StringLength[clean] > StringLength[src] * 0.7;
+              If[isFullFile,
+                finalCode = clean,
+                (* 部分的レスポンス: マージを試みる *)
+                Module[{origBlks, updBlks, code = src, mc = 0},
+                  origBlks = iExtractFunctions[src];
+                  updBlks  = iExtractFunctions[clean];
+                  Scan[Function[fn,
+                    Module[{oldDef, newDef},
+                      oldDef = Lookup[origBlks, fn, ""];
+                      newDef = Lookup[updBlks, fn, ""];
+                      If[oldDef =!= "" && newDef =!= "",
+                        code = StringReplace[code, oldDef -> newDef, 1];
+                        mc++]
+                    ]
+                  ], Keys[updBlks]];
+                  If[mc > 0,
+                    Print["\:90e8\:5206\:30ec\:30b9\:30dd\:30f3\:30b9\:3092\:30de\:30fc\:30b8: " <> ToString[mc] <> " \:500b\:306e\:95a2\:6570\:3092\:66f4\:65b0"];
+                    finalCode = code,
+                    (* マージ不能: 安全検証してからフォールバック *)
+                    If[StringLength[clean] > StringLength[src] * 0.5,
+                      finalCode = clean,
+                      Print[Style["\:26a0 \:30ec\:30b9\:30dd\:30f3\:30b9\:304c\:5c0f\:3055\:3059\:304e\:307e\:3059\:3002\:30de\:30fc\:30b8\:3082\:5931\:6557\:3002\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3059\:3002",
+                        FontColor -> RGBColor[0.8, 0, 0]]];
+                      finalCode = None
+                    ]
+                  ]
+                ]
+              ];
+              If[finalCode =!= None,
+                Export[target, finalCode, "Text", CharacterEncoding -> "UTF-8"];
+                Print[Style["\:2705 " <> FileNameTake[target] <> " \:3092\:4fee\:6b63\:3057\:307e\:3057\:305f", Bold]];
+                $iSeparationCheckCache = KeyDrop[$iSeparationCheckCache, target],
+                Print["\:30b9\:30ad\:30c3\:30d7: " <> FileNameTake[target] <> " \:306f\:5909\:66f4\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"]
+              ]
+            ],
             Print["\:30a8\:30e9\:30fc: \:4fee\:6b63\:306b\:5931\:6557: " <> StringTake[ToString[fixResult], UpTo[200]]]
           ]
         ]

@@ -104,3 +104,28 @@ Do[
     count++],
   {item, items}]
 ```
+
+## エラーレスポンスのノートブック表示（必須）
+
+エラー・制限メッセージをノートブックに表示する場合は、**必ず `NBAccess`NBWritePrintNotice` を使用する**。通常の Text セルや Input セルとして出力してはならない。
+
+```mathematica
+(* ✅ 正しいパターン: 通知スタイルで小さめフォント表示 *)
+NBAccess`NBWritePrintNotice[nb, "Error: 利用制限に達しています", RGBColor[0.8, 0, 0]];
+
+(* ❌ 禁止: エラーを通常 Text セルとして表示 *)
+NBAccess`NBWriteCell[nb, Cell["Error: 利用制限に達しています", "Text"]];
+```
+
+非同期コールバック（`ClaudeEval`/`ClaudeQuery`/`ContinueEval`）では、コールバック冒頭でエラーを早期検出し、通知スタイルで表示後にジョブを終了する:
+
+```mathematica
+If[iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"],
+  NBAccess`NBWritePrintNotice[nb, response, RGBColor[0.8, 0, 0]];
+  NBAccess`NBEndJob[jid];
+  Return[]];
+```
+
+## 空レスポンスの扱い
+
+Claude Code が利用制限に達した場合、`stream-json` 出力の stdout には正常な JSON イベントが出力されず、stderr にのみ limit メッセージが出力されることがある。`iExtractResultFromStreamJson` は JSON パース不能な行を stderr 行として収集し、結果が空の場合にこれらを `"Error: ..."` として返す。空レスポンス（`result === ""`）は利用制限と同等に扱い、`Fallback -> True` の場合はフォールバックをトリガーする。

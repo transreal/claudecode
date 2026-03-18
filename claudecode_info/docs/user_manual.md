@@ -18,8 +18,10 @@ Mathematica ノートブックから [Claude Code](https://github.com/transreal/
 8. [ディレクティブ管理](#ディレクティブ管理)
 9. [機密データ管理](#機密データ管理)
 10. [Web 検索・取得](#web-検索取得)
-11. [ユーティリティ](#ユーティリティ)
-12. [設定変数](#設定変数)
+11. [タスク状態監視](#タスク状態監視)
+12. [ユーティリティ](#ユーティリティ)
+13. [設定変数](#設定変数)
+14. [LM Studio・ローカルモデル連携](#lm-studioローカルモデル連携)
 
 ---
 
@@ -27,12 +29,20 @@ Mathematica ノートブックから [Claude Code](https://github.com/transreal/
 
 ### ClaudeQuery
 
-テキスト応答を返す同期クエリです。コードブロックは含まれません。
+テキスト応答を返す非同期クエリです。コードブロックは含まれません。応答はノートブックにスタイル付きセル（見出し・箇条書き・コードブロック等）として挿入されます。
 
 ```mathematica
 ClaudeQuery["Mathematica で行列の固有値を求める方法を説明してください"]
 ClaudeQuery[session, "前回の結果をもう少し詳しく説明してください"]
 ```
+
+**主なオプション:**
+
+| オプション | デフォルト | 説明 |
+|---|---|---|
+| `Fallback` | `False` | Claude Code 不可時に API 直接呼び出し |
+| `WebFetch` | `False` | Web 検索の利用 |
+| `Model` | `Automatic` | 使用するモデルの指定（後述） |
 
 ### ClaudeMath
 
@@ -57,7 +67,7 @@ codes = ClaudeExtractAllCode[response]  (* 全ブロックのリスト *)
 
 ### ClaudeEval
 
-コードを非同期で生成し、ノートブックに Input セルとして挿入・実行します。
+コードを非同期で生成し、ノートブックに Input セルとして挿入・実行します。問い合わせ中はリアルタイムのステータス表示（思考中・テキスト生成中・ツール実行中など）が表示されます。
 
 ```mathematica
 ClaudeEval["素数を100個リストアップするコード"]
@@ -71,13 +81,55 @@ ClaudeEval[session, "前回のコードにエラーハンドリングを追加"]
 |---|---|---|
 | `AutoEvaluate` | `True` | 生成セルを自動実行するか |
 | `StartTime` | `Now` | 実行開始時刻（遅延実行用） |
+| `RepeatInterval` | `None` | 繰り返し実行の間隔 |
 | `Fallback` | `False` | Claude Code 不可時に API 直接呼び出し |
 | `WebFetch` | `Automatic` | Web 検索の利用（`True`/`False`/`Automatic`） |
+| `Model` | `Automatic` | 使用するモデルの直接指定 |
 
 ```mathematica
 ClaudeEval["レポート生成", StartTime -> Now + Quantity[1, "Hours"]]
 ClaudeEval["最新の為替レートを取得", WebFetch -> True]
+ClaudeEval["階乗を計算して", Fallback -> True]
+ClaudeEval["計算して", Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
 ```
+
+**RepeatInterval の使い方:**
+
+```mathematica
+(* 2時間ごとに繰り返し実行 *)
+ClaudeEval["データ更新", RepeatInterval -> Quantity[2, "Hours"]]
+
+(* 1時間ごとに最大5回実行 *)
+ClaudeEval["チェック", RepeatInterval -> {Quantity[1, "Hours"], 5}]
+
+(* TaskObject が返るので TaskRemove[] で停止可能 *)
+```
+
+**Model オプション:**
+
+`Model` オプションで Claude Code CLI を経由せず、指定したモデルを API 経由で直接呼び出すことができます。
+
+```mathematica
+(* LM Studio のローカルモデルを直接指定 *)
+ClaudeEval["フィボナッチ数を計算して",
+  Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
+
+(* Anthropic API を直接指定 *)
+ClaudeEval["計算して", Model -> {"anthropic", "claude-sonnet-4-20250514"}]
+
+(* OpenAI API を直接指定 *)
+ClaudeEval["計算して", Model -> {"openai", "gpt-4.1"}]
+```
+
+**進捗表示について:**
+
+問い合わせ中は `stream-json` 形式の出力をリアルタイムで解析し、以下の情報を動的に表示します:
+
+- 経過時間（秒）
+- 現在の状態（初期化 / 思考中 / テキスト生成中 / ツール実行中 / 応答完了）
+- 思考断片数・テキスト断片数・ツール使用数
+
+エラー出力は stderr 経由で処理され、stdout の JSON ストリームと分離されています。
 
 ### ContinueEval
 
@@ -87,6 +139,16 @@ ClaudeEval["最新の為替レートを取得", WebFetch -> True]
 ContinueEval[]                          (* "エラーを修正してください" で継続 *)
 ContinueEval["グラフの色を変更して"]      (* 追加指示で継続 *)
 ContinueEval[session, "次のステップへ"]   (* セッション指定 *)
+```
+
+### ContinueUpdate
+
+直前の ClaudeUpdatePackage の結果を踏まえてバグ修正を継続します。
+
+```mathematica
+ContinueUpdate[]                              (* デフォルト指示で継続 *)
+ContinueUpdate["上半円の境界線が欠けている"]   (* 追加指示付き *)
+ContinueUpdate["pkgName", "修正指示"]          (* パッケージ名を指定 *)
 ```
 
 ### ClaudeSpec
@@ -292,7 +354,7 @@ ClaudeListDirectives[]              (* CLAUDE.md と全スキルの一覧 *)
 ClaudeDirectiveBackupDataset[]      (* 更新履歴を Review/Pull/Delete 付きで表示 *)
 ```
 
-`ClaudeDirectiveBackupDataset[]` はディレクティブの更新履歴を表示します。履歴は `ClaudeUpdateDirective[text]` や `ClaudeAddDirective` の実行時に自動保存されます。ノートブックのコンテキストも参照可能です。
+`ClaudeDirectiveBackupDataset[]` はディレクティブの更新履歴を表示します。履歴は `ClaudeUpdateDirective[text]` や `ClaudeAddDirective` の実行時に自動保存されます。
 
 ---
 
@@ -343,6 +405,32 @@ ClaudeWebSearch["Mathematica 14 新機能"]
 ClaudeWebFetch["https://example.com/docs"]
 ClaudeWebFetch["https://example.com/data", "表形式のデータを抽出して"]
 ```
+
+---
+
+## タスク状態監視
+
+### ClaudeStatus
+
+現在実行中の全 Claude タスク（ClaudeEval、ClaudeUpdatePackage 等）のリアルタイム状態を表示します。
+
+```mathematica
+ClaudeStatus[]
+```
+
+各タスクについて以下の情報を表示します:
+
+- **経過時間**: タスク開始からの秒数
+- **プロセス状態**: Running / Finished 等
+- **現在の状態**: 初期化 / 思考中 / テキスト生成中 / ツール実行中: ツール名 / 応答完了
+- **統計**: 思考断片数、テキスト断片数、ツール使用数
+- **出力ファイル**: 現在のサイズ（KB）と行数
+- **最新テキスト**: 生成中のテキストの末尾60文字
+- **呼び出し元**: Async / Job:xxx
+
+実行中のタスクがない場合はその旨を表示します。
+
+`stream-json` 形式の出力を差分読み取りすることで、Claude Code プロセスの内部状態をリアルタイムに把握できます。エラー出力は stderr として分離されており、stdout の JSON ストリームイベントと混在しません。
 
 ---
 
@@ -421,6 +509,65 @@ $ClaudeModel = "claude-sonnet-4-20250514";
 $ClaudeTimeout = 900;
 $ClaudeAccessibleDirs = {$packageDirectory, "F:\\Dropbox\\Mathematica"};
 ```
+
+---
+
+## LM Studio・ローカルモデル連携
+
+claudecode パッケージは LM Studio などのローカル LLM サーバーと連携できます。API キーは不要です。
+
+### フォールバックモデルとして登録
+
+`$ClaudeFallbackModels` にローカルモデルを追加すると、Claude Code が利用制限に達した際に自動的にローカルモデルにフォールバックします。
+
+```mathematica
+$ClaudeFallbackModels = {
+  {"anthropic", "claude-opus-4-6"},
+  {"openai", "gpt-5"},
+  {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}
+};
+
+(* Fallback -> True で利用制限時に自動切替 *)
+ClaudeEval["階乗を計算して", Fallback -> True]
+```
+
+### Model オプションで直接指定
+
+`Model` オプションを使うと、Claude Code CLI を経由せずに指定モデルを API 経由で直接呼び出します。
+
+```mathematica
+ClaudeEval["1から10までのフィボナッチ数を計算して",
+  Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
+```
+
+**モデル指定の形式:**
+
+| プロバイダー | 形式 | 説明 |
+|---|---|---|
+| `"lmstudio"` | `{"lmstudio", "モデル名", "URL"}` | LM Studio（API キー不要） |
+| `"anthropic"` | `{"anthropic", "モデル名"}` | Anthropic API 直接呼び出し |
+| `"openai"` | `{"openai", "モデル名"}` | OpenAI API 直接呼び出し |
+| カスタム | `{"openai", "モデル名", "URL"}` | OpenAI 互換 API エンドポイント |
+
+LM Studio の場合、URL のデフォルトは `http://localhost:1234` です。URL 末尾に `/v1/chat/completions` が自動付加されます。
+
+---
+
+## 内部アーキテクチャに関する注意事項
+
+### ファイルパス操作のプラットフォーム非依存化
+
+claudecode パッケージでは、ファイルパス操作に `FileNameJoin`、`FileNameSplit`、`FileNameTake` 等の Mathematica 組み込み関数を使用しています。パス区切り文字の直接結合（`"C:" <> "\\" <> "path"` 等の Windows 依存パターン）は禁止されています。これにより、macOS/Linux 環境でも動作する前提を維持しています。
+
+### stderr によるエラー出力の分離
+
+Claude Code CLI との通信では `stream-json` 出力形式を使用しています。stdout には JSON Lines（JSONL）形式のストリームイベント（`text_delta`、`thinking_delta`、`content_block_start`、`result` 等）が出力され、stderr にはエラーメッセージや利用制限通知が出力されます。この分離により:
+
+- 正常な応答テキストの抽出が確実になります
+- エラーメッセージが応答テキストに混入するリスクが排除されます
+- 利用制限（rate limit）の検出がより正確になります
+
+`iExtractResultFromStreamJson` 関数が JSONL を解析し、JSON パースに失敗した行を stderr 由来として収集します。結果が空の場合、これらを `"Error: ..."` として返すことで、利用制限時の適切なエラーハンドリングが行われます。
 
 ---
 

@@ -40,3 +40,4 @@
 - パッケージファイルの手動読み書き（`Import`/`Export`/`ReadString`/`Put`/`OpenWrite` 等）
 - パッケージの存在を確認するための探索コード（`FileNames["*.wl", ...]` 等）の出力 — File Access Context に一覧が載っている
 - パッケージソースコードの全体を出力に含めること
+- LLM レスポンスを無条件に全コードとして採用すること（必ずマージを実行する。詳細は `rules/85-safe-merge.md` および `skills/package-merge-pattern` を参照）

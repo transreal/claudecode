@@ -28,6 +28,51 @@ description: Use for Wolfram Language / Mathematica coding, editing, notebook ou
 - 数式は省略せず明示する。
 - 可能なら短い動作確認コードや最小例を添える。
 
+## ノートブック出力のスタイル規約（必須）
+
+システムからのエラー・警告・進捗メッセージは、ユーザーの作業セルとは区別して **通知スタイル（Print セル・小さめフォント）** で表示する。
+
+### 使い分け
+
+| 出力の種類 | 使う関数 | セルスタイル |
+|-----------|---------|------------|
+| ユーザーへの回答テキスト | `NBAccess`NBWriteCell[nb, Cell[text, "Text"]]` | 通常 Text |
+| 生成コード | `NBAccess`NBWriteSmartCode[nb, code]` | Input |
+| エラー・警告・制限通知 | `NBAccess`NBWritePrintNotice[nb, text, color]` | Print (小さめ) |
+| 進捗表示 | `NBAccess`NBWriteDynamicCell[nb, ...]` | Print (小さめ) |
+
+### エラーレスポンスの早期検出パターン
+
+コールバック関数の冒頭で `iIsAPIErrorResponse` を使ってエラーを検出し、通知スタイルで表示して早期リターンする:
+
+```mathematica
+(* ✅ 正しいパターン: エラーは通知スタイルで表示 *)
+Function[response,
+  Module[{...},
+    NBAccess`NBJobMoveToAnchor[jid];
+    If[iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"],
+      NBAccess`NBWritePrintNotice[nb, response, RGBColor[0.8, 0, 0]];
+      NBAccess`NBEndJob[jid];
+      Return[]];
+    (* 以下: 正常レスポンスの処理 *)
+    ...
+  ]]
+
+(* ❌ 禁止: エラーメッセージを通常 Text セルで表示 *)
+Function[response,
+  Module[{...},
+    textOnly = cleanMarkdown[response];
+    NBAccess`NBWriteCell[nb, Cell[textOnly, "Text"]];  (* ← エラーもここに来る *)
+    ...
+  ]]
+```
+
+### 色の使い分け
+
+- エラー（赤）: `RGBColor[0.8, 0, 0]`
+- 警告・進捗（オレンジ）: `RGBColor[0.8, 0.4, 0]`
+- 成功（緑）: `RGBColor[0, 0.5, 0.2]`
+
 ## 全体禁止事項
 
 - ffmpeg のパスをハードコードしない。
@@ -48,9 +93,64 @@ Print["
 "];
 ```
 
-## ファイルパス解決方針
+## ファイルパス操作方針（必須）
 
-- ファイル名だけが指定された場合（フルパスでない場合）は、`FileNameJoin[{NotebookDirectory[], ファイル名}]` でパスを構築する。
+Mathematica は Windows / macOS / Linux で動作する。ファイルパスの操作には **文字列操作関数を使わず、必ず専用関数を使う**。
+
+### パス結合・分解
+
+```mathematica
+(* ✅ 正しい *)
+FileNameJoin[{dir, "subdir", "file.wl"}]
+FileNameSplit["C:\\Users\\foo\\bar.wl"]  (* → {"C:", "Users", "foo", "bar.wl"} *)
+FileNameTake[path]            (* ファイル名のみ *)
+FileNameDrop[path, n]         (* 先頭 n 階層を除去 *)
+DirectoryName[path]           (* 親ディレクトリ *)
+FileExtension[path]           (* 拡張子 *)
+
+(* ❌ 禁止 *)
+dir <> $PathnameSeparator <> file
+StringReplace[path, dir <> $PathnameSeparator -> ""]
+StringDrop[path, StringLength[dir] + 1]
+```
+
+### 相対パスの計算
+
+```mathematica
+(* ✅ iRelativePath[fullPath, baseDir] — claudecode.wl に定義済み *)
+Module[{baseParts = FileNameSplit[baseDir],
+        fullParts = FileNameSplit[fullPath]},
+  FileNameJoin[Drop[fullParts, Length[baseParts]]]
+]
+
+(* ❌ 禁止 *)
+StringReplace[fullPath, baseDir <> $PathnameSeparator -> ""]
+```
+
+### パスの正規化（末尾セパレータ除去）
+
+```mathematica
+(* ✅ 正しい *)
+dir = FileNameJoin[FileNameSplit[dir]]
+
+(* ❌ 禁止 *)
+StringTrimRight[dir, "\\"]
+StringReplace[dir, RegularExpression["[\\\\/]+$"] -> ""]
+```
+
+### JSON 等から取得したスラッシュ区切りパスの変換
+
+```mathematica
+(* ✅ 正しい — FileNameSplit は "/" も "\" も認識する *)
+FileNameJoin[Flatten[{srcDir, FileNameSplit[path]}]]
+
+(* ❌ 禁止 *)
+FileNameJoin[{srcDir, StringReplace[path, "/" -> $PathnameSeparator]}]
+```
+
+### bare filename の解決
+
+- ファイル名だけが指定された場合は `FileNameJoin[{NotebookDirectory[], ファイル名}]` でパスを構築する。
 - `NotebookDirectory[]` が取得できない場合のフォールバックとして `Quiet @ Check[NotebookDirectory[], $packageDirectory]` を使う。
 - `Import["ファイル名"]` のようにカレントディレクトリ依存のコードを生成しない。
 

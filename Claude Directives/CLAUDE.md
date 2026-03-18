@@ -25,6 +25,7 @@
 - `external-language-output` — R/Python 等の外部言語コードの出力パターン
 - `doc-generation` — ドキュメント生成の継続・README 構造ルール
 - `github-operations` — GitHub パッケージ管理・PR 管理・インストール手順
+- `package-merge-pattern` — LLM レスポンスによるパッケージ部分更新のマージ・安全検証パターン
 
 ## ファイル読み込みルール
 

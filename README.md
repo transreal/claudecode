@@ -14,7 +14,9 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 **セッションによる会話の継続性**: セッション機構により、複数回のやり取りにわたって会話履歴を保持します。セッションはノートブックの TaggingRules に永続化されるため、ノートブックを閉じて再度開いた後でも会話を再開できます。履歴が長くなった場合は自動または手動でコンパクションが行われ、トークン消費を抑制します。名前付きセッションの作成・継承・復元・削除が可能で、複数の独立したタスクを並行して進められます。
 
-実装面では、Claude Code CLI をバックエンドとして利用し、node-pty 経由で対話的にコマンドを送受信します。作業ディレクトリ (`$ClaudeWorkingDirectory`) 配下の CLAUDE.md やディレクティブ (rules/skills) が Claude Code に自動的に読み込まれ、プロジェクト固有のガイドラインを反映した応答が得られます。Claude Code CLI が利用できない場合のフォールバック機構として、Anthropic API や OpenAI API への直接呼び出しも備えています。
+実装面では、Claude Code CLI をバックエンドとして利用し、`--output-format stream-json` モードでリアルタイムにストリーミング出力を解析します。問い合わせ中は経過時間に加え、現在の状態（思考中・テキスト生成中・ツール実行中）やフラグメント数をリアルタイムで表示します。エラー出力は stderr 経由で分離処理され、stdout の JSON ストリームと干渉しない設計になっています。ファイルパス操作には `FileNameJoin` を一貫して使用し、OS 非依存のパス構築を徹底しています。
+
+作業ディレクトリ (`$ClaudeWorkingDirectory`) 配下の CLAUDE.md やディレクティブ (rules/skills) が Claude Code に自動的に読み込まれ、プロジェクト固有のガイドラインを反映した応答が得られます。Claude Code CLI が利用できない場合のフォールバック機構として、Anthropic API や OpenAI API への直接呼び出しに加え、LM Studio 等のローカル LLM サーバーへの接続もサポートしています。フォールバックモデルは `$ClaudeFallbackModels` で優先順位付きで設定でき、`{provider, model, url}` の3要素形式でカスタム URL を指定できます。
 
 パッケージ管理機能 (`ClaudeUpdatePackage`, `ClaudeRestorePackage`) では、既存の .wl パッケージを Claude の支援で更新し、自動バックアップにより安全なイテレーションを実現します。ドキュメント生成機能 (`ClaudeCreateDocumentation`, `ClaudeUpdateDocumentation`) では、ソースコードから API リファレンス・使用例・セットアップガイドなどの文書一式を自動生成します。ドキュメント更新時はノートブックの現在のコンテキストも参照でき、「上で議論された内容を反映して」といった自然な指示が可能です。
 
@@ -29,7 +31,7 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 | Mathematica | 13.0 以上（14.x 推奨） |
 | Node.js | 18 以上 |
 | Claude Code CLI | 最新版 |
-| OS | Windows 11 |
+| OS | Windows 11（macOS/Linux ではパス区切りやシェルコマンドを適宜読み替えてください） |
 
 ### インストール
 
@@ -83,6 +85,8 @@ SystemCredential["ANTHROPIC_API_KEY"] = "sk-ant-...";
 SystemCredential["OPENAI_API_KEY"] = "sk-...";
 ```
 
+LM Studio 等のローカル LLM を使用する場合は、API キーは不要です（`$ClaudeFallbackModels` にエンドポイント URL を指定します）。
+
 ### クイックスタート
 
 ```mathematica
@@ -110,6 +114,13 @@ ClaudeEval["添付した仕様書に従ってコードを書いて"]
 (* セッション状態の確認 *)
 ClaudeSessionStatus[]
 
+(* 実行中タスクのリアルタイム状態表示 *)
+ClaudeStatus[]
+
+(* LM Studio のローカルモデルを使用 *)
+ClaudeEval["階乗を計算して",
+  Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
+
 (* パレット表示 *)
 ShowClaudePalette[]
 ```
@@ -120,19 +131,22 @@ ShowClaudePalette[]
 |------|-----------|------|
 | `$ClaudeModel` | `""` | Claude CLI に渡すモデル名。空文字は CLI デフォルト |
 | `$ClaudeTimeout` | `1200` | タイムアウト秒数 |
-| `$ClaudeWorkingDirectory` | `$HomeDirectory/Claude Working` | 作業ディレクトリ |
+| `$ClaudeWorkingDirectory` | `FileNameJoin[{$HomeDirectory, "Claude Working"}]` | 作業ディレクトリ |
 | `$ClaudeAccessibleDirs` | `{$packageDirectory}` | Claude Code に Read 許可する追加ディレクトリ |
-| `$ClaudeFallbackModels` | `{{"anthropic","claude-opus-4-6"},{"openai","gpt-5"}}` | フォールバックモデル優先順位 |
+| `$ClaudeFallbackModels` | `{{"anthropic","claude-opus-4-6"},{"openai","gpt-5"}}` | フォールバックモデル優先順位。`{"lmstudio","modelName","http://host:port"}` 形式でローカル LLM も指定可能 |
 
 ### 主な機能
 
 **クエリ・コード生成**
-- `ClaudeQuery[prompt]` — Claude に問い合わせ、テキスト応答を返す（同期）
+- `ClaudeQuery[prompt]` — Claude に問い合わせ、テキスト応答を返す（非同期）
 - `ClaudeMath[task]` — Mathematica コード生成に特化したクエリ
-- `ClaudeEval[task]` — コードを非同期生成し、ノートブックに挿入・自動実行。`Fallback` オプションで Claude Code 利用不可時の API 直接呼び出し、`WebFetch` オプションで Web 検索の制御が可能
+- `ClaudeEval[task]` — コードを非同期生成し、ノートブックに挿入・自動実行。`Fallback` オプションで Claude Code 利用不可時の API 直接呼び出し、`WebFetch` オプションで Web 検索の制御、`Model` オプションで特定のモデルを直接指定可能
 - `ContinueEval[instruction]` — 直前の ClaudeEval の続きを実行。エラー修正に便利
 - `ClaudeSpec[task]` — ノートブック内容からプログラムの仕様書を生成
 - `ClaudeExtractCode[response]` / `ClaudeExtractAllCode[response]` — 応答からコードブロックを抽出
+
+**タスク状態監視**
+- `ClaudeStatus[]` — 実行中の全 Claude タスクのリアルタイム状態を表示。各タスクの経過時間、現在の状態（思考中/テキスト生成中/ツール実行中）、生成済みテキスト断片数、思考断片数、ツール使用数を表示します
 
 **セッション管理**
 - `CreateClaudeSession["name"]` — 名前付きセッションの作成（履歴の継承・独立が選択可能）
@@ -191,6 +205,28 @@ ShowClaudePalette[]
 - `ClaudeQueryShowContext[]` — 次回送信されるノートブックコンテキストの確認（デバッグ用）
 - `ClaudeShowAccessConfig[]` — ファイルアクセス設定の確認（デバッグ用）
 
+### LM Studio 対応
+
+ローカルで動作する LLM サーバー（LM Studio 等）をフォールバックモデルとして使用できます。API キーは不要で、OpenAI 互換の Chat Completions API エンドポイントに接続します。
+
+```mathematica
+(* フォールバックモデルにローカルモデルを追加 *)
+$ClaudeFallbackModels = {
+  {"anthropic", "claude-opus-4-6"},
+  {"openai", "gpt-5"},
+  {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}
+};
+
+(* Fallback で自動的に使われる *)
+ClaudeEval["階乗を計算して", Fallback -> True]
+
+(* Model オプションで直接指定 *)
+ClaudeEval["1から10までのフィボナッチ数を計算して",
+  Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
+```
+
+`$ClaudeFallbackModels` の各エントリは `{provider, modelName}` または `{provider, modelName, url}` の形式です。`"lmstudio"` プロバイダーを指定すると、指定 URL（デフォルト `http://localhost:1234`）の `/v1/chat/completions` エンドポイントに接続します。
+
 ### ドキュメント一覧
 
 | ファイル | 内容 |
@@ -226,3 +262,105 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+---
+
+次に user_manual.md の更新内容を出力します。以下の変更を反映しています:
+
+1. **ClaudeStatus[]** の追加
+2. **LM Studio 対応** の説明
+3. **stream-json によるリアルタイムステータス表示** の説明
+4. **stderr によるエラー処理** の説明
+5. **FileNameJoin によるOS非依存パス操作** の記述
+
+---
+
+## user_manual.md に追加すべきセクション
+
+### タスク状態監視（新規セクション）
+
+`ClaudeStatus[]` は、現在実行中のすべての Claude タスク（ClaudeEval、ClaudeQuery、ClaudeUpdatePackage 等）のリアルタイム状態を表示します。
+
+```mathematica
+ClaudeStatus[]
+```
+
+各タスクについて以下の情報が表示されます:
+
+- 経過時間（秒）
+- プロセス状態（Running / Finished）
+- 現在の状態: 思考中、テキスト生成中、ツール実行中、完了 など
+- 思考断片数 / テキスト断片数 / ツール使用数
+- 出力ファイルサイズと行数
+- 最新のテキスト断片（先頭60文字）
+- 呼び出し元（Async / Job:xxx）
+
+実行中のタスクがない場合は「実行中の Claude タスクはありません」と表示されます。
+
+### 問い合わせ中のステータス表示
+
+ClaudeEval や ClaudeQuery の実行中、ノートブックにリアルタイムのステータスが表示されます。`stream-json` 形式の出力を差分読み取りし、以下の情報が1秒ごとに更新されます:
+
+```
+Claude に問い合わせ中... 15s | テキスト生成中 (思考:3) (テキスト:12) (ツール:1)
+```
+
+- 経過時間
+- 現在の処理フェーズ（初期化 → 思考中 → テキスト生成中 → ツール実行中 → 完了）
+- 各フェーズのフラグメント数
+
+### LM Studio・ローカル LLM の使用（新規セクション）
+
+`$ClaudeFallbackModels` にローカル LLM サーバーを追加することで、Claude Code CLI が利用できない場合の代替モデルとして使用できます。
+
+```mathematica
+(* フォールバックモデルリストにローカルモデルを追加 *)
+$ClaudeFallbackModels = {
+  {"anthropic", "claude-opus-4-6"},
+  {"openai", "gpt-5"},
+  {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}
+};
+```
+
+各エントリの形式:
+- `{"provider", "model"}` — 標準プロバイダー（anthropic / openai）
+- `{"provider", "model", "url"}` — カスタム URL 付き（lmstudio 等）
+
+`"lmstudio"` プロバイダーの特徴:
+- API キー不要（`"lm-studio"` が自動設定されます）
+- OpenAI 互換の `/v1/chat/completions` エンドポイントに接続します
+- URL を省略すると `http://localhost:1234` がデフォルトで使用されます
+
+`Model` オプションで特定のモデルを直接指定することもできます:
+
+```mathematica
+ClaudeEval["タスク",
+  Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
+
+ClaudeQuery["質問",
+  Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
+```
+
+### エラー処理の仕組み
+
+Claude Code CLI の出力は `--output-format stream-json` モードで取得されます。このモードでは:
+
+- **stdout**: JSON Lines 形式のストリーミングイベント（テキスト断片、思考断片、ツール使用、結果等）
+- **stderr**: エラーメッセージ、利用制限通知等
+
+`iExtractResultFromStreamJson` は stdout の JSON イベントからテキスト結果を復元します。JSON パースに失敗した行は stderr 由来のプレーンテキストとして収集され、正常な結果が得られなかった場合に `"Error: ..."` 形式で返されます。
+
+空レスポンス（利用制限到達時に発生）は自動検出され、`Fallback -> True` が指定されていればフォールバックモデルへの切り替えがトリガーされます。
+
+### ファイルパス操作の原則
+
+本パッケージではすべてのファイルパス構築に `FileNameJoin` を使用し、OS 非依存の動作を保証しています。
+
+```mathematica
+(* 正しいパターン *)
+FileNameJoin[{$HomeDirectory, "Claude Working"}]
+FileNameJoin[{Global`$packageDirectory, packageName <> ".wl"}]
+
+(* 禁止パターン: 直接の文字列結合やバックスラッシュ *)
+(* $HomeDirectory <> "\\Claude Working"  ← 使用しないでください *)
