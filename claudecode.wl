@@ -3739,15 +3739,27 @@ iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
     allBlocks = iExtractAllCodeBlocks[response];
     mathBlocks = Select[allBlocks, #["lang"] === "mathematica" &];
     extBlocks  = Select[allBlocks, #["lang"] =!= "mathematica" &];
+    (* Mathematica ブロックの構文チェック: 不正なコードは警告付きで挿入 *)
+    mathBlocks = Map[
+      Function[b,
+        If[!TrueQ[Quiet[SyntaxQ[b["code"]]]],
+          nbPrint[nb, "\:26a0\:fe0f \:69cb\:6587\:30a8\:30e9\:30fc\:3092\:691c\:51fa: \:751f\:6210\:30b3\:30fc\:30c9\:306e\:6587\:6cd5\:304c\:4e0d\:6b63\:3067\:3059\:3002\:624b\:52d5\:3067\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
+          <|b, "syntaxError" -> True|>,
+          b
+        ]
+      ], mathBlocks];
     Which[
       (* Mathematica ブロックがある場合 *)
       Length[mathBlocks] > 0,
         Do[
           (* 長時間ブロッキング関数を含むセルは autoEvaluate を抑制 *)
-          ae = autoEvaluate && !iIsLongRunningCode[b["code"]];
+          (* 構文エラーのブロックも autoEvaluate を抑制 *)
+          ae = autoEvaluate && !iIsLongRunningCode[b["code"]] && !TrueQ[b["syntaxError"]];
           iWriteSmartCell[nb, b["code"], ae];
           If[!ae && autoEvaluate,
-            nbPrint[nb, "\:26a1 \:4e0a\:306e\:30bb\:30eb\:306f\:5916\:90e8\:30b5\:30fc\:30d3\:30b9\:3078\:306e\:66f8\:304d\:8fbc\:307f\:64cd\:4f5c\:3092\:542b\:3080\:305f\:3081\:81ea\:52d5\:5b9f\:884c\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3057\:305f\:3002Shift+Enter \:3067\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002"]],
+            If[TrueQ[b["syntaxError"]],
+              nbPrint[nb, "\:26a1 \:4e0a\:306e\:30bb\:30eb\:306f\:69cb\:6587\:30a8\:30e9\:30fc\:306e\:305f\:3081\:81ea\:52d5\:5b9f\:884c\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3057\:305f\:3002\:4fee\:6b63\:5f8c\:306b Shift+Enter \:3067\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002"],
+              nbPrint[nb, "\:26a1 \:4e0a\:306e\:30bb\:30eb\:306f\:5916\:90e8\:30b5\:30fc\:30d3\:30b9\:3078\:306e\:66f8\:304d\:8fbc\:307f\:64cd\:4f5c\:3092\:542b\:3080\:305f\:3081\:81ea\:52d5\:5b9f\:884c\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3057\:305f\:3002Shift+Enter \:3067\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002"]]],
           {b, mathBlocks}];
         iWriteContinueEvalButton[nb, autoEvaluate];
         blocks = #["code"] & /@ mathBlocks,
@@ -3896,6 +3908,16 @@ Do NOT add any final guidance like 'ContinueEval', 'ContinueEval[]', '継続で�
 "These functions handle backup, validation, reload, and history automatically.\n" <>
 "If the task is a QUESTION about a package (not modification), answer using the docs context " <>
 "or suggest ClaudeQuery with the package name.\n" <>
+"STRING SAFETY IN GENERATED CODE (CRITICAL):\n" <>
+"When generating ClaudeUpdatePackage, ClaudeUpdateDocumentation, or similar calls:\n" <>
+"- The instruction string argument MUST be a concise summary of what to do, NOT a verbatim copy of the user's input.\n" <>
+"- NEVER paste the user's long text (especially content containing quotes, parentheses, " <>
+"or code block markers) directly into a Mathematica string literal.\n" <>
+"- Summarize the intent in 1-3 short sentences. Example:\n" <>
+"  BAD:  ClaudeUpdateDocumentation[\"pkg\", \"READMEの末尾（ライセンスの後）に誤って...（長い引用）...\"]\n" <>
+"  GOOD: ClaudeUpdateDocumentation[\"pkg\", \"README.mdのライセンスセクション以降に誤挿入されたテキストを削除する\"]\n" <>
+"- Ensure all generated string literals are properly closed with matching quotes.\n" <>
+"- Verify the generated code has balanced brackets: [...], (...), \"...\".\n" <>
 "Example: User says 'Maildb\:306eshowMails\:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:8868\:793a\:6570\:309230\:306b\:5909\:66f4' -> Output:\n" <>
 "```mathematica\nClaudeUpdatePackage[\"Maildb\", \"showMails\:306a\:3069\:306e\:30e1\:30fc\:30eb\:8868\:793a\:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:8868\:793a\:6570\:309230\:306b\:5909\:66f4\:3059\:308b\"]\n```\n\n" <>
 "OPTION ARGUMENTS (CRITICAL):\n" <>
@@ -6983,7 +7005,16 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         " using \:656c\:4f53 (\:3067\:3059\:30fb\:307e\:3059\:8abf) style.\n"] <>
       "Do NOT wrap in code fences. Do NOT include markers. Do NOT ask for file permissions.\n" <>
       "Preserve the existing structure and content that is not affected by the update instruction.\n" <>
-      "Add or modify only the parts relevant to the instruction.";
+      "Add or modify only the parts relevant to the instruction.\n" <>
+      If[docFile === "README.md",
+        "CRITICAL: README.md is a HIGH-LEVEL OVERVIEW document.\n" <>
+        "The UPDATE INSTRUCTION above may contain detailed content meant for OTHER documents " <>
+        "(e.g., user_manual.md, api.md, setup.md). Do NOT copy such details into README.md.\n" <>
+        "For README.md, only reflect changes that affect the package overview, feature list, " <>
+        "or structure. Do NOT append raw instruction text, prompt fragments, or per-document " <>
+        "update notes to the README. The README ends with: 免責事項, then ライセンス (if present). " <>
+        "Nothing should be added after the ライセンス section.\n",
+        ""];
     (* $currentUseFallback \:306f\:547c\:3073\:51fa\:3057\:5143\:3067\:8a2d\:5b9a\:6e08\:307f *)
     iClaudeQueryAsyncWithProgress[fullPrompt,
       With[{nb2 = nb, dd = docsDir, tds = targetDocs, i = idx,

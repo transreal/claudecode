@@ -1,577 +1,264 @@
-# claudecode ユーザーマニュアル
+# claudecode
 
-Mathematica ノートブックから [Claude Code](https://github.com/transreal/claudecode) CLI を呼び出し、コード生成・デバッグ・パッケージ管理・ドキュメント生成を行うパッケージです。
+Mathematica ノートブックから Claude Code CLI を呼び出し、コード生成・デバッグ・パッケージ管理・ドキュメント生成を対話的に行うパッケージです。
 
-セットアップ手順は別途 `setup.md` をご参照ください。
+## 設計思想と実装の概要
 
----
+claudecode は、Mathematica のノートブック環境と Claude Code CLI をシームレスに統合することを目的として設計されています。ユーザーは自然言語でタスクを記述するだけで、Mathematica コードの生成・実行・デバッグ・レビューを一貫したワークフローの中で完結できます。
 
-## 目次
+本パッケージの中核となる設計思想は以下の3点です。
 
-1. [基本クエリ](#基本クエリ)
-2. [コード生成・実行](#コード生成実行)
-3. [セッション管理](#セッション管理)
-4. [アタッチメント](#アタッチメント)
-5. [デバッグ・レビュー](#デバッグレビュー)
-6. [パッケージ管理](#パッケージ管理)
-7. [ドキュメント生成](#ドキュメント生成)
-8. [ディレクティブ管理](#ディレクティブ管理)
-9. [機密データ管理](#機密データ管理)
-10. [Web 検索・取得](#web-検索取得)
-11. [タスク状態監視](#タスク状態監視)
-12. [ユーティリティ](#ユーティリティ)
-13. [設定変数](#設定変数)
-14. [LM Studio・ローカルモデル連携](#lm-studioローカルモデル連携)
+**ノートブック中心のコンテキスト共有**: ClaudeEval や ClaudeQuery を呼び出す際、ノートブック内のセル履歴（入力・出力・エラーメッセージ）が自動的に収集され、Claude へのプロンプトに組み込まれます。これにより、ユーザーが手動でコードを貼り付ける必要がなく、Claude は現在の作業状態を正確に把握した上で応答を生成します。コンテキスト収集は [NBAccess](https://github.com/transreal/NBAccess) パッケージに委譲されており、セルの読み書き・プライバシー管理・変数追跡といった低レベル操作は分離されています。
 
----
+**機密データの自動保護**: API キーや個人情報を扱うセルは `Confidential` ラッパーや `MarkConfidential` によって機密マークされ、以降の Claude プロンプトから自動的に除外されます。さらに CellEpilog を利用した伝播機構により、機密変数を参照する下流のセルも自動検出・マーキングされます。`NonConfidential` で明示的に公開指定することも可能で、きめ細かなプライバシー制御を実現しています。
 
-## 基本クエリ
+**セッションによる会話の継続性**: セッション機構により、複数回のやり取りにわたって会話履歴を保持します。セッションはノートブックの TaggingRules に永続化されるため、ノートブックを閉じて再度開いた後でも会話を再開できます。履歴が長くなった場合は自動または手動でコンパクションが行われ、トークン消費を抑制します。名前付きセッションの作成・継承・復元・削除が可能で、複数の独立したタスクを並行して進められます。
 
-### ClaudeQuery
+実装面では、Claude Code CLI をバックエンドとして利用し、`--output-format stream-json` モードでリアルタイムにストリーミング出力を解析します。問い合わせ中は経過時間に加え、現在の状態（思考中・テキスト生成中・ツール実行中）やフラグメント数をリアルタイムで表示します。エラー出力は stderr 経由で分離処理され、stdout の JSON ストリームと干渉しない設計になっています。ファイルパス操作には `FileNameJoin` を一貫して使用し、OS 非依存のパス構築を徹底しています。
 
-テキスト応答を返す非同期クエリです。コードブロックは含まれません。応答はノートブックにスタイル付きセル（見出し・箇条書き・コードブロック等）として挿入されます。
+作業ディレクトリ (`$ClaudeWorkingDirectory`) 配下の CLAUDE.md やディレクティブ (rules/skills) が Claude Code に自動的に読み込まれ、プロジェクト固有のガイドラインを反映した応答が得られます。Claude Code CLI が利用できない場合のフォールバック機構として、Anthropic API や OpenAI API への直接呼び出しに加え、LM Studio 等のローカル LLM サーバーへの接続もサポートしています。フォールバックモデルは `$ClaudeFallbackModels` で優先順位付きで設定でき、`{provider, model, url}` の3要素形式でカスタム URL を指定できます。
+
+パッケージ管理機能 (`ClaudeUpdatePackage`, `ClaudeRestorePackage`) では、既存の .wl パッケージを Claude の支援で更新し、自動バックアップにより安全なイテレーションを実現します。ドキュメント生成機能 (`ClaudeCreateDocumentation`, `ClaudeUpdateDocumentation`) では、ソースコードから API リファレンス・使用例・セットアップガイドなどの文書一式を自動生成します。ドキュメント更新時はノートブックの現在のコンテキストも参照でき、「上で議論された内容を反映して」といった自然な指示が可能です。
+
+外部ファイルのアタッチメント機構や Web 検索・取得機能により、ノートブック外の情報源も活用できます。ディレクティブ管理機能を通じて、Claude Code の振る舞いを制御する CLAUDE.md やルール・スキルファイルの追加・更新・整合性チェックをノートブック内から行えます。`ClaudeUpdateDirective[]` はソースコードの公開 API とディレクティブファイルの整合性を自動検査・修正することで、ドキュメントとコードの乖離を防ぎます。
+
+## 詳細説明
+
+### 動作環境
+
+| 項目 | バージョン |
+|------|-----------|
+| Mathematica | 13.0 以上（14.x 推奨） |
+| Node.js | 18 以上 |
+| Claude Code CLI | 最新版 |
+| OS | Windows 11（macOS/Linux ではパス区切りやシェルコマンドを適宜読み替えてください） |
+
+### インストール
+
+#### 1. 外部ツールのインストール
+
+Node.js の LTS 版を [公式サイト](https://nodejs.org/) からインストールしてください。
+
+```
+node --version
+```
+
+Claude Code CLI をインストールし、認証を行います。
+
+```
+npm install -g @anthropic-ai/claude-code
+claude auth login
+```
+
+#### 2. パッケージファイルの配置
+
+以下のファイルをすべて `$packageDirectory` に配置してください。
+
+| ファイル | 説明 |
+|---------|------|
+| `claudecode.wl` | 本体 |
+| `NBAccess.wl` | ノートブック読み書き・プライバシー管理（[GitHub](https://github.com/transreal/NBAccess)） |
+| `github.wl` | GitHub REST API 連携（[GitHub](https://github.com/transreal/github)） |
+
+#### 3. パッケージの読み込み
+
+`$Path` には `$packageDirectory` 自体を追加します。claudecode を使用する場合、`$Path` は自動的に設定されます。
 
 ```mathematica
+AppendTo[$Path, $packageDirectory];
+
+Block[{$CharacterEncoding = "UTF-8"},
+  Needs["ClaudeCode`", "claudecode.wl"]];
+```
+
+ファイル名のみの形式 `"claudecode.wl"` は、`$packageDirectory` が `$Path` に含まれているため動作します。
+
+初回ロード時に `node-pty` が未インストールの場合、自動で `npm install` が実行されます。
+
+#### 4. API キーの設定
+
+Claude Code CLI の認証が完了していれば、追加の設定は不要です。フォールバック機能で API を直接使う場合は `SystemCredential` に登録してください。
+
+```mathematica
+SystemCredential["ANTHROPIC_API_KEY"] = "sk-ant-...";
+(* OpenAI フォールバックを使う場合 *)
+SystemCredential["OPENAI_API_KEY"] = "sk-...";
+```
+
+LM Studio 等のローカル LLM を使用する場合は、API キーは不要です（`$ClaudeFallbackModels` にエンドポイント URL を指定します）。
+
+### クイックスタート
+
+```mathematica
+(* パッケージの読み込み *)
+AppendTo[$Path, $packageDirectory];
+Block[{$CharacterEncoding = "UTF-8"},
+  Needs["ClaudeCode`", "claudecode.wl"]];
+
+(* 基本的な問い合わせ *)
 ClaudeQuery["Mathematica で行列の固有値を求める方法を説明してください"]
-ClaudeQuery[session, "前回の結果をもう少し詳しく説明してください"]
-```
 
-**主なオプション:**
+(* コード生成・自動実行 *)
+ClaudeEval["フィボナッチ数列の最初の10項をリストで返す関数"]
 
-| オプション | デフォルト | 説明 |
-|---|---|---|
-| `Fallback` | `False` | Claude Code 不可時に API 直接呼び出し |
-| `WebFetch` | `False` | Web 検索の利用 |
-| `Model` | `Automatic` | 使用するモデルの指定（後述） |
+(* エラー修正の継続 *)
+ContinueEval["日本語ラベルが文字化けしています。フォント指定を追加して"]
 
-### ClaudeMath
+(* 機密データの保護 *)
+apiKey = Confidential[SystemCredential["MyAPIKey"]]
 
-Mathematica コード生成に特化したクエリです。応答は `` ```mathematica `` ブロックで返ります。
+(* 参考資料のアタッチ *)
+ClaudeAttach["spec.pdf"]
+ClaudeEval["添付した仕様書に従ってコードを書いて"]
 
-```mathematica
-response = ClaudeMath["フィボナッチ数列の最初の20項を計算するコード"]
-```
+(* セッション状態の確認 *)
+ClaudeSessionStatus[]
 
-### ClaudeExtractCode / ClaudeExtractAllCode
+(* 実行中タスクのリアルタイム状態表示 *)
+ClaudeStatus[]
 
-応答文字列からコードブロックを抽出します。
-
-```mathematica
-code = ClaudeExtractCode[response]     (* 最初の1ブロック *)
-codes = ClaudeExtractAllCode[response]  (* 全ブロックのリスト *)
-```
-
----
-
-## コード生成・実行
-
-### ClaudeEval
-
-コードを非同期で生成し、ノートブックに Input セルとして挿入・実行します。問い合わせ中はリアルタイムのステータス表示（思考中・テキスト生成中・ツール実行中など）が表示されます。
-
-```mathematica
-ClaudeEval["素数を100個リストアップするコード"]
-ClaudeEval[{"この Dataset を可視化して", myDataset}]
-ClaudeEval[session, "前回のコードにエラーハンドリングを追加"]
-```
-
-**主なオプション:**
-
-| オプション | デフォルト | 説明 |
-|---|---|---|
-| `AutoEvaluate` | `True` | 生成セルを自動実行するか |
-| `StartTime` | `Now` | 実行開始時刻（遅延実行用） |
-| `RepeatInterval` | `None` | 繰り返し実行の間隔 |
-| `Fallback` | `False` | Claude Code 不可時に API 直接呼び出し |
-| `WebFetch` | `Automatic` | Web 検索の利用（`True`/`False`/`Automatic`） |
-| `Model` | `Automatic` | 使用するモデルの直接指定 |
-
-```mathematica
-ClaudeEval["レポート生成", StartTime -> Now + Quantity[1, "Hours"]]
-ClaudeEval["最新の為替レートを取得", WebFetch -> True]
-ClaudeEval["階乗を計算して", Fallback -> True]
-ClaudeEval["計算して", Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
-```
-
-**RepeatInterval の使い方:**
-
-```mathematica
-(* 2時間ごとに繰り返し実行 *)
-ClaudeEval["データ更新", RepeatInterval -> Quantity[2, "Hours"]]
-
-(* 1時間ごとに最大5回実行 *)
-ClaudeEval["チェック", RepeatInterval -> {Quantity[1, "Hours"], 5}]
-
-(* TaskObject が返るので TaskRemove[] で停止可能 *)
-```
-
-**Model オプション:**
-
-`Model` オプションで Claude Code CLI を経由せず、指定したモデルを API 経由で直接呼び出すことができます。
-
-```mathematica
-(* LM Studio のローカルモデルを直接指定 *)
-ClaudeEval["フィボナッチ数を計算して",
+(* LM Studio のローカルモデルを使用 *)
+ClaudeEval["階乗を計算して",
   Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
 
-(* Anthropic API を直接指定 *)
-ClaudeEval["計算して", Model -> {"anthropic", "claude-sonnet-4-20250514"}]
-
-(* OpenAI API を直接指定 *)
-ClaudeEval["計算して", Model -> {"openai", "gpt-4.1"}]
-```
-
-**進捗表示について:**
-
-問い合わせ中は `stream-json` 形式の出力をリアルタイムで解析し、以下の情報を動的に表示します:
-
-- 経過時間（秒）
-- 現在の状態（初期化 / 思考中 / テキスト生成中 / ツール実行中 / 応答完了）
-- 思考断片数・テキスト断片数・ツール使用数
-
-エラー出力は stderr 経由で処理され、stdout の JSON ストリームと分離されています。
-
-### ContinueEval
-
-直前の ClaudeEval の続きを実行します。エラー発生時の修正に便利です。
-
-```mathematica
-ContinueEval[]                          (* "エラーを修正してください" で継続 *)
-ContinueEval["グラフの色を変更して"]      (* 追加指示で継続 *)
-ContinueEval[session, "次のステップへ"]   (* セッション指定 *)
-```
-
-### ContinueUpdate
-
-直前の ClaudeUpdatePackage の結果を踏まえてバグ修正を継続します。
-
-```mathematica
-ContinueUpdate[]                              (* デフォルト指示で継続 *)
-ContinueUpdate["上半円の境界線が欠けている"]   (* 追加指示付き *)
-ContinueUpdate["pkgName", "修正指示"]          (* パッケージ名を指定 *)
-```
-
-### ClaudeSpec
-
-ノートブック内容からプログラムの仕様書を生成します。パレットからセル選択で呼び出すことも可能です。
-
-```mathematica
-ClaudeSpec["データ分析パイプラインの仕様を生成"]
-ClaudeSpec[{"画像認識タスクの仕様", inputImage}]
-```
-
----
-
-## セッション管理
-
-セッションは会話履歴を保持する単位です。ノートブックの TaggingRules に永続化されます。
-
-### CreateClaudeSession
-
-```mathematica
-session = CreateClaudeSession["分析タスク"]       (* 名前付きセッション *)
-session = CreateClaudeSession[]                   (* デフォルト履歴を継承 *)
-session = CreateClaudeSession[Inherit -> False]   (* 独立セッション *)
-session = CreateClaudeSession[oldSession]         (* 既存セッションの履歴を継承 *)
-```
-
-### ClaudeRestoreSession
-
-保存済みセッションを復元します。
-
-```mathematica
-session = ClaudeRestoreSession["分析タスク"]
-session = ClaudeRestoreSession[]   (* デフォルトセッション *)
-```
-
-### ClaudeListSessions / ClaudeDeleteSession / ClaudeShowHistory
-
-```mathematica
-ClaudeListSessions[]                        (* 全セッション一覧 *)
-ClaudeDeleteSession["分析タスク"]             (* セッション削除 *)
-ClaudeDeleteSession["分析タスク", "All"]      (* 全履歴も削除 *)
-ClaudeShowHistory[]                          (* デフォルトセッションの履歴 *)
-ClaudeShowHistory[session]                   (* 指定セッションの履歴 *)
-```
-
-### ClaudeCompactHistory
-
-履歴が長くなった場合に手動で圧縮します（通常は自動実行されます）。
-
-```mathematica
-ClaudeCompactHistory[]
-ClaudeCompactHistory["分析タスク"]
-```
-
----
-
-## アタッチメント
-
-セッションに参考資料ファイルをアタッチすると、ClaudeQuery/ClaudeEval 時に自動で読み込まれます。
-
-```mathematica
-ClaudeAttach["reference.pdf"]              (* デフォルトセッションにアタッチ *)
-ClaudeAttach[session, "data_spec.md"]      (* 指定セッションにアタッチ *)
-ClaudeDetach["reference.pdf"]              (* デタッチ *)
-ClaudeAttachments[]                        (* 一覧表示 *)
-ClearAttachments[]                         (* 全アタッチメントをクリア *)
-```
-
----
-
-## デバッグ・レビュー
-
-### ClaudeDebug
-
-コードまたはファイルのデバッグ支援を非同期で行います。
-
-```mathematica
-ClaudeDebug["Sort[{3,1,2}]", "期待した結果と異なる"]
-ClaudeDebug["mypackage.wl", "関数 foo がエラーを返す"]
-```
-
-### ClaudeReview / ClaudeReviewChunked
-
-コードレビューを非同期で実行します。30000 文字超のコードは自動でチャンク分割されます。
-
-```mathematica
-ClaudeReview["mypackage.wl"]
-ClaudeReviewChunked["large_package.wl"]   (* 明示的にチャンク分割 *)
-```
-
----
-
-## パッケージ管理
-
-### ClaudeUpdatePackage
-
-`$packageDirectory` 内のパッケージを Claude の支援でアップデートします。自動バックアップ付きです。
-
-```mathematica
-ClaudeUpdatePackage["mypackage", "新しいエクスポート関数を追加"]
-ClaudeUpdatePackage["mypackage", {"画像を参考に修正して", refImage}]
-ClaudeUpdatePackage["mypackage", "修正指示", StartTime -> Now + Quantity[1, "Hours"]]
-```
-
-### ClaudeRestorePackage
-
-直前のバックアップからパッケージを復元します。
-
-```mathematica
-ClaudeRestorePackage["mypackage"]
-```
-
-### ClaudeCreatePackage
-
-新規パッケージを作成して `$packageDirectory` に保存します。
-
-```mathematica
-ClaudeCreatePackage["utils", "リスト操作のユーティリティ関数を作成"]
-```
-
-### ClaudeUpdatePackageHistory / ClaudeBackupDataset
-
-更新履歴の確認とバックアップの管理を行います。
-
-```mathematica
-ClaudeUpdatePackageHistory[]               (* 全パッケージの更新履歴 *)
-ClaudeUpdatePackageHistory["mypackage"]    (* 指定パッケージの履歴 *)
-ClaudeBackupDataset["mypackage"]           (* Review/Pull/Delete ボタン付き一覧 *)
-ClaudeBackupDataset[]                      (* 全パッケージのバックアップ一覧 *)
-```
-
-### ClaudeConvertToPaclet
-
-単一 .wl ファイルを Paclet ディレクトリ構造に変換します。
-
-```mathematica
-ClaudeConvertToPaclet["mypackage"]
-```
-
----
-
-## ドキュメント生成
-
-### ClaudeCreateDocumentation
-
-パッケージのドキュメント一式（setup.md, user_manual.md, api.md, README.md 等）を自動生成します。
-
-```mathematica
-ClaudeCreateDocumentation["mypackage"]
-ClaudeCreateDocumentation["mypackage", References -> {"https://example.com"}]
-ClaudeCreateDocumentation["mypackage", Demos -> {"https://youtu.be/xxx"}]
-ClaudeCreateDocumentation["mypackage", Disclaimer -> {"研究目的専用です"}]
-```
-
-### ClaudeUpdateDocumentation
-
-既存ドキュメントを指示に従って更新します。ノートブックのコンテキストも参照可能です（「上で議論されている内容を反映して」など）。
-
-```mathematica
-ClaudeUpdateDocumentation["mypackage", "インストール手順に Windows 11 対応を追記"]
-ClaudeUpdateDocumentation["mypackage", "api.md のみ更新して"]
-```
-
-引数なしで呼び出すと、前回のドキュメント更新以降のソースコード変更を自動検出して全ドキュメントを更新します。
-
-```mathematica
-ClaudeUpdateDocumentation["mypackage"]
-```
-
----
-
-## ディレクティブ管理
-
-Claude Code の動作を制御する CLAUDE.md・rules・skills を管理します。
-
-### ClaudeAddDirective / ClaudeRestoreDirective
-
-```mathematica
-ClaudeAddDirective["CLAUDE.md", "常に日本語で回答すること"]
-ClaudeAddDirective["wolfram-general", "Module の代わりに With を優先する"]
-ClaudeRestoreDirective["CLAUDE.md"]   (* 直前のバックアップに復元 *)
-```
-
-### ClaudeUpdateDirective
-
-引数なしで呼び出すと、基盤パッケージ（claudecode.wl, github.wl, NBAccess.wl）のソースコードと CLAUDE.md・rules・skills の整合性をチェックし、不整合（存在しない関数名の参照、新しい関数・オプションの未記載など）を Claude が自動修正します。
-
-```mathematica
-ClaudeUpdateDirective[]
-```
-
-テキストを指定して呼び出すと、指示内容を Claude で解釈し、CLAUDE.md / rules / skills の適切なファイルに反映します。ノートブックのコンテキストも参照可能です（「上で議論されている内容を反映して」など）。
-
-```mathematica
-ClaudeUpdateDirective["エラーハンドリングのルールを追加"]
-ClaudeUpdateDirective["上で議論したAPIの制約をskillsに追加して"]
-```
-
-### ClaudeListDirectives / ClaudeDirectiveBackupDataset
-
-```mathematica
-ClaudeListDirectives[]              (* CLAUDE.md と全スキルの一覧 *)
-ClaudeDirectiveBackupDataset[]      (* 更新履歴を Review/Pull/Delete 付きで表示 *)
-```
-
-`ClaudeDirectiveBackupDataset[]` はディレクティブの更新履歴を表示します。履歴は `ClaudeUpdateDirective[text]` や `ClaudeAddDirective` の実行時に自動保存されます。
-
----
-
-## 機密データ管理
-
-機密マークされたセルは ClaudeEval/ClaudeQuery のプロンプトから自動除外されます。
-
-```mathematica
-MarkConfidential[]           (* 現在のセルを機密マーク *)
-UnmarkConfidential[]         (* 機密マークを解除 *)
-IsConfidential[]             (* 現在のセルが機密か確認 *)
-```
-
-### Confidential / NonConfidential
-
-式レベルで機密制御を行います。
-
-```mathematica
-secretData = Confidential[Import["secret.xlsx", {"Dataset"}] // First]
-summary = NonConfidential[Mean[secretData[All, "Score"]]]
-```
-
-### ScanConfidentialCells
-
-ノートブック全体をスキャンし、機密変数を参照するセルを自動的に機密マークします。
-
-```mathematica
-ScanConfidentialCells[]
-```
-
----
-
-## Web 検索・取得
-
-### ClaudeWebSearch
-
-Anthropic API の web_search ツールを使用して Web 検索を実行します。
-
-```mathematica
-ClaudeWebSearch["Mathematica 14 新機能"]
-```
-
-### ClaudeWebFetch
-
-指定 URL の内容を取得・要約します。
-
-```mathematica
-ClaudeWebFetch["https://example.com/docs"]
-ClaudeWebFetch["https://example.com/data", "表形式のデータを抽出して"]
-```
-
----
-
-## タスク状態監視
-
-### ClaudeStatus
-
-現在実行中の全 Claude タスク（ClaudeEval、ClaudeUpdatePackage 等）のリアルタイム状態を表示します。
-
-```mathematica
-ClaudeStatus[]
-```
-
-各タスクについて以下の情報を表示します:
-
-- **経過時間**: タスク開始からの秒数
-- **プロセス状態**: Running / Finished 等
-- **現在の状態**: 初期化 / 思考中 / テキスト生成中 / ツール実行中: ツール名 / 応答完了
-- **統計**: 思考断片数、テキスト断片数、ツール使用数
-- **出力ファイル**: 現在のサイズ（KB）と行数
-- **最新テキスト**: 生成中のテキストの末尾60文字
-- **呼び出し元**: Async / Job:xxx
-
-実行中のタスクがない場合はその旨を表示します。
-
-`stream-json` 形式の出力を差分読み取りすることで、Claude Code プロセスの内部状態をリアルタイムに把握できます。エラー出力は stderr として分離されており、stdout の JSON ストリームイベントと混在しません。
-
----
-
-## ユーティリティ
-
-### ClaudeCommand
-
-Claude Code CLI のコマンドを直接実行します。
-
-```mathematica
-ClaudeCommand["/help"]
-ClaudeCommand["/permissions"]
-ClaudeCommand["config list"]
-ClaudeCommand["--version"]
-```
-
-### ClaudeCheckSeparation / ClaudeFixSeparation
-
-[NBAccess](https://github.com/transreal/NBAccess) パッケージとの分離原則の違反を検査・修正します。静的パターン走査（正規表現ベース）と LLM 判定の2段階で検出します。
-
-```mathematica
-ClaudeCheckSeparation["claudecode"]              (* 違反箇所をリストアップ *)
-ClaudeFixSeparation["claudecode"]                (* 違反を修正 *)
-ClaudeCheckSeparation["C:\\path\\to\\file.wl"]    (* ファイル指定も可能 *)
-```
-
-**検査対象の違反カテゴリ:**
-
-| カテゴリ | 内容 |
-|---|---|
-| a | SystemCredential 直接利用 |
-| b | CellObject 直接操作（NotebookWrite/NotebookRead/CellGroupData 直接構築） |
-| c | CellEpilog/CellProlog/NotebookEventActions 直接操作 |
-| d | NBAccess\`Private\` 関数呼び出し |
-| e | NBAccess 公開グローバル直接更新 |
-| f | EvaluationCell[]/CellPrint[]/SetSelectedNotebook[] 直接使用 |
-| g | CurrentValue/SetOptions による属性直接アクセス |
-| h | CellObject の公開 API・戻り値・状態保持への漏洩 |
-| i | SelectionEvaluate/FrontEndTokenExecute 等 FE 状態操作 |
-| j | NBAccess 公開グローバルの破壊的更新（AppendTo/AssociateTo 等） |
-
-### ShowClaudePalette
-
-Claude Code 操作用の GUI パレットを表示します。
-
-```mathematica
+(* パレット表示 *)
 ShowClaudePalette[]
 ```
 
-### デバッグ用
-
-```mathematica
-ClaudeQueryShowContext[]     (* 次回送信されるノートブックコンテキストを確認 *)
-ClaudeShowAccessConfig[]     (* ファイルアクセス設定を確認 *)
-ClaudeSessionStatus[]        (* セッション状態の詳細表示 *)
-```
-
----
-
-## 設定変数
+#### 主要な設定変数
 
 | 変数 | デフォルト | 説明 |
-|---|---|---|
-| `$ClaudeModel` | `""` (CLI デフォルト) | 使用する Claude モデル名 |
+|------|-----------|------|
+| `$ClaudeModel` | `""` | Claude CLI に渡すモデル名。空文字は CLI デフォルト |
 | `$ClaudeTimeout` | `1200` | タイムアウト秒数 |
-| `$ClaudeWorkingDirectory` | `~/Claude Working` | Claude Code の作業ディレクトリ |
-| `$ClaudeAccessibleDirs` | `{$packageDirectory}` | Read 許可する追加ディレクトリ |
-| `$ClaudeFallbackModels` | `{{"anthropic","claude-opus-4-6"},{"openai","gpt-5"}}` | フォールバックモデルの優先順位 |
-| `$ClaudeTestModel` | `$ClaudeModel` と同じ | 分離検証用モデル |
-| `$ClaudeDocRetryDelay` | `60` | ドキュメント生成のリトライ待機秒数 |
-| `$ClaudeDocMaxRetries` | `3` | ドキュメント生成の最大リトライ回数 |
-| `$ClaudeDocMaxChunkChars` | `60000` | プロンプト中ソースの最大文字数 |
+| `$ClaudeWorkingDirectory` | `FileNameJoin[{$HomeDirectory, "Claude Working"}]` | 作業ディレクトリ |
+| `$ClaudeAccessibleDirs` | `{$packageDirectory}` | Claude Code に Read 許可する追加ディレクトリ |
+| `$ClaudeFallbackModels` | `{{"anthropic","claude-opus-4-6"},{"openai","gpt-5"}}` | フォールバックモデル優先順位。`{"lmstudio","modelName","http://host:port"}` 形式でローカル LLM も指定可能 |
+
+### 主な機能
+
+**クエリ・コード生成**
+- `ClaudeQuery[prompt]` — Claude に問い合わせ、テキスト応答を返す（非同期）
+- `ClaudeMath[task]` — Mathematica コード生成に特化したクエリ
+- `ClaudeEval[task]` — コードを非同期生成し、ノートブックに挿入・自動実行。`Fallback` オプションで Claude Code 利用不可時の API 直接呼び出し、`WebFetch` オプションで Web 検索の制御、`Model` オプションで特定のモデルを直接指定可能
+- `ContinueEval[instruction]` — 直前の ClaudeEval の続きを実行。エラー修正に便利
+- `ClaudeSpec[task]` — ノートブック内容からプログラムの仕様書を生成
+- `ClaudeExtractCode[response]` / `ClaudeExtractAllCode[response]` — 応答からコードブロックを抽出
+
+**タスク状態監視**
+- `ClaudeStatus[]` — 実行中の全 Claude タスクのリアルタイム状態を表示。各タスクの経過時間、現在の状態（思考中/テキスト生成中/ツール実行中）、生成済みテキスト断片数、思考断片数、ツール使用数を表示します
+
+**セッション管理**
+- `CreateClaudeSession["name"]` — 名前付きセッションの作成（履歴の継承・独立が選択可能）
+- `ClaudeRestoreSession["name"]` — 保存済みセッションの復元
+- `ClaudeListSessions[]` — 全セッション一覧
+- `ClaudeDeleteSession["name"]` — セッション削除
+- `ClaudeShowHistory[]` — 会話履歴の表示
+- `ClaudeCompactHistory[]` — 履歴の手動コンパクション
+- `ClaudeSessionStatus[]` — セッション状態の確認
+
+**アタッチメント**
+- `ClaudeAttach[path]` — セッションに参考資料を添付（PDF、.wl 等）
+- `ClaudeDetach[path]` — 添付を解除
+- `ClaudeAttachments[]` — アタッチメント一覧
+
+**機密データ管理**
+- `Confidential[expr]` — 式を評価し、そのセルを機密マーク（プロンプトから自動除外）
+- `NonConfidential[expr]` — 機密依存でも明示的に公開扱い
+- `MarkConfidential[]` / `UnmarkConfidential[]` — セルの機密マーク操作
+- `ScanConfidentialCells[]` — 機密変数参照セルの自動検出・マーキング
+
+**デバッグ・レビュー**
+- `ClaudeDebug[codeOrFile, errorMsg]` — デバッグ支援（非同期）
+- `ClaudeReview[codeOrFile]` — コードレビュー（非同期、長大ファイルは自動チャンク分割）
+
+**パッケージ管理**
+- `ClaudeUpdatePackage[name, prompt]` — .wl パッケージを Claude 支援で更新（自動バックアップ付き）
+- `ClaudeRestorePackage[name]` — 直前のバックアップから復元
+- `ClaudeBackupDataset[name]` — バックアップ履歴の表示・復元・削除
+- `ClaudeConvertToPaclet[name]` — .wl パッケージを Paclet 形式に変換
+- `ClaudeCreatePackage[name, prompt]` — 新規パッケージの作成
+
+**ドキュメント生成**
+- `ClaudeCreateDocumentation["name"]` — パッケージの文書一式を自動生成
+- `ClaudeUpdateDocumentation["name", "指示"]` — 既存ドキュメントの更新。ノートブックのコンテキストも参照可能（「上で議論されている内容を反映して」など）
+
+**ディレクティブ管理**
+- `ClaudeAddDirective[target, description]` — CLAUDE.md やスキルファイルにディレクティブを追加
+- `ClaudeRestoreDirective[target]` — 直前のバックアップを復元
+- `ClaudeUpdateDirective[]` — ソースコードと Claude Directives の整合性をチェックし、不整合を自動修正する
+- `ClaudeUpdateDirective[text]` — テキストの内容を Claude で解釈し、CLAUDE.md / rules / skills の適切なファイルに反映する。ノートブックのコンテキストも参照可能
+- `ClaudeListDirectives[]` — 全ディレクティブ一覧
+- `ClaudeDirectiveBackupDataset[]` — ディレクティブ更新履歴を Review/Pull/Delete ボタン付き Grid で表示
+
+**Web 検索・取得**
+- `ClaudeWebSearch[query]` — Web 検索を実行し結果をテキストで返す
+- `ClaudeWebFetch[url]` — URL の内容を取得・要約
+
+**分離検証**
+- `ClaudeCheckSeparation[target]` — NBAccess の分離原則への違反箇所を検出
+- `ClaudeFixSeparation[target]` — 分離違反を修正
+
+**ユーティリティ**
+- `ShowClaudePalette[]` — 操作用パレットの表示
+- `ClaudeCommand["/command"]` — Claude Code CLI コマンドの直接実行
+- `ClaudeQueryShowContext[]` — 次回送信されるノートブックコンテキストの確認（デバッグ用）
+- `ClaudeShowAccessConfig[]` — ファイルアクセス設定の確認（デバッグ用）
+
+### LM Studio 対応
+
+ローカルで動作する LLM サーバー（LM Studio 等）をフォールバックモデルとして使用できます。API キーは不要で、OpenAI 互換の Chat Completions API エンドポイントに接続します。
 
 ```mathematica
-$ClaudeModel = "claude-sonnet-4-20250514";
-$ClaudeTimeout = 900;
-$ClaudeAccessibleDirs = {$packageDirectory, "F:\\Dropbox\\Mathematica"};
-```
-
----
-
-## LM Studio・ローカルモデル連携
-
-claudecode パッケージは LM Studio などのローカル LLM サーバーと連携できます。API キーは不要です。
-
-### フォールバックモデルとして登録
-
-`$ClaudeFallbackModels` にローカルモデルを追加すると、Claude Code が利用制限に達した際に自動的にローカルモデルにフォールバックします。
-
-```mathematica
+(* フォールバックモデルにローカルモデルを追加 *)
 $ClaudeFallbackModels = {
   {"anthropic", "claude-opus-4-6"},
   {"openai", "gpt-5"},
   {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}
 };
 
-(* Fallback -> True で利用制限時に自動切替 *)
+(* Fallback で自動的に使われる *)
 ClaudeEval["階乗を計算して", Fallback -> True]
-```
 
-### Model オプションで直接指定
-
-`Model` オプションを使うと、Claude Code CLI を経由せずに指定モデルを API 経由で直接呼び出します。
-
-```mathematica
+(* Model オプションで直接指定 *)
 ClaudeEval["1から10までのフィボナッチ数を計算して",
   Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
 ```
 
-**モデル指定の形式:**
+`$ClaudeFallbackModels` の各エントリは `{provider, modelName}` または `{provider, modelName, url}` の形式です。`"lmstudio"` プロバイダーを指定すると、指定 URL（デフォルト `http://localhost:1234`）の `/v1/chat/completions` エンドポイントに接続します。
 
-| プロバイダー | 形式 | 説明 |
-|---|---|---|
-| `"lmstudio"` | `{"lmstudio", "モデル名", "URL"}` | LM Studio（API キー不要） |
-| `"anthropic"` | `{"anthropic", "モデル名"}` | Anthropic API 直接呼び出し |
-| `"openai"` | `{"openai", "モデル名"}` | OpenAI API 直接呼び出し |
-| カスタム | `{"openai", "モデル名", "URL"}` | OpenAI 互換 API エンドポイント |
+### ドキュメント一覧
 
-LM Studio の場合、URL のデフォルトは `http://localhost:1234` です。URL 末尾に `/v1/chat/completions` が自動付加されます。
+| ファイル | 内容 |
+|---------|------|
+| `api.md` | API リファレンス（全関数・変数・オプションの詳細仕様） |
+| `setup.md` | セットアップガイド（インストール手順・トラブルシューティング） |
+| `user_manual.md` | ユーザーマニュアル（機能別の詳細な使い方） |
+| `example.md` | 使用例集（代表的なユースケースとコード例） |
 
----
+## 使用例・デモ
 
-## 内部アーキテクチャに関する注意事項
+### 動画
 
-### ファイルパス操作のプラットフォーム非依存化
+- [claudecode デモ動画 — Mathematica ノートブックから Claude Code を操作する様子を紹介（YouTube）](https://www.youtube.com/watch?v=_Lc-XtBPkl8&t=919s)
 
-claudecode パッケージでは、ファイルパス操作に `FileNameJoin`、`FileNameSplit`、`FileNameTake` 等の Mathematica 組み込み関数を使用しています。パス区切り文字の直接結合（`"C:" <> "\\" <> "path"` 等の Windows 依存パターン）は禁止されています。これにより、macOS/Linux 環境でも動作する前提を維持しています。
+## 免責事項
 
-### stderr によるエラー出力の分離
+本ソフトウェアは "as is"（現状有姿）で提供されており、明示・黙示を問わずいかなる保証もありません。
+本ソフトウェアの使用または使用不能から生じるいかなる損害についても責任を負いません。
+今後の動作保証のための更新が行われるとは限りません。
+本ソフトウェアとドキュメントはほぼすべてが生成AIによって生成されたものです。
+Windows 11上での実行を想定しており、MacOS, LinuxのMathematicaでの動作検証は一切していません(生成AIの処理で対応可能と想定されます)。
 
-Claude Code CLI との通信では `stream-json` 出力形式を使用しています。stdout には JSON Lines（JSONL）形式のストリームイベント（`text_delta`、`thinking_delta`、`content_block_start`、`result` 等）が出力され、stderr にはエラーメッセージや利用制限通知が出力されます。この分離により:
+## ライセンス
 
-- 正常な応答テキストの抽出が確実になります
-- エラーメッセージが応答テキストに混入するリスクが排除されます
-- 利用制限（rate limit）の検出がより正確になります
+```
+MIT License
 
-`iExtractResultFromStreamJson` 関数が JSONL を解析し、JSON パースに失敗した行を stderr 由来として収集します。結果が空の場合、これらを `"Error: ..."` として返すことで、利用制限時の適切なエラーハンドリングが行われます。
+Copyright (c) 2026 Katsunobu Imai
 
----
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-## 依存パッケージ
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-- [NBAccess](https://github.com/transreal/NBAccess) — ノートブック読み書き・プライバシー管理
-- [github](https://github.com/transreal/github) — GitHub REST API 連携
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
