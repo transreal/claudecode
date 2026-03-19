@@ -8,28 +8,60 @@
 | 変数 | 型 | デフォルト | 説明 |
 |------|-----|-----------|------|
 | `$ClaudeModel` | String | `""` | Claude CLI に渡すモデル名。空文字は CLI デフォルト |
+| `$ClaudePrivateModel` | List | `{}` | 秘密データ処理用のローカルモデル指定。AutoPrivate -> True 時に使用 |
 | `$ClaudeTimeout` | Integer | `1200` | ClaudeQuery/ClaudeEval 等のタイムアウト秒数 |
 | `$ClaudeWorkingDirectory` | String | `FileNameJoin[{$HomeDirectory, "Claude Working"}]` | Claude Code の作業ディレクトリ。FileNameJoin で構築（Windows パス区切り直書き禁止） |
 | `$ClaudeMDPath` | String | `""` | 読み込む CLAUDE.md のパス（自動検索または手動指定） |
 | `$ClaudeMDContent` | String | `""` | 読み込まれた CLAUDE.md の内容 |
 | `$ClaudeAccessibleDirs` | List | `{$packageDirectory}` | Claude Code に Read 許可する追加ディレクトリ |
 | `$ClaudeFallbackModels` | List | `{{"anthropic","claude-opus-4-6"},{"openai","gpt-5"}}` | フォールバックモデル優先順位。各要素は `{"provider","model"}` または `{"provider","model","customURL"}` |
+| `$ClaudeEvalMaxDepth` | Integer | `5` | ClaudeEval が再帰的に ClaudeEval を生成する際の最大深度。0 で再帰禁止 |
 | `$ClaudeTestModel` | String | `$ClaudeModel` と同じ | 分離検証用モデル名 |
 | `$ClaudeDocRetryDelay` | Integer | `60` | ドキュメント生成のリトライ待機秒数 |
 | `$ClaudeDocMaxRetries` | Integer | `3` | ドキュメント生成の最大リトライ回数 |
 | `$ClaudeDocMaxChunkChars` | Integer | `60000` | プロンプト中ソースの最大文字数 |
 
+### $ClaudePrivateModel
+型: List, 初期値: `{}`
+秘密データ処理用のローカルモデル指定。`AutoPrivate -> True` 時に秘密変数を含むタスクの生成コードに `Model -> $ClaudePrivateModel` が付与される。
+例: `$ClaudePrivateModel = {"lmstudio", "openai/gpt-oss-20b", "http://127.0.0.1:1234"}`
+
+### $ClaudeEvalMaxDepth
+型: Integer, 初期値: `5`
+ClaudeEval がコード内でさらに ClaudeEval/ContinueEval を生成する連鎖呼び出しの上限。0 で再帰禁止。値を大きくすると多段階の自動タスク連鎖が可能。
+
 `$ClaudeFallbackModels` の各要素は以下の形式を取る:
 - `{"provider", "model"}` — 標準プロバイダー（anthropic, openai）
 - `{"provider", "model", "customURL"}` — カスタムエンドポイント（LM Studio 等のローカルモデル）
 - provider が `"lmstudio"` の場合、API キー不要。デフォルト URL は `http://localhost:1234`。URL に `/v1/chat/completions` が含まれていなければ自動補完される。
-例: `$ClaudeFallbackModels = {{"anthropic","claude-opus-4-6"},{"openai","gpt-5"},{"lmstudio","openai/gpt-oss-20b","http://192.168.2.106:1234"}}`
+- パッケージロード時に `NBAccess`NBSetFallbackModels` へ自動同期される。
+例: `$ClaudeFallbackModels = {{"anthropic","claude-opus-4-6"},{"lmstudio","gpt-oss-20b","http://127.0.0.1:1234"}}`
 
 ## 内部動作: エラー出力と stream-json
 
 Claude Code CLI は `--output-format stream-json --verbose --include-partial-messages` オプションで起動される。stdout に JSON Lines 形式のストリーミングイベントが出力され、stderr にはエラー・制限メッセージが出力される。`iExtractResultFromStreamJson` が JSON パース不能な行を stderr 行として収集し、結果が空の場合にこれらを `"Error: ..."` として返す。この仕組みにより、利用制限メッセージ等が確実に検出される。
 
 ファイルパス操作はすべて `FileNameJoin` を使用し、Windows のバックスラッシュ (`\\`) やパス区切り文字のハードコーディングは禁止されている。
+
+## 内部動作: アクセスレベル対応ルーティング
+
+ClaudeQuery/ClaudeEval/ContinueEval は `PrivacySpec` と `Model` オプションからアクセスレベルを解決し、三段階のルーティングを行う:
+1. Claude Code（claudecode プロバイダー）がアクセスレベルに対応可能 → Claude Code 経由で実行（フォールバック時は対応可能なモデルのみ使用）
+2. Claude Code が対応不可だがフォールバックモデルに対応可能なものがある → フォールバックモデルへ直接ルーティング
+3. どのモデルも対応不可 → エラー表示
+
+`iResolveAccessLevel[privSpec, modelSpec]` がアクセスレベルを決定する:
+- `PrivacySpec -> Automatic, Model -> Automatic` → "claudecode" プロバイダーの MaxAccessLevel
+- `PrivacySpec -> Automatic, Model -> {"provider",...}` → そのプロバイダーの MaxAccessLevel
+- `PrivacySpec -> <|"AccessLevel" -> n|>` → 明示値 n
+
+## 内部動作: パッケージ更新排他ロック
+
+`ClaudeUpdatePackage` は同一パッケージの並列更新を防止する排他ロック機構を持つ。`$iPackageUpdateLocks` で更新中のパッケージを追跡し、ロック中のパッケージに対する更新要求は警告を表示してスキップする。コールバック完了時にロックは自動解放される。
+
+## 内部動作: フォールバックモデル同期
+
+`$ClaudeFallbackModels` の値はパッケージロード時に `NBAccess`NBSetFallbackModels` へ自動同期される。これにより NBAccess 側のプロバイダー情報やアクセスレベル判定が最新の状態を反映する。
 
 ## クエリ・コード生成
 
@@ -43,9 +75,12 @@ Claude Code CLI は `--output-format stream-json --verbose --include-partial-mes
 
 ### ClaudeQuery[prompt, opts]
 prompt を Claude Code に送信し、応答をノートブックにマークダウン形式で出力する（非同期）。
-Options: `Fallback -> False`, `WebFetch -> False`, `Model -> Automatic`
+Options: `Fallback -> False`, `WebFetch -> False`, `Model -> Automatic`, `PrivacySpec -> Automatic`, `AutoPrivate -> False`
 `Model`: `Automatic` で Claude Code 経由。`{"provider","model"}` または `{"provider","model","url"}` で API 直接呼び出し。
+`PrivacySpec`: `Automatic` でモデル/プロバイダーに応じたアクセスレベル自動解決。`<|"AccessLevel" -> n|>` で明示指定。
+`AutoPrivate`: `True` で秘密変数を含むタスクの生成コードに `Model -> $ClaudePrivateModel` を自動付与。
 例: `ClaudeQuery["質問", Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]`
+例: `ClaudeQuery["秘密データの分析", AutoPrivate -> True]`
 
 ### ClaudeEval
 
@@ -57,15 +92,18 @@ ClaudeEval[session, task]
 
 コードを非同期で生成・表示し、デフォルトセッションに履歴を保存する。
 問い合わせ中は経過時間と現在の状態（思考中/テキスト生成中/ツール実行中）、各種カウンタをリアルタイム表示する。
+再帰深度が `$ClaudeEvalMaxDepth` に達すると警告を表示して停止する。
 
 | オプション | デフォルト | 説明 |
 |-----------|-----------|------|
 | `AutoEvaluate` | `True` | 生成された Input セルを自動実行するか |
 | `StartTime` | `Now` | 実行開始時刻を DateObject で指定 |
-| `Fallback` | `False` | `True` で Claude Code 利用不可時に `$ClaudeFallbackModels` へ自動切替 |
+| `Fallback` | `False` | `True` で Claude Code 利用不可時に `$ClaudeFallbackModels` へ自動切替。アクセスレベルに基づき利用可能なモデルのみにフォールバック |
 | `WebFetch` | `Automatic` | `True`: 必ず Web 検索。`False`: しない。`Automatic`: Claude が自動判断 |
 | `RepeatInterval` | `None` | 繰り返し実行の間隔。`Quantity[n, "Hours"]` で無限繰り返し、`{Quantity[n, "Hours"], maxCount}` で最大回数指定 |
 | `Model` | `Automatic` | `Automatic` で Claude Code 経由。`{"provider","model"}` または `{"provider","model","url"}` で API 直接呼び出し |
+| `PrivacySpec` | `Automatic` | アクセスレベル指定。`Automatic` でプロバイダーに応じた自動解決。`<|"AccessLevel" -> n|>` で明示指定 |
+| `AutoPrivate` | `False` | `True` で秘密変数を含むタスクの生成コードに `Model -> $ClaudePrivateModel, PrivacySpec -> Automatic` を自動付与 |
 
 `AutoEvaluate -> True` の場合でも、外部サービスへの不可逆な書き込み操作（`GitHubRefreshAndCommit`, `GitHubPushAll`, `GitHubCommit`, `GitHubCreatePullRequest`, `GitHubMergePullRequest`, `GitHubSubmitPullRequest`）を含む生成コードは自動実行をスキップし、手動の Shift+Enter を要求する。それ以外の関数（`ClaudeUpdatePackage`, `ClaudeCreateDocumentation` 等）の生成コードは `AutoEvaluate` に従って自動実行される。
 
@@ -74,7 +112,9 @@ ClaudeEval[session, task]
 例: `ClaudeEval["タスク", RepeatInterval -> {Quantity[1, "Hours"], 5}]`
 例: `ClaudeEval["タスク", Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]`
 例: `ClaudeEval["タスク", StartTime -> Now + Quantity[3, "Hours"]]`
-例: `ClaudeEval["タスク", Fallback -> True]` — Claude Code が利用制限に達した場合、$ClaudeFallbackModels のモデル（LM Studio 含む）を順次試行
+例: `ClaudeEval["タスク", Fallback -> True]` — Claude Code が利用制限に達した場合、アクセスレベルに対応可能な $ClaudeFallbackModels のモデルを順次試行
+例: `ClaudeEval["秘密データを分析", AutoPrivate -> True]` — 秘密変数アクセス時に $ClaudePrivateModel へ自動ルーティング
+例: `ClaudeEval["タスク", PrivacySpec -> <|"AccessLevel" -> 1.0|>]` — 高アクセスレベルを明示指定
 
 ### ContinueEval
 
@@ -85,7 +125,8 @@ ContinueEval[]
 ```
 
 セッションを継続する。引数なしは「エラーを修正してください」で継続。
-Options: `Fallback -> False`, `AutoEvaluate -> True`, `StartTime -> Now`, `Model -> Automatic`
+アクセスレベルに基づく三段階ルーティング: Claude Code 使用可能ならそちらを優先、不可なら対応可能なフォールバックモデルへ直接ルーティング、どちらも不可ならエラー。
+Options: `Fallback -> False`, `AutoEvaluate -> True`, `StartTime -> Now`, `Model -> Automatic`, `PrivacySpec -> Automatic`, `AutoPrivate -> False`
 
 ### ContinueUpdate
 
@@ -152,6 +193,13 @@ Options: `Fallback -> False`, `"UpdateApiMd" -> True`, `StartTime -> Now`
 
 機密セルは ClaudeEval/ClaudeQuery のプロンプトから除外される。
 
+### AutoPrivate によるプライバシー対応自動ルーティング
+`AutoPrivate -> True` オプションを ClaudeQuery/ClaudeEval/ContinueEval に指定すると、秘密変数にアクセスするタスクの生成コードに `Model -> $ClaudePrivateModel, PrivacySpec -> Automatic` が自動付与される。これにより秘密データの処理がローカル/プライベートモデルにルーティングされる。
+
+`$ClaudePrivateModel` が未設定（空リスト）の場合、警告メッセージが表示される。
+
+高アクセスレベル（cloudcode の MaxAccessLevel を超える）でクエリが実行された場合、LLM が書き込んだ新規セルは `iAutoMarkNewCellsConfidential` により自動的に機密マークされる。これにより、ローカルモデルが `Confidential[]` を使い忘れても安全が保たれる。
+
 ## デバッグ・レビュー
 
 | 関数 | 説明 |
@@ -182,6 +230,7 @@ Options: `Fallback -> False`
 
 ### ClaudeUpdatePackage[name, prompt, opts]
 既存パッケージを更新する。実行前に事前バックアップ（`pre_TIMESTAMP` フォルダ）を自動作成する。
+同一パッケージの並列更新は排他ロック（`$iPackageUpdateLocks`）により防止される。ロック中のパッケージに対する更新要求は警告を表示してスキップする。コールバック完了時にロックは自動解放される。
 Options: `TargetFunctions -> Automatic`, `StartTime -> Now`, `Fallback -> False`, `"UpdateApiMd" -> True`
 `TargetFunctions`: 更新対象の関数名リスト。`Automatic` でプロンプトから自動推定。
 `"UpdateApiMd"`: `False` で api.md の自動更新をスキップ。
@@ -269,6 +318,16 @@ stream-json 形式の出力を差分解析し、各タスクについて以下�
 
 実行中のタスクがない場合はその旨を表示する。
 ClaudeEval/ClaudeQuery の問い合わせ中のプログレス表示にもこれらのステータス情報が反映される（「Claude に問い合わせ中... Xs | 思考中 (思考:N) (テキスト:N) (ツール:N)」形式）。
+
+## オプションシンボル
+
+### AutoPrivate
+型: Boolean (オプション), デフォルト: False
+ClaudeQuery/ClaudeEval/ContinueEval のオプション。True 時に秘密変数にアクセスするタスクの場合、生成コードに `Model -> $ClaudePrivateModel, PrivacySpec -> Automatic` を付与する。$ClaudePrivateModel が未設定の場合は警告を表示する。
+
+### Fallback
+型: Boolean (オプション), デフォルト: False
+ClaudeQuery/ClaudeEval/ContinueEval のオプション。True で Claude Code 利用不可時にフォールバックモデルに自動切替。アクセスレベルに応じて利用可能なモデルのみにフォールバックする（`NBAccess`NBGetAvailableFallbackModels[accessLevel]` で取得）。
 
 ## その他
 

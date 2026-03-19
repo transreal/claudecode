@@ -45,6 +45,16 @@ ClaudeEval[{"このグラフのトレンドを分析して回帰直線を描い�
 
 > 画像を解析したコードが生成・実行されます。
 
+### 再帰深度制限
+
+ClaudeEval が生成するコード内でさらに ClaudeEval/ContinueEval を呼び出す連鎖の上限は `$ClaudeEvalMaxDepth`（デフォルト 5）で制御されます。
+
+```mathematica
+$ClaudeEvalMaxDepth = 3  (* 最大3段階までの連鎖を許可 *)
+```
+
+> 上限に達すると警告が表示され、それ以上の再帰は実行されません。
+
 ---
 
 ## 3. エラー修正の継続（ContinueEval）
@@ -64,6 +74,22 @@ ContinueEval[]
 ```
 
 > `"エラーを修正してください"` として実行されます。
+
+### アクセスレベル対応フォールバック
+
+ContinueEval は三段階のルーティングロジックでモデルを選択します。
+
+```mathematica
+(* Claude Code が利用可能で AccessLevel に対応 → Claude Code を使用 *)
+ContinueEval["修正してください", Fallback -> True]
+
+(* Claude Code が利用不可 → アクセスレベルに対応するフォールバックモデルへ *)
+(* 秘密データを含む場合 → 高 AccessLevel のモデルのみに自動ルーティング *)
+ContinueEval["秘密データの集計結果を修正して",
+  Fallback -> True, PrivacySpec -> <|"AccessLevel" -> 1.0|>]
+```
+
+> アクセスレベルに応じて利用可能なモデルのみにフォールバックします。
 
 ---
 
@@ -87,7 +113,61 @@ summary = NonConfidential[Length[secretData]]
 
 ---
 
-## 5. 参考資料のアタッチ（ClaudeAttach）
+## 5. プライバシー対応モデルルーティング
+
+秘密データを処理するタスクをローカルモデルに自動ルーティングできます。
+
+### $ClaudePrivateModel の設定
+
+```mathematica
+$ClaudePrivateModel = {"lmstudio", "openai/gpt-oss-20b", "http://127.0.0.1:1234"}
+```
+
+> ローカルの LM Studio 等で稼働するモデルを秘密データ処理用に指定します。
+
+### AutoPrivate オプション
+
+```mathematica
+ClaudeEval["秘密変数 成績 のデータを分析して平均点を計算して",
+  AutoPrivate -> True]
+```
+
+> タスクが秘密変数にアクセスする場合、生成コードに `Model -> $ClaudePrivateModel, PrivacySpec -> Automatic` が自動付与されます。秘密変数に関係しないタスクでは通常のモデルが使われます。
+
+### Model / PrivacySpec の直接指定
+
+```mathematica
+ClaudeQuery["秘密データの統計を教えて",
+  Model -> {"lmstudio", "local-model", "http://127.0.0.1:1234"},
+  PrivacySpec -> <|"AccessLevel" -> 1.0|>]
+```
+
+> 指定したモデルに直接ルーティングされ、Claude Code を経由しません。
+
+---
+
+## 6. フォールバックモデルの設定
+
+Claude Code が利用制限に達した場合の代替モデルを設定します。
+
+```mathematica
+$ClaudeFallbackModels = {
+  {"anthropic", "claude-opus-4-6"},
+  {"lmstudio", "openai/gpt-oss-20b", "http://127.0.0.1:1234"}
+}
+```
+
+> 設定は自動的に NBAccess に同期されます（`iSyncFallbackModelsToNBAccess`）。
+
+```mathematica
+ClaudeEval["複雑な計算をして", Fallback -> True]
+```
+
+> Claude Code が利用不可の場合、アクセスレベルに対応するモデルへ順次フォールバックします。
+
+---
+
+## 7. 参考資料のアタッチ（ClaudeAttach）
 
 外部ファイルをセッションに添付し、Claude が自動的に参照できるようにします。
 
@@ -109,7 +189,7 @@ ClaudeDetach["spec.pdf"]
 
 ---
 
-## 6. パッケージの更新と復元（ClaudeUpdatePackage）
+## 8. パッケージの更新と復元（ClaudeUpdatePackage）
 
 既存の .wl パッケージを Claude の支援で更新します。バックアップは自動作成されます。
 
@@ -117,7 +197,7 @@ ClaudeDetach["spec.pdf"]
 ClaudeUpdatePackage["myUtils", "exportData関数にCSV出力オプションを追加して"]
 ```
 
-> `myUtils.wl` が更新され、バックアップが保存されます。
+> `myUtils.wl` が更新され、バックアップが保存されます。排他ロックにより同一パッケージへの並列更新が防止されます。
 
 問題があれば直前の状態に復元できます。
 
@@ -127,9 +207,19 @@ ClaudeRestorePackage["myUtils"]
 
 > 直前のバックアップから復元されます。
 
+### 更新の継続（ContinueUpdate）
+
+直前の ClaudeUpdatePackage の結果を踏まえてバグ修正を継続できます。
+
+```mathematica
+ContinueUpdate[]                          (* デフォルト指示で継続 *)
+ContinueUpdate["境界線が欠けているので修正して"]  (* 追加指示付き *)
+ContinueUpdate["myUtils", "エラー処理を追加して"]  (* パッケージ名指定 *)
+```
+
 ---
 
-## 7. デバッグとコードレビュー（ClaudeDebug / ClaudeReview）
+## 9. デバッグとコードレビュー（ClaudeDebug / ClaudeReview）
 
 エラーメッセージを添えてデバッグ支援を受けます。
 
@@ -149,7 +239,7 @@ ClaudeReview["myModule.wl"]
 
 ---
 
-## 8. Web 検索と URL 取得（ClaudeWebSearch / ClaudeWebFetch）
+## 10. Web 検索と URL 取得（ClaudeWebSearch / ClaudeWebFetch）
 
 最新情報を Web から取得して活用します。
 
@@ -167,3 +257,15 @@ ClaudeWebFetch["https://reference.wolfram.com/language/ref/Dataset.html",
 ```
 
 > 指定 URL の内容を取得し、指示に従って加工した結果が返されます。
+
+---
+
+## 11. 実行中タスクの監視（ClaudeStatus）
+
+現在実行中の全 Claude タスクのリアルタイム状態を表示します。
+
+```mathematica
+ClaudeStatus[]
+```
+
+> 各タスクの経過時間、現在の状態（思考中/テキスト生成中/ツール実行中）、生成済みテキスト断片数、思考断片数、ツール使用数を表示します。

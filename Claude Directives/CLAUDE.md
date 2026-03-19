@@ -26,6 +26,7 @@
 - `doc-generation` — ドキュメント生成の継続・README 構造ルール
 - `github-operations` — GitHub パッケージ管理・PR 管理・インストール手順
 - `package-merge-pattern` — LLM レスポンスによるパッケージ部分更新のマージ・安全検証パターン
+- `maildb-operations` — maildb パッケージの API 使用パターン（showMails/searchFromMails は MailDBObject 必須）
 
 ## ファイル読み込みルール
 
@@ -80,6 +81,17 @@
 - ドキュメント生成 `ClaudeCreateDocumentation` はリミット到達時に自動リトライし、再実行で未生成分のみ続行する。README.md は最後に生成される。
 - `_info/design/` フォルダが存在すれば、README の「設計思想」セクション生成時に参考にする（優先度: docs > コード > design メモ）。
 
+### ClaudeEval の再帰呼び出しと複合タスクの分解
+
+- **ClaudeEval が ClaudeEval/ClaudeUpdatePackage/ClaudeCreatePackage を生成することは推奨される。** 複雑なタスクを小さなステップに分解し、各ステップを個別の呼び出しとして列挙すべきである。
+- **再帰深さの上限**: `$ClaudeEvalMaxDepth`（デフォルト 5）で制御される。この上限を超える再帰呼び出しは自動的にブロックされる。
+- **複合タスクの分解**: 1つのプロンプトに複数の独立した変更指示が含まれる場合、ClaudeEval は複数の `ClaudeUpdatePackage` 呼び出しに分解して生成すべきである。
+  - 例: 「markSize を動的にし、配色を改善し、exportSVG を追加して」→ 3回の `ClaudeUpdatePackage` に分解
+  - 各呼び出しが独自のバックアップを作成するため、途中で問題が起きてもロールバック可能
+  - 変更が相互依存する場合（「X を追加し、Y から X を呼ぶ」）は分解しない
+- **分解数の上限**: `$ClaudeEvalMaxDepth` を超えない範囲で分解する。超える場合は関連変更をグループ化する。
+- **thinking トリガーの伝播**: ユーザーが「死ぬ気で」「じっくり考えて」等と書いた場合、生成する `ClaudeUpdatePackage` の instruction に適切な think トリガー（`ultrathink`/`think hard`/`think`）を先頭に挿入する。
+
 ## GitHub パッケージ管理ルール
 
 - **GitHub 関連の指示を受けたとき、Web 検索に頼らず、まず自分の GitHub リポジトリ（GitHubREST パッケージ）で操作すること。**
@@ -102,8 +114,27 @@
 - `claudecode_info/docs/api.md` — ClaudeCode の全関数と正確なオプション
 - `NBAccess_info/docs/api.md` — NBAccess の全関数と正確なオプション
 
+**その他のパッケージ（Maildb 等）にも `_info/docs/api.md` が存在する場合がある。** メール関連の操作では `maildb_info/docs/api.md` を参照し、存在しない場合は `skills/maildb-operations` スキルに従うこと。
+
 api.md とこのファイルや skills の記載が矛盾する場合は **常に api.md を信頼** する。api.md よりソースコードが新しい場合はソースコードを直接確認する。
 
+### 基盤パッケージの依存方向制約（必須）
+
+**claudecode.wl と NBAccess.wl は他のパッケージ（maildb, GitHubREST 等）に一切依存してはならない。** 依存方向は常に一方向:
+
+```
+任意のパッケージ ──uses──→ claudecode.wl / NBAccess.wl
+```
+
+- 基盤パッケージに `Needs`/`Get`/シンボル参照で他パッケージへの依存を追加する → ❌ 禁止
+- 基盤パッケージのシステムプロンプト (`$claudeMathPromptPrefix` 等) に特定パッケージ固有の情報を埋め込む → ❌ 禁止
+- 他パッケージが基盤パッケージの API を使用する → ✅ 正しい方向
+
+**ClaudeUpdatePackage / ClaudeCreatePackage でコード生成中に基盤パッケージの API 変更が必要と判断した場合:**
+- コード生成を即座に中断し、必要な変更内容と理由を出力してユーザーの判断を仰ぐ。
+- 基盤パッケージの変更を含むコードを自動生成してはならない。
+
+詳細は `rules/11-core-package-dependency.md` を参照。
 ### PR ワークフローの正しいパターン
 
 PR を作成する場合、以下の **いずれか** を使う。存在しない `GitHubCreateBranch`, `GitHubPushFile` 等を生成してはならない。
@@ -135,6 +166,20 @@ GitHubCreatePullRequest["pkg", "PRタイトル",
   - `RepeatInterval -> {Quantity[1, "Hours"], 5}` で最大5回。
   - `TaskObject` が返るので `TaskRemove[]` で停止可能。
   - `RepeatInterval` は `ClaudeEval` のみの機能。`ClaudeUpdatePackage` 等には `StartTime` のみ。
+
+### ScheduledTask 内の非同期制約（必須）
+
+ClaudeEval / ContinueEval は内部で ScheduledTask チェーンを使う。**パッケージ関数が ClaudeEval 経由で呼ばれる場合、以下を厳守すること。**
+
+- ❌ `ClaudeQuery` を ScheduledTask 内から呼ぶ → デッドロック（StartProcess + ScheduledTask のネスト）
+- ❌ 同一評価ブロック内で `ClaudeQuery` を2回以上呼ぶ → 確実にフリーズ
+- ❌ `ExternalEvaluate["Python", ...]` → サブプロセスがブロック
+- ✅ `LLMSynthesize[prompt]` → 同期 HTTP、ScheduledTask 内でも安全
+- ✅ `URLRead[HTTPRequest[...]]` → 同期 HTTP、ローカル LLM に安全
+- ✅ `ContinueEval[]` → ClaudeEval と同じチェーン、安全
+
+**秘密/公開データの並立処理**: 秘密データは `URLRead` でローカル LLM、公開データは `LLMSynthesize` でクラウド LLM。逐次処理し、`ClaudeQuery` は使わない。
+詳細は `rules/95-scheduled-task-safety.md` を参照。
 
 ## バックアップ・履歴管理
 

@@ -1,8 +1,88 @@
-# claudecode セットアップガイド
+---
 
-Mathematica から Claude Code CLI を呼び出し、コード生成・レビュー・ドキュメント作成などを行うパッケージです。
+# claudecode
 
-> macOS/Linux ではパス区切りやシェルコマンドを適宜読み替えてください。
+**Mathematica ノートブックから Claude Code CLI を透過的に呼び出し、コード生成・レビュー・パッケージ管理・ドキュメント作成を非同期で行う統合パッケージです。**
+
+[![GitHub](https://img.shields.io/badge/GitHub-transreal%2Fclaudecode-blue)](https://github.com/transreal/claudecode)
+
+## 設計思想
+
+claudecode は「ノートブックを離れずに AI コーディングを完結させる」ことを目的としています。以下の設計原則に基づいて実装されています。
+
+### プライバシーファースト
+
+ノートブック内の機密データ（個人情報、認証情報など）が外部 API に意図せず送信されることを防ぐため、**アクセスレベルに基づくモデルルーティング**を実装しています。機密セルはプロンプトから自動除外され、`AutoPrivate` オプションにより秘密データの処理をローカルモデルへ自動ルーティングできます。
+
+### 非同期・ノンブロッキング
+
+すべての LLM 呼び出しは非同期で実行されます。問い合わせ中はリアルタイムのプログレス表示（思考中・テキスト生成中・ツール実行中）を提供し、ノートブックの操作をブロックしません。`stream-json` 形式でストリーミング出力を差分解析し、各種カウンタを表示します。
+
+### 安全なパッケージ更新
+
+パッケージの更新は `ClaudeUpdatePackage` を通じて行われ、事前バックアップの自動作成、LLM レスポンスの安全なマージ検証、排他ロックによる並列更新の防止、更新後の再ロードまでを一貫して管理します。
+
+### 段階的フォールバック
+
+Claude Code CLI が利用制限に達した場合でも、`Fallback -> True` により `$ClaudeFallbackModels` に登録されたモデルへ自動切替できます。フォールバック時もアクセスレベルに基づいて利用可能なモデルのみが選択されます。
+
+## 実装概要
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Mathematica Notebook                                │
+│  ┌───────────┐  ┌───────────┐  ┌────────────────┐  │
+│  │ ClaudeEval│  │ClaudeQuery│  │ClaudeUpdatePkg │  │
+│  └─────┬─────┘  └─────┬─────┘  └───────┬────────┘  │
+│        └───────────────┼────────────────┘            │
+│                   ┌────▼─────┐                       │
+│                   │ アクセス  │                       │
+│                   │レベル解決 │                       │
+│                   └────┬─────┘                       │
+│              ┌─────────┼──────────┐                  │
+│         ┌────▼───┐ ┌───▼────┐ ┌──▼───┐              │
+│         │Claude  │ │Fallback│ │Local │              │
+│         │Code CLI│ │Models  │ │Model │              │
+│         └────┬───┘ └───┬────┘ └──┬───┘              │
+│              └─────────┼─────────┘                   │
+│                   ┌────▼─────┐                       │
+│                   │ NBAccess │ ← セル読み書き・       │
+│                   │          │   プライバシー管理     │
+│                   └──────────┘                       │
+└─────────────────────────────────────────────────────┘
+```
+
+- **Claude Code CLI 連携**: `--output-format stream-json --verbose` で起動し、stdout の JSON Lines を差分解析します。`node-pty` による対話的 CLI コマンド実行もサポートしています。
+- **NBAccess 連携**: ノートブックのセル読み書き、機密セル管理、プロバイダー別アクセスレベル判定を [NBAccess](https://github.com/transreal/NBAccess) に委譲しています。
+- **GitHubREST 連携**: パッケージの GitHub へのアップロード・PR 管理を [github](https://github.com/transreal/github) パッケージと連携して行います。
+- **セッション管理**: 会話履歴を NBAccess の履歴 DB に保存し、TaggingRules でノートブックに永続化します。コンパクション機能により長い履歴を要約圧縮できます。
+
+## 前回リリースからの主要変更点
+
+### プライバシー対応モデルルーティング
+
+`$ClaudePrivateModel` と `AutoPrivate` オプションを追加しました。秘密変数にアクセスするタスクの生成コードに、ローカル/プライベートモデルへのルーティング指定が自動付与されます。高アクセスレベルでの実行時は、LLM が書き込んだ新規セルが `iAutoMarkNewCellsConfidential` により自動的に機密マークされます。
+
+### アクセスレベル対応フォールバックルーティング
+
+`iResolveAccessLevel` による三段階ルーティングを実装しました:
+1. Claude Code（claudecode プロバイダー）が対応可能 → Claude Code 経由
+2. Claude Code が対応不可だがフォールバックモデルに対応可能なものがある → フォールバックモデルへ直接ルーティング
+3. どのモデルも対応不可 → エラー表示
+
+フォールバック時も `NBAccess`NBGetAvailableFallbackModels` でアクセスレベルに基づくフィルタリングが行われます。
+
+### パッケージ更新排他ロック
+
+`$iPackageUpdateLocks` による排他ロック機構を追加しました。同一パッケージの並列更新を防止し、ロック中のパッケージに対する更新要求は警告を表示してスキップします。コールバック完了時にロックは自動解放されます。
+
+### ClaudeEval 再帰深度制限
+
+`$ClaudeEvalMaxDepth`（デフォルト: 5）を追加しました。ClaudeEval がコード内でさらに ClaudeEval/ContinueEval を生成する連鎖呼び出しの上限を制御します。0 で再帰禁止、値を大きくすると多段階の自動タスク連鎖が可能です。
+
+### フォールバックモデル NBAccess 同期
+
+`$ClaudeFallbackModels` の値がパッケージロード時に `NBAccess`NBSetFallbackModels` へ自動同期されるようになりました。これにより NBAccess 側のプロバイダー情報やアクセスレベル判定が常に最新の状態を反映します。
 
 ## 動作要件
 
@@ -13,33 +93,20 @@ Mathematica から Claude Code CLI を呼び出し、コード生成・レビュ
 | Claude Code CLI | 最新版 |
 | OS | Windows 11 |
 
-## 1. 外部ツールのインストール
+## インストール
 
-### Node.js
+### 1. 外部ツールのインストール
 
-[公式サイト](https://nodejs.org/)から LTS 版をダウンロードしてインストールしてください。
-
-```
-node --version
-```
-
-### Claude Code CLI
+[Node.js 公式サイト](https://nodejs.org/)から LTS 版をインストールした後、Claude Code CLI をインストールします。
 
 ```
 npm install -g @anthropic-ai/claude-code
-```
-
-インストール後、以下で認証を済ませてください。
-
-```
 claude auth login
 ```
 
-## 2. パッケージの配置
+### 2. パッケージの配置
 
-`claudecode.wl` と依存パッケージを `$packageDirectory` に配置します。
-
-必要なファイル:
+以下のファイルを `$packageDirectory` に配置してください。
 
 | ファイル | 説明 |
 |---------|------|
@@ -47,81 +114,177 @@ claude auth login
 | `NBAccess.wl` | ノートブック読み書き・プライバシー管理（[GitHub](https://github.com/transreal/NBAccess)） |
 | `github.wl` | GitHub REST API 連携（[GitHub](https://github.com/transreal/github)） |
 
-すべて同一ディレクトリ（`$packageDirectory`）に配置してください。
-
-## 3. パッケージの読み込み
+### 3. パッケージの読み込み
 
 ```mathematica
-(* $packageDirectory が $Path に含まれていることを確認 *)
 AppendTo[$Path, $packageDirectory];
-
-(* UTF-8 で読み込み *)
 Block[{$CharacterEncoding = "UTF-8"},
   Needs["ClaudeCode`", "claudecode.wl"]];
 ```
 
 初回ロード時に `node-pty` が未インストールの場合、自動で `npm install` が実行されます。
 
-## 4. API キーの設定
+### 4. API キーの設定
 
-Claude Code CLI の認証が完了していれば、追加の API キー設定は不要です。
-
-フォールバック機能で Anthropic API や OpenAI API を直接使う場合は、`SystemCredential` に登録してください。
+Claude Code CLI の認証が完了していれば、追加の設定は不要です。フォールバック機能で外部 API を直接使う場合は `SystemCredential` に登録してください。
 
 ```mathematica
 SystemCredential["ANTHROPIC_API_KEY"] = "sk-ant-...";
-(* OpenAI フォールバックを使う場合 *)
-SystemCredential["OPENAI_API_KEY"] = "sk-...";
+SystemCredential["OPENAI_API_KEY"] = "sk-...";   (* OpenAI フォールバック用 *)
 ```
 
-## 5. 主要な設定変数
+## クイックスタート
 
 ```mathematica
-(* 使用モデル（空文字列 = Claude Code デフォルト） *)
-$ClaudeModel = "";
-
-(* タイムアウト秒数 *)
-$ClaudeTimeout = 1200;
-
-(* 作業ディレクトリ（.claude/CLAUDE.md 等の配置先） *)
-$ClaudeWorkingDirectory = FileNameJoin[{$HomeDirectory, "Claude Working"}];
-
-(* Claude Code に Read 許可する追加ディレクトリ *)
-$ClaudeAccessibleDirs = {$packageDirectory};
-
-(* フォールバックモデル優先順位 *)
-$ClaudeFallbackModels = {
-  {"anthropic", "claude-opus-4-6"},
-  {"openai", "gpt-5"}
-};
-```
-
-## 6. 動作確認
-
-```mathematica
-(* 基本的な問い合わせ *)
-ClaudeQuery["1+1 を計算してください"]
+(* 質問する *)
+ClaudeQuery["Wolfram Language で連立方程式を解く方法を教えてください"]
 
 (* コード生成・自動実行 *)
 ClaudeEval["フィボナッチ数列の最初の10項をリストで返す関数"]
 
+(* セッションを分けて作業 *)
+CreateClaudeSession["analysis"]
+ClaudeEval["analysis", "データの基本統計量を計算"]
+
+(* パッケージの新規作成 *)
+ClaudeCreatePackage["MyUtils", "リスト操作ユーティリティ"]
+
+(* パッケージの更新 *)
+ClaudeUpdatePackage["MyUtils", "sortByFrequency関数を追加"]
+
+(* ドキュメント一式を自動生成 *)
+ClaudeCreateDocumentation["MyUtils"]
+
 (* パレット表示 *)
 ShowClaudePalette[]
-
-(* セッション状態の確認 *)
-ClaudeSessionStatus[]
 ```
 
-## 7. トラブルシューティング
+## 主要機能
 
-| 症状 | 対処 |
+### クエリ・コード生成
+
+| 関数 | 説明 |
 |------|------|
-| `node-pty` のビルドエラー | `npm install -g windows-build-tools` を実行後に再ロード |
-| Claude Code CLI が見つからない | `claude --version` で CLI の存在を確認 |
-| 文字化け | `$CharacterEncoding` が `"UTF-8"` であることを確認 |
-| タイムアウト | `$ClaudeTimeout` の値を増やす |
+| `ClaudeQuery[prompt]` | Claude に質問し、マークダウン形式で回答を表示します |
+| `ClaudeEval[task]` | コードを生成・表示し、自動実行します |
+| `ContinueEval[instruction]` | セッションを継続して追加指示を出します |
+| `ClaudeMath[task]` | Mathematica コード生成に特化したプロンプトで呼び出します |
 
-## 関連パッケージ
+### セッション管理
+
+| 関数 | 説明 |
+|------|------|
+| `CreateClaudeSession["name"]` | 名前付きセッションを作成します |
+| `ClaudeRestoreSession["name"]` | セッションをリストアします |
+| `ClaudeListSessions[]` | 全セッション一覧を表示します |
+| `ClaudeShowHistory[]` | セッション履歴を表示します |
+| `ClaudeCompactHistory[]` | 長い履歴を要約圧縮します |
+| `ClaudeSessionStatus[]` | セッション状態を表示します |
+
+### 機密データ管理
+
+| 関数 | 説明 |
+|------|------|
+| `Confidential[expr]` | 式を評価し、セルを自動機密マークします |
+| `NonConfidential[expr]` | 機密マークを明示的に解除して評価します |
+| `MarkConfidential[]` | 現在のセルを機密マークします |
+| `ScanConfidentialCells[]` | 機密変数参照セルを自動スキャンしてマークします |
+
+### パッケージ管理
+
+| 関数 | 説明 |
+|------|------|
+| `ClaudeCreatePackage[name, spec]` | 新しいパッケージを作成します |
+| `ClaudeUpdatePackage[name, instruction]` | パッケージを安全に更新します（排他ロック・バックアップ付き） |
+| `ContinueUpdate[instruction]` | 直前の更新結果を踏まえてバグ修正を継続します |
+| `ClaudeRestorePackage[name]` | バックアップから復元します |
+| `ClaudeBackupDataset[name]` | バックアップ履歴を Grid で表示します |
+
+### ドキュメント生成
+
+| 関数 | 説明 |
+|------|------|
+| `ClaudeCreateDocumentation["name"]` | 包括的ドキュメント一式を自動生成します |
+| `ClaudeUpdateDocumentation["name", "指示"]` | 既存ドキュメントを部分更新します |
+
+### デバッグ・レビュー
+
+| 関数 | 説明 |
+|------|------|
+| `ClaudeDebug[code, error]` | デバッグ支援を非同期で求めます |
+| `ClaudeReview[code]` | コードレビューを非同期実行します |
+| `ClaudeSpec["task"]` | ノートブック内容からプログラム仕様を生成します |
+
+### ディレクティブ管理
+
+| 関数 | 説明 |
+|------|------|
+| `ClaudeAddDirective[target, desc]` | CLAUDE.md やスキルにディレクティブを追加します |
+| `ClaudeUpdateDirective[text]` | テキストを解釈し適切なファイルに反映します |
+| `ClaudeListDirectives[]` | 全ディレクティブの一覧を表示します |
+| `ClaudeDirectiveBackupDataset[]` | ディレクティブ更新履歴を表示します |
+
+### Web 検索・分離検証・その他
+
+| 関数 | 説明 |
+|------|------|
+| `ClaudeWebSearch[query]` | Web 検索を実行して結果をテキストで返します |
+| `ClaudeWebFetch[url]` | URL の内容を取得・要約します |
+| `ClaudeCheckSeparation[target]` | NBAccess 分離原則の違反をチェックします |
+| `ClaudeStatus[]` | 実行中タスクのリアルタイム状態を表示します |
+| `ShowClaudePalette[]` | 操作パレットを表示します |
+
+### 主要な設定変数
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `$ClaudeModel` | `""` | 使用モデル（空文字は CLI デフォルト） |
+| `$ClaudePrivateModel` | `{}` | 秘密データ処理用ローカルモデル |
+| `$ClaudeTimeout` | `1200` | タイムアウト秒数 |
+| `$ClaudeWorkingDirectory` | `~/Claude Working` | 作業ディレクトリ |
+| `$ClaudeFallbackModels` | `{{"anthropic","claude-opus-4-6"},{"openai","gpt-5"}}` | フォールバックモデル優先順位 |
+| `$ClaudeEvalMaxDepth` | `5` | ClaudeEval 再帰深度上限 |
+| `$ClaudeAccessibleDirs` | `{$packageDirectory}` | Read 許可追加ディレクトリ |
+
+## ドキュメント
+
+| ドキュメント | 内容 |
+|-------------|------|
+| [セットアップガイド](docs/setup.md) | インストール・初期設定の詳細 |
+| [API リファレンス](docs/api.md) | 全関数・オプション・使用例 |
+
+## 依存パッケージ
 
 - [NBAccess](https://github.com/transreal/NBAccess) — ノートブックのセル読み書き・プライバシー管理
-- [github](https://github.com/transreal/github) — GitHub REST API 連携
+- [github](https://github.com/transreal/github) (`GitHubREST`) — GitHub REST API 連携・パッケージ管理
+
+## 免責事項
+
+- 本パッケージは Claude Code CLI を Mathematica から呼び出すためのインターフェースです。LLM の出力内容の正確性は保証されません。
+- 生成されたコードは必ず内容を確認してから使用してください。
+- API の利用には各プロバイダーの利用規約が適用されます。
+- 機密データの取り扱いについては、`Confidential`/`AutoPrivate` 機能を活用し、適切なアクセスレベルを設定してください。ただし、完全な情報漏洩防止を保証するものではありません。
+
+## ライセンス
+
+MIT License
+
+Copyright (c) 2025 transreal
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
