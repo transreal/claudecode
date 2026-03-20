@@ -9,8 +9,13 @@ description: Use when ClaudeEval needs to generate code that depends on confiden
 
 ## いつ使うか
 
-- プロンプトで「秘密変数」「Confidential」「依存変数」として除外された変数に依存するコードを書く必要があるとき
-- 変数名は分かるが、Head, Dimensions, Keys, 型情報がプロンプトに含まれていないとき
+- プロンプトの Output 一覧にスキーマ情報が含まれていない秘密変数を使う必要があるとき
+- `$NBSendDataSchema = True` の場合、秘密依存 Output にはスキーマ情報（データ型・キー・サイズ等）が
+  自動的に含まれるため、**まず Output 一覧を確認すること**
+- スキーマ情報が `(* [機密依存データ: Dataset, columns: {学生, 中間成績, 期末成績}] *)` のように
+  表示されている場合、構造調査は不要。そのスキーマ情報を使ってコードを書く
+- Output 一覧にスキーマ情報がない場合（取得失敗、または変数が Output に現れていない場合）のみ、
+  以下の構造調査手順を使う
 
 ## 構造調査コードのパターン
 

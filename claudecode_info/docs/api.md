@@ -46,6 +46,12 @@ ClaudeEval がコード内でさらに ClaudeEval/ContinueEval を生成する�
 ### $ClaudeDocMaxChunkChars
 型: Integer, 初期値: `60000`
 プロンプト中ソースの最大文字数。
+### $ClaudeImageModels
+型: List, 初期値: `{{"openai","gpt-image-1"},{"openai","dall-e-3"}}`
+画像生成モデルのリスト。`{{"provider","model"}, ...}` の形式。
+### $ClaudeTTSModels
+型: List, 初期値: `{{"openai","tts-1-hd"},{"openai","tts-1"}}`
+音声生成モデルのリスト。`{{"provider","model"}, ...}` の形式。
 
 ## クエリ・コード生成
 ### ClaudeQuery[prompt, opts]
@@ -231,24 +237,56 @@ Options: `Fallback -> False`, `References -> {}`, `Demos -> {}`, `Disclaimer -> 
 指示に従ってドキュメントを更新する。ノートブックのコンテキストも参照可能（「上で議論されている内容を反映して」など）。Options は同上。
 例: `ClaudeUpdateDocumentation["claudecode", "api.mdのみ更新して"]`
 
+## AI 画像・音声生成
+### ClaudeImageGenerate[prompt, opts] → Image
+OpenAI Images API で画像を生成し Image オブジェクトで返す。
+Options: `"Model" -> Automatic`, `"Size" -> "1024x1024"`, `"Quality" -> "auto"`, `"N" -> 1`
+`"Model"`: `Automatic` で `$ClaudeImageModels` の先頭モデル。`"gpt-image-1"` または `"dall-e-3"` を指定可能。
+`"Quality"`: gpt-image-1: `"auto"`(default)/`"high"`/`"medium"`/`"low"`。dall-e-3: `"standard"`(default)/`"hd"`。dall-e-3 指定時は `"auto"`→`"standard"`, `"high"`→`"hd"` に自動変換。
+例: `ClaudeImageGenerate["桜の満開の写真"]`
+例: `ClaudeImageGenerate["sunset", "Model" -> "dall-e-3", "Quality" -> "hd"]`
+### ClaudeSpeech[text, opts] → Audio
+OpenAI TTS API で音声を生成し Audio オブジェクトで返す。
+Options: `"Model" -> Automatic`, `"Voice" -> "alloy"`, `"Speed" -> 1.0`
+`"Model"`: `Automatic` で `$ClaudeTTSModels` の先頭モデル。`"tts-1"` または `"tts-1-hd"` を指定可能。
+`"Voice"`: `"alloy"` / `"echo"` / `"fable"` / `"onyx"` / `"nova"` / `"shimmer"`。
+`"Speed"`: 0.25〜4.0。
+例: `ClaudeSpeech["こんにちは、世界"]`
+
 ## ディレクティブ管理
 ### ClaudeAddDirective[target, description, opts]
 Claude で description を整形し、target ファイルに追加する。元ファイルは自動バックアップ。
-Options: `DryRun -> False`（`True` でファイル変更なし）
+Options: `DryRun -> False`, `Scope -> "Global"`
+`DryRun -> True` でファイル変更なし。
+`Scope`: `"Global"` でメインの Claude Directives に書き込み。`"Local"` で NotebookDirectory/.claude-project/ に書き込み（プロジェクト固有ディレクティブ）。
 target は `"CLAUDE.md"` またはスキル名（例: `"wolfram-general"`）。
+例: `ClaudeAddDirective["wolfram-general", "新しいルール", Scope -> "Local"]`
 ### ClaudeRestoreDirective[target]
 直前のバックアップから復元。
 ### ClaudeListDirectives[] → Dataset
 CLAUDE.md と全スキルの一覧を表示する。
 ### ClaudeUpdateDirective[]
 ソースコードと Claude Directives の整合性をチェックし、不整合を自動修正する。
-### ClaudeUpdateDirective[text]
+### ClaudeUpdateDirective[text, opts]
 text を Claude で解釈し CLAUDE.md / rules / skills の適切なファイルに反映する。ノートブックのコンテキストも参照可能。
+Options: `Scope -> "Global"`
+`Scope`: `"Global"` でメインの Claude Directives を更新。`"Local"` で NotebookDirectory/.claude-project/ を更新。
+例: `ClaudeUpdateDirective["新しいルールを追加"]`
+例: `ClaudeUpdateDirective["ローカルルール", Scope -> "Local"]`
 ### ClaudeDirectiveBackupDataset[]
 ディレクティブの更新履歴を Review/Pull/Delete 付き Grid で表示。起動時にローカル最新版のスナップショットを保存。#0行でローカル最新版に復元可能。Pull で巻き戻した後にファイルを編集していた場合、復元時に警告を表示する。
 ### ClaudeSyncDirectives[dir]
 指定ディレクトリ dir のファイルを Claude Directives フォルダと比較し、内容が異なるファイルで Claude Directives を更新する。dir にだけ存在するファイルもコピーする。Claude Directives 側にしかないファイルはそのまま。
 例: `ClaudeSyncDirectives["C:\\Users\\user\\Claude Directives"]`
+### ClaudeInitProject[]
+現在のノートブックのディレクトリにプロジェクト固有の Claude Directives 雛形を作成する。
+.claude-project/CLAUDE.local.md および rules/, skills/ ディレクトリが作成される。
+メインのディレクティブと自動マージされ、次回の ClaudeQuery/ClaudeEval から反映される。
+### ClaudePromoteProjectDirectives[opts]
+プロジェクト固有のディレクティブをグローバルに昇格する。
+.claude-project/ 内の CLAUDE.local.md / rules / skills をメインの Claude Directives にコピーする。
+Options: `DryRun -> False`
+例: `ClaudePromoteProjectDirectives[DryRun -> True]`
 
 ## Web 検索・取得
 ### ClaudeWebSearch[query] → String
@@ -351,6 +389,15 @@ Claude Code CLI は `--output-format stream-json --verbose --include-partial-mes
 2. タイトル保持: CLAUDE.md の先頭 # タイトルが変わっていたら → 拒否
 3. SKILL.md のスキル名保持: name: 行が消滅 → 拒否
 
+## 内部動作: プロジェクト固有ディレクティブ
+
+NotebookDirectory/.claude-project/ にプロジェクト固有のディレクティブを配置し、メインの Claude Directives と自動マージして .claude/ に出力する。
+- `ClaudeInitProject[]` で雛形を作成
+- `ClaudeAddDirective[..., Scope -> "Local"]` でローカルに追加
+- `ClaudeUpdateDirective[..., Scope -> "Local"]` でローカルを更新
+- `ClaudePromoteProjectDirectives[]` でグローバルに昇格
+- マージはタイムスタンプ比較で必要時のみ自動実行される
+
 ## 内部動作: $Language ベースの言語指示
 
 プロンプト内の言語指定は `$Language` に基づいて動的生成される。`iLanguageName[]` が現在の言語名（英語表記）を返し、`iLanguageInstruction[style]` がスタイル別の言語指示文を生成する（"polite" で敬体、"plain" で常体、"general" で汎用指示）。
@@ -358,6 +405,14 @@ Claude Code CLI は `--output-format stream-json --verbose --include-partial-mes
 ## 内部動作: 履歴コンパクション閾値
 
 エントリ数ベース（2n+1+w、n=10, w=2）とサイズベース（`$iHistoryMaxBytes` = 200KB）の二重チェックにより、エントリ数が少なくても巨大な response を持つセッションでのノートブック肥大化・フリーズを防ぐ。
+
+## 内部動作: Think トリガー自動挿入
+
+日本語の励まし表現（「死ぬ気で考えろ」「よく考えて」「考えてみて」等）を検出し、適切な think トリガーワード（ultrathink/think hard/think）をプロンプト先頭に自動挿入する。既に英語の think トリガーが含まれている場合は挿入しない。
+
+## 内部動作: LLM 送信直前の精密チェック
+
+`iPrecisionConfidentialCheck` は ClaudeQuery/ClaudeEval/ContinueEval の直前に呼ばれ、全ノートブックを走査して完全な依存グラフを構築し、秘密依存変数の最終判定を行う。CellEpilog による第1層の橙マーキングは日常の注意喚起として残し、この第2層で精密な除外判定を行う。
 
 ## 依存パッケージ
 

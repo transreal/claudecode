@@ -40,12 +40,6 @@
   1行目をキー（列名）として使用する。ただし、1行目からデータが始まっている場合（1行目と2行目以降が同じタイプの項目）であれば、キーを列番号で生成する。
 - **シートが1枚の場合**（結果リストの長さが1）: `First @ Import[...]` でリストを外し、単一の Dataset を返す。
 - **シートが複数の場合**（結果リストの長さが2以上）: Dataset のリストとしてそのまま返す。
-- 秘密変数として Excel を読み込むときは、`Confidential[...]` でラップした直後に、キー情報を `NonConfidential` で出力する:
-  ```mathematica
-  成績 = Confidential[First @ Import[..., {"Dataset"}]]
-  NonConfidential[Normal[Keys[成績[[1]]]]]
-  ```
-  これにより、秘匿されたデータセットの構造が ClaudeEval / ContinueEval で利用可能になる。
 
 ## パッケージドキュメント参照ルール
 

@@ -24,6 +24,16 @@ ClaudeQuery[session, "前回の結果をもとに改善案を出してくださ�
 
 > `"前回の分析結果を踏まえると…"`
 
+### リッチレスポンスモード
+
+ClaudeQuery の応答にはコードブロックを含めることができます。安全なコード（プロット、計算など）は自動評価されます。
+
+```mathematica
+ClaudeQuery["sin(x) のグラフを描いて特徴を説明してください"]
+```
+
+> テキストの説明に加え、`Plot[Sin[x], ...]` のコードが自動挿入・実行されます。
+
 ---
 
 ## 2. コード生成と自動実行（ClaudeEval）
@@ -44,6 +54,31 @@ ClaudeEval[{"このグラフのトレンドを分析して回帰直線を描い�
 ```
 
 > 画像を解析したコードが生成・実行されます。
+
+### Web 検索付き実行
+
+```mathematica
+ClaudeEval["最新の為替レートを調べて円ドルの推移グラフを作成して",
+  WebFetch -> True]
+```
+
+> Web 検索で最新情報を取得し、コードを生成・実行します。`WebFetch -> Automatic`（デフォルト）では Claude が自動判定します。
+
+### スケジュール実行
+
+```mathematica
+ClaudeEval["サーバーの状態を確認して",
+  StartTime -> Now + Quantity[1, "Hours"]]
+```
+
+> 1時間後に実行されます。
+
+```mathematica
+ClaudeEval["メールを確認して新着を報告して",
+  RepeatInterval -> Quantity[30, "Minutes"]]
+```
+
+> 30分ごとに繰り返し実行されます。`TaskRemove[]` で停止できます。
 
 ### 再帰深度制限
 
@@ -110,6 +145,10 @@ summary = NonConfidential[Length[secretData]]
 ```
 
 > 機密データに依存していても、このセルは公開扱いになります。
+
+### 精密チェック（第2層）
+
+ClaudeQuery/ClaudeEval/ContinueEval の送信直前に、全ノートブックを走査して完全な依存グラフを構築し、秘密依存変数の最終判定を行います。別ノートブック経由の秘密依存も自動検出されます。
 
 ---
 
@@ -330,7 +369,69 @@ ClaudeWebFetch["https://reference.wolfram.com/language/ref/Dataset.html",
 
 ---
 
-## 13. 実行中タスクの監視（ClaudeStatus）
+## 13. AI 画像生成（ClaudeImageGenerate）
+
+OpenAI Images API を使って AI 画像を生成します。
+
+```mathematica
+ClaudeImageGenerate["Cherry blossoms in full bloom with a Japanese castle, photorealistic"]
+```
+
+> Image オブジェクトが返されます。
+
+### モデルとオプションの指定
+
+```mathematica
+(* gpt-image-1 (デフォルト) *)
+ClaudeImageGenerate["夕焼けの海辺", "Quality" -> "high"]
+
+(* dall-e-3 を使用 *)
+ClaudeImageGenerate["sunset over ocean",
+  "Model" -> "dall-e-3", "Size" -> "1792x1024", "Quality" -> "hd"]
+```
+
+> `"Quality"` は gpt-image-1 では `"auto"` / `"high"` / `"medium"` / `"low"`、dall-e-3 では `"standard"` / `"hd"` が利用できます。dall-e-3 指定時は `"auto"` → `"standard"`、`"high"` → `"hd"` に自動変換されます。
+
+### 利用可能なモデルの設定
+
+```mathematica
+$ClaudeImageModels = {{"openai", "gpt-image-1"}, {"openai", "dall-e-3"}}
+```
+
+> ClaudeQuery のリッチレスポンスや ClaudeEval 内でも `ClaudeImageGenerate` が自動的に使用されます。
+
+---
+
+## 14. AI 音声生成（ClaudeSpeech）
+
+OpenAI TTS API を使ってテキストから音声を生成します。
+
+```mathematica
+ClaudeSpeech["こんにちは、世界"]
+```
+
+> Audio オブジェクトが返されます。
+
+### 音声オプションの指定
+
+```mathematica
+ClaudeSpeech["Welcome to the presentation",
+  "Model" -> "tts-1-hd",
+  "Voice" -> "nova",
+  "Speed" -> 1.2]
+```
+
+> `"Voice"` は `"alloy"` / `"echo"` / `"fable"` / `"onyx"` / `"nova"` / `"shimmer"` から選択できます。`"Speed"` は 0.25〜4.0 の範囲で指定します。
+
+### 利用可能なモデルの設定
+
+```mathematica
+$ClaudeTTSModels = {{"openai", "tts-1-hd"}, {"openai", "tts-1"}}
+```
+
+---
+
+## 15. 実行中タスクの監視（ClaudeStatus）
 
 現在実行中の全 Claude タスクのリアルタイム状態を表示します。
 
@@ -342,7 +443,67 @@ ClaudeStatus[]
 
 ---
 
-## 14. ディレクティブ履歴の管理（ClaudeDirectiveBackupDataset）
+## 16. ディレクティブ管理
+
+### プロジェクト固有ディレクティブの初期化（ClaudeInitProject）
+
+現在のノートブックのディレクトリにプロジェクト固有の Claude Directives を初期化します。
+
+```mathematica
+ClaudeInitProject[]
+```
+
+> `.claude-project/CLAUDE.local.md` および `rules/`、`skills/` ディレクトリが作成されます。メインのディレクティブと自動マージされ、次回の ClaudeQuery/ClaudeEval から反映されます。
+
+### ローカルディレクティブの追加（ClaudeAddDirective with Scope）
+
+プロジェクト固有のディレクティブを追加できます。
+
+```mathematica
+(* グローバル（デフォルト） *)
+ClaudeAddDirective["wolfram-general", "日本語変数名を使用しないこと"]
+
+(* プロジェクトローカル *)
+ClaudeAddDirective["CLAUDE.md",
+  "このプロジェクトではデータベース名に 'test_' プレフィックスを付ける",
+  Scope -> "Local"]
+```
+
+> `Scope -> "Local"` を指定すると、`.claude-project/` 内に書き込まれ、そのノートブックのプロジェクトでのみ反映されます。
+
+### ローカルディレクティブのグローバル昇格（ClaudePromoteProjectDirectives）
+
+プロジェクト固有のディレクティブをグローバルに昇格できます。
+
+```mathematica
+(* プレビュー *)
+ClaudePromoteProjectDirectives[DryRun -> True]
+
+(* 実行 *)
+ClaudePromoteProjectDirectives[]
+```
+
+> `.claude-project/` 内の CLAUDE.local.md / rules / skills をメインの Claude Directives にコピーします。
+
+### ディレクティブの自動整合性チェック（ClaudeUpdateDirective）
+
+引数なしで呼ぶと、ソースコードと Claude Directives の整合性をチェックし、不整合を自動修正します。
+
+```mathematica
+ClaudeUpdateDirective[]
+```
+
+> 基盤パッケージ（claudecode, github, NBAccess）の公開関数・オプションを走査し、ディレクティブとの不整合を検出・修正します。
+
+テキスト指示でディレクティブを更新することもできます。
+
+```mathematica
+ClaudeUpdateDirective["Excel インポート時にシートのリストを外すルールを追加して"]
+```
+
+> ノートブックコンテキストも参照でき、「上で議論されている内容を反映して」などの指示も可能です。
+
+### ディレクティブ履歴の管理（ClaudeDirectiveBackupDataset）
 
 Claude Directives の更新履歴を Review/Pull/Delete ボタン付き Grid で表示します。
 
@@ -351,3 +512,42 @@ ClaudeDirectiveBackupDataset[]
 ```
 
 > 起動時にローカル最新版のスナップショットが保存されます。#0 行の「Pull」ボタンでローカル最新版に復元できます。Pull で過去バージョンに巻き戻した後に変更があれば警告が表示されます。
+
+---
+
+## 17. Think トリガー（日本語の励まし表現）
+
+日本語の励まし表現を使うと、自動的に Claude の thinking budget が設定されます。
+
+```mathematica
+ClaudeEval["死ぬ気で考えてバグを直せ"]
+(* → ultrathink が自動挿入される *)
+
+ClaudeEval["よく考えてリファクタリングして"]
+(* → think hard が自動挿入される *)
+
+ClaudeEval["考えてみて最適なアルゴリズムを選んで"]
+(* → think が自動挿入される *)
+```
+
+> ClaudeUpdatePackage 等のコード生成時にも、生成される指示文字列に think トリガーが自動注入されます。
+
+---
+
+## 18. NBAccess 分離検証（ClaudeCheckSeparation / ClaudeFixSeparation）
+
+パッケージコードが NBAccess の分離原則に違反していないか検証します。
+
+```mathematica
+ClaudeCheckSeparation["claudecode"]
+```
+
+> 静的パターン走査と LLM 判定の二段階で違反を検出し、カテゴリ別にリストアップします。
+
+違反が見つかった場合は自動修正できます。
+
+```mathematica
+ClaudeFixSeparation["claudecode"]
+```
+
+> 直前の ClaudeCheckSeparation の結果を利用し、NBAccess の公開 API に置き換えます。パッケージ名の場合は ClaudeUpdatePackage が呼び出されます。

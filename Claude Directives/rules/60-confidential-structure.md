@@ -36,12 +36,15 @@ scores = First @ Import[...];
 NBMarkCellConfidential[EvaluationCell[]]
 ```
 
-## Dataset のキー公開（必須）
-Dataset を秘密変数としてインポートするとき、2つのコードブロックを出力する:
-1. `Confidential[...]` でデータ本体を秘匿
-2. `NonConfidential[Row[{"変数名のキー: ", Normal[Keys[変数名[[1]]]]}, " "]]` でキー情報を公開
+## 秘密変数の構造情報の扱い
 
-これにより後続の ClaudeEval / ContinueEval がキー情報をコンテキストとして利用できる。
+`$NBSendDataSchema = True`（デフォルト）の場合、秘密依存 Output のスキーマ情報（データ型・サイズ・キー等）が
+LLM コンテキストの Output 一覧に自動的に含まれる。例:
+```
+Out[20]= (* [機密依存データ: Dataset, columns: {学生, 中間成績, 期末成績}] *)
+```
+このため、NonConfidential[] でキーを出力する必要はない。
+構造調査コード（Head, Keys, Dimensions 等）は、スキーマ情報が得られない場合のフォールバックとして使用する。
 
 # 機密解除（NonConfidential）
 

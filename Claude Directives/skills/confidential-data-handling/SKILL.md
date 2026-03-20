@@ -39,31 +39,19 @@ n = 1000!;
 NBMarkCellConfidential[EvaluationCell[]]
 ```
 
-## Dataset の秘密インポートとキー公開（必須）
+## 秘密変数の構造情報の自動送信
 
-Excel/CSV 等の Dataset を秘密変数としてインポートするとき、
-**2つのコードブロック** を出力する:
+`$NBSendDataSchema = True`（デフォルト）の場合、秘密依存の Output セルについて
+データ型・サイズ・キー等のスキーマ情報が LLM コンテキストに自動的に含まれる:
 
-1. **Confidential 代入** — データ本体を秘匿
-2. **NonConfidential キー出力** — 列名（キー）のみを機密解除して表示
-
-```mathematica
-(* ブロック1: データ本体を秘匿 *)
-成績 = Confidential[First @ Import[
-  FileNameJoin[{Quiet @ Check[NotebookDirectory[], $packageDirectory], "成績.xlsx"}],
-  {"Dataset"}]]
+```
+Out[20]= (* [機密依存データ: Dataset, columns: {学生, 中間成績, 期末成績}] *)
+Out[5]= (* [機密依存データ: Association, 3 keys: {name, age, salary}] *)
+Out[8]= (* [機密依存データ: List, ~100 elements] *)
 ```
 
-```mathematica
-(* ブロック2: キー情報を機密解除して出力 *)
-NonConfidential[Row[{"成績のキー: ", Normal[Keys[成績[[1]]]]}, " "]]
-```
-
-これにより:
-- データの値は秘匿されたまま
-- 列名のみが Out セルに表示される（機密解除済み）
-- ClaudeEval / ContinueEval がキー情報をコンテキストとして読み取り、
-  秘密データセットに対する関数生成が可能になる
+このため、NonConfidential[] でキーを手動出力する必要はない。
+構造調査コードは、スキーマ情報が得られない場合のフォールバックとして使用する
 
 ## 解釈ガイド
 
