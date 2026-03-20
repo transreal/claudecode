@@ -10,6 +10,8 @@ ClaudeCode は以下の設計原則に基づいています。
 - **多段フォールバック**: Claude Code CLI が利用不可の場合、アクセスレベルに応じたフォールバックモデルに自動切替します。Anthropic API、OpenAI API、LM Studio 等のローカルモデルを順次試行します。
 - **セッション管理**: 会話履歴をノートブックの TaggingRules に永続化し、差分圧縮と自動コンパクションによりストレージを効率的に利用します。
 - **多言語対応**: `$Language` 設定に基づいてプロンプトの言語指示を動的に生成します。日本語・英語等の環境で適切な応答言語が自動選択されます。
+- **AI 生成機能**: OpenAI Images API による画像生成（`ClaudeImageGenerate`）と OpenAI TTS API による音声生成（`ClaudeSpeech`）を統合しています。
+- **プロジェクト固有ディレクティブ**: ノートブックディレクトリごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。
 
 内部的には、[NBAccess](https://github.com/transreal/NBAccess) パッケージにノートブックのセル操作・プライバシー管理・履歴 DB を委譲し、[GitHubREST](https://github.com/transreal/github) パッケージと連携して GitHub 上のパッケージ管理を行います。
 
@@ -59,6 +61,15 @@ $ClaudeTimeout = 1200
 
 (* ClaudeEval 再帰深度上限 *)
 $ClaudeEvalMaxDepth = 5
+
+(* 画像生成モデル *)
+$ClaudeImageModels = {{"openai", "gpt-image-1"}, {"openai", "dall-e-3"}}
+
+(* 音声生成モデル *)
+$ClaudeTTSModels = {{"openai", "tts-1-hd"}, {"openai", "tts-1"}}
+
+(* NotebookDirectory のアクセスレベル *)
+$ClaudeNBDirAccess = "list"  (* "list" | "read" | "readwrite" *)
 ```
 
 ### クイックスタート
@@ -85,6 +96,12 @@ ClaudeUpdatePackage["MyPackage", "エラーハンドリングを改善"]
 
 (* ドキュメント生成 *)
 ClaudeCreateDocumentation["MyPackage"]
+
+(* AI 画像生成 *)
+ClaudeImageGenerate["桜の満開の写真、フォトリアル"]
+
+(* AI 音声生成 *)
+ClaudeSpeech["こんにちは、世界"]
 ```
 
 ### 主な機能
@@ -116,9 +133,13 @@ ClaudeCreateDocumentation["MyPackage"]
 | | `ClaudeHistorySize` | 履歴サイズ診断 |
 | | `ClaudeAttach` / `ClaudeDetach` | 参考資料のアタッチ |
 | **ディレクティブ** | `ClaudeAddDirective` | ルール・スキルの追加 |
-| | `ClaudeUpdateDirective` | ディレクティブの自動整合 |
+| | `ClaudeUpdateDirective` | ディレクティブの自動整合・テキスト指示更新 |
 | | `ClaudeSyncDirectives` | 外部フォルダからの同期 |
 | | `ClaudeDirectiveBackupDataset` | ディレクティブ更新履歴の管理 |
+| | `ClaudeInitProject` | プロジェクト固有ディレクティブの初期化 |
+| | `ClaudePromoteProjectDirectives` | ローカルディレクティブをグローバルに昇格 |
+| **AI 生成** | `ClaudeImageGenerate` | OpenAI Images API で画像生成 |
+| | `ClaudeSpeech` | OpenAI TTS API で音声生成 |
 | **Web** | `ClaudeWebSearch` | Web 検索（Anthropic API） |
 | | `ClaudeWebFetch` | URL 内容取得・要約 |
 | **分離検証** | `ClaudeCheckSeparation` | NBAccess 分離原則の違反検査 |
@@ -135,6 +156,18 @@ ClaudeCode は機密データを含むタスクに対して、自動的にロー
 - **`AutoPrivate -> True`**: 機密変数にアクセスするタスクで自動的にローカルモデルを使用します
 - **`PrivacySpec`**: アクセスレベルを明示的に制御します
 - **3段階フォールバック**: Claude Code CLI → アクセスレベル対応フォールバックモデル → エラーの順で試行します
+
+### NotebookDirectory アクセス制御
+
+`$ClaudeNBDirAccess` により、Claude Code がノートブックディレクトリ内のファイルにアクセスするレベルを制御できます。
+
+| レベル | 説明 |
+|---|---|
+| `"list"` | ファイル一覧のみ表示。読み書き不可（デフォルト） |
+| `"read"` | 読み取り許可 |
+| `"readwrite"` | 読み書き許可 |
+
+`"list"` モードでプロンプトが NotebookDirectory 内のファイルを参照している場合、権限付与ボタンが自動的に表示されます。ユーザーが「Read 許可」または「Read/Write 許可」をクリックすると、`$ClaudeNBDirAccess` が変更されてタスクが再実行されます。
 
 ### パッケージ更新の排他ロック
 
@@ -202,6 +235,100 @@ ClaudeEval["監視タスク", RepeatInterval -> Quantity[2, "Hours"]]
 ClaudeEval["チェック", RepeatInterval -> {Quantity[1, "Hours"], 5}]
 ```
 
+### AI 画像生成
+
+`ClaudeImageGenerate` は OpenAI Images API を使用して AI 画像を生成し、`Image` オブジェクトとして返します。
+
+```mathematica
+(* 基本的な画像生成 *)
+ClaudeImageGenerate["桜の満開の写真、フォトリアル"]
+
+(* モデルとオプション指定 *)
+ClaudeImageGenerate["sunset over ocean",
+  "Model" -> "dall-e-3",
+  "Size" -> "1792x1024",
+  "Quality" -> "hd"]
+```
+
+| オプション | デフォルト | 説明 |
+|---|---|---|
+| `"Model"` | `Automatic` | `"gpt-image-1"` または `"dall-e-3"` |
+| `"Size"` | `"1024x1024"` | 画像サイズ（`"1792x1024"`, `"1024x1792"` も可） |
+| `"Quality"` | `"auto"` | gpt-image-1: `"auto"`/`"high"`/`"medium"`/`"low"`、dall-e-3: `"standard"`/`"hd"` |
+| `"N"` | `1` | 生成枚数 |
+
+dall-e-3 指定時は `"auto"` → `"standard"`、`"high"` → `"hd"` に自動変換されます。`$ClaudeImageModels` でモデルリストをカスタマイズできます。
+
+ClaudeQuery の応答中でも、「AI で画像を生成して」「フォトリアルな写真」などのリクエストに対して自動的に `ClaudeImageGenerate` を含むコードブロックが生成されます。
+
+### AI 音声生成
+
+`ClaudeSpeech` は OpenAI TTS API を使用して音声を生成し、`Audio` オブジェクトとして返します。
+
+```mathematica
+(* 基本的な音声生成 *)
+ClaudeSpeech["こんにちは、世界"]
+
+(* オプション指定 *)
+ClaudeSpeech["Hello, world!",
+  "Model" -> "tts-1-hd",
+  "Voice" -> "nova",
+  "Speed" -> 1.2]
+```
+
+| オプション | デフォルト | 説明 |
+|---|---|---|
+| `"Model"` | `Automatic` | `"tts-1"` または `"tts-1-hd"` |
+| `"Voice"` | `"alloy"` | `"alloy"`, `"echo"`, `"fable"`, `"onyx"`, `"nova"`, `"shimmer"` |
+| `"Speed"` | `1.0` | 読み上げ速度（0.25〜4.0） |
+
+`$ClaudeTTSModels` でモデルリストをカスタマイズできます。ClaudeQuery の応答中でも、「読み上げて」「ナレーション」などのリクエストに対して自動的に `ClaudeSpeech` を含むコードブロックが生成されます。
+
+### プロジェクト固有ディレクティブ
+
+ノートブックごとにプロジェクト固有の Claude Directives を設定できます。メインのグローバルディレクティブと自動マージされ、次回の ClaudeQuery/ClaudeEval から反映されます。
+
+```mathematica
+(* プロジェクト固有ディレクティブを初期化 *)
+ClaudeInitProject[]
+```
+
+`ClaudeInitProject[]` は NotebookDirectory 内に `.claude-project/` ディレクトリを作成し、以下の構造を生成します。
+
+- `.claude-project/CLAUDE.local.md` — プロジェクト固有のルール
+- `.claude-project/rules/` — プロジェクト固有の制約
+- `.claude-project/skills/` — プロジェクト固有のスキル
+
+これらはメインの Claude Directives と自動マージされ、`.claude/` ディレクトリに出力されます。マージはタイムスタンプベースで、ソースが更新された場合のみ再マージされます。
+
+```mathematica
+(* ローカルディレクティブをグローバルに昇格 *)
+ClaudePromoteProjectDirectives[]
+
+(* DryRun でプレビュー *)
+ClaudePromoteProjectDirectives[DryRun -> True]
+```
+
+`ClaudePromoteProjectDirectives[]` は `.claude-project/` 内のディレクティブをメインの Claude Directives フォルダにコピーします。
+
+### ディレクティブのテキスト指示更新
+
+`ClaudeUpdateDirective[text]` は自然言語のテキスト指示を Claude が解釈し、CLAUDE.md / rules / skills の適切なファイルに反映します。
+
+```mathematica
+(* テキスト指示でディレクティブを更新 *)
+ClaudeUpdateDirective["エクセルファイルの読み込み時は必ず UTF-8 でインポートするルールを追加して"]
+
+(* ノートブックのコンテキストも自動参照 *)
+ClaudeUpdateDirective["上で議論されている内容をスキルに反映して"]
+
+(* 引数なし: ソースコードとの整合性チェック *)
+ClaudeUpdateDirective[]
+
+(* プロジェクトローカルに反映 *)
+ClaudeUpdateDirective["このプロジェクト固有のルールを追加", Scope -> "Local"]
+```
+
 ### ディレクティブ書き込みガード
 
 ディレクティブ（CLAUDE.md / rules / skills）の書き込み時には、以下の安全検証が自動的に行われます。
@@ -212,13 +339,25 @@ ClaudeEval["チェック", RepeatInterval -> {Quantity[1, "Hours"], 5}]
 
 ドキュメント書き込み時にも同様のガードが適用され、README.md のタイトルがパッケージ名と一致しない場合やサイズが大幅に縮小する場合は拒否されます。
 
+### Think トリガー自動挿入
+
+日本語の励まし表現が自動的に Claude の思考トリガーに変換されます。
+
+| 日本語表現 | 変換先 | 思考レベル |
+|---|---|---|
+| 死ぬ気で考えろ、本気出せ、全力で、徹底的に | `ultrathink` | 最大（32K トークン） |
+| よく考えて、じっくり、慎重に、がんばれ、丁寧に | `think hard` | 中程度（10K トークン） |
+| 考えてみて、少し考えて | `think` | 基本（4K トークン） |
+
+ClaudeUpdatePackage 等の呼び出し時にも、指示文中の日本語表現が自動的にトリガーワードに変換されます。
+
 ### ドキュメント一覧
 
 | ファイル | 内容 |
 |---|---|
-| `README.md` | パッケージ概要・セットアップ手順（本ファイル） |
+| `README.md` | パッケージ概要・セットアップ手順 |
 | `api.md` | 全公開関数の API リファレンス |
-| `user_manual.md` | 使い方・設定・具体例 |
+| `user_manual.md` | 使い方・設定・具体例（本ファイル） |
 | `architecture.md` | 内部アーキテクチャの解説 |
 | `setup.md` | インストール手順書 |
 | `examples/example.md` | 使用例集 |

@@ -34,6 +34,18 @@ ClaudeQuery["sin(x) のグラフを描いて特徴を説明してください"]
 
 > テキストの説明に加え、`Plot[Sin[x], ...]` のコードが自動挿入・実行されます。
 
+### モデル・プライバシー指定
+
+特定のモデルやプライバシーレベルを指定して問い合わせることもできます。
+
+```mathematica
+ClaudeQuery["秘密データの統計を教えて",
+  Model -> {"lmstudio", "local-model", "http://127.0.0.1:1234"},
+  PrivacySpec -> <|"AccessLevel" -> 1.0|>]
+```
+
+> 指定したモデルに直接ルーティングされ、Claude Code を経由しません。
+
 ---
 
 ## 2. コード生成と自動実行（ClaudeEval）
@@ -79,6 +91,13 @@ ClaudeEval["メールを確認して新着を報告して",
 ```
 
 > 30分ごとに繰り返し実行されます。`TaskRemove[]` で停止できます。
+
+```mathematica
+ClaudeEval["レポートを生成して",
+  RepeatInterval -> {Quantity[1, "Hours"], 5}]
+```
+
+> 1時間ごとに最大5回実行されます。
 
 ### 再帰深度制限
 
@@ -149,6 +168,16 @@ summary = NonConfidential[Length[secretData]]
 ### 精密チェック（第2層）
 
 ClaudeQuery/ClaudeEval/ContinueEval の送信直前に、全ノートブックを走査して完全な依存グラフを構築し、秘密依存変数の最終判定を行います。別ノートブック経由の秘密依存も自動検出されます。
+
+### 機密変数の構造情報
+
+`$NBSendDataSchema` が有効な場合（デフォルト）、機密依存の出力にはスキーマ情報が自動付与されます。
+
+```mathematica
+(* 出力例: (* [機密依存データ: Association, 3 keys: {name, age, salary}] *) *)
+```
+
+> これにより ClaudeEval は変数の構造を把握でき、プロービングなしでコードを生成できます。
 
 ---
 
@@ -254,6 +283,14 @@ ClaudeRestorePackage["myUtils"]
 ContinueUpdate[]                          (* デフォルト指示で継続 *)
 ContinueUpdate["境界線が欠けているので修正して"]  (* 追加指示付き *)
 ContinueUpdate["myUtils", "エラー処理を追加して"]  (* パッケージ名指定 *)
+```
+
+### api.md の自動更新
+
+ClaudeUpdatePackage / ClaudeCreatePackage の完了後、api.md が自動的に更新されます。`"UpdateApiMd" -> False` で無効化できます。
+
+```mathematica
+ClaudeUpdatePackage["myUtils", "修正指示", "UpdateApiMd" -> False]
 ```
 
 ---
@@ -503,6 +540,14 @@ ClaudeUpdateDirective["Excel インポート時にシートのリストを外す
 
 > ノートブックコンテキストも参照でき、「上で議論されている内容を反映して」などの指示も可能です。
 
+### ローカルスコープでのディレクティブ更新
+
+```mathematica
+ClaudeUpdateDirective["このプロジェクト用のルールを追加して", Scope -> "Local"]
+```
+
+> `.claude-project/` 内のディレクティブが更新され、メインには影響しません。
+
 ### ディレクティブ履歴の管理（ClaudeDirectiveBackupDataset）
 
 Claude Directives の更新履歴を Review/Pull/Delete ボタン付き Grid で表示します。
@@ -512,6 +557,16 @@ ClaudeDirectiveBackupDataset[]
 ```
 
 > 起動時にローカル最新版のスナップショットが保存されます。#0 行の「Pull」ボタンでローカル最新版に復元できます。Pull で過去バージョンに巻き戻した後に変更があれば警告が表示されます。
+
+### 外部ディレクトリとの同期（ClaudeSyncDirectives）
+
+外部の Claude Directives フォルダとの同期を行います。
+
+```mathematica
+ClaudeSyncDirectives["C:\\Users\\user\\Claude Directives"]
+```
+
+> dir 側の方が新しいファイル、または dir にだけ存在するファイルをコピーします。内容が同一のファイルはスキップされます。
 
 ---
 
@@ -544,6 +599,18 @@ ClaudeCheckSeparation["claudecode"]
 
 > 静的パターン走査と LLM 判定の二段階で違反を検出し、カテゴリ別にリストアップします。
 
+検出対象のカテゴリ:
+- a: SystemCredential 直接利用
+- b: CellObject 直接操作（NotebookWrite/NotebookRead/CellGroupData 直接構築）
+- c: CellEpilog/CellProlog/NotebookEventActions 直接操作
+- d: NBAccess`Private` 関数呼び出し
+- e: NBAccess 公開グローバル直接更新
+- f: EvaluationCell[]/CellPrint[]/SetSelectedNotebook[] 直接使用
+- g: CurrentValue/SetOptions による TaggingRules/CellTags/CellEpilog 属性直接アクセス
+- h: CellObject の公開 API・戻り値・状態保持への漏洩
+- i: SelectionEvaluate/FrontEndTokenExecute 等 FE 状態操作
+- j: NBAccess 公開グローバルの破壊的更新（AppendTo/AssociateTo 等）
+
 違反が見つかった場合は自動修正できます。
 
 ```mathematica
@@ -551,3 +618,116 @@ ClaudeFixSeparation["claudecode"]
 ```
 
 > 直前の ClaudeCheckSeparation の結果を利用し、NBAccess の公開 API に置き換えます。パッケージ名の場合は ClaudeUpdatePackage が呼び出されます。
+
+---
+
+## 19. NotebookDirectory アクセス制御
+
+`$ClaudeNBDirAccess` でノートブックディレクトリのアクセスレベルを制御します。
+
+```mathematica
+(* デフォルト: ファイル一覧のみ表示 *)
+$ClaudeNBDirAccess = "list"
+
+(* 読み取り許可 *)
+$ClaudeNBDirAccess = "read"
+
+(* 読み書き許可 *)
+$ClaudeNBDirAccess = "readwrite"
+```
+
+> `"list"` モードでプロンプトが NotebookDirectory 内のファイルを参照している場合、権限付与ボタンが自動表示されます。
+
+---
+
+## 20. Claude Code CLI コマンド実行（ClaudeCommand）
+
+Claude Code CLI のスラッシュコマンドやサブコマンドを Mathematica から実行できます。
+
+```mathematica
+ClaudeCommand["/help"]         (* ヘルプ表示 *)
+ClaudeCommand["/permissions"]  (* ファイルアクセス権限 *)
+ClaudeCommand["/model"]        (* モデル情報 *)
+ClaudeCommand["--version"]     (* バージョン表示 *)
+ClaudeCommand["config list"]   (* 設定一覧 *)
+```
+
+> スラッシュコマンド（`/` 始まり）は node-pty 経由で対話モードに送信され、CLI サブコマンドは直接実行されます。
+
+---
+
+## 21. ドキュメント生成と更新
+
+### ドキュメント自動生成（ClaudeCreateDocumentation）
+
+パッケージの包括的なドキュメント一式を自動生成します。
+
+```mathematica
+ClaudeCreateDocumentation["myUtils"]
+```
+
+> setup.md, user_manual.md, api.md, examples/example.md, README.md が順次生成されます。リミット到達時は自動停止し、再実行で未生成分のみ続行します。
+
+### オプション付きドキュメント生成
+
+```mathematica
+ClaudeCreateDocumentation["myUtils",
+  References -> {"https://reference.wolfram.com/...", "参考書籍名"},
+  Demos -> {"https://youtu.be/demo_video"},
+  Disclaimer -> {"本ツールは研究目的専用です"},
+  License -> "MIT"]
+```
+
+> 参考文献、デモ動画、免責事項、ライセンスが README.md に自動挿入されます。これらのオプションは `_info/references/doc_options.json` に永続化され、次回の更新時にも引き継がれます。
+
+### ドキュメント差分更新（ClaudeUpdateDocumentation）
+
+ソースコードの変更を自動検出してドキュメントを更新します。
+
+```mathematica
+(* 自動差分検出 *)
+ClaudeUpdateDocumentation["myUtils"]
+
+(* 指示付き更新 *)
+ClaudeUpdateDocumentation["myUtils", "api.md のみ更新して"]
+```
+
+> ノートブックのコンテキストも参照可能（「上で議論されている内容を反映して」などの指示も可能）。
+
+---
+
+## 22. シンボル参照（<<変数名>> 記法）
+
+プロンプト中で `<<変数名>>` と書くと、ノートブックカーネル内のシンボル情報が自動展開されます。
+
+```mathematica
+ClaudeEval["<<data>> の最初の10行を表示して"]
+```
+
+> `data` の型、次元、キー、プレビュー値がプロンプト末尾に自動付加されます。機密変数の場合は構造情報のみ（値は除外）が付加されます。
+
+---
+
+## 23. パッケージ新規作成（ClaudeCreatePackage）
+
+新しいパッケージを仕様指示から自動生成します。
+
+```mathematica
+ClaudeCreatePackage["MyCalculator",
+  "四則演算と三角関数をサポートする関数電卓パッケージ。
+   calculate[expr] で式を評価し、history[] で計算履歴を表示する。"]
+```
+
+> `$packageDirectory/MyCalculator.wl` が生成され、自動ロードされます。
+
+---
+
+## 24. Paclet 変換（ClaudeConvertToPaclet）
+
+単一 .wl ファイルのパッケージを Paclet 形式に変換します。
+
+```mathematica
+ClaudeConvertToPaclet["myUtils"]
+```
+
+> `myUtils/` ディレクトリに PacletInfo.wl, Kernel/, Documentation/, Tests/ 等が生成されます。元の .wl ファイルはバックアップ後に削除されます。

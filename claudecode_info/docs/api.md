@@ -26,6 +26,11 @@ Claude Code を起動する作業ディレクトリ。このディレクトリ�
 ### $ClaudeAccessibleDirs
 型: List, 初期値: `{$packageDirectory}`
 Claude Code に Read 許可する追加ディレクトリ。ノートブックの TaggingRules にも NBSetAccessibleDirs で永続化可能。
+### $ClaudeNBDirAccess
+型: String, 初期値: `"list"`
+NotebookDirectory のアクセスレベルを制御する。
+`"list"` — ファイル一覧のみ表示、読み書き不可（デフォルト）。`"read"` — 読み取り許可。`"readwrite"` — 読み書き許可。
+ClaudeQuery/ClaudeEval でファイル読み取りが必要な場合、`"list"` モードでは権限付与ボタンが表示される。
 ### $ClaudeFallbackModels
 型: List, 初期値: `{{"anthropic","claude-opus-4-6"},{"openai","gpt-5"}}`
 フォールバックモデル優先順位。各要素は `{"provider","model"}` または `{"provider","model","customURL"}`。
@@ -46,6 +51,12 @@ ClaudeEval がコード内でさらに ClaudeEval/ContinueEval を生成する�
 ### $ClaudeDocMaxChunkChars
 型: Integer, 初期値: `60000`
 プロンプト中ソースの最大文字数。
+### $ClaudeImageModels
+型: List, 初期値: `{{"openai","gpt-image-1"},{"openai","dall-e-3"}}`
+画像生成モデルのリスト。`{{"provider","model"}, ...}` の形式。
+### $ClaudeTTSModels
+型: List, 初期値: `{{"openai","tts-1-hd"},{"openai","tts-1"}}`
+音声生成モデルのリスト。`{{"provider","model"}, ...}` の形式。
 
 ## クエリ・コード生成
 ### ClaudeQuery[prompt, opts]
@@ -231,24 +242,53 @@ Options: `Fallback -> False`, `References -> {}`, `Demos -> {}`, `Disclaimer -> 
 指示に従ってドキュメントを更新する。ノートブックのコンテキストも参照可能（「上で議論されている内容を反映して」など）。Options は同上。
 例: `ClaudeUpdateDocumentation["claudecode", "api.mdのみ更新して"]`
 
+## 画像・音声生成
+### ClaudeImageGenerate[prompt, opts] → Image
+OpenAI Images API で画像を生成し Image オブジェクトで返す。
+Options: `"Model" -> Automatic`, `"Size" -> "1024x1024"`, `"Quality" -> "auto"`, `"N" -> 1`
+`"Model"`: `Automatic` で `$ClaudeImageModels` の先頭（デフォルト `"gpt-image-1"`）。`"dall-e-3"` も指定可能。
+`"Quality"`: gpt-image-1 では `"auto"` | `"high"` | `"medium"` | `"low"`。dall-e-3 では `"standard"` | `"hd"`（`"auto"` → `"standard"`, `"high"` → `"hd"` に自動変換）。
+例: `ClaudeImageGenerate["桜の満開の写真"]`
+例: `ClaudeImageGenerate["sunset", "Model" -> "dall-e-3", "Quality" -> "hd"]`
+### ClaudeSpeech[text, opts] → Audio
+OpenAI TTS API で音声を生成し Audio オブジェクトで返す。
+Options: `"Model" -> Automatic`, `"Voice" -> "alloy"`, `"Speed" -> 1.0`
+`"Model"`: `Automatic` で `$ClaudeTTSModels` の先頭（デフォルト `"tts-1-hd"`）。`"tts-1"` も指定可能。
+`"Voice"`: `"alloy"` | `"echo"` | `"fable"` | `"onyx"` | `"nova"` | `"shimmer"`
+`"Speed"`: 0.25〜4.0
+例: `ClaudeSpeech["こんにちは、世界"]`
+例: `ClaudeSpeech["Hello", "Model" -> "tts-1", "Voice" -> "nova"]`
+
 ## ディレクティブ管理
 ### ClaudeAddDirective[target, description, opts]
 Claude で description を整形し、target ファイルに追加する。元ファイルは自動バックアップ。
-Options: `DryRun -> False`（`True` でファイル変更なし）
+Options: `DryRun -> False`, `Scope -> "Global"`
 target は `"CLAUDE.md"` またはスキル名（例: `"wolfram-general"`）。
+`Scope -> "Local"` でプロジェクトローカルディレクティブ（.claude-project/）に書き込む。`Scope -> "Global"` でメインの Claude Directives フォルダに書き込む。
 ### ClaudeRestoreDirective[target]
 直前のバックアップから復元。
 ### ClaudeListDirectives[] → Dataset
 CLAUDE.md と全スキルの一覧を表示する。
 ### ClaudeUpdateDirective[]
 ソースコードと Claude Directives の整合性をチェックし、不整合を自動修正する。
-### ClaudeUpdateDirective[text]
+### ClaudeUpdateDirective[text, opts]
 text を Claude で解釈し CLAUDE.md / rules / skills の適切なファイルに反映する。ノートブックのコンテキストも参照可能。
+Options: `Scope -> "Global"`
+`Scope -> "Local"` でプロジェクトローカルディレクティブに書き込む。
 ### ClaudeDirectiveBackupDataset[]
 ディレクティブの更新履歴を Review/Pull/Delete 付き Grid で表示。起動時にローカル最新版のスナップショットを保存。#0行でローカル最新版に復元可能。Pull で巻き戻した後にファイルを編集していた場合、復元時に警告を表示する。
 ### ClaudeSyncDirectives[dir]
 指定ディレクトリ dir のファイルを Claude Directives フォルダと比較し、内容が異なるファイルで Claude Directives を更新する。dir にだけ存在するファイルもコピーする。Claude Directives 側にしかないファイルはそのまま。
 例: `ClaudeSyncDirectives["C:\\Users\\user\\Claude Directives"]`
+### ClaudeInitProject[] → String
+現在のノートブックのディレクトリにプロジェクト固有の Claude Directives 雛形を作成する。
+`.claude-project/CLAUDE.local.md` および `rules/`, `skills/` ディレクトリが作成される。
+メインのディレクティブと自動マージされ、次回の ClaudeQuery/ClaudeEval から反映される。
+### ClaudePromoteProjectDirectives[opts]
+プロジェクト固有のディレクティブをグローバルに昇格する。
+`.claude-project/` 内の `CLAUDE.local.md` / `rules` / `skills` をメインの Claude Directives にコピーする。
+Options: `DryRun -> False`
+`DryRun -> True` でプレビューのみ。
 
 ## Web 検索・取得
 ### ClaudeWebSearch[query] → String
@@ -351,13 +391,32 @@ Claude Code CLI は `--output-format stream-json --verbose --include-partial-mes
 2. タイトル保持: CLAUDE.md の先頭 # タイトルが変わっていたら → 拒否
 3. SKILL.md のスキル名保持: name: 行が消滅 → 拒否
 
+## 内部動作: プロジェクト固有ディレクティブとマージ
+
+`ClaudeInitProject[]` で `NotebookDirectory/.claude-project/` にプロジェクトローカルのディレクティブ雛形を作成する。メインの Claude Directives と自動マージされ、`NotebookDirectory/.claude/` に出力される。マージはタイムスタンプ比較により必要時のみ実行される。`ClaudePromoteProjectDirectives[]` でローカルディレクティブをグローバルに昇格できる。
+
+## 内部動作: NotebookDirectory アクセス制御
+
+`$ClaudeNBDirAccess` が `"list"` のとき、プロンプトが NotebookDirectory 内のファイルを参照していれば権限付与ボタンを表示して一時停止する。ユーザーが `"read"` または `"readwrite"` を選択すると `$ClaudeNBDirAccess` を更新し、元のクエリを再実行する。
+
 ## 内部動作: $Language ベースの言語指示
 
 プロンプト内の言語指定は `$Language` に基づいて動的生成される。`iLanguageName[]` が現在の言語名（英語表記）を返し、`iLanguageInstruction[style]` がスタイル別の言語指示文を生成する（"polite" で敬体、"plain" で常体、"general" で汎用指示）。
 
+## 内部動作: Think トリガー自動挿入
+
+日本語の励まし表現（「死ぬ気で考えろ」「じっくり考えて」「考えてみて」等）を検出し、対応する think トリガーワード（ultrathink / think hard / think）をプロンプト先頭に自動挿入する。既に英語の think トリガーが含まれている場合はスキップする。
+
 ## 内部動作: 履歴コンパクション閾値
 
 エントリ数ベース（2n+1+w、n=10, w=2）とサイズベース（`$iHistoryMaxBytes` = 200KB）の二重チェックにより、エントリ数が少なくても巨大な response を持つセッションでのノートブック肥大化・フリーズを防ぐ。
+
+## 内部動作: ドキュメント書き込みガード
+
+`iSafeWriteDoc` はドキュメントファイルの破損を防止するガードを備える:
+1. ポジティブ検証: Markdown ヘッダーを含む有効なドキュメント内容か
+2. サイズ退行: 既存の 40% 未満に縮小 → 拒否
+3. タイトル整合性: README.md の先頭 # タイトルがパッケージ名と不一致 → 拒否
 
 ## 依存パッケージ
 

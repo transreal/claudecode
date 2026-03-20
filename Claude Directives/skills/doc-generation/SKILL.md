@@ -182,6 +182,26 @@ README.md は以下の構造を**この順序で**持たなければならない
 
 第二引数の指示文中に URL が含まれていれば、自動的に `Demos` に追加される。
 
+## トークン消費の最適化
+
+### $ClaudeDocModel（ドキュメント専用モデル）
+- デフォルト: `"claude-sonnet-4-20250514"` — ドキュメント生成は Sonnet クラスで十分
+- `$ClaudeDocModel = ""` で `$ClaudeModel` と同じモデルを使用
+- Create/Update/AutoApiUpdate の全フローで自動適用される
+
+### ソースコードのチャンク化
+- Update 流でも `iBuildChunkedSource` によるチャンク化を適用（以前はソース全文を毎回送信していた）
+- 公開部分 + ドキュメント種別に関連するセクションのみを送信
+- 550KB のソースが 60KB 以下に圧縮される
+
+### 狭いスコープの更新指示
+- `iIsNarrowScopeInstruction` がライセンス・免責・謝辞のみの更新を検出
+- 該当する場合、README.md 更新時に兄弟ドキュメントの参照を省略（さらに 16KB 節約）
+
+### iGuessTargetDocs のフォールバック
+- キーワードにマッチしない場合、全ファイルではなく README.md のみを対象にする
+- 全ファイル更新が必要な場合は 1引数版 `ClaudeUpdateDocumentation["pkg"]` を使用する
+
 ## 文体ルール（必須）
 
 | ドキュメント | 文体 | 理由 |

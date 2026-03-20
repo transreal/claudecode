@@ -38,6 +38,7 @@ Scan[
    "$ClaudeTestModel",
    "$ClaudeFallbackModels", "$ClaudeWorkingDirectory", "$ClaudeAccessibleDirs",
    "$ClaudeDocRetryDelay", "$ClaudeDocMaxRetries", "$ClaudeDocMaxChunkChars",
+   "$ClaudeDocModel",
    "$ClaudePrivateModel",
    "Fallback", "AutoPrivate", "References", "Demos", "Disclaimer", "Acknowledgments"}
 ];
@@ -147,6 +148,13 @@ iSyncFallbackModelsToNBAccess[];
 If[!NumericQ[$ClaudeDocRetryDelay], $ClaudeDocRetryDelay = 60];
 If[!IntegerQ[$ClaudeDocMaxRetries], $ClaudeDocMaxRetries = 3];
 If[!IntegerQ[$ClaudeDocMaxChunkChars], $ClaudeDocMaxChunkChars = 60000];
+
+$ClaudeDocModel::usage =
+  "$ClaudeDocModel \:306f\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:30fb\:66f4\:65b0\:6642\:306b\:4f7f\:7528\:3059\:308b\:30e2\:30c7\:30eb\:3002\n" <>
+  "\:30c7\:30d5\:30a9\:30eb\:30c8: \"claude-sonnet-4-20250514\" (Sonnet \:30af\:30e9\:30b9\:3067\:5341\:5206\:304b\:3064\:5b89\:4fa1)\:3002\n" <>
+  "\"\" \:3067 $ClaudeModel \:3068\:540c\:3058\:30e2\:30c7\:30eb\:3092\:4f7f\:7528\:3002\n" <>
+  "\:4f8b: $ClaudeDocModel = \"claude-sonnet-4-20250514\"";
+If[!StringQ[$ClaudeDocModel], $ClaudeDocModel = "claude-sonnet-4-20250514"];
 
 $ClaudeEvalMaxDepth::usage =
   "$ClaudeEvalMaxDepth \:306f ClaudeEval \:304c\:518d\:5e30\:7684\:306b ClaudeEval \:3092\:751f\:6210\:3059\:308b\:969b\:306e\:6700\:5927\:6df1\:5ea6\:3002\:30c7\:30d5\:30a9\:30eb\:30c8 5\:3002\n" <>
@@ -7144,6 +7152,32 @@ iReadDesignMemos[packageName_String] :=
     content
   ];
 
+(* ドキュメント生成用モデルオーバーライド: $ClaudeDocModel が設定されていればそちらを使用 *)
+iDocModelOverride[] :=
+  If[StringQ[$ClaudeDocModel] && $ClaudeDocModel =!= "",
+    $ClaudeDocModel, $ClaudeModel];
+
+(* 更新指示が狭いスコープ（ライセンス・免責・謝辞のみ）かを判定 *)
+iIsNarrowScopeInstruction[instruction_String] :=
+  AnyTrue[{"\:30e9\:30a4\:30bb\:30f3\:30b9", "License", "\:514d\:8cac", "Disclaimer", "\:8b1d\:8f9e", "Acknowledgment"},
+    StringContainsQ[instruction, #, IgnoreCase -> True] &] &&
+  !AnyTrue[{"\:95a2\:6570", "API", "\:6a5f\:80fd", "\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb", "\:4f7f\:3044\:65b9", "\:4f8b"},
+    StringContainsQ[instruction, #, IgnoreCase -> True] &];
+
+(* 差分が小さい場合のコンパクトなソースコンテキスト生成 *)
+iCompactSourceForUpdate[sourceCode_String, split_Association, docFile_String,
+    diffText_String] :=
+  Module[{diffLineCount, added, removed},
+    (* 差分行数を推定 *)
+    added = StringCount[diffText, "\n", Overlaps -> False];
+    (* 差分が小さい（< 200行）場合はチャンク化ソースで十分 *)
+    If[added < 200 && docFile =!= "api.md",
+      iBuildChunkedSource[split, docFile],
+      (* api.md または大きな差分: フルソースだがチャンク化 *)
+      iBuildChunkedSource[split, docFile]
+    ]
+  ];
+
 (* 謝辞セクションのプロンプト *)
 iDocBuildAcknowledgmentsPrompt[] :=
   Module[{items},
@@ -7424,12 +7458,16 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       "Do NOT include ===BEGIN=== / ===END=== markers.\n\n" <>
       "=== PACKAGE SOURCE CODE (chunked) ===\n" <> chunked
     ];
+    (* ドキュメント生成用モデルでクエリ実行 *)
+    Module[{savedModel = $ClaudeModel},
+    $ClaudeModel = iDocModelOverride[];
     iClaudeQueryAsyncWithProgress[fullPrompt,
       With[{nb2 = nb, od = outDir, q = queue, i = idx,
             of = outFile, dt = docTitle, sc = sourceCode, pn = packageName,
-            rc = retryCount, sp = split},
+            rc = retryCount, sp = split, origModel = savedModel},
         Function[response,
           Module[{destPath, writeResult},
+            $ClaudeModel = origModel;
             destPath = FileNameJoin[{od, of}];
             writeResult = iSafeWriteDoc[destPath, response];
             If[writeResult =!= $Failed,
@@ -7462,6 +7500,7 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         ]
       ],
       nb]
+    ] (* end Module savedModel *)
   ];
 
 (* ============================================================
@@ -7739,9 +7778,12 @@ iGuessTargetDocs[instruction_String, docsDir_String] :=
          AnyTrue[keywords, StringContainsQ[instruction, #, IgnoreCase -> True] &],
         AppendTo[hits, docFile]],
     {docFile, Keys[$iDocKeywords]}, {keywords, {$iDocKeywords[docFile]}}];
-    (* \:8a72\:5f53\:306a\:3057\:306a\:3089\:5168\:65e2\:5b58\:30d5\:30a1\:30a4\:30eb\:3092\:5bfe\:8c61 *)
+    (* 該当なしなら警告して README.md のみを対象にする（全ファイル更新を防止） *)
     If[Length[hits] === 0,
-      hits = Select[Keys[$iDocKeywords],
+      Print[Style["\:8b66\:544a: \:66f4\:65b0\:5bfe\:8c61\:3092\:81ea\:52d5\:5224\:5b9a\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002README.md \:306e\:307f\:66f4\:65b0\:3057\:307e\:3059\:3002\n" <>
+        "\:5168\:30d5\:30a1\:30a4\:30eb\:3092\:66f4\:65b0\:3059\:308b\:306b\:306f 1\:5f15\:6570\:7248 ClaudeUpdateDocumentation[\"pkg\"] \:3092\:4f7f\:7528\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+        FontColor -> RGBColor[0.8, 0.4, 0]]];
+      hits = Select[{"README.md"},
         FileExistsQ[FileNameJoin[{docsDir, #}]] &]];
     iEnsureReadmeLast[DeleteDuplicates[hits]]
   ];
@@ -7976,11 +8018,12 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       diffText, srcFile]
   ]]);
 
-(* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:9806\:6b21\:66f4\:65b0\:3059\:308b\:518d\:5e30\:95a2\:6570 (\:5dee\:5206\:5bfe\:5fdc\:7248) *)
+(* ドキュメントを順次更新する再帰関数 (差分対応版・トークン節約版) *)
 iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     docsDir_String, instruction_String, targetDocs_List, idx_Integer,
-    diffText_String:"", srcFile_String:""] :=
-  Module[{docFile, docPath, currentContent, fullPrompt, histDir},
+    diffText_String:"", srcFile_String:"", splitCache_Association:<||>] :=
+  Module[{docFile, docPath, currentContent, fullPrompt, histDir,
+          split, chunkedSource, narrowQ, savedModel},
     If[idx > Length[targetDocs],
       (* 全ドキュメント更新完了 → バックアップ作成 *)
       If[StringQ[srcFile] && srcFile =!= "",
@@ -7993,14 +8036,22 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     docFile = targetDocs[[idx]];
     docPath = FileNameJoin[{docsDir, docFile}];
     currentContent = If[FileExistsQ[docPath], Import[docPath, "Text"], ""];
+    (* ソース分割キャッシュ（初回のみ計算） *)
+    split = If[splitCache =!= <||>, splitCache, iSplitSource[sourceCode]];
+    (* ドキュメント種別ごとにチャンク化ソースを構築（トークン節約の核心） *)
+    chunkedSource = iBuildChunkedSource[split, docFile];
+    narrowQ = iIsNarrowScopeInstruction[instruction];
     nbPrint[nb, "\:2500 [" <> ToString[idx] <> "/" <> ToString[Length[targetDocs]] <>
-      "] " <> docFile <> " \:3092\:66f4\:65b0\:4e2d..."];
+      "] " <> docFile <> " \:3092\:66f4\:65b0\:4e2d... (\:30bd\:30fc\:30b9 " <>
+      ToString[StringLength[sourceCode]] <> " \:2192 " <>
+      ToString[StringLength[chunkedSource]] <> " chars, \:30e2\:30c7\:30eb: " <>
+      iDocModelOverride[] <> ")"];
     fullPrompt =
       "You are an expert Wolfram Language / Mathematica documentation writer.\n" <>
       "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n" <>
-      "You are updating the documentation for package \"" <> packageName <> "\".\n\n" <>
+      "You are updating the documentation for package \"" <> packageName <> "\"\n\n" <>
       "UPDATE INSTRUCTION:\n" <> instruction <> "\n\n" <>
-      (* \:5dee\:5206\:304c\:3042\:308c\:3070\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:542b\:3081\:308b *)
+      (* 差分があればプロンプトに含める *)
       If[StringQ[diffText] && diffText =!= "" && diffText =!= "(\:5909\:66f4\:306a\:3057)",
         "SOURCE CODE DIFF (since last documentation update):\n" <>
         "Focus your updates on these changed parts.\n" <>
@@ -8011,24 +8062,28 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         currentContent, "(empty)"] <> "\n\n" <>
       (* README.md 更新時は他ドキュメント・免責事項・ライセンス・参考文献・GitHub URL を含める *)
       If[docFile === "README.md",
-        (* 他の全ドキュメントの最新内容を参照コンテキストとして挿入 *)
-        Module[{siblingDocs, siblingContent = ""},
-          siblingDocs = Join[
-            FileNames["*.md", docsDir],
-            FileNames["*.md", docsDir, 2]];
-          siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
-          siblingDocs = DeleteDuplicates[siblingDocs];
-          If[Length[siblingDocs] > 0,
-            siblingContent = "\n=== OTHER DOCUMENTATION FILES (just updated — use as reference for README overview) ===\n" <>
-              StringJoin[
-                Module[{relPath, txt},
-                  relPath = StringReplace[#,
-                    docsDir <> $PathnameSeparator -> ""];
-                  txt = Quiet @ Check[Import[#, "Text"], ""];
-                  If[StringQ[txt],
-                    "--- " <> relPath <> " ---\n" <> StringTake[txt, UpTo[4000]] <> "\n\n",
-                    ""]] & /@ siblingDocs]];
-          siblingContent] <>
+        (* 狭いスコープの指示（ライセンス変更等）では兄弟ドキュメントを省略 *)
+        If[narrowQ,
+          "(Sibling documentation files omitted \:2014 narrow-scope update)\n",
+          (* 他の全ドキュメントの最新内容を参照コンテキストとして挿入 *)
+          Module[{siblingDocs, siblingContent = ""},
+            siblingDocs = Join[
+              FileNames["*.md", docsDir],
+              FileNames["*.md", docsDir, 2]];
+            siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
+            siblingDocs = DeleteDuplicates[siblingDocs];
+            If[Length[siblingDocs] > 0,
+              siblingContent = "\n=== OTHER DOCUMENTATION FILES (just updated \:2014 use as reference for README overview) ===\n" <>
+                StringJoin[
+                  Module[{relPath, txt},
+                    relPath = StringReplace[#,
+                      docsDir <> $PathnameSeparator -> ""];
+                    txt = Quiet @ Check[Import[#, "Text"], ""];
+                    If[StringQ[txt],
+                      "--- " <> relPath <> " ---\n" <> StringTake[txt, UpTo[4000]] <> "\n\n",
+                      ""]] & /@ siblingDocs]];
+            siblingContent]
+        ] <>
         iBuildGitHubLinksContext[] <>
         iDocBuildRefSection[] <>
         iDocBuildAcknowledgmentsPrompt[] <>
@@ -8039,7 +8094,7 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         "\nCRITICAL RULE: \:8b1d\:8f9e (Acknowledgments), \:514d\:8cac\:4e8b\:9805 (Disclaimer) and \:30e9\:30a4\:30bb\:30f3\:30b9 (License) sections MUST ONLY exist in README.md.\n" <>
         "Do NOT add, create, or keep any \:8b1d\:8f9e, \:514d\:8cac\:4e8b\:9805 or \:30e9\:30a4\:30bb\:30f3\:30b9 section in this file.\n" <>
         "If this file currently contains such sections, REMOVE them entirely.\n\n"] <>
-      "PACKAGE SOURCE CODE (for reference):\n" <> sourceCode <> "\n\n" <>
+      "PACKAGE SOURCE CODE (chunked for token efficiency):\n" <> chunkedSource <> "\n\n" <>
       "Output the COMPLETE updated document directly as your response text. " <>
       If[docFile === "api.md",
         iLanguageInstruction["plain"] <>
@@ -8059,63 +8114,53 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       "Add or modify only the parts relevant to the instruction.\n" <>
       If[docFile === "README.md",
         "CRITICAL: README.md is a HIGH-LEVEL OVERVIEW document updated LAST.\n" <>
-        "You have access to the OTHER DOCUMENTATION FILES above — they were just updated.\n" <>
-        "Use them to construct an accurate, comprehensive overview.\n\n" <>
-        "MANDATORY STRUCTURE (in this order):
-" <>
-        "1. # パッケージ名 — 設計思想と実装の概要
-" <>
-        "2. ## 詳細説明 containing:
-" <>
-        "   - 動作環境 (OS, Mathematica version, external tools)
-" <>
-        "   - インストール
-" <>
-        "   - クイックスタート (minimal working example)
-" <>
-        "   - 主な機能 (feature list with brief descriptions)
-" <>
-        "   - ドキュメント一覧 (links to setup.md, user_manual.md, api.md, examples/)
-" <>
-        "3. ## 謝辞 (ONLY if Acknowledgments are provided — omit entirely if none)
-" <>
-        "4. ## 免責事項
-" <>
-        "5. ## ライセンス (if present — MUST be last)
-
-" <>
-        "RULES:
-" <>
-        "- Do NOT copy detailed API descriptions from other docs. Keep it high-level.
-" <>
-        "- Do NOT append raw instruction text, prompt fragments, or update notes.
-" <>
-        "- Nothing should be added after ライセンス.
-" <>
-        "- Preserve the existing design philosophy narrative.
-" <>
-        "- Update feature lists and function counts to match the latest source.
-",
+        If[!narrowQ,
+          "You have access to the OTHER DOCUMENTATION FILES above \:2014 they were just updated.\n" <>
+          "Use them to construct an accurate, comprehensive overview.\n\n",
+          "This is a narrow-scope update. Focus only on the specific section mentioned in the instruction.\n\n"] <>
+        "MANDATORY STRUCTURE (in this order):\n" <>
+        "1. # \:30d1\:30c3\:30b1\:30fc\:30b8\:540d \:2014 \:8a2d\:8a08\:601d\:60f3\:3068\:5b9f\:88c5\:306e\:6982\:8981\n" <>
+        "2. ## \:8a73\:7d30\:8aac\:660e containing:\n" <>
+        "   - \:52d5\:4f5c\:74b0\:5883 (OS, Mathematica version, external tools)\n" <>
+        "   - \:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\n" <>
+        "   - \:30af\:30a4\:30c3\:30af\:30b9\:30bf\:30fc\:30c8 (minimal working example)\n" <>
+        "   - \:4e3b\:306a\:6a5f\:80fd (feature list with brief descriptions)\n" <>
+        "   - \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:4e00\:89a7 (links to setup.md, user_manual.md, api.md, examples/)\n" <>
+        "3. ## \:8b1d\:8f9e (ONLY if Acknowledgments are provided \:2014 omit entirely if none)\n" <>
+        "4. ## \:514d\:8cac\:4e8b\:9805\n" <>
+        "5. ## \:30e9\:30a4\:30bb\:30f3\:30b9 (if present \:2014 MUST be last)\n\n" <>
+        "RULES:\n" <>
+        "- Do NOT copy detailed API descriptions from other docs. Keep it high-level.\n" <>
+        "- Do NOT append raw instruction text, prompt fragments, or update notes.\n" <>
+        "- Nothing should be added after \:30e9\:30a4\:30bb\:30f3\:30b9.\n" <>
+        "- Preserve the existing design philosophy narrative.\n" <>
+        "- Update feature lists and function counts to match the latest source.\n",
         ""];
-    (* $currentUseFallback \:306f\:547c\:3073\:51fa\:3057\:5143\:3067\:8a2d\:5b9a\:6e08\:307f *)
+    (* ドキュメント生成用モデルでクエリ実行 *)
+    savedModel = $ClaudeModel;
+    $ClaudeModel = iDocModelOverride[];
     iClaudeQueryAsyncWithProgress[fullPrompt,
       With[{nb2 = nb, dd = docsDir, tds = targetDocs, i = idx,
             df = docFile, dp = docPath, sc = sourceCode, pn = packageName,
-            instr = instruction, dt = diffText, sf = srcFile},
+            instr = instruction, dt = diffText, sf = srcFile, sp = split,
+            origModel = savedModel},
         Function[response,
           Module[{writeResult},
+            (* モデルを元に戻す *)
+            $ClaudeModel = origModel;
             writeResult = iSafeWriteDoc[dp, response, pn];
             If[writeResult =!= $Failed,
               nbPrint[nb2, "  \:2713 " <> df <> " \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
               nbPrint[nb2, "  \:2717 " <> df <> " \:306e\:66f4\:65b0\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408/\:30b5\:30a4\:30ba\:9000\:884c): " <>
                 StringTake[ToString[response], UpTo[200]]]
             ];
-            iUpdateDocNext[sc, pn, nb2, dd, instr, tds, i + 1, dt, sf]
+            iUpdateDocNext[sc, pn, nb2, dd, instr, tds, i + 1, dt, sf, sp]
           ]
         ]
       ],
       nb]
   ];
+
 
 (* ============================================================
    api.md 自動更新: ClaudeUpdatePackage/ClaudeCreatePackage 後に
@@ -8160,12 +8205,16 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
         "CURRENT api.md (update and keep structure where appropriate):\n" <>
         currentApi <> "\n\n",
         ""] <>
-      "PACKAGE SOURCE CODE:\n" <> sourceCode;
-    nbPrint[nb, "\:2500 api.md \:3092\:81ea\:52d5\:66f4\:65b0\:4e2d..."];
+      "PACKAGE SOURCE CODE:\n" <>
+      iBuildChunkedSource[iSplitSource[sourceCode], "api.md"];
+    nbPrint[nb, "\:2500 api.md \:3092\:81ea\:52d5\:66f4\:65b0\:4e2d... (\:30e2\:30c7\:30eb: " <> iDocModelOverride[] <> ")"];
+    Module[{savedModel = $ClaudeModel},
+    $ClaudeModel = iDocModelOverride[];
     iClaudeQueryAsyncWithProgress[prompt,
-      With[{nb2 = nb, af = apiFile, pn = packageName},
+      With[{nb2 = nb, af = apiFile, pn = packageName, origModel = savedModel},
         Function[response,
           Module[{writeResult},
+            $ClaudeModel = origModel;
             writeResult = iSafeWriteDoc[af, response, pn];
             If[writeResult =!= $Failed,
               nbPrint[nb2, "  \:2713 " <> pn <> " \:306e api.md \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
@@ -8175,6 +8224,7 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
         ]
       ],
       nb]
+    ] (* end Module savedModel *)
   ];
 
 (* ============================================================

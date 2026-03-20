@@ -32,6 +32,10 @@ Claude Code CLI が利用制限に達した場合でも、`Fallback -> True` に
 
 `$Language` に基づいてプロンプト内の言語指定を動的に生成します。日本語環境では日本語でドキュメントや説明文を生成し、英語環境では英語で生成します。
 
+### AI 生成 API 統合
+
+OpenAI Images API および TTS API との統合により、ノートブック内から直接 AI 画像生成・音声合成が可能です。`ClaudeImageGenerate` で画像を、`ClaudeSpeech` で音声を生成し、Mathematica の `Image` / `Audio` オブジェクトとして返します。ClaudeQuery のリッチレスポンスモードでは、ユーザーの要求に応じて自動的にこれらの API を呼び出すコードを生成します。
+
 ## 実装概要
 
 ```
@@ -55,15 +59,59 @@ Claude Code CLI が利用制限に達した場合でも、`Fallback -> True` に
 │                   │ NBAccess │ ← セル読み書き・       │
 │                   │          │   プライバシー管理     │
 │                   └──────────┘                       │
+│                                                      │
+│  ┌────────────────────┐  ┌───────────────────────┐  │
+│  │ClaudeImageGenerate │  │   ClaudeSpeech        │  │
+│  │(OpenAI Images API) │  │   (OpenAI TTS API)    │  │
+│  └────────────────────┘  └───────────────────────┘  │
 └─────────────────────────────────────────────────────┘
 ```
 
 - **Claude Code CLI 連携**: `--output-format stream-json --verbose` で起動し、stdout の JSON Lines を差分解析します。`node-pty` による対話的 CLI コマンド実行もサポートしています。
 - **NBAccess 連携**: ノートブックのセル読み書き、機密セル管理、プロバイダー別アクセスレベル判定を [NBAccess](https://github.com/transreal/NBAccess) に委譲しています。
 - **GitHubREST 連携**: パッケージの GitHub へのアップロード・PR 管理を [github](https://github.com/transreal/github) パッケージと連携して行います。
+- **OpenAI API 連携**: 画像生成（Images API）と音声合成（TTS API）を OpenAI API 経由で実行します。
 - **セッション管理**: 会話履歴を NBAccess の履歴 DB に保存し、TaggingRules でノートブックに永続化します。コンパクション機能により長い履歴を要約圧縮でき、`ClaudeHistorySize` で履歴サイズを診断できます。
 
 ## 前回リリースからの主要変更点
+
+### AI 画像生成・音声合成 API
+
+`ClaudeImageGenerate` と `ClaudeSpeech` を追加しました。OpenAI の Images API / TTS API を呼び出し、Mathematica の `Image` / `Audio` オブジェクトとして結果を返します。
+
+- `ClaudeImageGenerate["prompt"]` — `gpt-image-1` または `dall-e-3` で画像を生成
+- `ClaudeSpeech["text"]` — `tts-1` または `tts-1-hd` で音声を生成
+- `$ClaudeImageModels` / `$ClaudeTTSModels` でモデルリストを設定可能
+- ClaudeQuery のリッチレスポンスモードでは、ユーザーの要求（「AIで桜の写真を生成して」「読み上げて」等）に応じて自動的にこれらの API を呼び出すコードを生成します
+
+### プロジェクト固有ディレクティブシステム
+
+`ClaudeInitProject[]` でノートブックのディレクトリにプロジェクト固有のディレクティブ雛形を作成できるようになりました。
+
+- `.claude-project/CLAUDE.local.md` にプロジェクト固有ルールを記述
+- `.claude-project/rules/` と `.claude-project/skills/` にローカルルール・スキルを配置
+- メインのディレクティブと自動マージされ、次回の ClaudeQuery/ClaudeEval から反映
+- `ClaudePromoteProjectDirectives[]` でローカルディレクティブをグローバルに昇格可能
+
+### NotebookDirectory アクセス制御
+
+`$ClaudeNBDirAccess` による NotebookDirectory のアクセスレベル制御を追加しました。
+
+- `"list"` (デフォルト) — ファイル一覧のみ表示、読み書き不可
+- `"read"` — 読み取り許可
+- `"readwrite"` — 読み書き許可
+- `"list"` モードでプロンプトが NB ディレクトリ内のファイルを参照している場合、権限付与ボタンを表示して一時停止します
+
+### ディレクティブ書き込みガード
+
+`iSafeWriteDirective` により、ディレクティブファイル（CLAUDE.md / SKILL.md / rules）の書き込み時に以下の検証を行います:
+1. **サイズ退行**: 既存の 40% 未満に縮小 → 書き込み拒否
+2. **タイトル保持**: CLAUDE.md の先頭 `#` タイトルが変更 → 書き込み拒否
+3. **スキル名保持**: SKILL.md の `name:` 行が消滅 → 書き込み拒否
+
+### ディレクティブ Scope オプション
+
+`ClaudeAddDirective` と `ClaudeUpdateDirective` に `Scope -> "Local"` オプションを追加しました。プロジェクト固有ディレクティブへの書き込みが可能です。
 
 ### 差分ベースバックアップシステム
 
@@ -77,13 +125,6 @@ Claude Code CLI が利用制限に達した場合でも、`Fallback -> True` に
 ### 安全なバックアップ削除
 
 差分チェーンの中間ノードを削除する際、後続の `.cdiff` / `.unchanged` が参照先を失って復元不能になることを防止するため、`iSafeDeleteBackupDir` が依存ファイルを自動的に `.cz`（ベースライン）に変換してから削除を実行します。
-
-### ディレクティブ書き込みガード
-
-`iSafeWriteDirective` により、ディレクティブファイル（CLAUDE.md / SKILL.md / rules）の書き込み時に以下の検証を行います:
-1. **サイズ退行**: 既存の 40% 未満に縮小 → 書き込み拒否
-2. **タイトル保持**: CLAUDE.md の先頭 `#` タイトルが変更 → 書き込み拒否
-3. **スキル名保持**: SKILL.md の `name:` 行が消滅 → 書き込み拒否
 
 ### 履歴サイズ診断とサイズベースコンパクション
 
@@ -121,6 +162,10 @@ Claude Code CLI が利用制限に達した場合でも、`Fallback -> True` に
 ### フォールバックモデル NBAccess 同期
 
 `$ClaudeFallbackModels` の値がパッケージロード時に `NBAccess`NBSetFallbackModels` へ自動同期されるようになりました。これにより NBAccess 側のプロバイダー情報やアクセスレベル判定が常に最新の状態を反映します。
+
+### Think トリガー自動挿入
+
+日本語の励まし表現（「死ぬ気で考えろ」「じっくり考えて」等）を検出し、適切な think トリガーワード（ultrathink / think hard / think）をプロンプト先頭に自動挿入します。ClaudeUpdatePackage 等の生成コードにも、ユーザーの指示に含まれる励まし表現に応じてトリガーが伝搬されます。
 
 ## 動作要件
 
@@ -164,11 +209,11 @@ Block[{$CharacterEncoding = "UTF-8"},
 
 ### 4. API キーの設定
 
-Claude Code CLI の認証が完了していれば、追加の設定は不要です。フォールバック機能で外部 API を直接使う場合は `SystemCredential` に登録してください。
+Claude Code CLI の認証が完了していれば、追加の設定は不要です。フォールバック機能で外部 API を直接使う場合や、画像生成・音声合成機能を使う場合は `SystemCredential` に登録してください。
 
 ```mathematica
 SystemCredential["ANTHROPIC_API_KEY"] = "sk-ant-...";
-SystemCredential["OPENAI_API_KEY"] = "sk-...";   (* OpenAI フォールバック用 *)
+SystemCredential["OPENAI_API_KEY"] = "sk-...";   (* OpenAI フォールバック・画像生成・音声合成用 *)
 ```
 
 ## クイックスタート
@@ -192,6 +237,15 @@ ClaudeUpdatePackage["MyUtils", "sortByFrequency関数を追加"]
 
 (* ドキュメント一式を自動生成 *)
 ClaudeCreateDocumentation["MyUtils"]
+
+(* AI 画像生成 *)
+ClaudeImageGenerate["桜の満開の写真、フォトリアル"]
+
+(* AI 音声合成 *)
+ClaudeSpeech["こんにちは、世界"]
+
+(* プロジェクト固有ディレクティブの初期化 *)
+ClaudeInitProject[]
 
 (* パレット表示 *)
 ShowClaudePalette[]
@@ -247,6 +301,13 @@ ShowClaudePalette[]
 | `ClaudeCreateDocumentation["name"]` | 包括的ドキュメント一式を自動生成します |
 | `ClaudeUpdateDocumentation["name", "指示"]` | 既存ドキュメントを部分更新します |
 
+### AI 画像生成・音声合成
+
+| 関数 | 説明 |
+|------|------|
+| `ClaudeImageGenerate[prompt]` | OpenAI Images API で画像を生成し Image オブジェクトで返します |
+| `ClaudeSpeech[text]` | OpenAI TTS API で音声を生成し Audio オブジェクトで返します |
+
 ### デバッグ・レビュー
 
 | 関数 | 説明 |
@@ -261,8 +322,12 @@ ShowClaudePalette[]
 |------|------|
 | `ClaudeAddDirective[target, desc]` | CLAUDE.md やスキルにディレクティブを追加します |
 | `ClaudeUpdateDirective[text]` | テキストを解釈し適切なファイルに反映します |
+| `ClaudeUpdateDirective[]` | ソースコードとディレクティブの整合性をチェック・自動修正します |
 | `ClaudeListDirectives[]` | 全ディレクティブの一覧を表示します |
 | `ClaudeDirectiveBackupDataset[]` | ディレクティブ更新履歴を表示します（スナップショット付き） |
+| `ClaudeSyncDirectives[dir]` | 外部ディレクトリから Claude Directives へファイルを同期します |
+| `ClaudeInitProject[]` | プロジェクト固有ディレクティブの雛形を初期化します |
+| `ClaudePromoteProjectDirectives[]` | ローカルディレクティブをグローバルに昇格します |
 
 ### Web 検索・分離検証・その他
 
@@ -273,6 +338,7 @@ ShowClaudePalette[]
 | `ClaudeCheckSeparation[target]` | NBAccess 分離原則の違反をチェックします |
 | `ClaudeFixSeparation[target]` | 分離違反を自動修正します |
 | `ClaudeStatus[]` | 実行中タスクのリアルタイム状態を表示します |
+| `ClaudeCommand["/cmd"]` | Claude Code CLI のスラッシュコマンドを実行します |
 | `ShowClaudePalette[]` | 操作パレットを表示します |
 
 ### 主要な設定変数
@@ -286,6 +352,9 @@ ShowClaudePalette[]
 | `$ClaudeFallbackModels` | `{{"anthropic","claude-opus-4-6"},{"openai","gpt-5"}}` | フォールバックモデル優先順位 |
 | `$ClaudeEvalMaxDepth` | `5` | ClaudeEval 再帰深度上限 |
 | `$ClaudeAccessibleDirs` | `{$packageDirectory}` | Read 許可追加ディレクトリ |
+| `$ClaudeNBDirAccess` | `"list"` | NotebookDirectory アクセスレベル（`"list"` / `"read"` / `"readwrite"`） |
+| `$ClaudeImageModels` | `{{"openai","gpt-image-1"},{"openai","dall-e-3"}}` | 画像生成モデルリスト |
+| `$ClaudeTTSModels` | `{{"openai","tts-1-hd"},{"openai","tts-1"}}` | 音声生成モデルリスト |
 
 ## ドキュメント
 
@@ -305,6 +374,9 @@ ShowClaudePalette[]
 - 生成されたコードは必ず内容を確認してから使用してください。
 - API の利用には各プロバイダーの利用規約が適用されます。
 - 機密データの取り扱いについては、`Confidential`/`AutoPrivate` 機能を活用し、適切なアクセスレベルを設定してください。ただし、完全な情報漏洩防止を保証するものではありません。
+- 本ソフトウェアは "as is"（現状有姿）で提供されており、明示・黙示を問わずいかなる保証もありません。
+- 本ソフトウェアとドキュメントはほぼすべてが生成AIによって生成されたものです。
+- Windows 11上での実行を想定しており、MacOS, LinuxのMathematicaでの動作検証は一切していません（生成AIの処理で対応可能と想定されます）。
 
 ## ライセンス
 
