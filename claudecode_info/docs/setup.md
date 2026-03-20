@@ -1,5 +1,3 @@
----
-
 # claudecode
 
 **Mathematica ノートブックから Claude Code CLI を透過的に呼び出し、コード生成・レビュー・パッケージ管理・ドキュメント作成を非同期で行う統合パッケージです。**
@@ -20,11 +18,19 @@ claudecode は「ノートブックを離れずに AI コーディングを完�
 
 ### 安全なパッケージ更新
 
-パッケージの更新は `ClaudeUpdatePackage` を通じて行われ、事前バックアップの自動作成、LLM レスポンスの安全なマージ検証、排他ロックによる並列更新の防止、更新後の再ロードまでを一貫して管理します。
+パッケージの更新は `ClaudeUpdatePackage` を通じて行われ、事前バックアップの自動作成、LLM レスポンスの安全なマージ検証、排他ロックによる並列更新の防止、更新後の再ロードまでを一貫して管理します。ディレクティブファイルの書き込みにも、サイズ退行・タイトル整合性・スキル名保持を検証するガード機構が組み込まれています。
+
+### 差分ベースバックアップ
+
+バックアップシステムは `SequenceAlignment` ベースの差分保存を採用しています。テキストファイル（`.wl` / `.md` 等）を `.cz`（Compress ベースライン）、`.cdiff`（差分）、`.unchanged`（前回参照）の3形式で保存し、バックアップ容量を大幅に削減します。既存の生バックアップは `ClaudeMigrateBackupHistory` で差分形式に一括変換できます。バックアップ削除時は依存チェーンを自動解決し、復元不能になることを防止します。
 
 ### 段階的フォールバック
 
 Claude Code CLI が利用制限に達した場合でも、`Fallback -> True` により `$ClaudeFallbackModels` に登録されたモデルへ自動切替できます。フォールバック時もアクセスレベルに基づいて利用可能なモデルのみが選択されます。
+
+### 多言語対応
+
+`$Language` に基づいてプロンプト内の言語指定を動的に生成します。日本語環境では日本語でドキュメントや説明文を生成し、英語環境では英語で生成します。
 
 ## 実装概要
 
@@ -55,9 +61,41 @@ Claude Code CLI が利用制限に達した場合でも、`Fallback -> True` に
 - **Claude Code CLI 連携**: `--output-format stream-json --verbose` で起動し、stdout の JSON Lines を差分解析します。`node-pty` による対話的 CLI コマンド実行もサポートしています。
 - **NBAccess 連携**: ノートブックのセル読み書き、機密セル管理、プロバイダー別アクセスレベル判定を [NBAccess](https://github.com/transreal/NBAccess) に委譲しています。
 - **GitHubREST 連携**: パッケージの GitHub へのアップロード・PR 管理を [github](https://github.com/transreal/github) パッケージと連携して行います。
-- **セッション管理**: 会話履歴を NBAccess の履歴 DB に保存し、TaggingRules でノートブックに永続化します。コンパクション機能により長い履歴を要約圧縮できます。
+- **セッション管理**: 会話履歴を NBAccess の履歴 DB に保存し、TaggingRules でノートブックに永続化します。コンパクション機能により長い履歴を要約圧縮でき、`ClaudeHistorySize` で履歴サイズを診断できます。
 
 ## 前回リリースからの主要変更点
+
+### 差分ベースバックアップシステム
+
+バックアップの保存形式を `SequenceAlignment` ベースの差分圧縮に刷新しました。テキストファイル（`.wl`・`.md` 等）を以下の3形式で保存します:
+- `.cz` — `Compress[全文]` によるベースライン（一定間隔で自動作成）
+- `.cdiff` — `Compress[{前回ディレクトリ名, SequenceAlignment結果}]` による差分
+- `.unchanged` — 前回ディレクトリ名の参照（内容同一時、1ホップ解決保証）
+
+`ClaudeMigrateBackupHistory` で既存の生バックアップを差分形式に一括変換できます。`DryRun -> True` で容量削減の見積もりを事前確認可能です。
+
+### 安全なバックアップ削除
+
+差分チェーンの中間ノードを削除する際、後続の `.cdiff` / `.unchanged` が参照先を失って復元不能になることを防止するため、`iSafeDeleteBackupDir` が依存ファイルを自動的に `.cz`（ベースライン）に変換してから削除を実行します。
+
+### ディレクティブ書き込みガード
+
+`iSafeWriteDirective` により、ディレクティブファイル（CLAUDE.md / SKILL.md / rules）の書き込み時に以下の検証を行います:
+1. **サイズ退行**: 既存の 40% 未満に縮小 → 書き込み拒否
+2. **タイトル保持**: CLAUDE.md の先頭 `#` タイトルが変更 → 書き込み拒否
+3. **スキル名保持**: SKILL.md の `name:` 行が消滅 → 書き込み拒否
+
+### 履歴サイズ診断とサイズベースコンパクション
+
+`ClaudeHistorySize[]` でセッション履歴のサイズを診断できます。Entries・ByteCount・KiloBytes・Status を含む Association を返し、200KB超でコンパクション推奨、500KB超で危険と判定します。エントリ数ベースに加えてサイズベースの二重チェックにより、巨大な response を持つセッションでのノートブック肥大化・フリーズを防ぎます。
+
+### バックアップスナップショット管理
+
+`ClaudeBackupDataset` / `ClaudeDirectiveBackupDataset` の起動時に現在のファイルの SHA-256 ハッシュ付きスナップショットを自動保存します。Pull で過去のバックアップに巻き戻した後、#0行の「Pull」ボタンでローカル最新版に復元できます。ファイルが変更されている場合は警告を表示します。
+
+### $Language ベース多言語対応
+
+プロンプト内の言語指定を `$Language` に基づいて動的に生成するようになりました。`iLanguageName[]` で現在の言語名を取得し、`iLanguageInstruction[style]` でスタイル別（敬体・常体・一般）の言語指示文を生成します。
 
 ### プライバシー対応モデルルーティング
 
@@ -179,6 +217,7 @@ ShowClaudePalette[]
 | `ClaudeListSessions[]` | 全セッション一覧を表示します |
 | `ClaudeShowHistory[]` | セッション履歴を表示します |
 | `ClaudeCompactHistory[]` | 長い履歴を要約圧縮します |
+| `ClaudeHistorySize[]` | セッション履歴のサイズを診断します |
 | `ClaudeSessionStatus[]` | セッション状態を表示します |
 
 ### 機密データ管理
@@ -198,7 +237,8 @@ ShowClaudePalette[]
 | `ClaudeUpdatePackage[name, instruction]` | パッケージを安全に更新します（排他ロック・バックアップ付き） |
 | `ContinueUpdate[instruction]` | 直前の更新結果を踏まえてバグ修正を継続します |
 | `ClaudeRestorePackage[name]` | バックアップから復元します |
-| `ClaudeBackupDataset[name]` | バックアップ履歴を Grid で表示します |
+| `ClaudeBackupDataset[name]` | バックアップ履歴を Grid で表示します（スナップショット付き） |
+| `ClaudeMigrateBackupHistory[name]` | 生バックアップを差分形式に変換して容量を削減します |
 
 ### ドキュメント生成
 
@@ -222,7 +262,7 @@ ShowClaudePalette[]
 | `ClaudeAddDirective[target, desc]` | CLAUDE.md やスキルにディレクティブを追加します |
 | `ClaudeUpdateDirective[text]` | テキストを解釈し適切なファイルに反映します |
 | `ClaudeListDirectives[]` | 全ディレクティブの一覧を表示します |
-| `ClaudeDirectiveBackupDataset[]` | ディレクティブ更新履歴を表示します |
+| `ClaudeDirectiveBackupDataset[]` | ディレクティブ更新履歴を表示します（スナップショット付き） |
 
 ### Web 検索・分離検証・その他
 
@@ -231,6 +271,7 @@ ShowClaudePalette[]
 | `ClaudeWebSearch[query]` | Web 検索を実行して結果をテキストで返します |
 | `ClaudeWebFetch[url]` | URL の内容を取得・要約します |
 | `ClaudeCheckSeparation[target]` | NBAccess 分離原則の違反をチェックします |
+| `ClaudeFixSeparation[target]` | 分離違反を自動修正します |
 | `ClaudeStatus[]` | 実行中タスクのリアルタイム状態を表示します |
 | `ShowClaudePalette[]` | 操作パレットを表示します |
 

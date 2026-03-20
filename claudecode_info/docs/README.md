@@ -12,15 +12,19 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 **機密データの自動保護**: API キーや個人情報を扱うセルは `Confidential` ラッパーや `MarkConfidential` によって機密マークされ、以降の Claude プロンプトから自動的に除外されます。さらに CellEpilog を利用した伝播機構により、機密変数を参照する下流のセルも自動検出・マーキングされます。`NonConfidential` で明示的に公開指定することも可能で、きめ細かなプライバシー制御を実現しています。
 
-**セッションによる会話の継続性**: セッション機構により、複数回のやり取りにわたって会話履歴を保持します。セッションはノートブックの TaggingRules に永続化されるため、ノートブックを閉じて再度開いた後でも会話を再開できます。履歴が長くなった場合は自動または手動でコンパクションが行われ、トークン消費を抑制します。名前付きセッションの作成・継承・復元・削除が可能で、複数の独立したタスクを並行して進められます。
+**セッションによる会話の継続性**: セッション機構により、複数回のやり取りにわたって会話履歴を保持します。セッションはノートブックの TaggingRules に永続化されるため、ノートブックを閉じて再度開いた後でも会話を再開できます。履歴が長くなった場合はエントリ数ベースとサイズベースの二重チェックにより自動または手動でコンパクションが行われ、トークン消費を抑制します。名前付きセッションの作成・継承・復元・削除が可能で、複数の独立したタスクを並行して進められます。
 
 実装面では、Claude Code CLI をバックエンドとして利用し、`--output-format stream-json` モードでリアルタイムにストリーミング出力を解析します。問い合わせ中は経過時間に加え、現在の状態（思考中・テキスト生成中・ツール実行中）やフラグメント数をリアルタイムで表示します。エラー出力は stderr 経由で分離処理され、stdout の JSON ストリームと干渉しない設計になっています。ファイルパス操作には `FileNameJoin` を一貫して使用し、OS 非依存のパス構築を徹底しています。
 
 作業ディレクトリ (`$ClaudeWorkingDirectory`) 配下の CLAUDE.md やディレクティブ (rules/skills) が Claude Code に自動的に読み込まれ、プロジェクト固有のガイドラインを反映した応答が得られます。Claude Code CLI が利用できない場合のフォールバック機構として、Anthropic API や OpenAI API への直接呼び出しに加え、LM Studio 等のローカル LLM サーバーへの接続もサポートしています。フォールバックモデルは `$ClaudeFallbackModels` で優先順位付きで設定でき、`{provider, model, url}` の3要素形式でカスタム URL を指定できます。
 
-パッケージ管理機能 (`ClaudeUpdatePackage`, `ClaudeRestorePackage`) では、既存の .wl パッケージを Claude の支援で更新し、自動バックアップにより安全なイテレーションを実現します。ドキュメント生成機能 (`ClaudeCreateDocumentation`, `ClaudeUpdateDocumentation`) では、ソースコードから API リファレンス・使用例・セットアップガイドなどの文書一式を自動生成します。ドキュメント更新時はノートブックの現在のコンテキストも参照でき、「上で議論された内容を反映して」といった自然な指示が可能です。
+パッケージ管理機能 (`ClaudeUpdatePackage`, `ClaudeRestorePackage`) では、既存の .wl パッケージを Claude の支援で更新し、差分ベースの自動バックアップにより安全なイテレーションを実現します。バックアップシステムは `SequenceAlignment` ベースの差分保存を採用し、`.cz`（ベースライン）・`.cdiff`（差分）・`.unchanged`（参照）の3形式でストレージ消費を大幅に削減します。差分チェーンの中間ノードを削除する際も依存関係を自動解決し、復元不能になることを防止します。既存の生バックアップは `ClaudeMigrateBackupHistory` で差分形式に一括変換できます。
+
+ドキュメント生成機能 (`ClaudeCreateDocumentation`, `ClaudeUpdateDocumentation`) では、ソースコードから API リファレンス・使用例・セットアップガイドなどの文書一式を自動生成します。ドキュメント更新時はノートブックの現在のコンテキストも参照でき、「上で議論された内容を反映して」といった自然な指示が可能です。ディレクティブファイルの書き込みには、サイズ退行・タイトル整合性・スキル名保持を検証するガード機構 (`iSafeWriteDirective`) が組み込まれています。
 
 外部ファイルのアタッチメント機構や Web 検索・取得機能により、ノートブック外の情報源も活用できます。ディレクティブ管理機能を通じて、Claude Code の振る舞いを制御する CLAUDE.md やルール・スキルファイルの追加・更新・整合性チェックをノートブック内から行えます。`ClaudeUpdateDirective[]` はソースコードの公開 API とディレクティブファイルの整合性を自動検査・修正することで、ドキュメントとコードの乖離を防ぎます。
+
+多言語対応として、`$Language` に基づいてプロンプト内の言語指定を動的に生成します。日本語環境では日本語で、英語環境では英語でドキュメントや説明文が生成されます。
 
 ## 詳細説明
 
@@ -117,6 +121,9 @@ ClaudeSessionStatus[]
 (* 実行中タスクのリアルタイム状態表示 *)
 ClaudeStatus[]
 
+(* 履歴サイズ診断 *)
+ClaudeHistorySize[]
+
 (* LM Studio のローカルモデルを使用 *)
 ClaudeEval["階乗を計算して",
   Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
@@ -134,6 +141,7 @@ ShowClaudePalette[]
 | `$ClaudeWorkingDirectory` | `FileNameJoin[{$HomeDirectory, "Claude Working"}]` | 作業ディレクトリ |
 | `$ClaudeAccessibleDirs` | `{$packageDirectory}` | Claude Code に Read 許可する追加ディレクトリ |
 | `$ClaudeFallbackModels` | `{{"anthropic","claude-opus-4-6"},{"openai","gpt-5"}}` | フォールバックモデル優先順位。`{"lmstudio","modelName","http://host:port"}` 形式でローカル LLM も指定可能 |
+| `$ClaudePrivateModel` | `{}` | 秘密データ処理用のローカルモデル指定 |
 
 ### 主な機能
 
@@ -155,6 +163,7 @@ ShowClaudePalette[]
 - `ClaudeDeleteSession["name"]` — セッション削除
 - `ClaudeShowHistory[]` — 会話履歴の表示
 - `ClaudeCompactHistory[]` — 履歴の手動コンパクション
+- `ClaudeHistorySize[]` — 履歴サイズ診断（Entries・ByteCount・KiloBytes・Status を返す。200KB超でコンパクション推奨、500KB超で危険）
 - `ClaudeSessionStatus[]` — セッション状態の確認
 
 **アタッチメント**
@@ -173,9 +182,11 @@ ShowClaudePalette[]
 - `ClaudeReview[codeOrFile]` — コードレビュー（非同期、長大ファイルは自動チャンク分割）
 
 **パッケージ管理**
-- `ClaudeUpdatePackage[name, prompt]` — .wl パッケージを Claude 支援で更新（自動バックアップ付き）
+- `ClaudeUpdatePackage[name, prompt]` — .wl パッケージを Claude 支援で更新（差分ベースバックアップ付き・排他ロック）
+- `ContinueUpdate[instruction]` — 直前の ClaudeUpdatePackage の結果を踏まえてバグ修正を継続
 - `ClaudeRestorePackage[name]` — 直前のバックアップから復元
-- `ClaudeBackupDataset[name]` — バックアップ履歴の表示・復元・削除
+- `ClaudeBackupDataset[name]` — バックアップ履歴の表示・復元・削除（ローカル最新版スナップショット付き）
+- `ClaudeMigrateBackupHistory[name]` — 生バックアップを差分形式に一括変換（`DryRun -> True` で見積もり可能）
 - `ClaudeConvertToPaclet[name]` — .wl パッケージを Paclet 形式に変換
 - `ClaudeCreatePackage[name, prompt]` — 新規パッケージの作成
 
@@ -189,14 +200,15 @@ ShowClaudePalette[]
 - `ClaudeUpdateDirective[]` — ソースコードと Claude Directives の整合性をチェックし、不整合を自動修正する
 - `ClaudeUpdateDirective[text]` — テキストの内容を Claude で解釈し、CLAUDE.md / rules / skills の適切なファイルに反映する。ノートブックのコンテキストも参照可能
 - `ClaudeListDirectives[]` — 全ディレクティブ一覧
-- `ClaudeDirectiveBackupDataset[]` — ディレクティブ更新履歴を Review/Pull/Delete ボタン付き Grid で表示
+- `ClaudeDirectiveBackupDataset[]` — ディレクティブ更新履歴を Review/Pull/Delete ボタン付き Grid で表示（ローカル最新版スナップショット付き）
+- `ClaudeSyncDirectives[dir]` — 外部ディレクトリから Claude Directives へファイルを同期
 
 **Web 検索・取得**
 - `ClaudeWebSearch[query]` — Web 検索を実行し結果をテキストで返す
 - `ClaudeWebFetch[url]` — URL の内容を取得・要約
 
 **分離検証**
-- `ClaudeCheckSeparation[target]` — NBAccess の分離原則への違反箇所を検出
+- `ClaudeCheckSeparation[target]` — NBAccess の分離原則への違反箇所を検出（静的パターン走査 + LLM 判定の二段階検査）
 - `ClaudeFixSeparation[target]` — 分離違反を修正
 
 **ユーティリティ**

@@ -10,10 +10,10 @@
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[       154,          7]
-NotebookDataLength[     75121,       1215]
+NotebookDataLength[     75272,       1217]
 NotebookOptionsPosition[     15723,        385]
-NotebookOutlinePosition[     71656,       1161]
-CellTagsIndexPosition[     71569,       1156]
+NotebookOutlinePosition[     71807,       1163]
+CellTagsIndexPosition[     71720,       1158]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
@@ -387,7 +387,9 @@ WindowSize->{950.25, 522.75},
 WindowMargins->{{0, Automatic}, {Automatic, 0}},
 TaggingRules-><|
  "history" -> <|
-   "header" -> <||>, 
+   "header" -> <|
+     "compactP" -> 4, "compactN" -> 10, "compactW" -> 2, "lastCompactTime" -> 
+      3.9829859683743802`17.352783765599835*^9, "lastCompactTotal" -> 1|>, 
     "entries" -> {<|
       "step" -> 0, "time" -> 3.9827637004812602`17.352759529407756*^9, 
        "instruction" -> 
@@ -1155,7 +1157,7 @@ CellTagsIndex->{
 *)
 (*CellTagsIndex
 CellTagsIndex->{
- {"cjob1773742500x10803-s1", 71409, 1150}
+ {"cjob1773742500x10803-s1", 71560, 1152}
  }
 *)
 (*NotebookFileOutline

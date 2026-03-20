@@ -23,6 +23,7 @@ Scan[
    "ClaudeEval","ContinueEval","ContinueUpdate","ClaudeSpec","ClaudeDebug","ClaudeReview","ClaudeReviewChunked",
    "ClaudeUpdatePackage","ClaudeRestorePackage","ClaudeUpdatePackageHistory","ClaudeBackupDataset",
    "ClaudeConvertToPaclet","ClaudeCreateDocumentation","ClaudeUpdateDocumentation",
+   "ClaudeMigrateBackupHistory",
    "ClaudeAddDirective","ClaudeRestoreDirective","ClaudeListDirectives",
    "ClaudeUpdateDirective","ClaudeDirectiveBackupDataset","ClaudeSyncDirectives",
    "CreateClaudeSession","ClaudeRestoreSession","Inherit",
@@ -30,7 +31,7 @@ Scan[
    "ClaudeAttach","ClaudeDetach","ClaudeAttachments","ClearAttachments",
    "MarkConfidential","UnmarkConfidential","IsConfidential","Confidential","NonConfidential",
    "ScanConfidentialCells","ShowClaudePalette","ClaudeQueryShowContext",
-   "ClaudeShowAccessConfig","ClaudeSessionStatus","ClaudeCompactHistory",
+   "ClaudeShowAccessConfig","ClaudeSessionStatus","ClaudeCompactHistory","ClaudeHistorySize",
    "ClaudeWebSearch","ClaudeWebFetch","WebFetch",
    "ClaudeCommand","ClaudeCheckSeparation","ClaudeFixSeparation","ClaudeStatus",
    "$ClaudeTimeout", "$ClaudeMDPath", "$ClaudeMDContent", "$ClaudeModel",
@@ -258,7 +259,11 @@ ClaudeUpdatePackageHistory[packageName] \:306f\:6307\:5b9a\:30d1\:30c3\:30b1\:30
 \:5404\:30a8\:30f3\:30c8\:30ea\:306f <|\"Package\"->\[Ellipsis], \"Timestamp\"->\[Ellipsis], \"Directory\"->\[Ellipsis]|> \:306e Association\:3002";ClaudeBackupDataset::usage =
   "ClaudeBackupDataset[packageName] \:306f\:6307\:5b9a\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:3092 Review/Pull/Delete \:30dc\:30bf\:30f3\:4ed8\:304d Grid \:3067\:8868\:793a\:3059\:308b\:3002\n" <>
   "ClaudeBackupDataset[] \:306f\:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
-  "Review \:306f\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5185\:5bb9\:3092\:78ba\:8a8d\:3001Pull \:306f\:5fa9\:5143\:3001Delete \:306f\:305d\:306e\:5c65\:6b74\:3092\:524a\:9664\:3002";ClaudeAddDirective::usage =
+  "Review \:306f\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5185\:5bb9\:3092\:78ba\:8a8d\:3001Pull \:306f\:5fa9\:5143\:3001Delete \:306f\:305d\:306e\:5c65\:6b74\:3092\:524a\:9664\:3002";ClaudeMigrateBackupHistory::usage =
+  "ClaudeMigrateBackupHistory[packageName] \:306f\:65e2\:5b58\:306e history \:5185\:306e\:751f .wl \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\n" <>
+  "\:5dee\:5206\:5f62\:5f0f (.wl.cz / .wl.cdiff) \:306b\:5909\:63db\:3057\:3066\:5bb9\:91cf\:3092\:524a\:6e1b\:3059\:308b\:3002\n" <>
+  "ClaudeMigrateBackupHistory[packageName, DryRun -> True] \:306f\:524a\:9664\:305b\:305a\:5bb9\:91cf\:524a\:6e1b\:306e\:898b\:7a4d\:3082\:308a\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
+  "ClaudeMigrateBackupHistory[] \:306f\:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:306b\:5bfe\:3057\:3066\:5b9f\:884c\:3059\:308b\:3002";ClaudeAddDirective::usage =
   "ClaudeAddDirective[target, description] \:306f Claude \:3067 description \:3092\:6574\:5f62\:3057\:3001\n" <>
   "Claude Directives \:30d5\:30a9\:30eb\:30c0\:306e\:30d5\:30a1\:30a4\:30eb\:306b\:8ffd\:52a0\:3057\:3066 InstallClaudeDirectives[] \:3092\:5b9f\:884c\:3059\:308b\:3002\n" <>
   "target \:306f \"CLAUDE.md\" \:307e\:305f\:306f\:30b9\:30ad\:30eb\:540d\:ff08\:4f8b: \"wolfram-general\"\:ff09\:3002\n" <>
@@ -322,6 +327,10 @@ ClaudeCompactHistory::usage =
   "ClaudeCompactHistory[] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\:3092\:624b\:52d5\:3067\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:3059\:308b\:3002\n" <>
   "ClaudeCompactHistory[name] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:3059\:308b\:3002\n" <>
   "\:901a\:5e38\:306f 2n+1+w \:30a8\:30f3\:30c8\:30ea\:3092\:8d85\:3048\:305f\:3068\:304d\:306b\:81ea\:52d5\:5b9f\:884c\:3055\:308c\:308b\:3002";
+ClaudeHistorySize::usage =
+  "ClaudeHistorySize[] \:306f\:73fe\:5728\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:30b5\:30a4\:30ba\:3092\:8a3a\:65ad\:3059\:308b\:3002\n" <>
+  "Entries\:30fbByteCount\:30fbKiloBytes\:30fbStatus \:3092\:542b\:3080 Association \:3092\:8fd4\:3059\:3002\n" <>
+  "200KB\:8d85\:3067\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:63a8\:5968\:3001500KB\:8d85\:3067\:5371\:967a\:3002";
 ClaudeCommand::usage =
   "ClaudeCommand[\"/command\"] \:306f Claude Code CLI \:306e\:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9\:3092\:5b9f\:884c\:3057\:7d50\:679c\:3092\:8fd4\:3059\:3002\n" <>
   "\:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9 (/\:59cb\:307e\:308a) \:306f node-pty \:7d4c\:7531\:3067\:5bfe\:8a71\:30e2\:30fc\:30c9\:306b\:9001\:4fe1\:3055\:308c\:308b\:3002\n" <>
@@ -662,17 +671,28 @@ iClaudeSysPrompt[] :=
 (* \:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500
    \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:51fa\:529b\:30d8\:30eb\:30d1\:30fc
    \:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500 *)
-(* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:51fa\:529b\:30d8\:30eb\:30d1\:30fc (\:5185\:90e8\:4e92\:63db\:5c64) \:2192 NBAccess\:306b\:59d4\:8b72 *)
-nbPrint[nb_, text_String, style_String:"Text"] :=
-  NBAccess`NBWriteText[nb, text, style];
+(* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:51fa\:529b\:30d8\:30eb\:30d1\:30fc (\:5185\:90e8\:4e92\:63db\:5c64) \:2192 NBAccess\:306b\:59d4\:8b72
+   非同期コールバック中にユーザーが別のセルを編集していても、
+   常にノートブック末尾に追記することでセル破損を防止する。 *)
+nbPrint[nb_, text_String, style_String:"Text"] := (
+  Quiet[SelectionMove[nb, After, Notebook]];
+  NBAccess`NBWriteText[nb, text, style]);
+
+(* Style 付きテキストのオーバーロード *)
+nbPrint[nb_, text_Style, ___] := (
+  Quiet[SelectionMove[nb, After, Notebook]];
+  NotebookWrite[nb,
+    Cell[BoxData[ToBoxes[text]], "Text"], After]);
 
 (* \:30b3\:30fc\:30c9\:6587\:5b57\:5217\:3092\:69cb\:6587\:30ab\:30e9\:30fc\:30ea\:30f3\:30b0\:4ed8\:304d Input \:30bb\:30eb\:3068\:3057\:3066\:66f8\:304d\:8fbc\:3080 \:2192 NBAccess\:306b\:59d4\:8b72 *)
-iWriteCodeCell[nb_NotebookObject, code_String] :=
-  NBAccess`NBWriteCode[nb, code];
+iWriteCodeCell[nb_NotebookObject, code_String] := (
+  Quiet[SelectionMove[nb, After, Notebook]];
+  NBAccess`NBWriteCode[nb, code]);
 
 (* CellPrint\:30d1\:30bf\:30fc\:30f3\:3092\:81ea\:52d5\:6aa2\:51fa\:3057\:3066\:30b9\:30de\:30fc\:30c8\:306b\:30bb\:30eb\:3092\:66f8\:304d\:8fbc\:3080 \:2192 NBAccess\:306b\:59d4\:8b72 *)
 iWriteSmartCell[nb_, code_String, autoEvaluate_:False] :=
   Module[{},
+    Quiet[SelectionMove[nb, After, Notebook]];
     NBAccess`NBWriteSmartCode[nb, code];
     If[TrueQ[autoEvaluate],
       NBAccess`NBEvaluatePreviousCell[nb]]
@@ -695,6 +715,7 @@ iWriteSectionHeaderBeforeEvalCell[nb_NotebookObject, title_String] :=
       NotebookWrite[nb, headerCell, After];
       Quiet[SelectionMove[nb, After, Notebook]],
       (* フォールバック: 末尾に追記 *)
+      Quiet[SelectionMove[nb, After, Notebook]];
       NBAccess`NBWriteCell[nb, headerCell]
     ]
   ];
@@ -1016,7 +1037,15 @@ iInstallCellEpilog[nb_NotebookObject] :=
 (* \:30ab\:30fc\:30cd\:30eb\:518d\:8d77\:52d5\:5f8c\:306a\:3069\:3001\:65e2\:5b58\:306e\:6a5f\:5bc6\:30bb\:30eb\:304b\:3089 $confidentialSymbols \:3068
    $NBConfidentialSymbols \:3092\:5fa9\:5143\:3059\:308b *)
 iRebuildConfidentialSymbols[nb_NotebookObject] :=
-  iRebuildConfidentialSymbolsAll[];
+  Module[{nCells},
+    nCells = NBAccess`NBCellCount[nb];
+    If[nCells === 0, Return[]];
+    Do[
+      With[{depTag = NBAccess`NBCellGetTaggingRule[nb, i, {"claudecode", "dependent"}]},
+        If[iIsConfidentialCell[nb, i] && !TrueQ[depTag],
+          iRegisterConfidentialVars[NBAccess`NBCellExtractVarNames[nb, i]]]],
+      {i, nCells}]
+  ];
 
 (* \:5168\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304b\:3089\:6a5f\:5bc6\:5909\:6570\:3092\:518d\:69cb\:7bc9 *)
 iRebuildConfidentialSymbolsAll[] :=
@@ -1214,9 +1243,11 @@ iSessionHistoryWithInherit[nb_NotebookObject, tag_String] :=
      ・p は毎回 p*2 で増加
    ============================================================ *)
 
-$iHistoryCompactN = 25;   (* 基本間引き幅パラメータ *)
+$iHistoryCompactN = 10;   (* 基本間引き幅パラメータ（旧: 25） *)
 $iHistoryCompactW = 2;    (* 直近 w ステップは常に平文保持 *)
 $iHistoryCompactP = 2;    (* 初期間引き間隔 — セッションヘッダーに保存 *)
+$iHistoryMaxBytes = 200000; (* TaggingRules 推定サイズ上限（約200KB）—
+                               超過時はエントリ数に関わらずコンパクション発動 *)
 
 (* 1エントリの概要テキスト (API 不要) *)
 iMakeLocalSummary[entry_Association] :=
@@ -1316,16 +1347,25 @@ iCompactHistory[nb_NotebookObject, tag_String] :=
       RGBColor[0.3, 0.5, 0.3]];
   ];
 
-(* 閾値チェック + 自動コンパクション *)
+(* 閾値チェック + 自動コンパクション
+   エントリ数ベース + サイズベースの二重チェック。
+   サイズベースにより、エントリ数が少なくても巨大な response を持つ
+   セッションでのノートブック肥大化・フリーズを防ぐ。 *)
 iCheckHistoryCompaction[nb_NotebookObject, tag_String] :=
-  Module[{entries, total, hdr, n, w},
+  Module[{entries, total, hdr, n, w, rawData, estimatedBytes, needCompact = False},
     entries = NBAccess`NBHistoryEntries[nb, tag];
     total = Length[entries];
     hdr = Quiet[NBAccess`NBHistoryReadHeader[nb, tag]];
     n = If[AssociationQ[hdr], Lookup[hdr, "compactN", $iHistoryCompactN], $iHistoryCompactN];
     w = If[AssociationQ[hdr], Lookup[hdr, "compactW", $iHistoryCompactW], $iHistoryCompactW];
-    If[total > 2 n + 1 + w,
-      iCompactHistory[nb, tag]]
+    (* 条件1: エントリ数ベース *)
+    If[total > 2 n + 1 + w, needCompact = True];
+    (* 条件2: サイズベース（エントリ数が少なくても巨大な場合） *)
+    If[!needCompact && total > w + 1,
+      rawData = Quiet[NBAccess`NBHistoryRawData[nb, tag]];
+      estimatedBytes = Quiet @ Check[ByteCount[rawData], 0];
+      If[estimatedBytes > $iHistoryMaxBytes, needCompact = True]];
+    If[needCompact, iCompactHistory[nb, tag]]
   ];
 
 (* セッションオブジェクトから継承付き履歴を取得 *)
@@ -1377,8 +1417,11 @@ iClaudeCallPrefix[] :=
 $claudeProgress = <||>;
 
 (* --print モードではツール使用許可プロンプトに応答できないため
-   Read ツールのみを許可し、Write/Edit 等のファイル書き込みツールを禁止する *)
-iCLIPermissionFlags[] := " --allowedTools \"Read\"";
+   Read ツールのみを許可し、Write/Edit 等のファイル書き込みツールを禁止する。
+   $iAllowReadTool が True の場合は Glob/Grep も追加し、ファイル検索・内容検索を許可する。 *)
+iCLIPermissionFlags[] := If[TrueQ[$iAllowReadTool],
+  " --allowedTools \"Read,Glob,Grep\"",
+  " --allowedTools \"Read\""];
 
 iMakeBat[promptFile_String, outFile_String, imageDirs_List:{}] :=
   Module[{batFile, bc, strm, addDirFlags, permFlags, workDir, allDirs},
@@ -1406,8 +1449,6 @@ iMakeBat[promptFile_String, outFile_String, imageDirs_List:{}] :=
     Close[strm];
     batFile
   ];
-
-(* stream-json 版: リアルタイムストリーミング対応 *)
 iMakeBatStreamJson[promptFile_String, outFile_String, imageDirs_List:{}] :=
   Module[{batFile, bc, strm, addDirFlags, permFlags, workDir, allDirs},
     batFile = FileNameJoin[{$TemporaryDirectory,
@@ -1629,6 +1670,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
             ToBoxes[If[AssociationQ[$claudeProgress[k]], $claudeProgress[k]["disp"], ""]],
             UpdateInterval -> 1]],
             "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]],
+        Quiet[SelectionMove[nb, After, Notebook]];
         NBAccess`NBWriteDynamicCell[nb,
           DynamicBox[
             ToBoxes[If[AssociationQ[$claudeProgress[k]], $claudeProgress[k]["disp"], ""]],
@@ -1690,6 +1732,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                             If[uj,
                               NBAccess`NBAbortJob[jid, result],
                               iFlushFallbackLog[pNb];
+                              Quiet[SelectionMove[pNb, After, Notebook]];
                               NBAccess`NBWriteCell[pNb, Cell[result, "Text"]]]]],
                         fbModels, 1, jid]],
                     cb[result]]],
@@ -1801,6 +1844,7 @@ Print[
   "  ClaudeRestorePackage[name]       \[RightArrow] \:76f4\:524d\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306b\:623b\:3059\n" <>
   "  ClaudeUpdatePackageHistory[]     \[RightArrow] \:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:66f4\:65b0\:5c65\:6b74\:3092\:8868\:793a\n" <>
   "  ClaudeBackupDataset[name]        \[RightArrow] \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:3092 Review/Pull/Delete \:30dc\:30bf\:30f3\:4ed8\:304d Grid \:3067\:8868\:793a\n" <>
+  "  ClaudeMigrateBackupHistory[name] \[RightArrow] \:751f .wl \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:5dee\:5206\:5f62\:5f0f\:306b\:5909\:63db\:3057\:5bb9\:91cf\:524a\:6e1b\n" <>
   "  ClaudeConvertToPaclet[name]     \[RightArrow] .wl \:3092 Paclet \:5f62\:5f0f\:306b\:5909\:63db\n" <>
   "  ClaudeCreateDocumentation[name] \[RightArrow] \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:81ea\:52d5\:751f\:6210 (Fallback)\n" <>
   "  ClaudeUpdateDocumentation[name]       \[RightArrow] \:524d\:56de\:4ee5\:964d\:306e\:5909\:66f4\:3092\:81ea\:52d5\:691c\:51fa\:3057\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\n" <>
@@ -2230,13 +2274,15 @@ cleanMarkdown[s_String] := StringTrim @ StringReplace[s, {
 (* ClaudeQuery 応答をマークダウン解析して適切なスタイルのセルで出力 *)
 iFlushQueryTextBuf[nb_NotebookObject, buf_List] :=
   If[Length[buf] > 0,
+    Quiet[SelectionMove[nb, After, Notebook]];
     NBAccess`NBWriteCell[nb,
       Cell[StringJoin[Riffle[buf, "\n"]], "Text"]]];
 
 iWriteQueryResponse[nb_NotebookObject, text_String] :=
   Module[{lines, i, line, trimmed, textBuf = {}, content,
           inCodeBlock = False, codeLang = "", codeBuf = {}},
-
+    (* 非同期コールバックからの呼び出し対策: 末尾に移動してから全セルを書き込み *)
+    Quiet[SelectionMove[nb, After, Notebook]];
     lines = StringSplit[text, "\n"];
     Do[
       line = lines[[i]];
@@ -3653,6 +3699,24 @@ ClaudeCompactHistory[] :=
 ClaudeCompactHistory[name_String] :=
   iCompactHistory[EvaluationNotebook[], iNamedSessionTag[name]];
 
+(* 履歴サイズ診断 *)
+ClaudeHistorySize[] := ClaudeHistorySize[EvaluationNotebook[]];
+ClaudeHistorySize[nb_NotebookObject] :=
+  Module[{tag = iSessionTag[], raw, entries, byteSize, entryCount},
+    raw = NBAccess`NBHistoryRawData[nb, tag];
+    entries = Lookup[raw, "entries", {}];
+    entryCount = Length[entries];
+    byteSize = ByteCount[raw];
+    <|"Entries" -> entryCount,
+      "ByteCount" -> byteSize,
+      "KiloBytes" -> Round[byteSize / 1024.0, 0.1],
+      "Status" -> Which[
+        byteSize > 500000, Style["危険: ノートブック動作に深刻な影響", Red, Bold],
+        byteSize > 200000, Style["警告: コンパクション推奨", Orange, Bold],
+        byteSize > 100000, Style["注意: やや大きい", RGBColor[0.6, 0.5, 0]],
+        True, Style["正常", Darker[Green]]]|>
+  ];
+
 (* iMoveAfterEvalCell removed: use NBAccess`NBWriteAnchorAfterEvalCell *)
 
 (* ============================================================
@@ -3749,7 +3813,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
       "time"        -> AbsoluteTime[],
       "type"        -> "query",
       "instruction" -> prompt,
-      "fullPrompt"  -> fullPrompt,
+      "fullPrompt"  -> Compress[fullPrompt],
       "cellCount"   -> NBAccess`NBCellCount[nb],
       "response"    -> "(\:51e6\:7406\:4e2d)",
       "code"        -> ""
@@ -3840,26 +3904,33 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
 
 ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
+    $iAllowReadTool = True;
   With[{nb = Quiet[EvaluationNotebook[]]},
   Module[{session, tag},
-  (* \:73fe\:5728\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:5b9f\:969b\:306e\:6a5f\:5bc6\:30de\:30fc\:30af\:304b\:3089 $confidentialSymbols \:3092\:518d\:69cb\:7bc9 *)
-  (* \:30bb\:30c3\:30b7\:30e7\:30f3\:5168\:4f53\:306e\:53e4\:3044\:60c5\:5831\:304c\:6b8b\:3089\:306a\:3044\:3088\:3046\:30af\:30ea\:30a2\:3057\:3066\:304b\:3089\:518d\:767b\:9332 *)
+  (* 現在のノートブックの実際の機密マークから $confidentialSymbols を再構築 *)
+  (* セッション全体の古い情報が残らないようクリアしてから再登録 *)
    $confidentialSymbols = <||>;
   $confVarTimes = <||>;
   $allConfidentialVars = <||>;
   NBAccess`NBClearConfidentialVars[];
   iRebuildConfidentialSymbols[nb];
-  (* \:63a8\:79fb\:7684\:4f9d\:5b58\:5909\:6570\:3092\:542b\:3080\:5168\:6a5f\:5bc6\:5909\:6570\:30bb\:30c3\:30c8\:3092\:69cb\:7bc9 *)
-  With[{deps = Quiet[NBAccess`NBBuildVarDependencies[nb]],
-         confVars = Keys[$confidentialSymbols]},
-    If[AssociationQ[deps] && Length[confVars] > 0,
-      $allConfidentialVars = Association[
-        # -> True & /@ Quiet[NBAccess`NBTransitiveDependents[deps, confVars]]];
-      NBAccess`NBSetConfidentialVars[$allConfidentialVars],
-      $allConfidentialVars = $confidentialSymbols;
-      NBAccess`NBSetConfidentialVars[$confidentialSymbols]]];
-  (* \:4f9d\:5b58\:30bb\:30eb\:306e\:30aa\:30ec\:30f3\:30b8\:30b9\:30bf\:30a4\:30eb\:3092\:66f4\:65b0 *)
-  Quiet[NBAccess`NBScanDependentCells[nb, Keys[$confidentialSymbols]]];
+  (* 機密変数が存在する場合のみ、高コストな依存グラフ構築・走査を実行 *)
+  With[{confVars = Keys[$confidentialSymbols]},
+    If[Length[confVars] > 0,
+      (* 推移的依存変数を含む全機密変数セットを構築 *)
+      With[{deps = Quiet[NBAccess`NBBuildVarDependencies[nb]]},
+        If[AssociationQ[deps],
+          $allConfidentialVars = Association[
+            # -> True & /@ Quiet[NBAccess`NBTransitiveDependents[deps, confVars]]];
+          NBAccess`NBSetConfidentialVars[$allConfidentialVars];
+          (* 依存セルのオレンジスタイルを更新（deps を再利用して二重計算を回避） *)
+          Quiet[NBAccess`NBScanDependentCells[nb, confVars, deps]],
+          (* deps 構築失敗時のフォールバック *)
+          $allConfidentialVars = $confidentialSymbols;
+          NBAccess`NBSetConfidentialVars[$confidentialSymbols]]],
+      (* 機密変数なし: 高コスト処理をすべてスキップ *)
+      $allConfidentialVars = <||>;
+      NBAccess`NBSetConfidentialVars[<||>]]];
   session = iEnsureDefaultSession[nb];
   tag     = session["SessionTag"];
   iClaudeQueryImpl[nb, tag, prompt,
@@ -3867,9 +3938,10 @@ ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
     OptionValue[Model], OptionValue[PrivacySpec], TrueQ[OptionValue[AutoPrivate]]]
   ]]);
 
-(* \:30bb\:30c3\:30b7\:30e7\:30f3\:5bfe\:5fdc\:7248 ClaudeQuery\:ff08\:975e\:540c\:671f\:30fb\:5c65\:6b74\:4fdd\:5b58\:4ed8\:304d\:ff09 *)
+(* セッション対応版 ClaudeQuery（非同期・履歴保存付き） *)
 ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ClaudeQuery, {opts}, Fallback]];
+    $iAllowReadTool = True;
   With[{nb = session["Notebook"]},
   Module[{tag},
     tag = session["SessionTag"];
@@ -3883,18 +3955,37 @@ ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
   ]]);
 
 (* ============================================================
-   \:975e\:540c\:671f\:30b3\:30a2\:ff1aStartProcess + ScheduledTask \:30dd\:30fc\:30ea\:30f3\:30b0
-   \:30fbStartProcess \:306b\:306f batFile \:3092\:305d\:306e\:307e\:307e\:6e21\:3059\:ff08\:30af\:30a9\:30fc\:30c8\:4e0d\:8981\:ff09
-   \:30fb.cmd \:306f\:30d7\:30ed\:30bb\:30b9\:7d42\:4e86\:5f8c\:306b\:66f8\:304d\:8fbc\:307f\:5b8c\:4e86\:307e\:3067\:6700\:59273\:56de\:30ea\:30c8\:30e9\:30a4
+   $Language ベースの言語指示ヘルパー
+   プロンプト内の言語指定を $Language に基づいて動的生成する。
    ============================================================ *)
 
-(* ClaudeQueryAsync は iClaudeQueryAsyncWithProgress に統合済み。
-   ClaudeDebug/ClaudeReview/iClaudeReviewChunkedAsync は
-   iClaudeQueryAsyncWithProgress を直接呼び出す。 *)
+(* 現在の言語名を返す（英語表記） *)
+iLanguageName[] := If[StringQ[$Language], $Language, "English"];
 
-(* ============================================================
-   Mathematica \:30b3\:30fc\:30c9\:751f\:6210\:306b\:7279\:5316\:3057\:305f\:30e9\:30c3\:30d1\:30fc
-   ============================================================ *)
+(* プロンプト用の言語指示文を生成。
+   style:
+     "polite"  → 敬体 (日本語) / polite style (他言語)
+     "plain"   → 常体 (日本語) / concise style (他言語)
+     "general" → "All text must be written in ..." *)
+iLanguageInstruction["polite"] :=
+  If[$Language === "Japanese",
+    "Write in Japanese using \:656c\:4f53 (\:3067\:3059\:30fb\:307e\:3059\:8abf) style.\n",
+    "Write in " <> iLanguageName[] <> ".\n"];
+
+iLanguageInstruction["plain"] :=
+  If[$Language === "Japanese",
+    "Write in Japanese using \:5e38\:4f53 (\:3060\:30fb\:3067\:3042\:308b\:8abf) style for brevity.\n",
+    "Write in " <> iLanguageName[] <> " using concise style.\n"];
+
+iLanguageInstruction["general"] :=
+  "All text must be written in " <> iLanguageName[] <> ".\n";
+
+iLanguageInstruction["summary"] :=
+  "Summarize the following Mathematica package update instruction in ONE short " <>
+  iLanguageName[] <> " sentence (max 40 chars). ";
+
+iLanguageInstruction["explanation"] :=
+  "All explanatory text must be written in " <> iLanguageName[] <> ".";
 
 ClaudeMath[task_String] := iClaudeQueryRaw[
   "You are an expert Wolfram Language / Mathematica programmer. \
@@ -3905,7 +3996,7 @@ For explanatory text outside code blocks: \
 do NOT use markdown tables (no |---|); \
 instead describe comparisons as numbered lists or plain sentences. \
 Do not use markdown bold (**text**) or heading syntax (# ##). \
-All explanatory text must be written in Japanese. \
+All explanatory text must be written in " <> iLanguageName[] <> ". \
 Task: " <> task
 ];
 
@@ -4005,7 +4096,7 @@ iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
   ];
 
 (* ClaudeQuery \:7528\:30d5\:30a9\:30fc\:30de\:30c3\:30c8\:6307\:793a\:ff08\:30d7\:30ed\:30dd\:30fc\:30b7\:30e7\:30ca\:30eb\:30d5\:30a9\:30f3\:30c8\:5411\:3051\:ff09 *)
-$claudeQueryPrefix =
+$claudeQueryPrefix :=
   "You are a knowledgeable assistant. Your response will be rendered as styled cells in Mathematica's notebook.\n\
 CRITICAL RULE: Do NOT include any code blocks (```mathematica ... ``` or other). \
 ClaudeQuery returns TEXT only. If the user's request requires generating or executing code, \
@@ -4016,7 +4107,7 @@ FORMATTING RULES:\n\
   Use indented lists (  - subitem) for nested items.\n\
 - Do NOT use markdown tables (no |---|). Tables are not rendered properly.\n\
 - **Bold** is allowed but will be stripped in display.\n\
-- All text must be written in Japanese.\n\
+- All text must be written in " <> iLanguageName[] <> ".\n\
 SYMBOL REFERENCE CONVENTION: <<n>> in the prompt refers to a specific symbol (variable or function) \
 in the user's Mathematica notebook kernel. Metadata about referenced symbols is appended at the end of the prompt. \
 In your answer, refer to the symbol by name.\n\
@@ -4030,7 +4121,7 @@ If the user wants to MODIFY a package, suggest using ClaudeEval with ClaudeUpdat
 Do NOT attempt to read or write package files directly.\n\n";
 
 
-$claudeMathPromptPrefix =
+$claudeMathPromptPrefix :=
   "You are an expert Wolfram Language / Mathematica programmer. \
 Your response will be parsed by a program that extracts ```mathematica ... ``` blocks \
 and inserts them as executable Input cells in the user's notebook.\n\n\
@@ -4054,7 +4145,7 @@ Use idiomatic Wolfram Language style. \
 For brief explanatory text OUTSIDE code blocks (a few sentences only): \
 do NOT use markdown tables (no |---|); \
 do not use markdown bold (**text**) or heading syntax (# ##). \
-All explanatory text must be written in Japanese.\n\n\
+All explanatory text must be written in " <> iLanguageName[] <> ".\n\n\
 UNICODE IN STRINGS (CRITICAL):\n\
 When writing Mathematica string literals, ALWAYS use literal Unicode characters directly. \
 NEVER use \\uXXXX escape sequences (e.g. \\uff08, \\u30fb). \
@@ -4257,7 +4348,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
       "step"        -> step,
       "time"        -> AbsoluteTime[],
       "instruction" -> task,
-      "fullPrompt"  -> contextPrompt,
+      "fullPrompt"  -> Compress[contextPrompt],
       "cellCount"   -> NBAccess`NBCellCount[nb],
       "response"    -> "\:ff08\:51e6\:7406\:4e2d\:ff09",
       "code"        -> ""
@@ -4492,6 +4583,7 @@ iResolveWebFetch[task_String, Automatic] :=
 
 ClaudeEval[task_String, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
+    $iAllowReadTool = False;
   With[{nb = EvaluationNotebook[], st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate],
         actualTask = iResolveWebFetch[task, OptionValue[WebFetch]],
         ri = OptionValue[RepeatInterval],
@@ -4507,9 +4599,10 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := (
     ]
   ]);
 
-(* \:30ea\:30b9\:30c8\:5165\:529b\:7248: {"\:6307\:793a", data, Image, ...} *)
+(* リスト入力版: {"指示", data, Image, ...} *)
 ClaudeEval[items_List, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
+    $iAllowReadTool = False;
   With[{nb = EvaluationNotebook[], st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate],
         wf = OptionValue[WebFetch], ri = OptionValue[RepeatInterval], mdl = OptionValue[Model],
         ps = OptionValue[PrivacySpec], ap = TrueQ[OptionValue[AutoPrivate]]},
@@ -4529,9 +4622,10 @@ ClaudeEval[items_List, opts:OptionsPattern[]] := (
     ]
   ]]);
 
-(* \:30bb\:30c3\:30b7\:30e7\:30f3\:6307\:5b9a\:7248 ClaudeEval *)
+(* セッション指定版 ClaudeEval *)
 ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ClaudeEval, {opts}, Fallback]];
+    $iAllowReadTool = False;
   With[{st = OptionValue[ClaudeEval, {opts}, StartTime], ae = OptionValue[ClaudeEval, {opts}, AutoEvaluate],
         actualTask = iResolveWebFetch[task, OptionValue[ClaudeEval, {opts}, WebFetch]],
         ri = OptionValue[ClaudeEval, {opts}, RepeatInterval], mdl = OptionValue[ClaudeEval, {opts}, Model],
@@ -4548,6 +4642,7 @@ ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := (
 
 ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ClaudeEval, {opts}, Fallback]];
+    $iAllowReadTool = False;
   Module[{norm = iNormalizePrompt[items], st = OptionValue[ClaudeEval, {opts}, StartTime],
           ae = OptionValue[ClaudeEval, {opts}, AutoEvaluate],
           wf = OptionValue[ClaudeEval, {opts}, WebFetch],
@@ -4568,35 +4663,6 @@ ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := (
         st, ri]
     ]
   ]);
-
-(* ============================================================
-   \:4ed5\:69d8\:751f\:6210\:ff08ClaudeSpec\:ff09
-   ClaudeEval \:3068\:540c\:69d8\:3060\:304c\:30b3\:30fc\:30c9\:3067\:306f\:306a\:304f\:4ed5\:69d8\:66f8\:3092\:51fa\:529b\:3059\:308b\:3002
-   \:51fa\:529b\:30bb\:30eb\:306f\:9752\:7d2b\:7cfb\:306e\:88c5\:98fe\:4ed8\:304d Text \:30bb\:30eb\:3002
-   ============================================================ *)
-
-$claudeSpecPrefix =
-  "You are an expert software architect and specification writer for Wolfram Language / Mathematica.\n\
-Your task is to analyze the given notebook content or instructions and produce a SPECIFICATION document, NOT executable code.\n\n\
-OUTPUT FORMAT RULES:\n\
-- Write the specification as structured plain text in Japanese.\n\
-- Use numbered sections (1. 2. 3.) and sub-items for organization.\n\
-- Include: \:76ee\:7684, \:5165\:529b/\:51fa\:529b\:306e\:5b9a\:7fa9, \:51e6\:7406\:30d5\:30ed\:30fc\:306e\:6982\:8981, \:30c7\:30fc\:30bf\:69cb\:9020, \:5236\:7d04\:6761\:4ef6/\:524d\:63d0\:6761\:4ef6, \:30a8\:30e9\:30fc\:30cf\:30f3\:30c9\:30ea\:30f3\:30b0\:65b9\:91dd\n\
-- Do NOT produce executable Mathematica code. Instead describe WHAT the program should do, not HOW.\n\
-- Do NOT use markdown bold (**text**) or heading syntax (# ## ###).\n\
-- Do NOT use markdown tables (no |---|).\n\
-- If images are attached, analyze them as part of the specification context.\n\n\
-NOTE: Some cells in the notebook are marked as confidential and excluded. Do NOT ask for confidential data.\n\
-SYMBOL REFERENCE: <<n>> in the prompt refers to a specific symbol in the user's kernel.\n\n";
-
-(* \:4ed5\:69d8\:30bb\:30eb\:306e\:8996\:899a\:30b9\:30bf\:30a4\:30eb *)
-$specCellOpts = {
-  Background -> RGBColor[0.92, 0.92, 1.0],
-  CellFrame -> {{3, 3}, {1, 1}},
-  CellFrameColor -> RGBColor[0.35, 0.3, 0.7],
-  CellDingbat -> Cell["\[FilledDiamond]", FontColor -> RGBColor[0.35, 0.3, 0.7], FontSize -> 14],
-  FontSize -> 12
-};
 
 iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :=
   Module[{step, entry, jobId, history, contextPrompt},
@@ -4624,7 +4690,7 @@ iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :
       "step"        -> step,
       "time"        -> AbsoluteTime[],
       "instruction" -> "[Spec] " <> task,
-      "fullPrompt"  -> contextPrompt,
+      "fullPrompt"  -> Compress[contextPrompt],
       "cellCount"   -> NBAccess`NBCellCount[nb],
       "response"    -> "(\:51e6\:7406\:4e2d)",
       "code"        -> ""
@@ -4712,7 +4778,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
       "step"        -> step,
       "time"        -> AbsoluteTime[],
       "instruction" -> instruction,
-      "fullPrompt"  -> contextPrompt,
+      "fullPrompt"  -> Compress[contextPrompt],
       "cellCount"   -> NBAccess`NBCellCount[nb],
       "response"    -> "\:ff08\:51e6\:7406\:4e2d\:ff09",
       "code"        -> ""
@@ -4806,12 +4872,9 @@ ContinueEval[session_Association, instruction_String:"\:30a8\:30e9\:30fc\:3092\:
     ]
   ]);
 
-ContinueEval[session_Association] :=
-  ContinueEval[session, "\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044"];
-
-(* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:7248\:ff08\:30bb\:30c3\:30b7\:30e7\:30f3\:6307\:5b9a\:306a\:3057\:ff09 *)
 ContinueEval[instruction_String, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ContinueEval, {opts}, Fallback]];
+    $iAllowReadTool = False;
   With[{nb = EvaluationNotebook[], st = OptionValue[ContinueEval, {opts}, StartTime],
         ae = OptionValue[ContinueEval, {opts}, AutoEvaluate],
         mdl = OptionValue[ContinueEval, {opts}, Model],
@@ -4823,16 +4886,18 @@ ContinueEval[instruction_String, opts:OptionsPattern[]] := (
     ]
   ]);
 
-ContinueEval[] :=
-  ContinueEval["\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044"];
+ContinueEval[session_Association, instruction_String:"\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044",
+    opts:OptionsPattern[]] := (
+    $currentUseFallback = TrueQ[OptionValue[Fallback]];
+    $iAllowReadTool = False;
+  With[{st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate], mdl = OptionValue[Model],
+        ps = OptionValue[PrivacySpec], ap = TrueQ[OptionValue[AutoPrivate]]},
+    iScheduleAt[
+      iContinueEvalImpl[session["Notebook"], session["SessionTag"], instruction, ae, mdl, ps, ap],
+      st
+    ]
+  ]);
 
-(* ============================================================
-   ContinueUpdate: 直前の ClaudeUpdatePackage を結果を踏まえて継続
-   ============================================================ *)
-
-Options[ContinueUpdate] = {Fallback -> False, "UpdateApiMd" -> True, StartTime -> Now};
-
-(* --- 内部ヘルパー: ノートブックの最近のセル出力をテキストで取得 --- *)
 iCaptureRecentOutput[nb_NotebookObject, afterCellCount_Integer] :=
   Module[{ctx},
     ctx = Quiet @ Check[iCaptureNotebookContext[nb, afterCellCount], ""];
@@ -5035,9 +5100,209 @@ iClaudeReviewChunkedAsync[nb_, chunks_, label_, i_, results_] :=
    \:30d1\:30c3\:30b1\:30fc\:30b8\:7ba1\:7406\:ff1a\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30fb\:66f4\:65b0\:30fb\:30ea\:30b9\:30c8\:30a2\:30fb\:5c65\:6b74
    ============================================================ *)
 
+(* FileQ 互換ヘルパー: FileQ は Mathematica 14.1+ のため、
+   古いバージョンでは未定義。全バージョンで動作する代替を定義。 *)
+iFileQ[path_String] := FileExistsQ[path] && !DirectoryQ[path];
+iFileQ[_] := False;
+
 (* \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306e\:30d1\:30b9\:3092\:8fd4\:3059 *)
 backupDir[packageName_String] :=
   FileNameJoin[{Global`$packageDirectory, packageName <> "_info", "history"}];
+
+(* ============================================================
+   差分ベースバックアップシステム（汎用）
+   .wl / .md 等のテキストファイルを SequenceAlignment ベースの
+   差分で保存し、バックアップ容量を削減する。
+   
+   保存形式:
+   - filename.cz        Compress[全文] ベースライン
+   - filename.cdiff      Compress[{前回Dir名, SequenceAlignment結果}] 差分
+   - filename.unchanged  前回Dir名（内容同一、1ホップ解決保証）
+   - filename            レガシー生ファイル（後方互換読み取り対応）
+   ============================================================ *)
+
+$iBackupBaselineInterval = 10;
+
+(* --- 汎用保存: ファイルパス指定 --- *)
+(* srcFilePath のテキストを読み込み、差分形式で histDir に保存する。 *)
+iSaveBackupFile[histDir_String, srcFilePath_String, packageName_String,
+    fullBaseline:(True|False):False] :=
+  Module[{content},
+    content = Quiet @ Check[Import[srcFilePath, "Text"], ""];
+    If[!StringQ[content] || content === "", Return[$Failed]];
+    iSaveBackupFileContent[histDir, FileNameTake[srcFilePath], content, packageName, fullBaseline]
+  ];
+
+(* --- 汎用保存: コンテンツ直接指定 --- *)
+(* テキスト content を fileName として histDir に保存。
+   前回バックアップと比較し baseline / diff / unchanged を自動選択。 *)
+iSaveBackupFileContent[histDir_String, fileName_String, content_String,
+    packageName_String, fullBaseline:(True|False):False] :=
+  Module[{czPath, cdiffPath, unchangedPath, prevDir, prevContent,
+          alignment, diffData, backupCount},
+    czPath = FileNameJoin[{histDir, fileName <> ".cz"}];
+    cdiffPath = FileNameJoin[{histDir, fileName <> ".cdiff"}];
+    unchangedPath = FileNameJoin[{histDir, fileName <> ".unchanged"}];
+    (* 強制ベースライン *)
+    If[fullBaseline,
+      Export[czPath, Compress[content], "String"];
+      Return[czPath]];
+    (* 前回バックアップを検索 *)
+    prevDir = iFindPreviousBackupWithFile[histDir, fileName, packageName];
+    If[!StringQ[prevDir],
+      Export[czPath, Compress[content], "String"];
+      Return[czPath]];
+    prevContent = iLoadBackupFile[prevDir, fileName, packageName];
+    If[!StringQ[prevContent],
+      Export[czPath, Compress[content], "String"];
+      Return[czPath]];
+    (* 内容同一 → .unchanged (1ホップ解決: .unchanged チェーンを辿らない) *)
+    If[content === prevContent,
+      Module[{prevUnchangedPath, targetDirName},
+        prevUnchangedPath = FileNameJoin[{prevDir, fileName <> ".unchanged"}];
+        targetDirName = If[FileExistsQ[prevUnchangedPath],
+          StringTrim[Quiet @ Check[Import[prevUnchangedPath, "String"], ""]],
+          ""];
+        If[targetDirName === "", targetDirName = FileNameTake[prevDir, -1]];
+        Export[unchangedPath, targetDirName, "String"]];
+      Return[unchangedPath]];
+    (* ベースライン間隔チェック *)
+    backupCount = Length[FileNames["*_documentupdate", backupDir[packageName]]] +
+                  Length[FileNames["pre_*", backupDir[packageName]]];
+    If[Mod[backupCount, $iBackupBaselineInterval] === 0,
+      Export[czPath, Compress[content], "String"];
+      Return[czPath]];
+    (* 差分計算 *)
+    alignment = Quiet @ Check[
+      SequenceAlignment[
+        StringSplit[prevContent, "\n"],
+        StringSplit[content, "\n"]],
+      $Failed];
+    If[alignment === $Failed,
+      Export[czPath, Compress[content], "String"];
+      Return[czPath]];
+    diffData = {FileNameTake[prevDir, -1], alignment};
+    Export[cdiffPath, Compress[diffData], "String"];
+    cdiffPath
+  ];
+
+(* --- 汎用読み込み --- *)
+(* バックアップディレクトリから任意のファイルを復元する。
+   生ファイル / .cz / .cdiff / .unchanged すべてに対応。 *)
+iLoadBackupFile[dir_String, fileName_String, packageName_String] :=
+  Module[{rawPath, czPath, cdiffPath, unchangedPath},
+    rawPath = FileNameJoin[{dir, fileName}];
+    czPath = FileNameJoin[{dir, fileName <> ".cz"}];
+    cdiffPath = FileNameJoin[{dir, fileName <> ".cdiff"}];
+    unchangedPath = FileNameJoin[{dir, fileName <> ".unchanged"}];
+    Which[
+      FileExistsQ[rawPath],
+        Quiet @ Check[Import[rawPath, "Text"], $Failed],
+      FileExistsQ[czPath],
+        Quiet @ Check[Uncompress[Import[czPath, "String"]], $Failed],
+      FileExistsQ[unchangedPath],
+        Module[{targetDirName, targetDir},
+          targetDirName = StringTrim[Quiet @ Check[Import[unchangedPath, "String"], ""]];
+          targetDir = FileNameJoin[{backupDir[packageName], targetDirName}];
+          If[DirectoryQ[targetDir],
+            iLoadBackupFile[targetDir, fileName, packageName],
+            $Failed]],
+      FileExistsQ[cdiffPath],
+        iReconstructFileFromChain[dir, fileName, packageName, 0],
+      True, $Failed
+    ]
+  ];
+
+(* --- 前回バックアップ検索 --- *)
+(* histDir より前のバックアップで fileName を持つ最新ディレクトリを返す。 *)
+iFindPreviousBackupWithFile[histDir_String, fileName_String, packageName_String] :=
+  Module[{bdir, allDirs, histName, preceding},
+    bdir = backupDir[packageName];
+    If[!DirectoryQ[bdir], Return[$Failed]];
+    histName = FileNameTake[histDir, -1];
+    allDirs = SortBy[Select[FileNames["*", bdir, {1}], DirectoryQ],
+      FileNameTake[#, -1] &];
+    preceding = Select[allDirs, FileNameTake[#, -1] < histName &];
+    If[Length[preceding] === 0, Return[$Failed]];
+    Do[
+      If[FileExistsQ[FileNameJoin[{d, fileName}]] ||
+         FileExistsQ[FileNameJoin[{d, fileName <> ".cz"}]] ||
+         FileExistsQ[FileNameJoin[{d, fileName <> ".cdiff"}]] ||
+         FileExistsQ[FileNameJoin[{d, fileName <> ".unchanged"}]],
+        Return[d, Do]],
+      {d, Reverse[preceding]}];
+    $Failed
+  ];
+
+(* --- 差分チェーン復元 --- *)
+iReconstructFileFromChain[targetDir_String, fileName_String,
+    packageName_String, depth_Integer] :=
+  Module[{cdiffPath, compressed, diffData, prevDirName, alignment,
+          bdir, prevDir, prevContent, newLines},
+    If[depth > 50, Return[$Failed]];
+    cdiffPath = FileNameJoin[{targetDir, fileName <> ".cdiff"}];
+    If[!FileExistsQ[cdiffPath], Return[$Failed]];
+    compressed = Quiet @ Check[Import[cdiffPath, "String"], ""];
+    If[!StringQ[compressed] || compressed === "", Return[$Failed]];
+    diffData = Quiet @ Check[Uncompress[compressed], $Failed];
+    If[!MatchQ[diffData, {_String, _List}], Return[$Failed]];
+    {prevDirName, alignment} = diffData;
+    bdir = backupDir[packageName];
+    prevDir = FileNameJoin[{bdir, prevDirName}];
+    If[!DirectoryQ[prevDir], Return[$Failed]];
+    (* 前回コンテンツ取得: .unchanged は1ホップで解決するため深度を消費しない *)
+    prevContent = Which[
+      FileExistsQ[FileNameJoin[{prevDir, fileName}]],
+        Quiet @ Check[Import[FileNameJoin[{prevDir, fileName}], "Text"], $Failed],
+      FileExistsQ[FileNameJoin[{prevDir, fileName <> ".cz"}]],
+        Quiet @ Check[Uncompress[Import[FileNameJoin[{prevDir, fileName <> ".cz"}], "String"]], $Failed],
+      FileExistsQ[FileNameJoin[{prevDir, fileName <> ".unchanged"}]],
+        Module[{uTarget, uDir},
+          uTarget = StringTrim[Quiet @ Check[
+            Import[FileNameJoin[{prevDir, fileName <> ".unchanged"}], "String"], ""]];
+          uDir = FileNameJoin[{bdir, uTarget}];
+          If[DirectoryQ[uDir], iLoadBackupFile[uDir, fileName, packageName], $Failed]],
+      FileExistsQ[FileNameJoin[{prevDir, fileName <> ".cdiff"}]],
+        iReconstructFileFromChain[prevDir, fileName, packageName, depth + 1],
+      True, $Failed
+    ];
+    If[!StringQ[prevContent], Return[$Failed]];
+    newLines = iApplyAlignment[alignment];
+    If[newLines === $Failed, Return[$Failed]];
+    StringRiffle[newLines, "\n"]
+  ];
+
+(* SequenceAlignment → ターゲット側テキスト復元 *)
+iApplyAlignment[alignment_List] :=
+  Quiet @ Check[
+    Flatten[
+      Map[
+        If[MatchQ[#, {_List, _List}], #[[2]], #] &,
+        alignment]],
+    $Failed];
+
+(* --- バックアップディレクトリから復元可能なファイル名一覧 --- *)
+(* 指定拡張子パターンのファイルを生/.cz/.cdiff/.unchanged から検出 *)
+iListRestorableFiles[dir_String, extPattern_String] :=
+  Module[{allFiles, stripSuffix},
+    allFiles = FileNameTake /@ Select[FileNames["*", dir], iFileQ];
+    stripSuffix[s_] := StringReplace[s,
+      (".cz" | ".cdiff" | ".unchanged") ~~ EndOfString -> ""];
+    DeleteDuplicates @ Select[
+      stripSuffix /@ allFiles,
+      StringMatchQ[#, __ ~~ extPattern] &]
+  ];
+
+(* --- .wl 専用ラッパー（後方互換） --- *)
+iSaveBackupWl[histDir_String, srcFile_String, packageName_String,
+    fullBaseline:(True|False):False] :=
+  iSaveBackupFile[histDir, srcFile, packageName, fullBaseline];
+
+iLoadBackupWl[dir_String, packageName_String] :=
+  iLoadBackupFile[dir, packageName <> ".wl", packageName];
+
+iFindPreviousBackupWithWl[histDir_String, packageName_String] :=
+  iFindPreviousBackupWithFile[histDir, packageName <> ".wl", packageName];
 
 (* _info サブディレクトリ *)
 iInfoDir[packageName_String] :=
@@ -5117,14 +5382,14 @@ iPackageSourceFile[packageName_String] :=
 
 (* \:30bf\:30a4\:30e0\:30b9\:30bf\:30f3\:30d7\:6587\:5b57\:5217 "YYYYMMDD_HHMMSS" \:307e\:305f\:306f "YYYYMMDDHHMM" \:3092\:8aad\:307f\:3084\:3059\:3044\:5f62\:5f0f\:306b\:5909\:63db *)
 formatTimestamp[ts_String] := Module[{m, m2},
-  (* YYYYMMDD_HHMMSS \:5f62\:5f0f (ClaudeUpdatePackage) *)
+  (* YYYYMMDD_HHMMSS \:5f62\:5f0f (ClaudeUpdatePackage) → 秒は省略 *)
   m = StringCases[ts,
     RegularExpression["(\\d{4})(\\d{2})(\\d{2})_(\\d{2})(\\d{2})(\\d{2})"] :>
-      {"$1", "$2", "$3", "$4", "$5", "$6"}];
+      {"$1", "$2", "$3", "$4", "$5"}];
   If[Length[m] > 0,
     With[{p = First[m]},
       p[[1]] <> "-" <> p[[2]] <> "-" <> p[[3]] <>
-      " " <> p[[4]] <> ":" <> p[[5]] <> ":" <> p[[6]]],
+      " " <> p[[4]] <> ":" <> p[[5]]],
     (* YYYYMMDDHHMM \:5f62\:5f0f (ClaudeUpdateDocumentation) *)
     m2 = StringCases[ts,
       RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
@@ -5244,7 +5509,7 @@ iBackupTimestampPart[dirName_String] := Which[
 
 (* \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:5185\:306e\:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\:3092\:53d6\:5f97 *)
 iBackupFileList[dir_String] :=
-  FileNameTake /@ Select[FileNames["*", dir], FileQ];
+  FileNameTake /@ Select[FileNames["*", dir], iFileQ];
 
 (* プロンプトの要約を生成して summary.txt に保存する。
    API 制限中は生成せず空文字を返す（summary.txt も作成しない）。
@@ -5262,7 +5527,7 @@ iGenerateBackupSummary[dir_String] :=
     If[queryFn === $Failed || !MatchQ[queryFn, _Symbol],
       Return[""]];  (* API 利用不可: summary.txt を作らず従来表示に任せる *)
     result = Quiet @ Check[queryFn[
-      "Summarize the following Mathematica package update instruction in ONE short Japanese sentence (max 40 chars). " <>
+      iLanguageInstruction["summary"] <>
       "Output ONLY the summary, nothing else. No quotes.\n\n" <>
       StringTake[prompt, UpTo[1000]]], $Failed];
     (* iIsAPIErrorResponse でエラー・制限レスポンスをチェック *)
@@ -5344,9 +5609,76 @@ iAllBackupEntriesAll[] :=
     MapIndexed[Function[{entry, idx}, Append[entry, "Index" -> First[idx]]], allEntries]
   ];
 
+(* ============================================================
+   安全なバックアップ削除:
+   差分チェーンの中間ノードを削除するとき、後続の .cdiff / .unchanged が
+   参照先を失って復元不能になることを防ぐ。
+   削除前に後続の依存を .cz (ベースライン) に変換し自己完結させる。
+   ============================================================ *)
+
+(* パッケージバックアップの安全削除。
+   packageName が "" の場合はチェーン解決をスキップ（生ファイルのみの場合）。 *)
+iSafeDeleteBackupDir[dir_String, packageName_String:""] :=
+  Module[{parentDir, dirName, allDirs, laterDirs, resolved = 0},
+    If[!DirectoryQ[dir], Return[$Failed]];
+    parentDir = DirectoryName[dir];
+    dirName = FileNameTake[dir, -1];
+    (* 同じ history 内の全ディレクトリを取得 *)
+    allDirs = SortBy[Select[FileNames["*", parentDir, {1}], DirectoryQ],
+      FileNameTake[#, -1] &];
+    (* 削除対象より後のディレクトリ *)
+    laterDirs = Select[allDirs, FileNameTake[#, -1] > dirName &];
+    (* 後続ディレクトリで dirName を参照する .cdiff / .unchanged を検索・解決 *)
+    Scan[Function[laterDir,
+      Module[{allFiles},
+        allFiles = Select[FileNames["*", laterDir],
+          iFileQ[#] && (StringEndsQ[FileNameTake[#], ".cdiff"] ||
+                        StringEndsQ[FileNameTake[#], ".unchanged"]) &];
+        Scan[Function[refFile,
+          Module[{refContent, refDirName, baseName, fullContent, czPath},
+            refContent = Quiet @ Check[Import[refFile, "String"], ""];
+            If[!StringQ[refContent] || refContent === "", Return[]];
+            (* 参照先ディレクトリ名を抽出 *)
+            refDirName = If[StringEndsQ[FileNameTake[refFile], ".unchanged"],
+              StringTrim[refContent],
+              (* .cdiff の場合: Uncompress して {prevDirName, alignment} の第1要素 *)
+              Module[{data},
+                data = Quiet @ Check[Uncompress[refContent], $Failed];
+                If[MatchQ[data, {_String, _List}], data[[1]], ""]]];
+            (* このファイルが削除対象ディレクトリを参照しているか *)
+            If[refDirName === dirName,
+              (* ファイル名を復元 (.cdiff/.unchanged を除去) *)
+              baseName = StringReplace[FileNameTake[refFile],
+                {".cdiff" -> "", ".unchanged" -> ""}];
+              (* フルコンテンツを復元して .cz に変換 *)
+              If[packageName =!= "",
+                fullContent = iLoadBackupFile[laterDir, baseName, packageName],
+                (* packageName なし: 直接復元を試みる *)
+                fullContent = If[StringEndsQ[FileNameTake[refFile], ".unchanged"],
+                  (* unchanged: 元のディレクトリから直接読む *)
+                  Module[{origPath = FileNameJoin[{parentDir, dirName, baseName}]},
+                    If[FileExistsQ[origPath], Import[origPath, "Text"], $Failed]],
+                  $Failed]];
+              If[StringQ[fullContent],
+                czPath = FileNameJoin[{laterDir, baseName <> ".cz"}];
+                Export[czPath, Compress[fullContent], "String"];
+                DeleteFile[refFile];
+                resolved++,
+                Print["  \:26a0 " <> baseName <> " in " <> FileNameTake[laterDir, -1] <>
+                  " \:306e\:89e3\:6c7a\:306b\:5931\:6557\:3002\:524a\:9664\:3092\:4e2d\:6b62\:3057\:307e\:3059\:3002"];
+                Return[$Failed, Module]
+              ]]
+          ]], allFiles]
+      ]], laterDirs];
+    If[resolved > 0,
+      Print["  \:2713 " <> ToString[resolved] <> " \:500b\:306e\:4f9d\:5b58\:30d5\:30a1\:30a4\:30eb\:3092\:30d9\:30fc\:30b9\:30e9\:30a4\:30f3\:306b\:5909\:63db\:3057\:307e\:3057\:305f\:3002"]];
+    DeleteDirectory[dir, DeleteContents -> True];
+    dir
+  ];
+
 (* Review \:30a2\:30af\:30b7\:30e7\:30f3: \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306e\:5185\:5bb9\:3092\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:8868\:793a *)
 iBackupReview[packageName_String, dir_String, btype_String] :=
-  Module[{nb, cells, files, dirName, wlFile, currentFile, currentCode, backupCode},
+  Module[{nb, cells, files, dirName, currentFile, currentCode, backupCode},
     nb = EvaluationNotebook[];
     dirName = FileNameTake[dir, -1];
     files = iBackupFileList[dir];
@@ -5358,20 +5690,19 @@ iBackupReview[packageName_String, dir_String, btype_String] :=
       "\n\:30d5\:30a1\:30a4\:30eb\:6570: " <> ToString[Length[files]] <>
       "\n\:30d5\:30a1\:30a4\:30eb: " <> StringRiffle[files, ", "],
       "Text"]];
-    (* .wl \:304c\:3042\:308c\:3070\:73fe\:5728\:3068\:306e\:5dee\:5206\:3092\:8868\:793a *)
-    wlFile = FileNameJoin[{dir, packageName <> ".wl"}];
+    (* .wl データがあれば現在との差分を表示 (.wl / .cz / .cdiff 対応) *)
     currentFile = iPackageSourceFile[packageName];
-    If[FileExistsQ[wlFile] && FileExistsQ[currentFile],
+    backupCode = iLoadBackupWl[dir, packageName];
+    If[StringQ[backupCode] && FileExistsQ[currentFile],
       currentCode = Import[currentFile, "Text"];
-      backupCode = Import[wlFile, "Text"];
-      If[StringQ[currentCode] && StringQ[backupCode],
+      If[StringQ[currentCode],
         Module[{currentLen, backupLen, diffLines},
           currentLen = StringLength[currentCode];
           backupLen = StringLength[backupCode];
           diffLines = If[currentCode === backupCode,
             "(\:73fe\:5728\:3068\:540c\:4e00\:5185\:5bb9)",
             "\:73fe\:5728: " <> ToString[currentLen] <> " chars, \:30d0\:30c3\:30af\:30a2\:30c3\:30d7: " <> ToString[backupLen] <> " chars\n" <>
-            iComputeSourceDiff[wlFile, currentFile]
+            iComputeSourceDiff[FileNameJoin[{dir, packageName <> ".wl"}], currentFile]
           ];
           AppendTo[cells, Cell[
             "\n--- .wl \:5dee\:5206 ---\n" <> StringTake[diffLines, UpTo[3000]],
@@ -5386,16 +5717,23 @@ iBackupReview[packageName_String, dir_String, btype_String] :=
           AppendTo[cells, Cell[
             "\n--- prompt.txt ---\n" <> StringTake[promptText, UpTo[2000]],
             "Program"]]]]];
-    (* .md \:30d5\:30a1\:30a4\:30eb\:304c\:3042\:308c\:3070\:4e00\:89a7\:8868\:793a *)
-    Module[{mdFiles},
-      mdFiles = FileNames["*.md", dir];
-      If[Length[mdFiles] > 0,
+    (* .md ファイルがあれば一覧表示 (.md / .cz / .cdiff / .unchanged 対応) *)
+    Module[{mdNames, mdInfo},
+      mdNames = iListRestorableFiles[dir, ".md"];
+      If[Length[mdNames] > 0,
+        mdInfo = Map[Function[fn,
+          Module[{fmt},
+            fmt = Which[
+              FileExistsQ[FileNameJoin[{dir, fn}]], "raw",
+              FileExistsQ[FileNameJoin[{dir, fn <> ".unchanged"}]], "=",
+              FileExistsQ[FileNameJoin[{dir, fn <> ".cdiff"}]], "\:0394",
+              FileExistsQ[FileNameJoin[{dir, fn <> ".cz"}]], "cz",
+              True, "?"];
+            fn <> " [" <> fmt <> "]"
+          ]], mdNames];
         AppendTo[cells, Cell[
           "\n--- \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb ---\n" <>
-          StringRiffle[
-            Map[Function[f,
-              FileNameTake[f] <> " (" <> ToString[FileByteCount[f]] <> " bytes)"],
-              mdFiles], "\n"],
+          StringRiffle[mdInfo, "\n"],
           "Program"]]]];
     (* \:30a2\:30af\:30b7\:30e7\:30f3\:30dc\:30bf\:30f3 *)
     With[{pn = packageName, d = dir},
@@ -5410,8 +5748,9 @@ iBackupReview[packageName_String, dir_String, btype_String] :=
           Button["Delete (\:524a\:9664)",
             Module[{},
               If[ChoiceDialog["\:672c\:5f53\:306b\:524a\:9664\:3057\:307e\:3059\:304b\:ff1f\n" <> d],
-                DeleteDirectory[d, DeleteContents -> True];
-                Print["\:524a\:9664\:3057\:307e\:3057\:305f: " <> d],
+                If[iSafeDeleteBackupDir[d, pn] =!= $Failed,
+                  Print["\:524a\:9664\:3057\:307e\:3057\:305f: " <> d],
+                  Print["\:524a\:9664\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002"]],
                 Print["\:30ad\:30e3\:30f3\:30bb\:30eb\:3057\:307e\:3057\:305f\:3002"]]],
             Method -> "Queued"]
         }]
@@ -5422,39 +5761,59 @@ iBackupReview[packageName_String, dir_String, btype_String] :=
 
 (* Pull \:30a2\:30af\:30b7\:30e7\:30f3: \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:5fa9\:5143 *)
 iBackupPull[packageName_String, dir_String] :=
-  Module[{nb, wlFile, destFile, mdFiles, docsDir, result = <||>},
+  Module[{nb, destFile, result = <||>, restoredSource, newSz, oldSz},
     nb = EvaluationNotebook[];
-    (* .wl \:30d5\:30a1\:30a4\:30eb\:306e\:5fa9\:5143 *)
-    wlFile = FileNameJoin[{dir, packageName <> ".wl"}];
+    (* .wl ファイルの復元 (レガシー .wl / .cz / .cdiff すべて対応) *)
     destFile = iPackageSourceFile[packageName];
-    If[FileExistsQ[wlFile],
-      (* \:30b5\:30a4\:30ba\:691c\:8a3c *)
-      With[{newSz = FileByteCount[wlFile],
-            oldSz = If[FileExistsQ[destFile], FileByteCount[destFile], 0]},
-        If[oldSz > 0 && newSz < oldSz * 0.5,
-          nbPrint[nb, "\:26a0 \:30ef\:30fc\:30cb\:30f3\:30b0: \:5fa9\:5143\:30d5\:30a1\:30a4\:30eb(" <> ToString[newSz] <>
-            " bytes)\:304c\:73fe\:5728(" <> ToString[oldSz] <>
-            " bytes)\:306e50%\:672a\:6e80!"]]];
-      If[Quiet @ Check[(CopyFile[wlFile, destFile, OverwriteTarget -> True]; True), False],
-        nbPrint[nb, "\:5fa9\:5143\:3057\:307e\:3057\:305f: " <> wlFile <> "\n\:2192 " <> destFile];
+    restoredSource = iLoadBackupWl[dir, packageName];
+    If[StringQ[restoredSource],
+      newSz = StringLength[restoredSource];
+      oldSz = If[FileExistsQ[destFile], FileByteCount[destFile], 0];
+      If[oldSz > 0 && newSz < oldSz * 0.5,
+        nbPrint[nb, "\:26a0 \:30ef\:30fc\:30cb\:30f3\:30b0: \:5fa9\:5143\:30c7\:30fc\:30bf(" <> ToString[newSz] <>
+          " chars)\:304c\:73fe\:5728(" <> ToString[oldSz] <>
+          " bytes)\:306e50%\:672a\:6e80!"]];
+      (* 書き込み先ディレクトリを確保 *)
+      Module[{destDir = DirectoryName[destFile]},
+        If[!DirectoryQ[destDir],
+          Quiet @ CreateDirectory[destDir, CreateIntermediateDirectories -> True]]];
+      (* 書き込み: BinaryWrite → Export フォールバック *)
+      If[Quiet @ Check[
+            Module[{strm},
+              strm = OpenWrite[destFile, BinaryFormat -> True];
+              If[Head[strm] =!= OutputStream,
+                (* OpenWrite 失敗 → Export でフォールバック *)
+                Export[destFile, restoredSource, "Text", CharacterEncoding -> "UTF-8"];
+                True,
+                BinaryWrite[strm, ToCharacterCode[restoredSource, "UTF-8"]];
+                Close[strm]; True]], False],
+        nbPrint[nb, "\:5fa9\:5143\:3057\:307e\:3057\:305f: " <> dir <> "\n\:2192 " <> destFile];
         Quiet @ Block[{$CharacterEncoding = "UTF-8"}, Get[destFile]];
         nbPrint[nb, "\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:518d\:30ed\:30fc\:30c9\:3057\:307e\:3057\:305f\:3002"];
         AssociateTo[result, "WL" -> destFile],
-        nbPrint[nb, "\:8b66\:544a: .wl \:306e\:66f8\:304d\:8fbc\:307f\:5931\:6557\:3002\:624b\:52d5\:3067\:30b3\:30d4\:30fc\:3057\:3066\:304f\:3060\:3055\:3044\:3002"]],
-      nbPrint[nb, "\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306b .wl \:304c\:3042\:308a\:307e\:305b\:3093\:3002"]];
-    (* .md \:30d5\:30a1\:30a4\:30eb\:306e\:5fa9\:5143\:ff08\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306e\:5834\:5408\:ff09 *)
-    mdFiles = FileNames["*.md", dir];
-    If[Length[mdFiles] > 0,
-      docsDir = FileNameJoin[{iInfoDir[packageName], "docs"}];
-      If[DirectoryQ[docsDir],
-        Scan[Function[f,
-          Module[{dest},
-            dest = FileNameJoin[{docsDir, FileNameTake[f]}];
-            Quiet[CopyFile[f, dest, OverwriteTarget -> True]];
-            nbPrint[nb, "\:5fa9\:5143: " <> FileNameTake[f] <> " \:2192 " <> dest]]],
-          mdFiles];
-        AssociateTo[result, "MD" -> Length[mdFiles]],
-        nbPrint[nb, "\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093: " <> docsDir]]];
+        nbPrint[nb, "\:8b66\:544a: .wl \:306e\:66f8\:304d\:8fbc\:307f\:5931\:6557\:3002\:5bfe\:8c61: " <> destFile]],
+      nbPrint[nb, "\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306b .wl \:30c7\:30fc\:30bf\:304c\:3042\:308a\:307e\:305b\:3093\:3002"]];
+    (* .md ファイルの復元（.md / .cz / .cdiff / .unchanged すべて対応） *)
+    Module[{mdNames, docsDir2, restoredCount = 0},
+      mdNames = iListRestorableFiles[dir, ".md"];
+      If[Length[mdNames] > 0,
+        docsDir2 = FileNameJoin[{iInfoDir[packageName], "docs"}];
+        If[DirectoryQ[docsDir2],
+          Scan[Function[mdName,
+            Module[{content, dest, strm2},
+              content = iLoadBackupFile[dir, mdName, packageName];
+              If[StringQ[content],
+                dest = FileNameJoin[{docsDir2, mdName}];
+                Quiet @ Check[
+                  strm2 = OpenWrite[dest, BinaryFormat -> True];
+                  BinaryWrite[strm2, ToCharacterCode[content, "UTF-8"]];
+                  Close[strm2], Null];
+                nbPrint[nb, "\:5fa9\:5143: " <> mdName <> " \:2192 " <> dest];
+                restoredCount++,
+                nbPrint[nb, "\:8b66\:544a: " <> mdName <> " \:306e\:5fa9\:5143\:306b\:5931\:6557"]]]],
+            mdNames];
+          If[restoredCount > 0, AssociateTo[result, "MD" -> restoredCount]],
+          nbPrint[nb, "\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093: " <> docsDir2]]]];
     Join[result, <|"Action" -> "Pull", "Package" -> packageName, "Directory" -> dir|>]
   ];
 
@@ -5686,12 +6045,13 @@ ClaudeBackupDataset[packageName_String] :=
                      Print[iBackupPull[pkg, d]],
                      Print["\:30ad\:30e3\:30f3\:30bb\:30eb\:3057\:307e\:3057\:305f\:3002"]]],
                  Method -> "Queued", ImageSize -> {52, 22}]],
-             With[{d = dir},
+             With[{d = dir, pkg2 = pn},
                Button["Delete",
                  Module[{},
                    If[ChoiceDialog["\:672c\:5f53\:306b\:524a\:9664\:3057\:307e\:3059\:304b\:ff1f\n" <> d],
-                     DeleteDirectory[d, DeleteContents -> True];
-                     Print["\:524a\:9664\:3057\:307e\:3057\:305f: " <> d],
+                     If[iSafeDeleteBackupDir[d, pkg2] =!= $Failed,
+                       Print["\:524a\:9664\:3057\:307e\:3057\:305f: " <> d],
+                       Print["\:524a\:9664\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002"]],
                      Print["\:30ad\:30e3\:30f3\:30bb\:30eb\:3057\:307e\:3057\:305f\:3002"]]],
                  Method -> "Queued", ImageSize -> {52, 22}]]
            }, Spacer[3]]}
@@ -5702,7 +6062,7 @@ ClaudeBackupDataset[packageName_String] :=
       Dividers -> {None, {2 -> GrayLevel[0.7]}},
       Spacings -> {1.5, 0.8},
       Background -> {None, {GrayLevel[0.95], None}},
-      ItemSize -> {{3, 18, 8, 18, Automatic}, Automatic}];
+      ItemSize -> {{3, 14, 8, 22, Automatic}, Automatic}];
     Module[{nb = Quiet[EvaluationNotebook[]]},
       NBAccess`NBDeleteCellsByTag[nb, warningTag];
       NBAccess`NBDeleteCellsByTag[nb, outputTag]];
@@ -5745,12 +6105,13 @@ ClaudeBackupDataset[] :=
                      Print[iBackupPull[p, d]],
                      Print["\:30ad\:30e3\:30f3\:30bb\:30eb\:3057\:307e\:3057\:305f\:3002"]]],
                  Method -> "Queued", ImageSize -> {52, 22}]],
-             With[{d = dir},
+             With[{p2 = pkg, d = dir},
                Button["Delete",
                  Module[{},
                    If[ChoiceDialog["\:672c\:5f53\:306b\:524a\:9664\:3057\:307e\:3059\:304b\:ff1f\n" <> d],
-                     DeleteDirectory[d, DeleteContents -> True];
-                     Print["\:524a\:9664\:3057\:307e\:3057\:305f: " <> d],
+                     If[iSafeDeleteBackupDir[d, p2] =!= $Failed,
+                       Print["\:524a\:9664\:3057\:307e\:3057\:305f: " <> d],
+                       Print["\:524a\:9664\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002"]],
                      Print["\:30ad\:30e3\:30f3\:30bb\:30eb\:3057\:307e\:3057\:305f\:3002"]]],
                  Method -> "Queued", ImageSize -> {52, 22}]]
            }, Spacer[3]]}
@@ -5761,15 +6122,191 @@ ClaudeBackupDataset[] :=
       Dividers -> {None, {2 -> GrayLevel[0.7]}},
       Spacings -> {1.5, 0.8},
       Background -> {None, {GrayLevel[0.95], None}},
-      ItemSize -> {{3, 14, 18, 8, 16, Automatic}, Automatic}];
+      ItemSize -> {{3, 14, 14, 8, 20, Automatic}, Automatic}];
     Module[{nb = Quiet[EvaluationNotebook[]]},
       NBAccess`NBDeleteCellsByTag[nb, outputTag]];
     CellPrint[Cell[BoxData[ToBoxes[gridResult]], "Output",
       CellTags -> {outputTag}]];
   ];
 
+(* ============================================================
+   バックアップ履歴マイグレーション:
+   既存の生 .wl バックアップを差分形式 (.wl.cz / .wl.cdiff) に変換し、
+   history フォルダの容量を大幅に削減する。
+   ============================================================ *)
+
+(* 変換済みバックアップファイルか判定 (拡張子ベース) *)
+iIsConvertedBackupFile[fn_String] :=
+  StringEndsQ[fn, ".cz"] || StringEndsQ[fn, ".cdiff"] || StringEndsQ[fn, ".unchanged"];
+
+Options[ClaudeMigrateBackupHistory] = {DryRun -> False};
+
+(* 既存バックアップ内の全テキストファイル (.wl / .md 等) を
+   差分形式 (.cz / .cdiff / .unchanged) に変換し容量を削減する。
+   各ファイルの履歴を個別に追跡し、未変更ファイルは .unchanged で参照。 *)
+ClaudeMigrateBackupHistory[packageName_String, opts:OptionsPattern[]] :=
+  Module[{bdir, allDirs, dryRun, results = {},
+          totalOldBytes = 0, totalNewBytes = 0,
+          prevContents = <||>, prevDirNames = <||>,
+          baselineCount = 0, metaFiles},
+    dryRun = TrueQ[OptionValue[DryRun]];
+    bdir = backupDir[packageName];
+    If[!DirectoryQ[bdir],
+      Print["\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093: " <> bdir];
+      Return[<||>]];
+    metaFiles = {"prompt.txt", "summary.txt"};
+    (* 全バックアップディレクトリを時系列順 *)
+    allDirs = SortBy[
+      Select[FileNames["*", bdir, {1}], DirectoryQ],
+      FileNameTake[#, -1] &];
+    (* 生テキストファイルを含むディレクトリのみ *)
+    allDirs = Select[allDirs, Function[dir,
+      AnyTrue[Select[FileNames["*", dir], iFileQ], Function[f,
+        Module[{fn = FileNameTake[f]},
+          !MemberQ[metaFiles, fn] &&
+          !iIsConvertedBackupFile[fn]]]]]];
+    If[Length[allDirs] === 0,
+      Print["\:5909\:63db\:5bfe\:8c61\:306e\:751f\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:304c\:3042\:308a\:307e\:305b\:3093\:3002"];
+      Return[<||>]];
+    Print[Style["\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:30de\:30a4\:30b0\:30ec\:30fc\:30b7\:30e7\:30f3" <>
+      If[dryRun, " (DryRun)", ""] <> ": " <> packageName, Bold]];
+    Print["\:5bfe\:8c61: " <> ToString[Length[allDirs]] <> " \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\n"];
+    Do[
+      Module[{dirName, rawFiles, dirOldBytes = 0, dirNewBytes = 0, fileResults = {}},
+        dirName = FileNameTake[dir, -1];
+        (* 生テキストファイルを収集 (メタファイル・既変換済みを除外) *)
+        rawFiles = Select[FileNames["*", dir],
+          Function[f, iFileQ[f] &&
+            !MemberQ[metaFiles, FileNameTake[f]] &&
+            !iIsConvertedBackupFile[FileNameTake[f]]]];
+        If[Length[rawFiles] === 0, Continue[]];
+        Do[
+          Module[{fn, filePath, content, oldBytes, newBytes, action,
+                  czPath, cdiffPath, unchangedPath,
+                  prevContent, prevDN, alignment, diffData, targetDN},
+            fn = FileNameTake[rf];
+            filePath = rf;
+            oldBytes = FileByteCount[filePath];
+            dirOldBytes += oldBytes;
+            content = Quiet @ Check[Import[filePath, "Text"], ""];
+            If[!StringQ[content] || content === "",
+              Print["    \:2717 " <> fn <> ": \:8aad\:307f\:8fbc\:307f\:5931\:6557"];
+              AppendTo[fileResults, fn -> "skip"];
+              Continue[]];
+            czPath = FileNameJoin[{dir, fn <> ".cz"}];
+            cdiffPath = FileNameJoin[{dir, fn <> ".cdiff"}];
+            unchangedPath = FileNameJoin[{dir, fn <> ".unchanged"}];
+            prevContent = Lookup[prevContents, fn, None];
+            prevDN = Lookup[prevDirNames, fn, None];
+            Which[
+              (* 初回 or pre_ or ベースライン間隔 → ベースライン *)
+              prevContent === None ||
+                StringStartsQ[dirName, "pre_"] ||
+                Mod[baselineCount, $iBackupBaselineInterval] === 0,
+                action = "baseline";
+                If[!dryRun,
+                  Export[czPath, Compress[content], "String"];
+                  newBytes = FileByteCount[czPath],
+                  newBytes = StringLength[Compress[content]]],
+              (* 内容同一 → .unchanged *)
+              content === prevContent,
+                action = "unchanged";
+                (* 1ホップ解決: 前回が .unchanged なら前回の参照先を引き継ぐ *)
+                targetDN = prevDN;
+                If[!dryRun,
+                  Export[unchangedPath, targetDN, "String"];
+                  newBytes = FileByteCount[unchangedPath],
+                  newBytes = StringLength[targetDN]],
+              (* 差分 *)
+              True,
+                alignment = Quiet @ Check[
+                  SequenceAlignment[
+                    StringSplit[prevContent, "\n"],
+                    StringSplit[content, "\n"]],
+                  $Failed];
+                If[alignment === $Failed,
+                  action = "baseline(fallback)";
+                  If[!dryRun,
+                    Export[czPath, Compress[content], "String"];
+                    newBytes = FileByteCount[czPath],
+                    newBytes = StringLength[Compress[content]]],
+                  action = "diff";
+                  diffData = {prevDN, alignment};
+                  If[!dryRun,
+                    Export[cdiffPath, Compress[diffData], "String"];
+                    newBytes = FileByteCount[cdiffPath],
+                    newBytes = StringLength[Compress[diffData]]]]
+            ];
+            dirNewBytes += newBytes;
+            AppendTo[fileResults, fn -> action];
+            (* 検証後に元ファイル削除 *)
+            If[!dryRun,
+              Module[{verify},
+                verify = iLoadBackupFile[dir, fn, packageName];
+                If[StringQ[verify] && StringLength[verify] > 0,
+                  DeleteFile[filePath],
+                  (* 検証失敗 → 新ファイル削除 *)
+                  Quiet @ If[FileExistsQ[czPath], DeleteFile[czPath]];
+                  Quiet @ If[FileExistsQ[cdiffPath], DeleteFile[cdiffPath]];
+                  Quiet @ If[FileExistsQ[unchangedPath], DeleteFile[unchangedPath]];
+                  Print["    \:26a0 " <> fn <> ": \:691c\:8a3c\:5931\:6557\:3001\:5143\:30d5\:30a1\:30a4\:30eb\:4fdd\:6301"];
+                  action = "verify-failed"]]];
+            (* 追跡を更新: unchanged の場合は prevDirNames を変えない *)
+            prevContents[fn] = content;
+            If[action =!= "unchanged", prevDirNames[fn] = dirName]
+          ],
+          {rf, rawFiles}];
+        baselineCount++;
+        totalOldBytes += dirOldBytes;
+        totalNewBytes += dirNewBytes;
+        (* ディレクトリ単位の表示 *)
+        Module[{summary},
+          summary = Tally[Values[fileResults]];
+          Print["  " <> dirName <> ": " <>
+            ToString[dirOldBytes] <> " \:2192 " <> ToString[dirNewBytes] <>
+            " bytes (" <> ToString[Round[100. dirNewBytes / Max[dirOldBytes, 1]]] <>
+            "%)  " <> StringRiffle[
+              (ToString[#[[2]]] <> #[[1]]) & /@ summary, " "]]];
+        AppendTo[results, <|"Dir" -> dirName,
+          "OldBytes" -> dirOldBytes, "NewBytes" -> dirNewBytes,
+          "Files" -> fileResults|>]
+      ],
+      {dir, allDirs}];
+    Print["\n", Style["\:5b8c\:4e86", Bold]];
+    Print["\:5408\:8a08: " <> ToString[totalOldBytes] <> " \:2192 " <> ToString[totalNewBytes] <>
+      " bytes (" <> ToString[Round[100. totalNewBytes / Max[totalOldBytes, 1]]] <> "%)"];
+    Print["\:524a\:6e1b: " <> ToString[totalOldBytes - totalNewBytes] <> " bytes (" <>
+      ToString[Round[100. (totalOldBytes - totalNewBytes) / Max[totalOldBytes, 1]]] <> "%)"];
+    If[dryRun, Print["\n\:203b DryRun \:30e2\:30fc\:30c9: \:5b9f\:969b\:306e\:5909\:63db\:306f\:884c\:308f\:308c\:3066\:3044\:307e\:305b\:3093\:3002"]];
+    <|"Package" -> packageName, "Converted" -> Length[results],
+      "OldBytes" -> totalOldBytes, "NewBytes" -> totalNewBytes,
+      "Reduction" -> ToString[Round[100. (totalOldBytes - totalNewBytes) / Max[totalOldBytes, 1]]] <> "%",
+      "Details" -> results|>
+  ];
+
+(* 全パッケージ版 *)
+ClaudeMigrateBackupHistory[opts:OptionsPattern[]] :=
+  Module[{pkgDir, allPkgs, results = <||>},
+    pkgDir = Global`$packageDirectory;
+    If[!StringQ[pkgDir] || !DirectoryQ[pkgDir],
+      Print["\:30a8\:30e9\:30fc: $packageDirectory \:304c\:8a2d\:5b9a\:3055\:308c\:3066\:3044\:307e\:305b\:3093\:3002"];
+      Return[<||>]];
+    allPkgs = Select[
+      FileNameTake /@ FileNames["*_info", pkgDir],
+      StringEndsQ[#, "_info"] &];
+    allPkgs = StringReplace[#, "_info" -> ""] & /@ allPkgs;
+    allPkgs = Select[allPkgs, DirectoryQ[backupDir[#]] &];
+    If[Length[allPkgs] === 0,
+      Print["\:30de\:30a4\:30b0\:30ec\:30fc\:30b7\:30e7\:30f3\:5bfe\:8c61\:306e\:30d1\:30c3\:30b1\:30fc\:30b8\:304c\:3042\:308a\:307e\:305b\:3093\:3002"];
+      Return[<||>]];
+    Do[
+      results[pkg] = ClaudeMigrateBackupHistory[pkg, opts],
+      {pkg, allPkgs}];
+    results
+  ];
+
 (* ==============================================================
-   \:95a2\:6570\:5358\:4f4d\:62bd\:51fa: \:30d5\:30a1\:30a4\:30eb\:5185\:306e\:5404\:95a2\:6570\:5b9a\:7fa9\:3092 Association \:306b\:5206\:89e3
+   関数単位抽出: ファイル内の各関数定義を Association に分解
    ============================================================== *)
 iExtractFunctions[code_String] :=
   Module[{lines, blocks, current, funcName, nameRe},
@@ -5889,6 +6426,12 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
   packagePromptNorm = iNormalizePrompt[packagePrompt];
   imgDirs = packagePromptNorm["imageDirs"];
   timestamp = DateString[Now, {"Year","Month","Day","_","Hour24","Minute","Second"}];
+
+  (* セクションヘッダーを入力セルの直前に挿入 *)
+  iWriteSectionHeaderBeforeEvalCell[nb,
+    "\:25b6 ClaudeCreatePackage: " <> packageName <>
+    " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
+
   bdir      = backupDir[packageName];
   sessionDir = FileNameJoin[{bdir, timestamp}];
   CreateDirectory[sessionDir, CreateIntermediateDirectories -> True];
@@ -6044,7 +6587,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
   Module[{preDir},
     preDir = FileNameJoin[{bdir, "pre_" <> timestamp}];
     CreateDirectory[preDir, CreateIntermediateDirectories -> True];
-    CopyFile[srcFile, FileNameJoin[{preDir, packageName <> ".wl"}]];
+    iSaveBackupWl[preDir, srcFile, packageName, True];
     nbPrint[nb, "\:4e8b\:524d\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: " <> preDir]
   ];
 
@@ -6324,10 +6867,10 @@ ClaudeRestorePackage[packageName_String] :=
 
 (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30ad\:30e5\:30fc\:306e\:5b9a\:7fa9: {outFileName, docTitle, promptTemplate} *)
 (* README.md \:306f\:4ed6\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:53c2\:7167\:3057\:3066\:6982\:8981\:3092\:751f\:6210\:3059\:308b\:305f\:3081\:6700\:5f8c\:306b\:914d\:7f6e *)
-$iDocQueue = {
+$iDocQueue := {
   {"setup.md", "\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\:624b\:9806\:66f8",
     "Create a CONCISE setup guide (setup.md) for this package.\n" <>
-    "Write in Japanese using \:656c\:4f53 (\:3067\:3059\:30fb\:307e\:3059\:8abf) style.\n" <>
+    iLanguageInstruction["polite"] <>
     "Target: 80-120 lines of Markdown.\n" <>
     "IMPORTANT: Assumes Windows 11 (no WSL2). For macOS/Linux, add ONE line: " <>
     "'macOS/Linux \:3067\:306f\:30d1\:30b9\:533a\:5207\:308a\:3084\:30b7\:30a7\:30eb\:30b3\:30de\:30f3\:30c9\:3092\:9069\:5b9c\:8aad\:307f\:66ff\:3048\:3066\:304f\:3060\:3055\:3044'.\n" <>
@@ -6348,7 +6891,7 @@ $iDocQueue = {
     "Format: Markdown."},
   {"user_manual.md", "\:30e6\:30fc\:30b6\:30fc\:30de\:30cb\:30e5\:30a2\:30eb",
     "Create a CONCISE user manual (user_manual.md) for this package.\n" <>
-    "Write in Japanese using \:656c\:4f53 (\:3067\:3059\:30fb\:307e\:3059\:8abf) style.\n" <>
+    iLanguageInstruction["polite"] <>
     "Target: 150-250 lines of Markdown.\n" <>
     "Cover each public function with: 1-line description, signature, " <>
     "1 concrete example. Group by category.\n" <>
@@ -6365,7 +6908,7 @@ $iDocQueue = {
     "- Do NOT use bold labels like **引数:** or **戻り値:**.\n" <>
     "- Do NOT add usage examples for trivial functions (e.g. getters with obvious signatures).\n" <>
     "- Only add examples for functions with complex options or non-obvious usage patterns.\n\n" <>
-    "Write in Japanese using \:5e38\:4f53 (\:3060\:30fb\:3067\:3042\:308b\:8abf) style.\n\n" <>
+    iLanguageInstruction["plain"] <> "\n" <>
     "FORMAT for constants/variables:\n" <>
     "### $VarName\n" <>
     "\:578b: Type, \:521d\:671f\:5024: value\n" <>
@@ -6392,7 +6935,7 @@ $iDocQueue = {
     "Format: Markdown."},
   {"examples/example.md", "\:4f7f\:7528\:4f8b\:96c6",
     "Create a CONCISE examples document (examples/example.md).\n" <>
-    "Write in Japanese using \:656c\:4f53 (\:3067\:3059\:30fb\:307e\:3059\:8abf) style.\n" <>
+    iLanguageInstruction["polite"] <>
     "Target: 80-150 lines of Markdown.\n" <>
     "Include 5-8 practical examples covering the main use cases.\n" <>
     "Each example: title, 2-5 lines of code, 1-line expected output.\n" <>
@@ -6457,6 +7000,59 @@ iSafeWriteDoc[destPath_String, response_String] :=
     cleaned = iCleanDocResponse[response];
     Export[destPath, cleaned, "Text", CharacterEncoding -> "UTF-8"];
     destPath
+  ];
+
+(* 3引数版: 更新時のファイル破損防止ガード付き。
+   packageName を使って (1) サイズ退行 (2) タイトル整合性 を検証する。 *)
+iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
+  Module[{cleaned, existingContent, existingLen, newLen, docFileName,
+          existingTitle, newTitle},
+    (* 基本的なコンテンツ検証 *)
+    If[!iIsValidDocContent[response],
+      Return[$Failed]];
+    cleaned = iCleanDocResponse[response];
+    docFileName = FileNameTake[destPath];
+    (* === ガード1: サイズ退行チェック === *)
+    (* 既存ファイルが存在する場合、新しい内容が既存の 40% 未満なら拒否 *)
+    If[FileExistsQ[destPath],
+      existingContent = Quiet @ Check[Import[destPath, "Text"], ""];
+      If[StringQ[existingContent] && StringLength[existingContent] > 200,
+        existingLen = StringLength[existingContent];
+        newLen = StringLength[StringTrim[cleaned]];
+        If[newLen < existingLen * 0.4,
+          Print["⚠ iSafeWriteDoc: サイズ退行を検出 (" <> docFileName <> "): " <>
+            ToString[existingLen] <> " → " <> ToString[newLen] <>
+            " 文字 (" <> ToString[Round[100. newLen / existingLen]] <> "%)。書き込みを拒否しました。"];
+          Return[$Failed]
+        ]
+      ]
+    ];
+    (* === ガード2: タイトル整合性チェック (README.md のみ) === *)
+    (* README.md の先頭 # タイトルがパッケージ名と完全に異なる場合は拒否 *)
+    If[docFileName === "README.md",
+      newTitle = iExtractDocTitle[cleaned];
+      If[StringQ[newTitle] && StringLength[newTitle] > 0,
+        If[!StringContainsQ[ToLowerCase[newTitle], ToLowerCase[packageName]],
+          Print["⚠ iSafeWriteDoc: タイトル不整合を検出 (README.md): " <>
+            "期待=\"" <> packageName <> "\", 実際=\"" <> newTitle <>
+            "\"。書き込みを拒否しました。"];
+          Return[$Failed]
+        ]
+      ]
+    ];
+    Export[destPath, cleaned, "Text", CharacterEncoding -> "UTF-8"];
+    destPath
+  ];
+
+(* ドキュメントの先頭 # タイトル行を抽出する補助関数 *)
+iExtractDocTitle[content_String] :=
+  Module[{match},
+    match = StringCases[content,
+      RegularExpression["(?m)^# +(.+)$"] :> "$1", 1];
+    If[Length[match] > 0,
+      StringTrim[First[match]],
+      ""
+    ]
   ];
 
 (* 後方互換エイリアス *)
@@ -6605,7 +7201,7 @@ iDocBuildLicensePrompt[] :=
     "\n=== LICENSE SECTION (MUST add at the very end of README.md, after \:514d\:8cac\:4e8b\:9805) ===\n" <>
     "Add a '## \:30e9\:30a4\:30bb\:30f3\:30b9' section.\n" <>
     "CRITICAL: The license text below is a LEGAL document. You MUST copy it VERBATIM in English.\n" <>
-    "Do NOT translate it into Japanese. Do NOT paraphrase. Do NOT modify any wording.\n" <>
+    "Do NOT translate it into other languages. Do NOT paraphrase. Do NOT modify any wording.\n" <>
     "Insert the following text exactly as-is:\n\n" <>
     "```\n" <> licText <> "\n```\n\n" <>
     "IMPORTANT: When updating an existing README, if a license section already exists,\n" <>
@@ -6623,7 +7219,7 @@ iBuildReadmePrompt[sourceCode_String, packageName_String, outDir_String] :=
     "You are an expert Wolfram Language / Mathematica documentation writer.\n" <>
     "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n" <>
     "You are creating a comprehensive README.md for the package \"" <> packageName <> "\".\n\n" <>
-    "Write in Japanese using \:656c\:4f53 (\:3067\:3059\:30fb\:307e\:3059\:8abf) style.\n\n" <>
+    iLanguageInstruction["polite"] <> "\n" <>
     "The README should have the following structure:\n\n" <>
     "1. FIRST HALF - \"\:8a2d\:8a08\:601d\:60f3\:3068\:5b9f\:88c5\:306e\:6982\:8981\" (Design Philosophy and Implementation Overview):\n" <>
     "   Based on the documentation files listed below, summarize the design philosophy\n" <>
@@ -6967,11 +7563,11 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       timestamp = DateString[Now, {"Year","Month","Day","Hour24","Minute"}];
       histDir = FileNameJoin[{bdir, timestamp <> "_documentupdate"}];
       CreateDirectory[histDir, CreateIntermediateDirectories -> True];
-      Quiet[CopyFile[srcFile, FileNameJoin[{histDir, FileNameTake[srcFile]}]]];
+      Quiet[iSaveBackupWl[histDir, srcFile, packageName]];
       If[DirectoryQ[outDir],
         Scan[Function[f,
-          Quiet[CopyFile[f, FileNameJoin[{histDir, FileNameTake[f]}]]]],
-          FileNames["*", outDir]]];
+          Quiet[iSaveBackupFile[histDir, f, packageName]]],
+          Select[FileNames["*", outDir], iFileQ]]];
 
       nbPrint[nb, Style["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:958b\:59cb: " <> packageName, Bold]];
       nbPrint[nb, "\:30bd\:30fc\:30b9: " <> srcFile <>
@@ -7089,6 +7685,17 @@ iPackageDocsContext[task_String] :=
    ============================================================ *)
 
 (* \:66f4\:65b0\:6307\:793a\:304b\:3089\:8a72\:5f53\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:81ea\:52d5\:5224\:5b9a *)
+(* README.md を常にリストの最後に移動する。
+   README.md は他のドキュメントの内容を参照して概要を構成するため、
+   必ず全ドキュメント生成/更新後に最後に処理する必要がある。 *)
+iEnsureReadmeLast[docs_List] :=
+  Module[{withoutReadme, hasReadme},
+    hasReadme = MemberQ[docs, "README.md"];
+    If[!hasReadme, Return[docs]];
+    withoutReadme = DeleteCases[docs, "README.md"];
+    Append[withoutReadme, "README.md"]
+  ];
+
 $iDocKeywords = <|
   "README.md"       -> {"README", "readme", "\:6982\:8981", "\:306f\:3058\:3081"},
   "setup.md"        -> {"\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb", "\:30bb\:30c3\:30c8\:30a2\:30c3\:30d7", "setup", "install", "\:74b0\:5883\:69cb\:7bc9", "\:5c0e\:5165"},
@@ -7108,7 +7715,7 @@ iGuessTargetDocs[instruction_String, docsDir_String] :=
     If[Length[hits] === 0,
       hits = Select[Keys[$iDocKeywords],
         FileExistsQ[FileNameJoin[{docsDir, #}]] &]];
-    DeleteDuplicates[hits]
+    iEnsureReadmeLast[DeleteDuplicates[hits]]
   ];
 
 (* \:76f4\:8fd1\:306e _documentupdate \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30d5\:30a9\:30eb\:30c0\:3092\:691c\:7d22 *)
@@ -7123,10 +7730,12 @@ iFindLatestDocBackup[packageName_String] :=
 
 (* .wl \:30d5\:30a1\:30a4\:30eb\:306e\:5dee\:5206\:3092\:53d6\:5f97 *)
 iComputeSourceDiff[oldFile_String, newFile_String] :=
-  Module[{oldLines, newLines, added = {}, removed = {}},
-    If[!FileExistsQ[oldFile], Return["(\:65e7\:30d5\:30a1\:30a4\:30eb\:306a\:3057 \:2014 \:5168\:4f53\:304c\:65b0\:898f)"]];
+  Module[{oldLines, newLines, added = {}, removed = {}, oldText},
     If[!FileExistsQ[newFile], Return["(\:65b0\:30d5\:30a1\:30a4\:30eb\:306a\:3057)"]];
-    oldLines = StringSplit[Import[oldFile, "Text"], "\n"];
+    (* 旧ファイル: .wl → .wl.cz → .wl.cdiff の順で試行 *)
+    oldText = iLoadBackupWlFromPath[oldFile];
+    If[!StringQ[oldText], Return["(\:65e7\:30d5\:30a1\:30a4\:30eb\:306a\:3057 \:2014 \:5168\:4f53\:304c\:65b0\:898f)"]];
+    oldLines = StringSplit[oldText, "\n"];
     newLines = StringSplit[Import[newFile, "Text"], "\n"];
     added = Complement[newLines, oldLines];
     removed = Complement[oldLines, newLines];
@@ -7139,6 +7748,28 @@ iComputeSourceDiff[oldFile_String, newFile_String] :=
     ]
   ];
 
+(* パスベースで生ファイル / .cz / .unchanged / .cdiff のいずれかからテキストを読み込む。
+   oldFile は従来の生ファイルパスとして渡される前提。
+   パス内のディレクトリ構造からパッケージ名を推定し iLoadBackupFile に委譲する。 *)
+iLoadBackupWlFromPath[filePath_String] :=
+  Module[{dir, fileName, bdir, packageName, histParts},
+    If[FileExistsQ[filePath], Return[Quiet @ Check[Import[filePath, "Text"], $Failed]]];
+    If[FileExistsQ[filePath <> ".cz"],
+      Return[Quiet @ Check[Uncompress[Import[filePath <> ".cz", "String"]], $Failed]]];
+    (* .unchanged / .cdiff は iLoadBackupFile 経由で復元 *)
+    If[FileExistsQ[filePath <> ".unchanged"] || FileExistsQ[filePath <> ".cdiff"],
+      dir = DirectoryName[filePath];
+      fileName = FileNameTake[filePath];
+      (* dir が backupDir[pkg] のサブディレクトリならパッケージ名を推定 *)
+      histParts = FileNameSplit[dir];
+      packageName = If[Length[histParts] >= 2 &&
+          histParts[[-2]] === "history",
+        StringReplace[histParts[[-3]], "_info" -> ""],
+        StringReplace[fileName, ".wl" -> ""]];
+      Return[iLoadBackupFile[dir, fileName, packageName]]];
+    $Failed
+  ];
+
 (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:5f8c\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:4f5c\:6210 *)
 iCreateDocUpdateBackup[packageName_String, srcFile_String, docsDir_String,
     instruction_String:""] :=
@@ -7147,11 +7778,11 @@ iCreateDocUpdateBackup[packageName_String, srcFile_String, docsDir_String,
     timestamp = DateString[Now, {"Year","Month","Day","Hour24","Minute"}];
     histDir = FileNameJoin[{bdir, timestamp <> "_documentupdate"}];
     CreateDirectory[histDir, CreateIntermediateDirectories -> True];
-    Quiet[CopyFile[srcFile, FileNameJoin[{histDir, FileNameTake[srcFile]}]]];
+    Quiet[iSaveBackupWl[histDir, srcFile, packageName]];
     If[DirectoryQ[docsDir],
       Scan[Function[f,
-        Quiet[CopyFile[f, FileNameJoin[{histDir, FileNameTake[f]}]]]],
-        FileNames["*", docsDir]]];
+        Quiet[iSaveBackupFile[histDir, f, packageName]]],
+        Select[FileNames["*", docsDir], iFileQ]]];
     (* prompt.txt \:306b\:6307\:793a\:3092\:4fdd\:5b58 *)
     If[StringQ[instruction] && instruction =!= "",
       Module[{strm},
@@ -7212,7 +7843,17 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
       nbPrint[nb, "\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306b\:5909\:66f4\:304c\:3042\:308a\:307e\:305b\:3093\:3002\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:6700\:65b0\:3067\:3059\:3002"];
       Return[]];
     (* \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:5bfe\:8c61\:306b\:3059\:308b *)
-    allDocs = FileNameTake /@ FileNames["*.md", docsDir];
+    (* 全ドキュメントファイルを対象にする (サブディレクトリ含む) *)
+    allDocs = Join[
+      FileNameTake /@ FileNames["*.md", docsDir],
+      (* examples/ などのサブディレクトリ内の .md *)
+      Module[{subFiles},
+        subFiles = FileNames["*.md", docsDir, 2];
+        subFiles = Select[subFiles, DirectoryName[#] =!= docsDir &];
+        (FileNameTake[DirectoryName[#], -1] <> "/" <> FileNameTake[#]) & /@ subFiles]
+    ] // DeleteDuplicates;
+    (* README.md は他のドキュメント参照のため必ず最後 *)
+    allDocs = iEnsureReadmeLast[allDocs];
     If[Length[allDocs] === 0,
       nbPrint[nb, "\:30a8\:30e9\:30fc: \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
       Return[$Failed]];
@@ -7338,8 +7979,26 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       "CURRENT DOCUMENT (" <> docFile <> "):\n" <>
       If[StringQ[currentContent] && currentContent =!= "",
         currentContent, "(empty)"] <> "\n\n" <>
-      (* README.md 更新時は免責事項・ライセンス・参考文献・GitHub URL のコンテキストも含める *)
+      (* README.md 更新時は他ドキュメント・免責事項・ライセンス・参考文献・GitHub URL を含める *)
       If[docFile === "README.md",
+        (* 他の全ドキュメントの最新内容を参照コンテキストとして挿入 *)
+        Module[{siblingDocs, siblingContent = ""},
+          siblingDocs = Join[
+            FileNames["*.md", docsDir],
+            FileNames["*.md", docsDir, 2]];
+          siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
+          siblingDocs = DeleteDuplicates[siblingDocs];
+          If[Length[siblingDocs] > 0,
+            siblingContent = "\n=== OTHER DOCUMENTATION FILES (just updated — use as reference for README overview) ===\n" <>
+              StringJoin[
+                Module[{relPath, txt},
+                  relPath = StringReplace[#,
+                    docsDir <> $PathnameSeparator -> ""];
+                  txt = Quiet @ Check[Import[#, "Text"], ""];
+                  If[StringQ[txt],
+                    "--- " <> relPath <> " ---\n" <> StringTake[txt, UpTo[4000]] <> "\n\n",
+                    ""]] & /@ siblingDocs]];
+          siblingContent] <>
         iBuildGitHubLinksContext[] <>
         iDocBuildRefSection[] <>
         iDocBuildDisclaimerPrompt[] <>
@@ -7347,9 +8006,9 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         (* README 以外でもリンク捏造防止のため URL リストを提供 *)
         iBuildGitHubLinksContext[]] <>
       "PACKAGE SOURCE CODE (for reference):\n" <> sourceCode <> "\n\n" <>
-      "Output the COMPLETE updated document directly as your response text. Write in Japanese" <>
+      "Output the COMPLETE updated document directly as your response text. " <>
       If[docFile === "api.md",
-        " using \:5e38\:4f53 (\:3060\:30fb\:3067\:3042\:308b\:8abf) style for brevity.\n" <>
+        iLanguageInstruction["plain"] <>
         "CRITICAL: api.md is for LLM code generation, NOT for humans.\n" <>
         "FORMAT RULES (token-efficient, high density):\n" <>
         "- Minimize blank lines: only 1 before ## section headings.\n" <>
@@ -7360,18 +8019,30 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         "- Option functions: ### FuncName[args, opts]\\n\:8aac\:660e\\n\:2192 ReturnType\\nOptions: Opt1 -> Def1 (\:8aac\:660e), ...\n" <>
         "- Variables: ### $Var\\n\:578b: Type, \:521d\:671f\:5024: val\\n\:8aac\:660e\n" <>
         "- List ALL public functions and ALL options. Completeness is critical.\n",
-        " using \:656c\:4f53 (\:3067\:3059\:30fb\:307e\:3059\:8abf) style.\n"] <>
+        iLanguageInstruction["polite"]] <>
       "Do NOT wrap in code fences. Do NOT include markers. Do NOT ask for file permissions.\n" <>
       "Preserve the existing structure and content that is not affected by the update instruction.\n" <>
       "Add or modify only the parts relevant to the instruction.\n" <>
       If[docFile === "README.md",
-        "CRITICAL: README.md is a HIGH-LEVEL OVERVIEW document.\n" <>
-        "The UPDATE INSTRUCTION above may contain detailed content meant for OTHER documents " <>
-        "(e.g., user_manual.md, api.md, setup.md). Do NOT copy such details into README.md.\n" <>
-        "For README.md, only reflect changes that affect the package overview, feature list, " <>
-        "or structure. Do NOT append raw instruction text, prompt fragments, or per-document " <>
-        "update notes to the README. The README ends with: 免責事項, then ライセンス (if present). " <>
-        "Nothing should be added after the ライセンス section.\n",
+        "CRITICAL: README.md is a HIGH-LEVEL OVERVIEW document updated LAST.\n" <>
+        "You have access to the OTHER DOCUMENTATION FILES above — they were just updated.\n" <>
+        "Use them to construct an accurate, comprehensive overview.\n\n" <>
+        "MANDATORY STRUCTURE (in this order):\n" <>
+        "1. # パッケージ名 — 設計思想と実装の概要\n" <>
+        "2. ## 詳細説明 containing:\n" <>
+        "   - 動作環境 (OS, Mathematica version, external tools)\n" <>
+        "   - インストール\n" <>
+        "   - クイックスタート (minimal working example)\n" <>
+        "   - 主な機能 (feature list with brief descriptions)\n" <>
+        "   - ドキュメント一覧 (links to setup.md, user_manual.md, api.md, examples/)\n" <>
+        "3. ## 免責事項\n" <>
+        "4. ## ライセンス (if present — MUST be last)\n\n" <>
+        "RULES:\n" <>
+        "- Do NOT copy detailed API descriptions from other docs. Keep it high-level.\n" <>
+        "- Do NOT append raw instruction text, prompt fragments, or update notes.\n" <>
+        "- Nothing should be added after ライセンス.\n" <>
+        "- Preserve the existing design philosophy narrative.\n" <>
+        "- Update feature lists and function counts to match the latest source.\n",
         ""];
     (* $currentUseFallback \:306f\:547c\:3073\:51fa\:3057\:5143\:3067\:8a2d\:5b9a\:6e08\:307f *)
     iClaudeQueryAsyncWithProgress[fullPrompt,
@@ -7380,10 +8051,10 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
             instr = instruction, dt = diffText, sf = srcFile},
         Function[response,
           Module[{writeResult},
-            writeResult = iSafeWriteDoc[dp, response];
+            writeResult = iSafeWriteDoc[dp, response, pn];
             If[writeResult =!= $Failed,
               nbPrint[nb2, "  \:2713 " <> df <> " \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
-              nbPrint[nb2, "  \:2717 " <> df <> " \:306e\:66f4\:65b0\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54/\:5236\:9650): " <>
+              nbPrint[nb2, "  \:2717 " <> df <> " \:306e\:66f4\:65b0\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408/\:30b5\:30a4\:30ba\:9000\:884c): " <>
                 StringTake[ToString[response], UpTo[200]]]
             ];
             iUpdateDocNext[sc, pn, nb2, dd, instr, tds, i + 1, dt, sf]
@@ -7418,7 +8089,7 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
       "Create an LLM-optimized API reference (api.md) for package \"" <> packageName <> "\".\n" <>
       "This file is read by LLMs for code generation, NOT by humans.\n" <>
       "An LLM reading ONLY this file must write correct code using the package.\n\n" <>
-      "Write in Japanese using \:5e38\:4f53 (\:3060\:30fb\:3067\:3042\:308b\:8abf) style.\n\n" <>
+      iLanguageInstruction["plain"] <> "\n" <>
       "CRITICAL FORMAT RULES (token-efficient, high density):\n" <>
       "- Minimize blank lines: only 1 before ## section headings.\n" <>
       "- Do NOT use --- separators. Do NOT use bold labels like **\:5f15\:6570:**.\n" <>
@@ -7441,10 +8112,10 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
       With[{nb2 = nb, af = apiFile, pn = packageName},
         Function[response,
           Module[{writeResult},
-            writeResult = iSafeWriteDoc[af, response];
+            writeResult = iSafeWriteDoc[af, response, pn];
             If[writeResult =!= $Failed,
               nbPrint[nb2, "  \:2713 " <> pn <> " \:306e api.md \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
-              nbPrint[nb2, "  \:2717 api.md \:306e\:81ea\:52d5\:66f4\:65b0\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54/\:5236\:9650): " <>
+              nbPrint[nb2, "  \:2717 api.md \:306e\:81ea\:52d5\:66f4\:65b0\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408/\:30b5\:30a4\:30ba\:9000\:884c): " <>
                 StringTake[ToString[response], UpTo[100]]]
             ]]
         ]
@@ -7661,6 +8332,12 @@ ClaudeConvertToPaclet[packageName_String] :=
 
     code = Import[srcFile, "Text"];
     publicSymbols = iExtractPublicSymbols[code];
+
+    (* セクションヘッダーを入力セルの直前に挿入 *)
+    iWriteSectionHeaderBeforeEvalCell[nb,
+      "\:25b6 ClaudeConvertToPaclet: " <> packageName <>
+      " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
+
     nbPrint[nb, "\:516c\:958b\:30b7\:30f3\:30dc\:30eb: " <> ToString[Length[publicSymbols]] <> " \:500b\:691c\:51fa"];
 
     (* \:30d0\:30c3\:30af\:30a2\:30c3\:30d7 (ClaudeUpdatePackage \:3068\:540c\:3058\:5f62\:5f0f) *)
@@ -7668,7 +8345,7 @@ ClaudeConvertToPaclet[packageName_String] :=
     bdir = backupDir[packageName];
     preDir = FileNameJoin[{bdir, "pre_paclet_" <> timestamp}];
     CreateDirectory[preDir, CreateIntermediateDirectories -> True];
-    CopyFile[srcFile, FileNameJoin[{preDir, packageName <> ".wl"}]];
+    iSaveBackupWl[preDir, srcFile, packageName, True];
     nbPrint[nb, "\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: " <> preDir];
 
     (* \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:69cb\:9020\:3092\:4f5c\:6210 *)
@@ -7868,7 +8545,7 @@ iDirectiveHistoryEntries[] :=
       If[!StringQ[promptText], promptText = ""];
       (* \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\:ff08prompt.txt\:4ee5\:5916\:ff09 *)
       files = Select[FileNames["*", dir, Infinity],
-        FileQ[#] && FileNameTake[#] =!= "prompt.txt" &];
+        iFileQ[#] && FileNameTake[#] =!= "prompt.txt" &];
       <|
         "Index"     -> First[idx],
         "Timestamp" -> formatTimestamp[dirName],
@@ -7888,7 +8565,7 @@ iDirectiveBackupReview[dir_String] :=
     nb = EvaluationNotebook[];
     dirName = FileNameTake[dir, -1];
     files = Select[FileNames["*", dir, Infinity],
-      FileQ[#] && FileNameTake[#] =!= "prompt.txt" &];
+      iFileQ[#] && FileNameTake[#] =!= "prompt.txt" &];
     promptFile = FileNameJoin[{dir, "prompt.txt"}];
     promptText = If[FileExistsQ[promptFile], Quiet @ Import[promptFile, "Text"], ""];
     If[!StringQ[promptText], promptText = ""];
@@ -7925,8 +8602,9 @@ iDirectiveBackupReview[dir_String] :=
           Spacer[20],
           Button["Delete (\:524a\:9664)",
             If[ChoiceDialog["\:672c\:5f53\:306b\:524a\:9664\:3057\:307e\:3059\:304b\:ff1f\n" <> d],
-              DeleteDirectory[d, DeleteContents -> True];
-              Print["\:524a\:9664\:3057\:307e\:3057\:305f: " <> d],
+              If[iSafeDeleteBackupDir[d] =!= $Failed,
+                Print["\:524a\:9664\:3057\:307e\:3057\:305f: " <> d],
+                Print["\:524a\:9664\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002"]],
               Print["\:30ad\:30e3\:30f3\:30bb\:30eb\:3057\:307e\:3057\:305f\:3002"]],
             Method -> "Queued"]
         }]
@@ -7944,7 +8622,7 @@ iDirectiveBackupPull[dir_String] :=
       nbPrint[nb, "\:26a0 Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
       Return[$Failed]];
     files = Select[FileNames["*", dir, Infinity],
-      FileQ[#] && FileNameTake[#] =!= "prompt.txt" &];
+      iFileQ[#] && FileNameTake[#] =!= "prompt.txt" &];
     Scan[Function[f,
       relPath = iRelativePath[f, dir];
       destFile = FileNameJoin[{srcDir, relPath}];
@@ -8155,8 +8833,9 @@ ClaudeDirectiveBackupDataset[] :=
              With[{d = dir},
                Button["Delete",
                  If[ChoiceDialog["\:672c\:5f53\:306b\:524a\:9664\:3057\:307e\:3059\:304b\:ff1f\n" <> d],
-                   DeleteDirectory[d, DeleteContents -> True];
-                   Print["\:524a\:9664\:3057\:307e\:3057\:305f: " <> d],
+                   If[iSafeDeleteBackupDir[d] =!= $Failed,
+                     Print["\:524a\:9664\:3057\:307e\:3057\:305f: " <> d],
+                     Print["\:524a\:9664\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002"]],
                    Print["\:30ad\:30e3\:30f3\:30bb\:30eb\:3057\:307e\:3057\:305f\:3002"]],
                  Method -> "Queued", ImageSize -> {52, 22}]]
            }, Spacer[3]]}
@@ -8167,7 +8846,7 @@ ClaudeDirectiveBackupDataset[] :=
       Dividers -> {None, {2 -> GrayLevel[0.7]}},
       Spacings -> {1.5, 0.8},
       Background -> {None, {GrayLevel[0.95], None}},
-      ItemSize -> {{3, 18, 20, 16, Automatic}, Automatic}];
+      ItemSize -> {{3, 14, 20, 20, Automatic}, Automatic}];
     Module[{nb = Quiet[EvaluationNotebook[]]},
       NBAccess`NBDeleteCellsByTag[nb, warningTag];
       NBAccess`NBDeleteCellsByTag[nb, outputTag]];
@@ -8195,7 +8874,69 @@ Your job:\n\
 7. NEVER output meta-commentary such as 'The rule already exists', 'No change needed', or any explanation about your decision. Output ONLY the directive text itself.\n\
 8. If an equivalent rule already exists, output a refined/improved version that replaces or extends it.\n\n";
 
-(* --- \:30e1\:30a4\:30f3\:95a2\:6570 --- *)
+(* --- ディレクティブ書き込みガード ---
+   iSafeWriteDirective: ドキュメントの iSafeWriteDoc と同様、
+   サイズ退行・内容置換を検出してファイル破損を防止する。
+   
+   検証項目:
+   1. サイズ退行: 既存の 40% 未満に縮小 → 拒否
+   2. タイトル保持: CLAUDE.md の先頭 # タイトルが変わっていたら → 拒否
+   3. SKILL.md のスキル名保持: name: 行が消滅 → 拒否
+   
+   action が "append" の場合は既存に追記するだけなのでガード不要。
+   Return: True (書き込み成功) / $Failed (拒否) *)
+iSafeWriteDirective[fullPath_String, content_String, action_String:"replace"] :=
+  Module[{existing, existingLen, newLen, fileName, existingTitle, newTitle,
+          existingSkillName, newSkillName},
+    fileName = FileNameTake[fullPath];
+    (* append の場合はそのまま書き込み *)
+    If[action === "append" && FileExistsQ[fullPath],
+      Module[{old = Import[fullPath, "Text"]},
+        Export[fullPath, old <> "\n" <> content, "Text"]];
+      Return[True]];
+    (* === ガード1: サイズ退行チェック === *)
+    If[FileExistsQ[fullPath],
+      existing = Quiet @ Check[Import[fullPath, "Text"], ""];
+      If[StringQ[existing] && StringLength[existing] > 100,
+        existingLen = StringLength[existing];
+        newLen = StringLength[StringTrim[content]];
+        If[newLen < existingLen * 0.4,
+          Print["  \:26a0 iSafeWriteDirective: \:30b5\:30a4\:30ba\:9000\:884c\:3092\:691c\:51fa (" <> fileName <> "): " <>
+            ToString[existingLen] <> " \:2192 " <> ToString[newLen] <>
+            " \:6587\:5b57 (" <> ToString[Round[100. newLen / existingLen]] <> "%)\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
+          Return[$Failed]]]];
+    (* === ガード2: CLAUDE.md タイトル整合性 === *)
+    If[fileName === "CLAUDE.md" && FileExistsQ[fullPath],
+      existing = Quiet @ Check[Import[fullPath, "Text"], ""];
+      If[StringQ[existing],
+        existingTitle = iExtractDocTitle[existing];
+        newTitle = iExtractDocTitle[content];
+        If[StringQ[existingTitle] && StringLength[existingTitle] > 0 &&
+           StringQ[newTitle] && StringLength[newTitle] > 0 &&
+           ToLowerCase[existingTitle] =!= ToLowerCase[newTitle],
+          Print["  \:26a0 iSafeWriteDirective: CLAUDE.md \:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408: \"" <>
+            existingTitle <> "\" \:2192 \"" <> newTitle <> "\"\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
+          Return[$Failed]]]];
+    (* === ガード3: SKILL.md のスキル名保持 === *)
+    If[fileName === "SKILL.md" && FileExistsQ[fullPath],
+      existing = Quiet @ Check[Import[fullPath, "Text"], ""];
+      If[StringQ[existing],
+        existingSkillName = First[StringCases[existing,
+          RegularExpression["(?m)^name:\\s*(.+)$"] :> "$1", 1], ""];
+        newSkillName = First[StringCases[content,
+          RegularExpression["(?m)^name:\\s*(.+)$"] :> "$1", 1], ""];
+        If[StringLength[existingSkillName] > 0 &&
+           StringLength[newSkillName] > 0 &&
+           StringTrim[existingSkillName] =!= StringTrim[newSkillName],
+          Print["  \:26a0 iSafeWriteDirective: SKILL.md \:540d\:524d\:4e0d\:6574\:5408: \"" <>
+            existingSkillName <> "\" \:2192 \"" <> newSkillName <> "\"\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
+          Return[$Failed]]]];
+    (* すべてのガードを通過 → 書き込み *)
+    Export[fullPath, content, "Text"];
+    True
+  ];
+
+(* --- メイン関数 --- *)
 
 ClaudeAddDirective::nosrc = "Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002";
 ClaudeAddDirective::nofile = "\:30bf\:30fc\:30b2\:30c3\:30c8\:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: `1`";
@@ -8436,6 +9177,10 @@ ClaudeUpdateDirective[] :=
       nbPrint[nb, "\:26a0 Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
       Return[$Failed]];
     iLoadClaudeMD[];
+    (* セクションヘッダーを入力セルの直前に挿入 *)
+    iWriteSectionHeaderBeforeEvalCell[nb,
+      "\:25b6 ClaudeUpdateDirective (" <>
+      DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
     nbPrint[nb, "[ClaudeUpdateDirective] \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3068\:306e\:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af\:3092\:958b\:59cb..."];
     iCheckAndFixDirectiveConsistency[nb, srcDir]
   ];
@@ -8526,10 +9271,10 @@ iCheckAndFixDirectiveConsistency[nb_NotebookObject, srcDir_String] :=
       dir = DirectoryName[fullPath];
       If[!DirectoryQ[dir],
         Quiet @ CreateDirectory[dir, CreateIntermediateDirectories -> True]];
-      If[action === "append" && FileExistsQ[fullPath],
-        Module[{existing = Import[fullPath, "Text"]},
-          Export[fullPath, existing <> "\n" <> content, "Text"]],
-        Export[fullPath, content, "Text"]];
+      (* ガード付き書き込み (append/replace 両対応) *)
+      If[iSafeWriteDirective[fullPath, content, action] === $Failed,
+        nbPrint[nb, "  \:2717 \:30ac\:30fc\:30c9\:306b\:3088\:308a\:66f8\:304d\:8fbc\:307f\:62d2\:5426: " <> path];
+        Continue[]];
       nbPrint[nb, "  \:2713 \:4fee\:6b63: " <> path];
       (* .claude にもコピー *)
       Module[{dotPath = FileNameJoin[{dotClaude, path}], dotDir},
@@ -8641,6 +9386,11 @@ ClaudeUpdateDirective[text_String] :=
       nbPrint[nb, "\:26a0 Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
       Return[$Failed]];
 
+    (* セクションヘッダーを入力セルの直前に挿入 *)
+    iWriteSectionHeaderBeforeEvalCell[nb,
+      "\:25b6 ClaudeUpdateDirective (" <>
+      DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
+
     (* ノートブックコンテキストを取得して指示に付加 *)
     nbCtx = Quiet @ Check[iCaptureNotebookContext[nb, 0], ""];
     enrichedText = If[StringQ[nbCtx] && StringLength[nbCtx] > 0,
@@ -8710,10 +9460,10 @@ ClaudeUpdateDirective[text_String] :=
       dir = DirectoryName[fullPath];
       If[!DirectoryQ[dir],
         CreateDirectory[dir, CreateIntermediateDirectories -> True]];
-      If[action === "append" && FileExistsQ[fullPath],
-        Module[{existing = Import[fullPath, "Text"]},
-          Export[fullPath, existing <> "\n" <> content, "Text"]],
-        Export[fullPath, content, "Text"]];
+      (* ガード付き書き込み *)
+      If[iSafeWriteDirective[fullPath, content, action] === $Failed,
+        nbPrint[nb, "  \:2717 \:30ac\:30fc\:30c9\:306b\:3088\:308a\:66f8\:304d\:8fbc\:307f\:62d2\:5426: " <> path];
+        Continue[]];
       nbPrint[nb, "  " <> action <> ": " <> path],
       {fe, files}];
 
@@ -9792,12 +10542,17 @@ iStaticSeparationScan[source_String, fileName_String] :=
 
 (* 分離チェック実行 *)
 ClaudeCheckSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
-  Module[{resolved, files, pkgName, prompt, result, docsCtx, ignoreList},
+  Module[{resolved, files, pkgName, prompt, result, docsCtx, ignoreList,
+          nb = Quiet[InputNotebook[]]},
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     {files, pkgName} = iResolveSeparationTarget[target];
     If[Length[files] === 0,
       Print["\:30a8\:30e9\:30fc: \:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> target];
       Return[$Failed]];
+    (* セクションヘッダーを入力セルの直前に挿入 *)
+    iWriteSectionHeaderBeforeEvalCell[nb,
+      "\:25b6 ClaudeCheckSeparation: " <> target <>
+      " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
     (* 無視リストチェック *)
     ignoreList = If[ListQ[NBAccess`$NBSeparationIgnoreList],
       NBAccess`$NBSeparationIgnoreList, {}];
@@ -9859,7 +10614,7 @@ ClaudeCheckSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :
             ""] <>
           "Respond in JSON format ONLY. No other text.\n" <>
           "Format: [{\"line\": <line_number>, \"code\": \"<offending code snippet>\", " <>
-          "\"violation\": \"<a|b|c|d|e|f|g|h|i|j>\", \"description\": \"<explanation in Japanese>\"}]\n" <>
+          "\"violation\": \"<a|b|c|d|e|f|g|h|i|j>\", \"description\": \"<explanation in " <> iLanguageName[] <> ">\"}]\n" <>
           "If no violations found, respond with: []\n\n" <>
           If[docsCtx =!= "",
             "=== NBAccess DOCUMENTATION (for reference) ===\n" <> docsCtx <> "\n", ""] <>
@@ -9923,12 +10678,17 @@ ClaudeCheckSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :
 
 (* 分離違反の修正 *)
 ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
-  Module[{resolved, files, pkgName, cached, ext, timestamp},
+  Module[{resolved, files, pkgName, cached, ext, timestamp,
+          nb = Quiet[InputNotebook[]]},
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     {files, pkgName} = iResolveSeparationTarget[target];
     If[Length[files] === 0,
       Print["\:30a8\:30e9\:30fc: \:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> target];
       Return[$Failed]];
+    (* セクションヘッダーを入力セルの直前に挿入 *)
+    iWriteSectionHeaderBeforeEvalCell[nb,
+      "\:25b6 ClaudeFixSeparation: " <> target <>
+      " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
     (* キャッシュされた検査結果を確認、なければ先に検査 *)
     cached = Lookup[$iSeparationCheckCache, target, None];
     If[cached === None,

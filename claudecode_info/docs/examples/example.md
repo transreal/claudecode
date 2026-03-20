@@ -219,7 +219,77 @@ ContinueUpdate["myUtils", "エラー処理を追加して"]  (* パッケージ�
 
 ---
 
-## 9. デバッグとコードレビュー（ClaudeDebug / ClaudeReview）
+## 9. バックアップ履歴の管理（ClaudeBackupDataset）
+
+パッケージのバックアップ履歴を Review/Pull/Delete ボタン付きの Grid で表示します。
+
+```mathematica
+ClaudeBackupDataset["myUtils"]
+```
+
+> 起動時にローカル最新版のスナップショットが SHA-256 ハッシュ付きで保存されます。#0 行の「Pull」ボタンでいつでもローカル最新版に復元できます。Pull で過去バージョンに巻き戻した後にファイルを編集していた場合、ローカル最新版への復元時に変更ファイルの警告が表示されます。
+
+全パッケージのバックアップ履歴を一括表示することもできます。
+
+```mathematica
+ClaudeBackupDataset[]
+```
+
+> 全パッケージの履歴を統合した Grid が表示されます。
+
+### バックアップ履歴のマイグレーション（ClaudeMigrateBackupHistory）
+
+既存の生 .wl バックアップを差分形式（.wl.cz / .wl.cdiff）に変換し、history フォルダの容量を大幅に削減します。
+
+```mathematica
+ClaudeMigrateBackupHistory["myUtils"]
+```
+
+> 差分ベースバックアップシステムにより、内容同一のファイルは `.unchanged`（参照のみ）、差分のあるファイルは `.cdiff`（SequenceAlignment ベースの差分）として保存されます。
+
+DryRun モードで削減見積もりを確認できます。
+
+```mathematica
+ClaudeMigrateBackupHistory["myUtils", DryRun -> True]
+```
+
+> 実際の変換は行わず、容量削減の見積もりのみ表示します。
+
+全パッケージに対して一括実行もできます。
+
+```mathematica
+ClaudeMigrateBackupHistory[]
+```
+
+---
+
+## 10. セッション履歴の管理
+
+### 履歴サイズ診断（ClaudeHistorySize）
+
+現在のノートブックのセッション履歴サイズを診断します。
+
+```mathematica
+ClaudeHistorySize[]
+```
+
+> `<|"Entries" -> 25, "ByteCount" -> 85000, "KiloBytes" -> 83.0, "Status" -> "正常"|>`
+
+200KB 超でコンパクション推奨、500KB 超で危険と判定されます。
+
+### 手動コンパクション（ClaudeCompactHistory）
+
+履歴が肥大化した場合に手動でコンパクションを実行できます（通常は自動実行されます）。
+
+```mathematica
+ClaudeCompactHistory[]
+```
+
+> エントリ数ベースとサイズベース（200KB 上限）の二重チェックにより、ノートブックの肥大化・フリーズを防ぎます。
+
+---
+
+## 11. デバッグとコードレビュー（ClaudeDebug / ClaudeReview）
 
 エラーメッセージを添えてデバッグ支援を受けます。
 
@@ -239,7 +309,7 @@ ClaudeReview["myModule.wl"]
 
 ---
 
-## 10. Web 検索と URL 取得（ClaudeWebSearch / ClaudeWebFetch）
+## 12. Web 検索と URL 取得（ClaudeWebSearch / ClaudeWebFetch）
 
 最新情報を Web から取得して活用します。
 
@@ -260,7 +330,7 @@ ClaudeWebFetch["https://reference.wolfram.com/language/ref/Dataset.html",
 
 ---
 
-## 11. 実行中タスクの監視（ClaudeStatus）
+## 13. 実行中タスクの監視（ClaudeStatus）
 
 現在実行中の全 Claude タスクのリアルタイム状態を表示します。
 
@@ -269,3 +339,15 @@ ClaudeStatus[]
 ```
 
 > 各タスクの経過時間、現在の状態（思考中/テキスト生成中/ツール実行中）、生成済みテキスト断片数、思考断片数、ツール使用数を表示します。
+
+---
+
+## 14. ディレクティブ履歴の管理（ClaudeDirectiveBackupDataset）
+
+Claude Directives の更新履歴を Review/Pull/Delete ボタン付き Grid で表示します。
+
+```mathematica
+ClaudeDirectiveBackupDataset[]
+```
+
+> 起動時にローカル最新版のスナップショットが保存されます。#0 行の「Pull」ボタンでローカル最新版に復元できます。Pull で過去バージョンに巻き戻した後に変更があれば警告が表示されます。

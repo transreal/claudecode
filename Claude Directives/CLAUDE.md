@@ -78,7 +78,7 @@
 - NBAccess 分離原則の検証には `ClaudeCheckSeparation["パッケージ名"]` を使用する。
   - 違反の修正には `ClaudeFixSeparation["パッケージ名"]` を使用する。
   - `$NBSeparationIgnoreList` に登録されたパッケージ（NBAccess, NotebookExtensions）は検査対象外。
-- ドキュメント生成 `ClaudeCreateDocumentation` はリミット到達時に自動リトライし、再実行で未生成分のみ続行する。README.md は最後に生成される。
+- ドキュメント生成 `ClaudeCreateDocumentation` はリミット到達時に自動リトライし、再実行で未生成分のみ続行する。
 - `_info/design/` フォルダが存在すれば、README の「設計思想」セクション生成時に参考にする（優先度: docs > コード > design メモ）。
 
 ### ClaudeEval の再帰呼び出しと複合タスクの分解
@@ -135,6 +135,18 @@ api.md とこのファイルや skills の記載が矛盾する場合は **常�
 - 基盤パッケージの変更を含むコードを自動生成してはならない。
 
 詳細は `rules/11-core-package-dependency.md` を参照。
+
+## Wolfram Language 関数名検証ルール（必須）
+
+**Mathematica に存在しない関数名・定数名・オプション名を推測で生成してはならない。** 
+
+- `FileQ[path]` → ❌（正しくは `FileExistsQ[path]`）
+- `DirectoryExists[path]` → ❌（正しくは `DirectoryQ[path]`）
+- `StringEmpty[str]` → ❌（正しくは `str === ""`）
+- api.md に記載されていないパッケージ関数やオプション → ❌
+
+不確実な場合は `Names["*File*"]` での検索や `?FunctionName` でのドキュメント確認を行い、存在を確認してから使用すること。詳細は `rules/12-function-name-verification.md` を参照。
+
 ### PR ワークフローの正しいパターン
 
 PR を作成する場合、以下の **いずれか** を使う。存在しない `GitHubCreateBranch`, `GitHubPushFile` 等を生成してはならない。
