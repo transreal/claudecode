@@ -26,7 +26,6 @@ Scan[
    "ClaudeMigrateBackupHistory",
    "ClaudeAddDirective","ClaudeRestoreDirective","ClaudeListDirectives",
    "ClaudeUpdateDirective","ClaudeDirectiveBackupDataset","ClaudeSyncDirectives",
-   "ClaudeInitProject", "ClaudePromoteProjectDirectives",
    "CreateClaudeSession","ClaudeRestoreSession","Inherit",
    "ClaudeListSessions","ClaudeDeleteSession","ClaudeShowHistory",
    "ClaudeAttach","ClaudeDetach","ClaudeAttachments","ClearAttachments",
@@ -34,15 +33,13 @@ Scan[
    "ScanConfidentialCells","ShowClaudePalette","ClaudeQueryShowContext",
    "ClaudeShowAccessConfig","ClaudeSessionStatus","ClaudeCompactHistory","ClaudeHistorySize",
    "ClaudeWebSearch","ClaudeWebFetch","WebFetch",
-   "ClaudeImageGenerate","ClaudeSpeech",
-   "$ClaudeImageModels","$ClaudeTTSModels",
    "ClaudeCommand","ClaudeCheckSeparation","ClaudeFixSeparation","ClaudeStatus",
    "$ClaudeTimeout", "$ClaudeMDPath", "$ClaudeMDContent", "$ClaudeModel",
    "$ClaudeTestModel",
    "$ClaudeFallbackModels", "$ClaudeWorkingDirectory", "$ClaudeAccessibleDirs",
    "$ClaudeDocRetryDelay", "$ClaudeDocMaxRetries", "$ClaudeDocMaxChunkChars",
    "$ClaudePrivateModel",
-   "Fallback", "AutoPrivate", "References", "Demos", "Disclaimer"}
+   "Fallback", "AutoPrivate", "References", "Demos", "Disclaimer", "Acknowledgments"}
 ];
 
 ClaudeSpec::usage =
@@ -130,6 +127,10 @@ License::usage =
   "\:7a7a\:6587\:5b57\:5217(\\:30c7\\:30d5\\:30a9\\:30eb\\:30c8): GitHubREST`$GitHubLicenseHolder \\:304c\\:975e\\:7a7a\\:306a\\:3089 MIT \\:30e9\\:30a4\\:30bb\\:30f3\\:30b9\\:3092\\:81ea\\:52d5\\:633f\\:5165\\:3002\n" <>
   "\:6587\:5b57\:5217\:6307\:5b9a: \:305d\:306e\:307e\:307e\:30e9\:30a4\:30bb\:30f3\:30b9\:30c6\:30ad\:30b9\:30c8\:3068\:3057\:3066\:633f\:5165\:3002\n" <>
   "\:4f8b: License -> \"MIT\", License -> \"Apache-2.0 License...\"";
+Acknowledgments::usage =
+  "Acknowledgments \:306f ClaudeCreateDocumentation/ClaudeUpdateDocumentation \:306e\:30aa\:30d7\:30b7\:30e7\:30f3\:3002\n" <>
+  "\:8b1d\:8f9e\:30bb\:30af\:30b7\:30e7\:30f3\:306b\:8ffd\:52a0\:3059\:308b\:6587\:8a00\:306e\:30ea\:30b9\:30c8\:3092\:6307\:5b9a\:3002\:6307\:5b9a\:6642\:306f README.md \:306e\:514d\:8cac\:4e8b\:9805\:306e\:524d\:306b\:914d\:7f6e\:3002\n" <>
+  "\:4f8b: Acknowledgments -> {\"\:672c\:7814\:7a76\:306f JSPS \:79d1\:7814\:8cbb\:306e\:52a9\:6210\:3092\:53d7\:3051\:305f\"}";
 
 
 If[!ListQ[$ClaudeFallbackModels],
@@ -284,13 +285,7 @@ ClaudeUpdateDirective::usage =
   "ClaudeSyncDirectives[dir] \:306f\:6307\:5b9a\:30c7\:30a3\:30ec\:30af\:30c8\:30ea dir \:306e\:30d5\:30a1\:30a4\:30eb\:3092 Claude Directives \:30d5\:30a9\:30eb\:30c0\:3068\:6bd4\:8f03\:3057\:3001\n" <>
   "dir \:5074\:306e\:65b9\:304c\:65b0\:3057\:3044\:30d5\:30a1\:30a4\:30eb\:3067 Claude Directives \:3092\:66f4\:65b0\:3059\:308b\:3002\n" <>
   "dir \:306b\:3060\:3051\:5b58\:5728\:3059\:308b\:30d5\:30a1\:30a4\:30eb\:3082\:30b3\:30d4\:30fc\:3059\:308b\:3002Claude Directives \:5074\:306b\:3057\:304b\:306a\:3044\:30d5\:30a1\:30a4\:30eb\:306f\:305d\:306e\:307e\:307e\:3002\n" <>
-  "\:4f8b: ClaudeSyncDirectives[\"C:\\\\Users\\\\user\\\\Claude Directives\"]";ClaudeInitProject::usage =
-  "ClaudeInitProject[] \:306f\:73fe\:5728\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306b\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:56fa\:6709\:306e Claude Directives \:96db\:5f62\:3092\:4f5c\:6210\:3059\:308b\:3002\n" <>
-  ".claude-project/CLAUDE.local.md \:304a\:3088\:3073 rules/, skills/ \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:4f5c\:6210\:3055\:308c\:308b\:3002\n" <>
-  "\:30e1\:30a4\:30f3\:306e\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3068\:81ea\:52d5\:30de\:30fc\:30b8\:3055\:308c\:3001\:6b21\:56de\:306e ClaudeQuery/ClaudeEval \:304b\:3089\:53cd\:6620\:3055\:308c\:308b\:3002";ClaudePromoteProjectDirectives::usage =
-  "ClaudePromoteProjectDirectives[] \:306f\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:56fa\:6709\:306e\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:30b0\:30ed\:30fc\:30d0\:30eb\:306b\:6607\:683c\:3059\:308b\:3002\n" <>
-  ".claude-project/ \:5185\:306e CLAUDE.local.md / rules / skills \:3092\:30e1\:30a4\:30f3\:306e Claude Directives \:306b\:30b3\:30d4\:30fc\:3059\:308b\:3002\n" <>
-  "ClaudePromoteProjectDirectives[DryRun -> True] \:3067\:30d7\:30ec\:30d3\:30e5\:30fc\:3002";MarkConfidential::usage =
+  "\:4f8b: ClaudeSyncDirectives[\"C:\\\\Users\\\\user\\\\Claude Directives\"]";MarkConfidential::usage =
   "MarkConfidential[] \:306f\:73fe\:5728\:306e\:30bb\:30eb\:3092\:6a5f\:5bc6\:30de\:30fc\:30af\:3059\:308b\:3002\n" <>
   "MarkConfidential[cell] \:306f\:6307\:5b9a\:30bb\:30eb\:3092\:6a5f\:5bc6\:30de\:30fc\:30af\:3059\:308b\:3002\n" <>
   "\:6a5f\:5bc6\:30bb\:30eb\:306f ClaudeEval/ClaudeQuery \:306e\:30d7\:30ed\:30f3\:30d7\:30c8\:304b\:3089\:9664\:5916\:3055\:308c\:308b\:3002";UnmarkConfidential::usage =
@@ -332,30 +327,6 @@ WebFetch::usage =
   "False: Web \:691c\:7d22\:3092\:884c\:308f\:306a\:3044\:3002\n" <>
   "Automatic (ClaudeEval \:306e\:30c7\:30d5\:30a9\:30eb\:30c8): Claude \:304c\:30bf\:30b9\:30af\:3092\:5206\:6790\:3057\:3001\:5fc5\:8981\:306a\:3089\:81ea\:52d5\:3067 Web \:691c\:7d22\:3059\:308b\:3002\n" <>
   "ClaudeQuery \:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:306f False\:3002";
-ClaudeImageGenerate::usage =
-  "ClaudeImageGenerate[prompt] は OpenAI Images API で画像を生成し Image オブジェクトで返す。\n" <>
-  "ClaudeImageGenerate[prompt, opts] でオプション指定可能。\n" <>
-  "  \"Model\" -> \"gpt-image-1\" (ディフォルト) | \"dall-e-3\"\n" <>
-  "  \"Size\" -> \"1024x1024\" (ディフォルト) | \"1792x1024\" | \"1024x1792\"\n" <>
-  "  \"Quality\" -> gpt-image-1: \"auto\"(default)|\"high\"|\"medium\"|\"low\", dall-e-3: \"standard\"(default)|\"hd\"\n" <>
-  "  (dall-e-3 指定時は \"auto\"→\"standard\", \"high\"→\"hd\" に自動変換される)\n" <>
-  "例: ClaudeImageGenerate[\"桜の満開の写真\"]\n" <>
-  "例: ClaudeImageGenerate[\"sunset\", \"Model\" -> \"dall-e-3\", \"Quality\" -> \"hd\"]";
-ClaudeSpeech::usage =
-  "ClaudeSpeech[text] は OpenAI TTS API で音声を生成し Audio オブジェクトで返す。\n" <>
-  "ClaudeSpeech[text, opts] でオプション指定可能。\n" <>
-  "  \"Model\" -> \"tts-1\" (ディフォルト) | \"tts-1-hd\"\n" <>
-  "  \"Voice\" -> \"alloy\" (ディフォルト) | \"echo\" | \"fable\" | \"onyx\" | \"nova\" | \"shimmer\"\n" <>
-  "  \"Speed\" -> 1.0 (ディフォルト), 0.25〜4.0\n" <>
-  "例: ClaudeSpeech[\"こんにちは、世界\"]";
-$ClaudeImageModels::usage =
-  "$ClaudeImageModels は画像生成モデルのリスト。\n" <>
-  "{{\"provider\",\"model\"}, ...} の形式。\n" <>
-  "例: $ClaudeImageModels = {{\"openai\",\"gpt-image-1\"},{\"openai\",\"dall-e-3\"}}";
-$ClaudeTTSModels::usage =
-  "$ClaudeTTSModels は音声生成モデルのリスト。\n" <>
-  "{{\"provider\",\"model\"}, ...} の形式。\n" <>
-  "例: $ClaudeTTSModels = {{\"openai\",\"tts-1-hd\"},{\"openai\",\"tts-1\"}}";
 ClaudeCompactHistory::usage =
   "ClaudeCompactHistory[] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\:3092\:624b\:52d5\:3067\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:3059\:308b\:3002\n" <>
   "ClaudeCompactHistory[name] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:3059\:308b\:3002\n" <>
@@ -421,145 +392,6 @@ iEnsureClaudeWorkingDirectory[] := Module[{dir = iClaudeWorkingDirectory[]},
   ];
   dir
 ];
-
-(* ============================================================
-   プロジェクト固有 Claude Directives:
-   NotebookDirectory/.claude-project/ にローカル差分を置き、
-   メインのディレクティブとマージして .claude/ に出力する。
-   ============================================================ *)
-
-(* NotebookDirectory のプロジェクトローカルディレクトリ。
-   ノートブックが未保存なら $Failed を返す。 *)
-iProjectLocalDir[] := iProjectLocalDir[Quiet[InputNotebook[]]];
-iProjectLocalDir[nb_] :=
-  Module[{nbDir},
-    nbDir = Quiet @ Check[NotebookDirectory[nb], $Failed];
-    If[!StringQ[nbDir] || !DirectoryQ[nbDir], Return[$Failed]];
-    FileNameJoin[{nbDir, ".claude-project"}]
-  ];
-
-(* プロジェクトローカルディレクティブが存在するか *)
-iHasProjectDirectives[] := iHasProjectDirectives[Quiet[InputNotebook[]]];
-iHasProjectDirectives[nb_] :=
-  Module[{localDir = iProjectLocalDir[nb]},
-    StringQ[localDir] && DirectoryQ[localDir]
-  ];
-
-(* マージ済み出力先: NotebookDirectory/.claude/ *)
-iProjectMergedDir[] := iProjectMergedDir[Quiet[InputNotebook[]]];
-iProjectMergedDir[nb_] :=
-  Module[{nbDir},
-    nbDir = Quiet @ Check[NotebookDirectory[nb], $Failed];
-    If[!StringQ[nbDir], Return[$Failed]];
-    FileNameJoin[{nbDir, ".claude"}]
-  ];
-
-(* マージが必要か判定: タイムスタンプ比較 *)
-iNeedsProjectMerge[] := iNeedsProjectMerge[Quiet[InputNotebook[]]];
-iNeedsProjectMerge[nb_] :=
-  Module[{localDir, mergedDir, tsFile, mergeTime, mainDir,
-          mainMaxTime, localMaxTime, allFiles},
-    localDir = iProjectLocalDir[nb];
-    If[!StringQ[localDir] || !DirectoryQ[localDir], Return[False]];
-    mergedDir = iProjectMergedDir[nb];
-    If[!StringQ[mergedDir], Return[True]];
-    tsFile = FileNameJoin[{mergedDir, ".merge_timestamp"}];
-    If[!FileExistsQ[tsFile], Return[True]];
-    mergeTime = Quiet @ Check[AbsoluteTime[FileDate[tsFile]], 0];
-    (* メインディレクティブの最終更新時刻 *)
-    mainDir = iDirectivesSourceDir[];
-    mainMaxTime = If[StringQ[mainDir] && DirectoryQ[mainDir],
-      Max[0, Quiet @ Check[
-        Max[AbsoluteTime[FileDate[#]] & /@
-          Select[FileNames["*", mainDir, Infinity], iFileQ]], 0], 0],
-      0];
-    (* ローカルの最終更新時刻 *)
-    localMaxTime = Max[0, Quiet @ Check[
-      Max[AbsoluteTime[FileDate[#]] & /@
-        Select[FileNames["*", localDir, Infinity], iFileQ]], 0], 0];
-    (* いずれかがマージ時刻より新しければ再マージ *)
-    mainMaxTime > mergeTime || localMaxTime > mergeTime
-  ];
-
-(* プロジェクトディレクティブのマージを実行 *)
-iMergeProjectDirectives[] := iMergeProjectDirectives[Quiet[InputNotebook[]]];
-iMergeProjectDirectives[nb_] :=
-  Module[{mainDir, localDir, mergedDir, tsFile,
-          mainClaude, localClaude, mergedClaude,
-          mainRules, mainSkills, localRules, localSkills,
-          mergedRulesDir, mergedSkillsDir, src, dst},
-    mainDir = iDirectivesSourceDir[];
-    localDir = iProjectLocalDir[nb];
-    mergedDir = iProjectMergedDir[nb];
-    If[!StringQ[mainDir] || !StringQ[localDir] || !StringQ[mergedDir],
-      Return[$Failed]];
-    (* マージ先ディレクトリ作成 *)
-    Quiet @ CreateDirectory[mergedDir, CreateIntermediateDirectories -> True];
-    mergedRulesDir = FileNameJoin[{mergedDir, "rules"}];
-    mergedSkillsDir = FileNameJoin[{mergedDir, "skills"}];
-    Quiet @ CreateDirectory[mergedRulesDir, CreateIntermediateDirectories -> True];
-    Quiet @ CreateDirectory[mergedSkillsDir, CreateIntermediateDirectories -> True];
-    (* --- CLAUDE.md マージ --- *)
-    mainClaude = FileNameJoin[{mainDir, "CLAUDE.md"}];
-    localClaude = FileNameJoin[{localDir, "CLAUDE.local.md"}];
-    mergedClaude = FileNameJoin[{mergedDir, "CLAUDE.md"}];
-    Module[{mainText = "", localText = "", merged},
-      If[FileExistsQ[mainClaude],
-        mainText = Quiet @ Check[Import[mainClaude, "Text"], ""]];
-      If[FileExistsQ[localClaude],
-        localText = Quiet @ Check[Import[localClaude, "Text"], ""]];
-      merged = If[localText === "",
-        mainText,
-        mainText <> "\n\n## Project-specific guidelines\n\n" <> localText];
-      Export[mergedClaude, merged, "Text", CharacterEncoding -> "UTF-8"]];
-    (* --- rules/ マージ: メイン全コピー → ローカルで上書き --- *)
-    mainRules = FileNameJoin[{mainDir, "rules"}];
-    localRules = FileNameJoin[{localDir, "rules"}];
-    If[DirectoryQ[mainRules],
-      Scan[Function[f,
-        dst = FileNameJoin[{mergedRulesDir, FileNameTake[f]}];
-        Quiet @ CopyFile[f, dst, OverwriteTarget -> True]],
-        Select[FileNames["*", mainRules], iFileQ]]];
-    If[DirectoryQ[localRules],
-      Scan[Function[f,
-        dst = FileNameJoin[{mergedRulesDir, FileNameTake[f]}];
-        Quiet @ CopyFile[f, dst, OverwriteTarget -> True]],
-        Select[FileNames["*", localRules], iFileQ]]];
-    (* --- skills/ マージ: メイン全コピー → ローカルで上書き --- *)
-    mainSkills = FileNameJoin[{mainDir, "skills"}];
-    localSkills = FileNameJoin[{localDir, "skills"}];
-    If[DirectoryQ[mainSkills],
-      Scan[Function[skillDir,
-        Module[{skillName = FileNameTake[skillDir], dstSkillDir},
-          dstSkillDir = FileNameJoin[{mergedSkillsDir, skillName}];
-          iCopyDirectoryRecursive[skillDir, dstSkillDir]]],
-        Select[FileNames["*", mainSkills], DirectoryQ]]];
-    If[DirectoryQ[localSkills],
-      Scan[Function[skillDir,
-        Module[{skillName = FileNameTake[skillDir], dstSkillDir},
-          dstSkillDir = FileNameJoin[{mergedSkillsDir, skillName}];
-          iCopyDirectoryRecursive[skillDir, dstSkillDir]]],
-        Select[FileNames["*", localSkills], DirectoryQ]]];
-    (* --- settings.json コピー --- *)
-    src = FileNameJoin[{iEnsureClaudeWorkingDirectory[], ".claude", "settings.json"}];
-    dst = FileNameJoin[{mergedDir, "settings.json"}];
-    If[FileExistsQ[src], Quiet @ CopyFile[src, dst, OverwriteTarget -> True]];
-    (* --- タイムスタンプ記録 --- *)
-    tsFile = FileNameJoin[{mergedDir, ".merge_timestamp"}];
-    Export[tsFile, DateString[], "Text"];
-    mergedDir
-  ];
-
-(* 必要なら自動マージを実行し、マージ済みディレクトリを返す。
-   プロジェクトディレクティブがない場合は None。 *)
-iEnsureProjectMerge[] := iEnsureProjectMerge[Quiet[InputNotebook[]]];
-iEnsureProjectMerge[nb_] :=
-  Module[{},
-    If[!iHasProjectDirectives[nb], Return[None]];
-    If[iNeedsProjectMerge[nb],
-      iMergeProjectDirectives[nb],
-      iProjectMergedDir[nb]]
-  ];
 
 iClaudeAPIEnvVars[] := {
   "ANTHROPIC_API_KEY",
@@ -740,14 +572,8 @@ iInjectSettingsPermissions[settingsFile_String, dirs_List] :=
   ];
 
 iPrepareClaudeProjectDirectory[] := Module[
-  {srcDir, tempDir, src, dst, rulesSrc, rulesDst, skillsSrc, skillsDst,
-   accessDirs, mergedDir},
-  (* プロジェクト固有ディレクティブがあればマージし、そちらを srcDir にする *)
-  mergedDir = iEnsureProjectMerge[];
-  srcDir = If[StringQ[mergedDir] && DirectoryQ[mergedDir],
-    (* マージ済みディレクティブの親ディレクトリ (NotebookDirectory) *)
-    DirectoryName[mergedDir],
-    iEnsureClaudeWorkingDirectory[]];
+  {srcDir, tempDir, src, dst, rulesSrc, rulesDst, skillsSrc, skillsDst, accessDirs},
+  srcDir = iEnsureClaudeWorkingDirectory[];
   tempDir = FileNameJoin[{
     $TemporaryDirectory,
     "claude_project_" <> ToString[UnixTime[]] <> "_" <> ToString[RandomInteger[99999]]
@@ -864,11 +690,13 @@ nbPrint[nb_, text_Style, ___] := (
 
 (* \:30b3\:30fc\:30c9\:6587\:5b57\:5217\:3092\:69cb\:6587\:30ab\:30e9\:30fc\:30ea\:30f3\:30b0\:4ed8\:304d Input \:30bb\:30eb\:3068\:3057\:3066\:66f8\:304d\:8fbc\:3080 \:2192 NBAccess\:306b\:59d4\:8b72 *)
 iWriteCodeCell[nb_NotebookObject, code_String] := (
+  Quiet[SelectionMove[nb, After, Notebook]];
   NBAccess`NBWriteCode[nb, code]);
 
 (* CellPrint\:30d1\:30bf\:30fc\:30f3\:3092\:81ea\:52d5\:6aa2\:51fa\:3057\:3066\:30b9\:30de\:30fc\:30c8\:306b\:30bb\:30eb\:3092\:66f8\:304d\:8fbc\:3080 \:2192 NBAccess\:306b\:59d4\:8b72 *)
 iWriteSmartCell[nb_, code_String, autoEvaluate_:False] :=
   Module[{},
+    Quiet[SelectionMove[nb, After, Notebook]];
     NBAccess`NBWriteSmartCode[nb, code];
     If[TrueQ[autoEvaluate],
       NBAccess`NBEvaluatePreviousCell[nb]]
@@ -1273,70 +1101,6 @@ ScanConfidentialCells[nb_NotebookObject] :=
     n = NBAccess`NBScanDependentCells[nb, directConfVars];
     n
   ];
-
-(* ============================================================
-   LLM 送信直前の精密チェック (第2層)
-   全ノートブックを走査して完全な依存グラフを構築し、
-   秘密依存変数の最終判定を行う。
-   第1層 (CellEpilog による橙マーキング) は日常の注意喚起として残す。
-   この関数は ClaudeQuery/ClaudeEval/ContinueEval の直前にのみ呼ぶ。
-   ============================================================ *)
-
-iPrecisionConfidentialCheck[nb_NotebookObject] :=
-  Module[{directConfVars, globalDeps, allDepVars, localDeps,
-          localDepVars, newlyFound},
-    (* Step 1: シンボルテーブルをクリアし、全ノートブックから直接秘密変数を再構築 *)
-    $confidentialSymbols = <||>;
-    $confVarTimes = <||>;
-    $allConfidentialVars = <||>;
-    NBAccess`NBClearConfidentialVars[];
-    iRebuildConfidentialSymbolsAll[];
-    directConfVars = Keys[$confidentialSymbols];
-
-    If[Length[directConfVars] === 0,
-      (* 機密変数なし: 高コスト処理をすべてスキップ *)
-      $allConfidentialVars = <||>;
-      NBAccess`NBSetConfidentialVars[<||>];
-      Return[0]];
-
-    (* Step 2: 現在NBの軽量版依存グラフ (比較用 + セルマーキング用) *)
-    localDeps = Quiet[NBAccess`NBBuildVarDependencies[nb]];
-    If[!AssociationQ[localDeps], localDeps = <||>];
-    localDepVars = Quiet[NBAccess`NBTransitiveDependents[localDeps, directConfVars]];
-    If[!ListQ[localDepVars], localDepVars = directConfVars];
-
-    (* Step 3: 全ノートブック統合依存グラフを構築 (精密モード) *)
-    globalDeps = Quiet[NBAccess`NBBuildGlobalVarDependencies[]];
-    If[!AssociationQ[globalDeps],
-      (* フォールバック: 軽量版の結果をそのまま使用 *)
-      globalDeps = localDeps];
-
-    (* Step 4: 統合グラフで推移的依存を計算 *)
-    allDepVars = Quiet[NBAccess`NBTransitiveDependents[globalDeps, directConfVars]];
-    If[!ListQ[allDepVars], allDepVars = directConfVars];
-
-    (* Step 5: $allConfidentialVars を更新 *)
-    $allConfidentialVars = Association[# -> True & /@ allDepVars];
-    NBAccess`NBSetConfidentialVars[$allConfidentialVars];
-
-    (* Step 6: 現在のNBの依存セルを橙マーク更新 (localDeps を再利用) *)
-    Quiet[NBAccess`NBScanDependentCells[nb, directConfVars, localDeps]];
-
-    (* Step 7: 精密チェックで新たに見つかった秘密依存を通知
-       (全NB統合で見つかったが、現在NBだけでは見つからなかった変数) *)
-    newlyFound = Complement[allDepVars, localDepVars];
-    If[Length[newlyFound] > 0,
-      Module[{msg},
-        msg = "\[WarningSign] 精密チェック: 別ノートブック経由の秘密依存を " <>
-              ToString[Length[newlyFound]] <> " 個検出しました (" <>
-              StringRiffle[Take[newlyFound, UpTo[5]], ", "] <>
-              If[Length[newlyFound] > 5, ", ...", ""] <>
-              ")。これらはコンテキスト送信から除外されます。";
-        NBAccess`NBWritePrintNotice[None, msg, RGBColor[0.85, 0.5, 0.1]]]];
-
-    Length[allDepVars]
-  ];
-
 (* ============================================================
    アクセスレベル解決ヘルパー
    PrivacySpec と Model の両方から実効アクセスレベルを決定する。
@@ -2096,8 +1860,6 @@ Print[
   "  ClaudeUpdateDirective[text]      \[RightArrow] \:6307\:793a\:3067\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:66f4\:65b0\:30fb\:30b3\:30d4\:30fc\n" <>
   "  ClaudeDirectiveBackupDataset[]   \[RightArrow] \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:66f4\:65b0\:5c65\:6b74\:3092 Review/Pull/Delete \:4ed8\:304d Grid \:3067\:8868\:793a\n" <>
   "  ClaudeSyncDirectives[dir]        \[RightArrow] dir \:304b\:3089 Claude Directives \:3078\:66f4\:65b0\:30d5\:30a1\:30a4\:30eb\:3092\:540c\:671f\n" <>
-  "  ClaudeInitProject[]              \[RightArrow] \:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:56fa\:6709\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:521d\:671f\:5316\n" <>
-  "  ClaudePromoteProjectDirectives[] \[RightArrow] \:30ed\:30fc\:30ab\:30eb\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:30b0\:30ed\:30fc\:30d0\:30eb\:306b\:6607\:683c\n" <>
   "  ClaudeSessionStatus[]            \[RightArrow] \:30bb\:30c3\:30b7\:30e7\:30f3\:72b6\:614b\:30fb\:30a2\:30af\:30bb\:30b9\:53ef\:80fd\:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\n" <>
   "  ClaudeStatus[]                   \[RightArrow] \:5b9f\:884c\:4e2d\:30bf\:30b9\:30af\:306e\:30ea\:30a2\:30eb\:30bf\:30a4\:30e0\:72b6\:614b\:8868\:793a\n" <>
   "  ClaudeCompactHistory[]           \[RightArrow] \:5c65\:6b74\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3 (\:901a\:5e38\:81ea\:52d5)\n" <>
@@ -2516,14 +2278,15 @@ cleanMarkdown[s_String] := StringTrim @ StringReplace[s, {
 (* ClaudeQuery 応答をマークダウン解析して適切なスタイルのセルで出力 *)
 iFlushQueryTextBuf[nb_NotebookObject, buf_List] :=
   If[Length[buf] > 0,
+    Quiet[SelectionMove[nb, After, Notebook]];
     NBAccess`NBWriteCell[nb,
       Cell[StringJoin[Riffle[buf, "\n"]], "Text"]]];
 
 iWriteQueryResponse[nb_NotebookObject, text_String] :=
   Module[{lines, i, line, trimmed, textBuf = {}, content,
           inCodeBlock = False, codeLang = "", codeBuf = {}},
-    (* Job システムがカーソルをアンカー位置に配置済み。
-       ここから After 書き込みが順次チェインする。 *)
+    (* 非同期コールバックからの呼び出し対策: 末尾に移動してから全セルを書き込み *)
+    Quiet[SelectionMove[nb, After, Notebook]];
     lines = StringSplit[text, "\n"];
     Do[
       line = lines[[i]];
@@ -2543,14 +2306,8 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
           If[Length[codeBuf] > 0,
             Module[{codeText = StringJoin[Riffle[codeBuf, "\n"]]},
               If[MemberQ[{"mathematica", "wolfram", "wl", "mma"}, ToLowerCase[codeLang]],
-                (* Mathematica コード → Input セル + 安全なら自動評価 *)
-                If[iIsSafeForQueryEval[codeText],
-                  iWriteSmartCell[nb, codeText, True],
-                  (* 安全でないコード → Input セルのみ（評価しない） *)
-                  iWriteCodeCell[nb, codeText];
-                  NBAccess`NBWritePrintNotice[nb,
-                    "\[RightTriangle] 上のセルは副作用を含む可能性があるため自動評価をスキップしました。Shift+Enter で実行できます。",
-                    GrayLevel[0.5]]],
+                (* Mathematica コード → Input セル *)
+                iWriteCodeCell[nb, codeText],
                 (* 他の言語やコードブロック → Program セル *)
                 NBAccess`NBWriteCell[nb, Cell[codeText, "Program"]]]]];
           codeBuf = {};
@@ -2637,9 +2394,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
     If[inCodeBlock && Length[codeBuf] > 0,
       Module[{codeText = StringJoin[Riffle[codeBuf, "\n"]]},
         If[MemberQ[{"mathematica", "wolfram", "wl", "mma"}, ToLowerCase[codeLang]],
-          If[iIsSafeForQueryEval[codeText],
-            iWriteSmartCell[nb, codeText, True],
-            iWriteCodeCell[nb, codeText]],
+          iWriteCodeCell[nb, codeText],
           NBAccess`NBWriteCell[nb, Cell[codeText, "Program"]]]]];
     (* 残りをフラッシュ *)
     iFlushQueryTextBuf[nb, textBuf];
@@ -3437,159 +3192,6 @@ iFlushFallbackLog[nb_NotebookObject] :=
   (* \:30e1\:30c3\:30bb\:30fc\:30b8\:306f iFallbackNotifyAndLog \:3067\:5373\:5ea7\:306b\:66f8\:304d\:51fa\:3057\:6e08\:307f\:3002\:30ed\:30b0\:3092\:30af\:30ea\:30a2\:306e\:307f *)
   ($iFallbackLog = {});
 
-(* ============================================================
-   画像・音声生成 API (OpenAI Images API / TTS API)
-   ClaudeQuery のリッチレスポンスおよび ClaudeEval から
-   生成されたコード内で呼び出される。
-   ============================================================ *)
-
-(* モデルリストのデフォルト値 *)
-If[!ListQ[$ClaudeImageModels],
-  $ClaudeImageModels = {{"openai", "gpt-image-1"}, {"openai", "dall-e-3"}}];
-If[!ListQ[$ClaudeTTSModels],
-  $ClaudeTTSModels = {{"openai", "tts-1-hd"}, {"openai", "tts-1"}}];
-
-(* --- 画像生成 --- *)
-Options[ClaudeImageGenerate] = {
-  "Model"   -> Automatic,
-  "Size"    -> "1024x1024",
-  "Quality" -> "auto",
-  "N"       -> 1
-};
-
-ClaudeImageGenerate[prompt_String, opts:OptionsPattern[]] :=
-  Module[{model, apiKey, url, bodyAssoc, body, resp, bodyStr, json, data,
-          imgURL, imgBytes, quality, isDallE},
-    (* モデル選択: Automatic なら $ClaudeImageModels の先頭 *)
-    model = OptionValue["Model"];
-    If[model === Automatic,
-      If[Length[$ClaudeImageModels] > 0,
-        model = $ClaudeImageModels[[1, 2]],
-        model = "gpt-image-1"]];
-    isDallE = StringContainsQ[model, "dall-e"];
-    (* API キー取得 *)
-    apiKey = Quiet[NBAccess`NBGetAPIKey["openai",
-      PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
-    If[apiKey === $Failed || !StringQ[apiKey],
-      Message[ClaudeImageGenerate::nokey];
-      Return[$Failed]];
-    (* モデル別パラメータ構築:
-       gpt-image-1: quality = "auto"/"high"/"medium"/"low", b64_json がデフォルト
-       dall-e-3: quality = "standard"/"hd", response_format 指定が必要 *)
-    quality = OptionValue["Quality"];
-    If[isDallE,
-      quality = Switch[quality,
-        "auto" | "medium" | "low", "standard",
-        "high", "hd",
-        _, quality]];
-    bodyAssoc = <|
-      "model"  -> model,
-      "prompt" -> prompt,
-      "size"   -> OptionValue["Size"],
-      "n"      -> OptionValue["N"]
-    |>;
-    bodyAssoc["quality"] = quality;
-    If[isDallE,
-      bodyAssoc["response_format"] = "b64_json"];
-    (* API 呼び出し *)
-    url = "https://api.openai.com/v1/images/generations";
-    body = ExportString[bodyAssoc, "RawJSON"];
-    resp = Quiet[URLRead[HTTPRequest[url, <|
-      "Method"  -> "POST",
-      "Headers" -> {
-        "Authorization" -> "Bearer " <> apiKey,
-        "Content-Type"  -> "application/json"},
-      "Body" -> body|>]]];
-    If[!MatchQ[resp, _HTTPResponse],
-      Message[ClaudeImageGenerate::conn]; Return[$Failed]];
-    bodyStr = iHTTPResponseBodyUTF8[resp];
-    If[!StringQ[bodyStr], bodyStr = ToString[resp["Body"]]];
-    If[resp["StatusCode"] =!= 200,
-      Message[ClaudeImageGenerate::api, resp["StatusCode"],
-        StringTake[bodyStr, UpTo[200]]];
-      Return[$Failed]];
-    json = Quiet[Developer`ReadRawJSONString[bodyStr]];
-    If[!AssociationQ[json],
-      json = Quiet[ImportString[bodyStr, "RawJSON"]]];
-    If[!AssociationQ[json],
-      Message[ClaudeImageGenerate::parse]; Return[$Failed]];
-    data = json["data"];
-    If[!ListQ[data] || Length[data] === 0,
-      Message[ClaudeImageGenerate::nodata]; Return[$Failed]];
-    (* gpt-image-1 は b64_json を返す; dall-e-3 も b64_json で要求済み *)
-    Module[{entry = First[data]},
-      Which[
-        KeyExistsQ[entry, "b64_json"],
-          ImportByteArray[BaseDecode[entry["b64_json"]], "PNG"],
-        KeyExistsQ[entry, "url"],
-          imgURL = entry["url"];
-          Quiet @ Import[imgURL],
-        True,
-          Message[ClaudeImageGenerate::nodata]; $Failed
-      ]]
-  ];
-
-ClaudeImageGenerate::nokey  = "OpenAI の API キーが見つかりません。SystemCredential[\"OPENAI_API_KEY\"] を設定してください。";
-ClaudeImageGenerate::conn   = "OpenAI Images API に接続できませんでした。";
-ClaudeImageGenerate::api    = "OpenAI Images API エラー (StatusCode=`1`): `2`";
-ClaudeImageGenerate::parse  = "OpenAI Images API の応答をパースできませんでした。";
-ClaudeImageGenerate::nodata = "OpenAI Images API から画像データを取得できませんでした。";
-
-(* --- 音声生成 (TTS) --- *)
-Options[ClaudeSpeech] = {
-  "Model" -> Automatic,
-  "Voice" -> "alloy",
-  "Speed" -> 1.0
-};
-
-ClaudeSpeech[text_String, opts:OptionsPattern[]] :=
-  Module[{model, apiKey, url, body, resp, bodyBytes, tmpFile},
-    model = OptionValue["Model"];
-    If[model === Automatic,
-      If[Length[$ClaudeTTSModels] > 0,
-        model = $ClaudeTTSModels[[1, 2]],
-        model = "tts-1"]];
-    apiKey = Quiet[NBAccess`NBGetAPIKey["openai",
-      PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
-    If[apiKey === $Failed || !StringQ[apiKey],
-      Message[ClaudeSpeech::nokey]; Return[$Failed]];
-    url = "https://api.openai.com/v1/audio/speech";
-    body = ExportString[<|
-      "model" -> model,
-      "input" -> text,
-      "voice" -> OptionValue["Voice"],
-      "speed" -> OptionValue["Speed"]
-    |>, "RawJSON"];
-    resp = Quiet[URLRead[HTTPRequest[url, <|
-      "Method"  -> "POST",
-      "Headers" -> {
-        "Authorization" -> "Bearer " <> apiKey,
-        "Content-Type"  -> "application/json"},
-      "Body" -> body|>]]];
-    If[!MatchQ[resp, _HTTPResponse],
-      Message[ClaudeSpeech::conn]; Return[$Failed]];
-    If[resp["StatusCode"] =!= 200,
-      Module[{errBody = iHTTPResponseBodyUTF8[resp]},
-        If[!StringQ[errBody], errBody = ToString[resp["Body"]]];
-        Message[ClaudeSpeech::api, resp["StatusCode"],
-          StringTake[errBody, UpTo[200]]]];
-      Return[$Failed]];
-    (* TTS API はバイナリ mp3 を返す *)
-    bodyBytes = resp["BodyByteArray"];
-    If[!MatchQ[bodyBytes, _ByteArray],
-      Message[ClaudeSpeech::parse]; Return[$Failed]];
-    tmpFile = FileNameJoin[{$TemporaryDirectory,
-      "claude_speech_" <> ToString[UnixTime[]] <> ".mp3"}];
-    BinaryWrite[tmpFile, Normal[bodyBytes]];
-    Close[tmpFile];
-    Import[tmpFile, "Audio"]
-  ];
-
-ClaudeSpeech::nokey = "OpenAI の API キーが見つかりません。SystemCredential[\"OPENAI_API_KEY\"] を設定してください。";
-ClaudeSpeech::conn  = "OpenAI TTS API に接続できませんでした。";
-ClaudeSpeech::api   = "OpenAI TTS API エラー (StatusCode=`1`): `2`";
-ClaudeSpeech::parse = "OpenAI TTS API から音声データを取得できませんでした。";
-
 (* 非同期フォールバック: StartProcess + ScheduledTask で API 呼び出し
    カーネルをブロックせずにフォールバックモデルを順次試行する *)
 iPrepareAnthropicPS1[apiKey_String, model_String, prompt_String,
@@ -4309,15 +3911,35 @@ ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
     $iAllowReadTool = True;
   With[{nb = Quiet[EvaluationNotebook[]]},
   Module[{session, tag},
-  (* LLM 送信直前の精密チェック (第2層):
-     全ノートブックを走査して完全な依存グラフを構築し、
-     秘密依存変数の最終判定を行う *)
-  iPrecisionConfidentialCheck[nb];
+  (* 現在のノートブックの実際の機密マークから $confidentialSymbols を再構築 *)
+  (* セッション全体の古い情報が残らないようクリアしてから再登録 *)
+   $confidentialSymbols = <||>;
+  $confVarTimes = <||>;
+  $allConfidentialVars = <||>;
+  NBAccess`NBClearConfidentialVars[];
+  iRebuildConfidentialSymbols[nb];
+  (* 機密変数が存在する場合のみ、高コストな依存グラフ構築・走査を実行 *)
+  With[{confVars = Keys[$confidentialSymbols]},
+    If[Length[confVars] > 0,
+      (* 推移的依存変数を含む全機密変数セットを構築 *)
+      With[{deps = Quiet[NBAccess`NBBuildVarDependencies[nb]]},
+        If[AssociationQ[deps],
+          $allConfidentialVars = Association[
+            # -> True & /@ Quiet[NBAccess`NBTransitiveDependents[deps, confVars]]];
+          NBAccess`NBSetConfidentialVars[$allConfidentialVars];
+          (* 依存セルのオレンジスタイルを更新（deps を再利用して二重計算を回避） *)
+          Quiet[NBAccess`NBScanDependentCells[nb, confVars, deps]],
+          (* deps 構築失敗時のフォールバック *)
+          $allConfidentialVars = $confidentialSymbols;
+          NBAccess`NBSetConfidentialVars[$confidentialSymbols]]],
+      (* 機密変数なし: 高コスト処理をすべてスキップ *)
+      $allConfidentialVars = <||>;
+      NBAccess`NBSetConfidentialVars[<||>]]];
   session = iEnsureDefaultSession[nb];
   tag     = session["SessionTag"];
   iClaudeQueryImpl[nb, tag, prompt,
     TrueQ[OptionValue[Fallback]], TrueQ[OptionValue[WebFetch]],
-    OptionValue[Model], OptionValue[PrivacySpec], TrueQ[OptionValue[AutoPrivate]]];
+    OptionValue[Model], OptionValue[PrivacySpec], TrueQ[OptionValue[AutoPrivate]]]
   ]]);
 
 (* セッション対応版 ClaudeQuery（非同期・履歴保存付き） *)
@@ -4327,15 +3949,13 @@ ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
   With[{nb = session["Notebook"]},
   Module[{tag},
     tag = session["SessionTag"];
-    (* LLM 送信直前の精密チェック (第2層) *)
-    iPrecisionConfidentialCheck[nb];
     $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
     iClaudeQueryImpl[nb, tag, prompt,
       TrueQ[OptionValue[ClaudeQuery, {opts}, Fallback]],
       TrueQ[OptionValue[ClaudeQuery, {opts}, WebFetch]],
       OptionValue[ClaudeQuery, {opts}, Model],
       OptionValue[ClaudeQuery, {opts}, PrivacySpec],
-      TrueQ[OptionValue[ClaudeQuery, {opts}, AutoPrivate]]];
+      TrueQ[OptionValue[ClaudeQuery, {opts}, AutoPrivate]]]
   ]]);
 
 (* ============================================================
@@ -4441,96 +4061,6 @@ $iLongRunningPatterns = {
 iIsLongRunningCode[code_String] :=
   AnyTrue[$iLongRunningPatterns, StringContainsQ[code, #] &];
 
-(* ============================================================
-   ClaudeQuery リッチレスポンス: コードブロック自動評価の安全性判定
-   ClaudeQuery 応答中の ```mathematica ブロックを自動評価してよいか判定する。
-   ClaudeEval より保守的: 副作用のない表示・可視化コードのみ許可。
-   ============================================================ *)
-
-(* 危険パターン: これらを含むコードは自動評価しない *)
-$iQueryUnsafePatterns = {
-  (* ファイルシステム操作 *)
-  "Export[", "Import[", "Put[", "Get[", "PutAppend[",
-  "DeleteFile[", "RenameFile[", "CopyFile[", "CreateFile[",
-  "CreateDirectory[", "DeleteDirectory[", "RenameDirectory[",
-  "SetDirectory[", "OpenWrite[", "OpenAppend[", "Write[", "Close[",
-  (* システム・プロセス *)
-  "Run[", "RunProcess[", "StartProcess[", "SystemOpen[",
-  "Install[", "Uninstall[", "ProcessConnect[",
-  (* ネットワーク *)
-  "URLFetch[", "URLRead[", "URLSubmit[", "URLExecute[",
-  "HTTPRequest[", "SocketConnect[", "ServiceConnect[",
-  (* 動的コード実行 *)
-  "ToExpression[",
-  (* 状態破壊 *)
-  "Clear[", "ClearAll[", "Remove[", "Unset[", "Quit[", "Exit[",
-  (* パッケージ管理 *)
-  "ClaudeUpdatePackage[", "ClaudeEval[", "ContinueEval[",
-  "ClaudeQuery[", "Needs[",
-  (* Git操作 *)
-  "GitHubRefreshAndCommit", "GitHubPushAll", "GitHubCommit"
-};
-
-(* 安全パターン: これらのいずれかを含むコードは自動評価の候補 *)
-$iQuerySafePatterns = {
-  (* プロット・可視化 *)
-  "Plot[", "Plot3D[", "ParametricPlot[", "ParametricPlot3D[",
-  "ContourPlot[", "DensityPlot[", "StreamPlot[", "VectorPlot[",
-  "RegionPlot[", "PolarPlot[", "LogPlot[", "LogLogPlot[",
-  "LogLinearPlot[", "ReImPlot[", "ComplexPlot[",
-  (* リスト系プロット *)
-  "ListPlot[", "ListLinePlot[", "ListPlot3D[", "ListContourPlot[",
-  "ListDensityPlot[", "ListStepPlot[", "ListPointPlot3D[",
-  (* 統計プロット *)
-  "BarChart[", "PieChart[", "Histogram[", "BoxWhiskerChart[",
-  "BubbleChart[", "SectorChart[", "RectangleChart[",
-  "BarChart3D[", "Histogram3D[",
-  (* ネットワーク・グラフ *)
-  "TreePlot[", "GraphPlot[", "LayeredGraphPlot[",
-  "Graph[", "TreeGraph[",
-  (* Graphics *)
-  "Graphics[", "Graphics3D[", "Show[", "GraphicsGrid[",
-  "GraphicsRow[", "GraphicsColumn[", "Legended[",
-  (* 音声 *)
-  "Play[", "Sound[", "Audio[", "EmitSound[",
-  "SoundNote[", "ListPlay[",
-  (* 表示・フォーマット *)
-  "TableForm[", "MatrixForm[", "Grid[", "Column[", "Row[",
-  "Style[", "Labeled[", "Panel[", "Framed[", "Pane[",
-  "TabView[", "OpenerView[", "Tooltip[",
-  (* インタラクティブ *)
-  "Manipulate[", "DynamicModule[", "Slider[",
-  (* 画像処理 — 表示のみ *)
-  "Image[", "ImageResize[", "ImageAdjust[", "ImageCompose[",
-  "ImageCollage[", "Rasterize[", "ArrayPlot[", "MatrixPlot[",
-  (* 地理・その他可視化 *)
-  "GeoGraphics[", "GeoListPlot[", "DateListPlot[",
-  "Timeline[", "NumberLinePlot[", "WordCloud[",
-  (* 数学表示 *)
-  "TraditionalForm[", "HoldForm[", "TeXForm[",
-  (* Mathematica ネイティブ: 純粋な計算も許可 *)
-  "Solve[", "DSolve[", "Integrate[", "Series[", "Limit[",
-  "Simplify[", "FullSimplify[", "Factor[", "Expand[",
-  "N[", "NIntegrate[", "NSolve[", "FindRoot[",
-  (* AI生成API: 画像・音声生成 *)
-  "ClaudeImageGenerate[", "ClaudeSpeech["
-};
-
-iIsSafeForQueryEval[code_String] :=
-  Module[{stripped},
-    (* Step 1: 危険パターンがあれば即 False *)
-    If[AnyTrue[$iQueryUnsafePatterns,
-         StringContainsQ[code, #] &],
-      Return[False]];
-    (* Step 2: 構文エラーなら False *)
-    If[!TrueQ[Quiet[SyntaxQ[code]]], Return[False]];
-    (* Step 3: 安全パターンを含むか確認 *)
-    stripped = StringReplace[code,
-      RegularExpression["\"[^\"]*\""] -> ""];
-    AnyTrue[$iQuerySafePatterns,
-      StringContainsQ[stripped, #] &]
-  ];
-
 iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
   Module[{allBlocks, mathBlocks, extBlocks, blocks = {}, ae},
     allBlocks = iExtractAllCodeBlocks[response];
@@ -4572,44 +4102,9 @@ iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
 (* ClaudeQuery \:7528\:30d5\:30a9\:30fc\:30de\:30c3\:30c8\:6307\:793a\:ff08\:30d7\:30ed\:30dd\:30fc\:30b7\:30e7\:30ca\:30eb\:30d5\:30a9\:30f3\:30c8\:5411\:3051\:ff09 *)
 $claudeQueryPrefix :=
   "You are a knowledgeable assistant. Your response will be rendered as styled cells in Mathematica's notebook.\n\
-RICH RESPONSE MODE:\n\
-Your response is primarily TEXT, but you MAY include ```mathematica code blocks when visualization \
-or computation would enhance the answer. Safe code (plots, graphics, sounds, calculations) \
-will be automatically evaluated and displayed inline alongside your text.\n\
-Use code blocks when the user asks to:\n\
-- Visualize, plot, chart, graph, or draw something\n\
-- Hear a sound, tone, or audio\n\
-- Compute or evaluate a mathematical expression\n\
-- Display data in a formatted table or grid\n\
-Do NOT use code blocks for:\n\
-- File I/O (Export, Import, etc.) \:2014 suggest ClaudeEval instead\n\
-- Package operations, system commands, or network requests\n\
-- Complex multi-step programs \:2014 suggest ClaudeEval instead\n\
-Keep code blocks SHORT (ideally 1-5 lines). For complex tasks, suggest ClaudeEval.\n\
-AI IMAGE/AUDIO GENERATION:\n\
-When the user asks for AI-generated images (photo, realistic image, AI art, etc.):\n\
-  Use ClaudeImageGenerate[\"prompt\"] \:2014 calls OpenAI Images API, returns Image object.\n\
-  Options: \"Model\"->\"gpt-image-1\"|\"dall-e-3\", \"Size\"->\"1024x1024\", \"Quality\"->\"auto\"|\"high\"\n\
-When the user asks for AI-generated speech/audio narration:\n\
-  Use ClaudeSpeech[\"text\"] \:2014 calls OpenAI TTS API, returns Audio object.\n\
-  Options: \"Model\"->\"tts-1\"|\"tts-1-hd\", \"Voice\"->\"alloy\"|\"echo\"|\"nova\"|\"shimmer\"\n\
-These functions require an OpenAI API key (SystemCredential[\"OPENAI_API_KEY\"]).\n\
-Distinguish clearly:\n\
-  \:2022 \"Plot/draw/graph\" with Mathematica data \:2192 use Plot[], Graphics[] etc.\n\
-  \:2022 \"AI\:3067\:751f\:6210\"/\"realistic photo\"/\"\:30d5\:30a9\:30c8\:30ea\:30a2\:30eb\" \:2192 use ClaudeImageGenerate[]\n\
-  \:2022 \"read aloud\"/\"\:8aad\:307f\:4e0a\:3052\"/\"narrate\"/\"\:97f3\:58f0\" \:2192 use ClaudeSpeech[]\n\
-Example response for 'AI\:3067\:685c\:306e\:5199\:771f\:3092\:751f\:6210\:3057\:3066':\n\
-  Text explaining what will be generated...\n\
-  ```mathematica\n\
-  ClaudeImageGenerate[\"Cherry blossoms in full bloom with a Japanese castle, photorealistic\"]\n\
-  ```\n\
-  Text with notes about the result...\n\n\
-Example response for 'describe and plot sin(x)':\n\
-  Text explaining sin(x) properties...\n\
-  ```mathematica\n\
-  Plot[Sin[x], {x, 0, 2 Pi}, PlotLabel -> \"Sine function\"]\n\
-  ```\n\
-  Text continuing the explanation...\n\n\
+CRITICAL RULE: Do NOT include any code blocks (```mathematica ... ``` or other). \
+ClaudeQuery returns TEXT only. If the user's request requires generating or executing code, \
+respond with a text answer and suggest using ClaudeEval[] instead.\n\
 FORMATTING RULES:\n\
 - Use markdown headings (# ## ###) to organize sections.\n\
 - Use bullet lists (- item) or numbered lists (1. item) for structured information.\n\
@@ -4679,14 +4174,6 @@ Do NOT add any final guidance like 'ContinueEval', 'ContinueEval[]', '継続で�
 "- Do NOT wrap it in ExternalEvaluate[]. The notebook has native cells for these languages.\n" <>
 "When the user asks for Mathematica code that CALLS an external language for part of the task:\n" <>
 "- Use ```mathematica blocks with ExternalEvaluate[] as needed.\n\n" <>
-"AI IMAGE/AUDIO GENERATION:\n" <>
-"When the user asks for AI-generated images (photo, realistic, AI art, フォトリアル, AI で生成, etc.):\n" <>
-"  Use ClaudeImageGenerate[\"prompt\"] — calls OpenAI Images API, returns Image.\n" <>
-"  Options: \"Model\"->\"gpt-image-1\"|\"dall-e-3\", \"Size\"->\"1024x1024\", \"Quality\"->\"auto\"|\"high\"\n" <>
-"When the user asks for AI speech/audio narration (読み上げ, ナレーション, 音声, etc.):\n" <>
-"  Use ClaudeSpeech[\"text\"] — calls OpenAI TTS API, returns Audio.\n" <>
-"  Options: \"Model\"->\"tts-1\"|\"tts-1-hd\", \"Voice\"->\"alloy\"|\"echo\"|\"nova\"|\"shimmer\"\n" <>
-"Distinguish: Plot/Graphics for data visualization vs ClaudeImageGenerate for AI art.\n\n" <>
 "EXCEL IMPORT CONVENTION (CRITICAL):\n" <>
 "When importing Excel (.xlsx/.xls) files:\n" <>
 "- ALWAYS use {\"Dataset\"} format unless the user explicitly requests Table, List, etc.\n" <>
@@ -4717,15 +4204,15 @@ Do NOT add any final guidance like 'ContinueEval', 'ContinueEval[]', '継続で�
 "  Confidential data MUST remain confidential throughout computation.\n" <>
 "  If computation results depend on confidential variables, keep them wrapped:\n" <>
 "    result = Confidential[Mean[secretData]]\n" <>
-"  The user can manually call NonConfidential[] if they choose to declassify.\n\n" <>
+"  The user can manually call NonConfidential[] if they choose to declassify.\n" <>
+"  EXCEPTION: When importing a Dataset as confidential, you SHOULD output the column KEYS\n" <>
+"  (not values) using NonConfidential[] in a SEPARATE code block AFTER the Confidential assignment.\n" <>
+"  Column keys are structural metadata, not secret data:\n" <>
+"    Block 1: \:6210\:7e3e = Confidential[First @ Import[..., {\"Dataset\"}]]\n" <>
+"    Block 2: NonConfidential[Row[{\"\:6210\:7e3e\:306e\:30ad\:30fc: \", Normal[Keys[\:6210\:7e3e[[1]]]]}, \" \"]]\n\n" <>
 "CONFIDENTIAL VARIABLE STRUCTURE PROBE:\n" <>
-"When the task requires using a confidential variable, check the Output section of the prompt.\n" <>
-"If $NBSendDataSchema is enabled (default), confidential outputs include schema info like:\n" <>
-"  (* [機密依存データ: Dataset, columns: {学生, 中間成績, 期末成績}] *)\n" <>
-"  (* [機密依存データ: Association, 3 keys: {name, age, salary}] *)\n" <>
-"  (* [機密依存データ: List, ~100 elements] *)\n" <>
-"Use this schema info to write code without probing.\n" <>
-"Only if NO schema info is available (output says '取得失敗' or variable is not in Output section):\n" <>
+"When the task requires using a confidential variable whose structure is unknown " <>
+"(marked as excluded/confidential in the prompt, with no type info available):\n" <>
 "1. Do NOT guess or fabricate the variable's structure.\n" <>
 "2. Output a structure-probing code block ONLY:\n" <>
 "3. Add brief text: '上の構造調査結果を確認後、ContinueEval[] で本コードを生成します。'\n" <>
@@ -4833,10 +4320,6 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
         ") \:306b\:9054\:3057\:307e\:3057\:305f\:3002\:5fc5\:8981\:306a\:3089 $ClaudeEvalMaxDepth \:3092\:5897\:3084\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
       Return[$Failed]];
     $iClaudeEvalCurrentDepth++;
-    (* LLM 送信直前の精密チェック (第2層):
-       再帰呼び出しでは親が既にチェック済みなので、トップレベルのみ実行 *)
-    If[$iClaudeEvalCurrentDepth === 1,
-      iPrecisionConfidentialCheck[nb]];
     $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
     history = iSessionHistoryWithInherit[nb, tag];
     step    = Length[iSessionHistory[nb, tag]];
@@ -5117,7 +4600,7 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := (
       iScheduleRepeating[
         iClaudeEvalImpl[nb, iSessionTag[], actualTask, {}, ae, mdl, ps, ap],
         st, ri]
-    ];
+    ]
   ]);
 
 (* リスト入力版: {"指示", data, Image, ...} *)
@@ -5140,7 +4623,7 @@ ClaudeEval[items_List, opts:OptionsPattern[]] := (
           iResolveWebFetch[norm["text"], wf],
           norm["imageDirs"], ae, mdl, ps, ap],
         st, ri]
-    ];
+    ]
   ]]);
 
 (* セッション指定版 ClaudeEval *)
@@ -5158,7 +4641,7 @@ ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := (
       iScheduleRepeating[
         iClaudeEvalImpl[session["Notebook"], session["SessionTag"], actualTask, {}, ae, mdl, ps, ap],
         st, ri]
-    ];
+    ]
   ]);
 
 ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := (
@@ -5182,7 +4665,7 @@ ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := (
           iResolveWebFetch[norm["text"], wf],
           norm["imageDirs"], ae, mdl, ps, ap],
         st, ri]
-    ];
+    ]
   ]);
 
 iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :=
@@ -5249,7 +4732,7 @@ iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :
 ClaudeSpec[task_String] := (
     $currentUseFallback = True;
   With[{nb = EvaluationNotebook[]},
-    iClaudeSpecImpl[nb, iSessionTag[], task];
+    iClaudeSpecImpl[nb, iSessionTag[], task]
   ]);
 
 ClaudeSpec[items_List] := (
@@ -5257,7 +4740,7 @@ ClaudeSpec[items_List] := (
   With[{nb = EvaluationNotebook[]},
   Module[{norm},
     norm = iNormalizePrompt[items];
-    iClaudeSpecImpl[nb, iSessionTag[], norm["text"], norm["imageDirs"]];
+    iClaudeSpecImpl[nb, iSessionTag[], norm["text"], norm["imageDirs"]]
   ]]);
 
 (* \:30bb\:30c3\:30b7\:30e7\:30f3\:6307\:5b9a\:7248 ContinueEval \:5185\:90e8\:5b9f\:88c5 *)
@@ -5267,8 +4750,6 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
           contextPrompt, step, entry, anchorTag, continueCallback,
           accessLevel, availModels, useClaudeCode},
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
-    (* LLM 送信直前の精密チェック (第2層) *)
-    iPrecisionConfidentialCheck[nb];
     history = iSessionHistoryWithInherit[nb, tag];
     If[Length[history] === 0,
       nbPrint[nb, "\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> tag];
@@ -5392,7 +4873,7 @@ ContinueEval[session_Association, instruction_String:"\:30a8\:30e9\:30fc\:3092\:
     iScheduleAt[
       iContinueEvalImpl[session["Notebook"], session["SessionTag"], instruction, ae, mdl, ps, ap],
       st
-    ];
+    ]
   ]);
 
 ContinueEval[instruction_String, opts:OptionsPattern[]] := (
@@ -5406,7 +4887,7 @@ ContinueEval[instruction_String, opts:OptionsPattern[]] := (
     iScheduleAt[
       iContinueEvalImpl[nb, iSessionTag[], instruction, ae, mdl, ps, ap],
       st
-    ];
+    ]
   ]);
 
 ContinueEval[session_Association, instruction_String:"\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044",
@@ -5418,7 +4899,7 @@ ContinueEval[session_Association, instruction_String:"\:30a8\:30e9\:30fc\:3092\:
     iScheduleAt[
       iContinueEvalImpl[session["Notebook"], session["SessionTag"], instruction, ae, mdl, ps, ap],
       st
-    ];
+    ]
   ]);
 
 iCaptureRecentOutput[nb_NotebookObject, afterCellCount_Integer] :=
@@ -5844,36 +5325,8 @@ iEnsureReferencesAccessible[packageName_String] :=
         Append[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}],
           refDir]]]];
 
-(* パッケージの _info ディレクトリ構造を一式確保する。
-   既存の .wl だけ置いて ClaudeUpdatePackage を初めて実行する場合に、
-   history / design / references / docs を自動作成し、
-   デザインテンプレートがあればコピーする。
-   既に存在するディレクトリやファイルには何もしない。 *)
-iEnsurePackageInfoStructure[packageName_String] :=
-  Module[{infoDir, histDir, designDir, refsDir, docsDir, tmpl, designNb},
-    infoDir = iInfoDir[packageName];
-    histDir = backupDir[packageName];
-    designDir = iDesignDir[packageName];
-    refsDir = iReferencesDir[packageName];
-    docsDir = iPackageDocsDir[packageName];
-    (* ディレクトリ作成（既存なら何もしない） *)
-    Quiet @ CreateDirectory[histDir, CreateIntermediateDirectories -> True];
-    Quiet @ CreateDirectory[designDir, CreateIntermediateDirectories -> True];
-    Quiet @ CreateDirectory[refsDir, CreateIntermediateDirectories -> True];
-    If[StringQ[docsDir],
-      Quiet @ CreateDirectory[docsDir, CreateIntermediateDirectories -> True]];
-    (* デザインテンプレートのコピー（未作成の場合のみ） *)
-    tmpl = FileNameJoin[{Global`$packageDirectory, "Templates", "design_template.nb"}];
-    designNb = FileNameJoin[{designDir, packageName <> "_design.nb"}];
-    If[FileExistsQ[tmpl] && !FileExistsQ[designNb],
-      Quiet @ CopyFile[tmpl, designNb];
-      Quiet @ Check[
-        NBAccess`NBInsertTextCells[designNb, packageName, ""],
-        Null]]
-  ];
-
 (* ============================================================
-   ドキュメントオプション永続化: Demos/References/Disclaimer/License を
+   ドキュメントオプション永続化: Demos/References/Disclaimer/Acknowledgments/License を
    _info/references/doc_options.json に保存し、次回の
    ClaudeCreateDocumentation / ClaudeUpdateDocumentation で自動復元する。
    ============================================================ *)
@@ -5892,6 +5345,7 @@ iSaveDocOptions[packageName_String] :=
       "References" -> If[ListQ[$iDocReferences], $iDocReferences, {}],
       "Demos" -> If[ListQ[$iDocDemos], $iDocDemos, {}],
       "Disclaimer" -> If[ListQ[$iDocDisclaimer], $iDocDisclaimer, {}],
+      "Acknowledgments" -> If[ListQ[$iDocAcknowledgments], $iDocAcknowledgments, {}],
       "License" -> If[StringQ[$iDocLicense], $iDocLicense, ""]
     |>;
     Quiet @ Export[path, data, "RawJSON"];
@@ -5915,6 +5369,9 @@ iLoadAndMergeDocOptions[packageName_String] :=
     $iDocDisclaimer = DeleteDuplicates @ Join[
       If[ListQ[$iDocDisclaimer], $iDocDisclaimer, {}],
       Replace[Lookup[saved, "Disclaimer", {}], Except[_List] -> {}]];
+    $iDocAcknowledgments = DeleteDuplicates @ Join[
+      If[ListQ[$iDocAcknowledgments], $iDocAcknowledgments, {}],
+      Replace[Lookup[saved, "Acknowledgments", {}], Except[_List] -> {}]];
     (* License: 明示指定があればそちらを優先、なければ永続値 *)
     If[!StringQ[$iDocLicense] || $iDocLicense === "",
       $iDocLicense = Replace[Lookup[saved, "License", ""], Except[_String] -> ""]];
@@ -7083,7 +6540,7 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
         ]
       ]
     ],
-    nb, imgDirs, jobId];
+    nb, imgDirs, jobId]
   ]]);
 
 Options[ClaudeUpdatePackage] = {TargetFunctions -> Automatic, StartTime -> Now, Fallback -> False, "UpdateApiMd" -> True};
@@ -7104,7 +6561,7 @@ ClaudeUpdatePackage[packageName_String, updatePrompt_, opts:OptionsPattern[]] :=
   iScheduleAt[
   iClaudeUpdatePackageImpl[packageName, updatePrompt,
     OptionValue[TargetFunctions], updateApi],
-  st]; ]);
+  st]]);
 
 iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, updateApiMd_:True] :=
   With[{nb = EvaluationNotebook[]},
@@ -7119,9 +6576,6 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
 
   (* 排他ロック: 同一パッケージの並列更新を防止 *)
   If[!iAcquirePackageLock[packageName, nb], Return[$Failed]];
-
-  (* _info ディレクトリ構造を確保 (初回実行時に自動作成) *)
-  iEnsurePackageInfoStructure[packageName];
 
   (* references フォルダを参照可能にする *)
   iEnsureReferencesAccessible[packageName];
@@ -7690,6 +7144,18 @@ iReadDesignMemos[packageName_String] :=
     content
   ];
 
+(* 謝辞セクションのプロンプト *)
+iDocBuildAcknowledgmentsPrompt[] :=
+  Module[{items},
+    items = If[ListQ[$iDocAcknowledgments], $iDocAcknowledgments, {}];
+    If[Length[items] === 0, Return[""]];
+    "\n=== ACKNOWLEDGMENTS SECTION (add BEFORE 免責事項 in README.md) ===\n" <>
+    "Add a '## 謝辞' section in README.md, placed BEFORE 免責事項.\n" <>
+    "Include the following acknowledgments:\n" <>
+    StringRiffle["- " <> ToString[#] & /@ items, "\n"] <> "\n" <>
+    "Write each item as a clear, natural sentence.\n"
+  ];
+
 (* 免責事項セクションのプロンプト *)
 iDocBuildDisclaimerPrompt[] :=
   Module[{extras, base},
@@ -7699,8 +7165,8 @@ iDocBuildDisclaimerPrompt[] :=
       "本ソフトウェアとドキュメントはほぼすべてが生成AIによって生成されたものです。\n" <>
       "Windows 11上での実行を想定しており、MacOS, LinuxのMathematicaでの動作検証は一切していません(生成AIの処理で対応可能と想定されます)。";
     extras = If[ListQ[$iDocDisclaimer], $iDocDisclaimer, {}];
-    "\n=== DISCLAIMER SECTION (MUST add at the very end of README.md) ===\n" <>
-    "Add a '## 免責事項' section at the very end of README.md with this text:\n" <>
+    "\n=== DISCLAIMER SECTION (add AFTER 謝辞 if present, BEFORE ライセンス in README.md) ===\n" <>
+    "Add a '## 免責事項' section in README.md with this text:\n" <>
     base <> "\n" <>
     If[Length[extras] > 0,
       "Additionally, rephrase and add these items:\n" <>
@@ -7810,6 +7276,8 @@ iBuildReadmePrompt[sourceCode_String, packageName_String, outDir_String] :=
       "### \:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2\n", ""] <>
     If[Length[If[ListQ[$iDocReferences], $iDocReferences, {}]] > 0,
       "### \:53c2\:8003\:6587\:732e\n", ""] <>
+    If[Length[If[ListQ[$iDocAcknowledgments], $iDocAcknowledgments, {}]] > 0,
+      "### \:8b1d\:8f9e\n", ""] <>
     "### \:514d\:8cac\:4e8b\:9805\n" <>
     "### \:30e9\:30a4\:30bb\:30f3\:30b9\n" <>
     "\n" <>
@@ -7823,6 +7291,7 @@ iBuildReadmePrompt[sourceCode_String, packageName_String, outDir_String] :=
     iDocBuildRefSection[] <>
     iBuildGitHubLinksContext[] <>
     iReadDesignMemos[packageName] <>
+    iDocBuildAcknowledgmentsPrompt[] <>
     iDocBuildDisclaimerPrompt[] <>
     iDocBuildLicensePrompt[] <>
     "=== PACKAGE SOURCE CODE (summary) ===\n" <>
@@ -7945,6 +7414,8 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       "You are an expert Wolfram Language / Mathematica documentation writer.\n" <>
       "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n" <>
       "You are documenting the package \"" <> packageName <> "\".\n\n" <>
+      "CRITICAL RULE: \:8b1d\:8f9e (Acknowledgments), \:514d\:8cac\:4e8b\:9805 (Disclaimer) and \:30e9\:30a4\:30bb\:30f3\:30b9 (License) sections MUST ONLY exist in README.md.\n" <>
+      "Do NOT add any \:8b1d\:8f9e, \:514d\:8cac\:4e8b\:9805 or \:30e9\:30a4\:30bb\:30f3\:30b9 section to this file.\n\n" <>
       iDocGlobalInstructionPrompt[] <>
       iBuildGitHubLinksContext[] <>
       promptTemplate <> "\n\n" <>
@@ -8033,7 +7504,7 @@ iCheckDocResumption[packageName_String, outDir_String, srcFile_String] :=
       "sourceModified" -> (backupTime > 0 && srcTime > backupTime)|>
   ];
 
-Options[ClaudeCreateDocumentation] = {Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, License -> ""};
+Options[ClaudeCreateDocumentation] = {Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, Acknowledgments -> {}, License -> ""};
 
 (* 1\:5f15\:6570\:7248: \:6307\:793a\:306a\:3057 *)
 ClaudeCreateDocumentation[packageName_String, opts:OptionsPattern[]] :=
@@ -8046,6 +7517,7 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
   $iDocReferences = Replace[OptionValue[References], Except[_List] -> {}];
   $iDocDemos = Replace[OptionValue[Demos], Except[_List] -> {}];
   $iDocDisclaimer = Replace[OptionValue[Disclaimer], Except[_List] -> {}];
+  $iDocAcknowledgments = Replace[OptionValue[Acknowledgments], Except[_List] -> {}];
   $iDocLicense = Replace[OptionValue[License], Except[_String] -> ""];
   (* \:6307\:793a\:6587\:4e2d\:306e URL \:3082\:81ea\:52d5\:691c\:51fa\:3057\:3066 Demos/References \:306b\:8ffd\:52a0 *)
   Module[{urlsInInstr},
@@ -8080,8 +7552,6 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       Return[$Failed]];
     (* references フォルダを参照可能にする *)
     iEnsureReferencesAccessible[packageName];
-    (* _info ディレクトリ構造を確保 *)
-    iEnsurePackageInfoStructure[packageName];
     (* \:51fa\:529b\:30c7\:30a3\:30ec\:30af\:30c8\:30ea *)
     If[FileExistsQ[FileNameJoin[{pkgDir, packageName, "PacletInfo.wl"}]],
       outDir = FileNameJoin[{pkgDir, packageName, "docs"}],
@@ -8133,7 +7603,7 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     ];
     nbPrint[nb, "\:751f\:6210\:5bfe\:8c61: " <> ToString[Length[filteredQueue]] <> " \:30d5\:30a1\:30a4\:30eb\n"];
 
-    iGenDocNext[sourceCode, packageName, nb, outDir, filteredQueue, 1, 0, <||>];
+    iGenDocNext[sourceCode, packageName, nb, outDir, filteredQueue, 1, 0, <||>]
   ]]);
 
 (* \:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3092\:89e3\:6c7a *)
@@ -8253,7 +7723,9 @@ iEnsureReadmeLast[docs_List] :=
   ];
 
 $iDocKeywords = <|
-  "README.md"       -> {"README", "readme", "\:6982\:8981", "\:306f\:3058\:3081"},
+  "README.md"       -> {"README", "readme", "\:6982\:8981", "\:306f\:3058\:3081",
+                         "\:30e9\:30a4\:30bb\:30f3\:30b9", "License", "\:514d\:8cac", "Disclaimer",
+                         "\:8b1d\:8f9e", "Acknowledgment"},
   "setup.md"        -> {"\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb", "\:30bb\:30c3\:30c8\:30a2\:30c3\:30d7", "setup", "install", "\:74b0\:5883\:69cb\:7bc9", "\:5c0e\:5165"},
   "user_manual.md"  -> {"\:30de\:30cb\:30e5\:30a2\:30eb", "\:4f7f\:3044\:65b9", "\:53d6\:6271\:8aac\:660e", "manual", "usage", "\:64cd\:4f5c"},
   "api.md"          -> {"API", "api", "\:95a2\:6570", "\:5b9a\:7fa9", "\:30ea\:30d5\:30a1\:30ec\:30f3\:30b9"},
@@ -8348,7 +7820,7 @@ iCreateDocUpdateBackup[packageName_String, srcFile_String, docsDir_String,
     histDir
   ];
 
-Options[ClaudeUpdateDocumentation] = {Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, License -> ""};
+Options[ClaudeUpdateDocumentation] = {Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, Acknowledgments -> {}, License -> ""};
 
 (* 1\:5f15\:6570\:7248: \:524d\:56de _documentupdate \:4ee5\:964d\:306e\:5909\:66f4\:3092\:81ea\:52d5\:691c\:51fa\:3057\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0 *)
 ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
@@ -8356,6 +7828,7 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
   $iDocReferences = Replace[OptionValue[References], Except[_List] -> {}];
   $iDocDemos = Replace[OptionValue[Demos], Except[_List] -> {}];
   $iDocDisclaimer = Replace[OptionValue[Disclaimer], Except[_List] -> {}];
+  $iDocAcknowledgments = Replace[OptionValue[Acknowledgments], Except[_List] -> {}];
   $iDocLicense = Replace[OptionValue[License], Except[_String] -> ""];
   (* 永続化されたオプションをマージ *)
   iLoadAndMergeDocOptions[packageName];
@@ -8424,7 +7897,7 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     nbPrint[nb, "\:66f4\:65b0\:5bfe\:8c61: " <> StringRiffle[allDocs, ", "]];
     nbPrint[nb, "\:30bd\:30fc\:30b9\:5dee\:5206: " <> StringTake[diffText, UpTo[200]] <> "\n"];
     iUpdateDocNext[sourceCode, packageName, nb, docsDir, autoInstruction, allDocs, 1,
-      diffText, srcFile];
+      diffText, srcFile]
   ]]);
 
 (* 2\:5f15\:6570\:7248: \:6307\:793a\:4ed8\:304d\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0 *)
@@ -8433,6 +7906,7 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
   $iDocReferences = Replace[OptionValue[References], Except[_List] -> {}];
   $iDocDemos = Replace[OptionValue[Demos], Except[_List] -> {}];
   $iDocDisclaimer = Replace[OptionValue[Disclaimer], Except[_List] -> {}];
+  $iDocAcknowledgments = Replace[OptionValue[Acknowledgments], Except[_List] -> {}];
   $iDocLicense = Replace[OptionValue[License], Except[_String] -> ""];
   Module[{urlsInInstr},
     urlsInInstr = StringCases[instruction,
@@ -8499,7 +7973,7 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     nbPrint[nb, "\:6307\:793a: " <> StringTake[instruction, UpTo[200]] <> "\n"];
     (* \:5dee\:5206\:4ed8\:304d\:3067\:9806\:6b21\:66f4\:65b0 *)
     iUpdateDocNext[sourceCode, packageName, nb, docsDir, enrichedInstruction, targetDocs, 1,
-      diffText, srcFile];
+      diffText, srcFile]
   ]]);
 
 (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:9806\:6b21\:66f4\:65b0\:3059\:308b\:518d\:5e30\:95a2\:6570 (\:5dee\:5206\:5bfe\:5fdc\:7248) *)
@@ -8557,10 +8031,14 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
           siblingContent] <>
         iBuildGitHubLinksContext[] <>
         iDocBuildRefSection[] <>
+        iDocBuildAcknowledgmentsPrompt[] <>
         iDocBuildDisclaimerPrompt[] <>
         iDocBuildLicensePrompt[],
         (* README 以外でもリンク捏造防止のため URL リストを提供 *)
-        iBuildGitHubLinksContext[]] <>
+        iBuildGitHubLinksContext[] <>
+        "\nCRITICAL RULE: \:8b1d\:8f9e (Acknowledgments), \:514d\:8cac\:4e8b\:9805 (Disclaimer) and \:30e9\:30a4\:30bb\:30f3\:30b9 (License) sections MUST ONLY exist in README.md.\n" <>
+        "Do NOT add, create, or keep any \:8b1d\:8f9e, \:514d\:8cac\:4e8b\:9805 or \:30e9\:30a4\:30bb\:30f3\:30b9 section in this file.\n" <>
+        "If this file currently contains such sections, REMOVE them entirely.\n\n"] <>
       "PACKAGE SOURCE CODE (for reference):\n" <> sourceCode <> "\n\n" <>
       "Output the COMPLETE updated document directly as your response text. " <>
       If[docFile === "api.md",
@@ -8583,22 +8061,41 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         "CRITICAL: README.md is a HIGH-LEVEL OVERVIEW document updated LAST.\n" <>
         "You have access to the OTHER DOCUMENTATION FILES above — they were just updated.\n" <>
         "Use them to construct an accurate, comprehensive overview.\n\n" <>
-        "MANDATORY STRUCTURE (in this order):\n" <>
-        "1. # パッケージ名 — 設計思想と実装の概要\n" <>
-        "2. ## 詳細説明 containing:\n" <>
-        "   - 動作環境 (OS, Mathematica version, external tools)\n" <>
-        "   - インストール\n" <>
-        "   - クイックスタート (minimal working example)\n" <>
-        "   - 主な機能 (feature list with brief descriptions)\n" <>
-        "   - ドキュメント一覧 (links to setup.md, user_manual.md, api.md, examples/)\n" <>
-        "3. ## 免責事項\n" <>
-        "4. ## ライセンス (if present — MUST be last)\n\n" <>
-        "RULES:\n" <>
-        "- Do NOT copy detailed API descriptions from other docs. Keep it high-level.\n" <>
-        "- Do NOT append raw instruction text, prompt fragments, or update notes.\n" <>
-        "- Nothing should be added after ライセンス.\n" <>
-        "- Preserve the existing design philosophy narrative.\n" <>
-        "- Update feature lists and function counts to match the latest source.\n",
+        "MANDATORY STRUCTURE (in this order):
+" <>
+        "1. # パッケージ名 — 設計思想と実装の概要
+" <>
+        "2. ## 詳細説明 containing:
+" <>
+        "   - 動作環境 (OS, Mathematica version, external tools)
+" <>
+        "   - インストール
+" <>
+        "   - クイックスタート (minimal working example)
+" <>
+        "   - 主な機能 (feature list with brief descriptions)
+" <>
+        "   - ドキュメント一覧 (links to setup.md, user_manual.md, api.md, examples/)
+" <>
+        "3. ## 謝辞 (ONLY if Acknowledgments are provided — omit entirely if none)
+" <>
+        "4. ## 免責事項
+" <>
+        "5. ## ライセンス (if present — MUST be last)
+
+" <>
+        "RULES:
+" <>
+        "- Do NOT copy detailed API descriptions from other docs. Keep it high-level.
+" <>
+        "- Do NOT append raw instruction text, prompt fragments, or update notes.
+" <>
+        "- Nothing should be added after ライセンス.
+" <>
+        "- Preserve the existing design philosophy narrative.
+" <>
+        "- Update feature lists and function counts to match the latest source.
+",
         ""];
     (* $currentUseFallback \:306f\:547c\:3073\:51fa\:3057\:5143\:3067\:8a2d\:5b9a\:6e08\:307f *)
     iClaudeQueryAsyncWithProgress[fullPrompt,
@@ -8642,6 +8139,7 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
     prompt =
       "You are an expert Wolfram Language / Mathematica documentation writer.\n" <>
       "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n" <>
+      "CRITICAL RULE: Do NOT add any \:8b1d\:8f9e, \:514d\:8cac\:4e8b\:9805 or \:30e9\:30a4\:30bb\:30f3\:30b9 section. These belong ONLY in README.md.\n" <>
       "Create an LLM-optimized API reference (api.md) for package \"" <> packageName <> "\".\n" <>
       "This file is read by LLMs for code generation, NOT by humans.\n" <>
       "An LLM reading ONLY this file must write correct code using the package.\n\n" <>
@@ -9492,168 +8990,24 @@ iSafeWriteDirective[fullPath_String, content_String, action_String:"replace"] :=
     True
   ];
 
-(* --- プロジェクト初期化 --- *)
-
-ClaudeInitProject::unsaved = "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304c\:4fdd\:5b58\:3055\:308c\:3066\:3044\:307e\:305b\:3093\:3002\:5148\:306b\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3092\:4fdd\:5b58\:3057\:3066\:304f\:3060\:3055\:3044\:3002";
-
-ClaudeInitProject[] :=
-  Module[{nb, nbDir, localDir, localClaude, rulesDir, skillsDir, mergedDir},
-    nb = Quiet[InputNotebook[]];
-    nbDir = Quiet @ Check[NotebookDirectory[nb], $Failed];
-    If[!StringQ[nbDir] || !DirectoryQ[nbDir],
-      Message[ClaudeInitProject::unsaved]; Return[$Failed]];
-    localDir = FileNameJoin[{nbDir, ".claude-project"}];
-    If[DirectoryQ[localDir],
-      Print["\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:306f\:65e2\:306b\:5b58\:5728\:3057\:307e\:3059: " <> localDir];
-      Return[localDir]];
-    (* ディレクトリ作成 *)
-    Quiet @ CreateDirectory[localDir, CreateIntermediateDirectories -> True];
-    rulesDir = FileNameJoin[{localDir, "rules"}];
-    skillsDir = FileNameJoin[{localDir, "skills"}];
-    Quiet @ CreateDirectory[rulesDir, CreateIntermediateDirectories -> True];
-    Quiet @ CreateDirectory[skillsDir, CreateIntermediateDirectories -> True];
-    (* CLAUDE.local.md テンプレート作成 *)
-    localClaude = FileNameJoin[{localDir, "CLAUDE.local.md"}];
-    Export[localClaude,
-      "# Project-specific guidelines\n\n" <>
-      "<!-- このファイルにプロジェクト固有のルールを記述してください。\n" <>
-      "     メインの CLAUDE.md に自動マージされます。\n" <>
-      "     rules/ や skills/ にファイルを追加することもできます。 -->\n\n",
-      "Text", CharacterEncoding -> "UTF-8"];
-    (* 即座にマージして反映 *)
-    mergedDir = iMergeProjectDirectives[nb];
-    iLoadClaudeMD[];
-    Print["\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:521d\:671f\:5316\:3057\:307e\:3057\:305f: " <> localDir];
-    Print["\:30de\:30fc\:30b8\:6e08\:307f: " <> ToString[mergedDir]];
-    Print["\n\:7de8\:96c6\:5bfe\:8c61: " <> localClaude];
-    Print["rules/: " <> rulesDir];
-    Print["skills/: " <> skillsDir];
-    localDir
-  ];
-
-(* --- ローカルディレクティブをグローバルに昇格 --- *)
-
-ClaudePromoteProjectDirectives::unsaved = "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304c\:4fdd\:5b58\:3055\:308c\:3066\:3044\:307e\:305b\:3093\:3002";
-ClaudePromoteProjectDirectives::nolocaldir = "\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:304c\:5b58\:5728\:3057\:307e\:305b\:3093\:3002";
-
-Options[ClaudePromoteProjectDirectives] = {DryRun -> False};
-
-ClaudePromoteProjectDirectives[OptionsPattern[]] :=
-  Module[{nb, localDir, mainDir, dryRun, promoted = {},
-          localClaude, mainClaude, localRules, localSkills,
-          mainRulesDir, mainSkillsDir},
-    nb = Quiet[InputNotebook[]];
-    dryRun = TrueQ[OptionValue[DryRun]];
-    localDir = iProjectLocalDir[nb];
-    If[!StringQ[localDir],
-      Message[ClaudePromoteProjectDirectives::unsaved]; Return[$Failed]];
-    If[!DirectoryQ[localDir],
-      Message[ClaudePromoteProjectDirectives::nolocaldir]; Return[$Failed]];
-    mainDir = iDirectivesSourceDir[];
-    If[mainDir === $Failed,
-      Print["\:26a0 \:30e1\:30a4\:30f3 Claude Directives \:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
-      Return[$Failed]];
-    Print[Style["\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:30b0\:30ed\:30fc\:30d0\:30eb\:306b\:6607\:683c" <>
-      If[dryRun, " (DryRun)", ""], Bold]];
-    Print["\:30ed\:30fc\:30ab\:30eb: " <> localDir];
-    Print["\:30b0\:30ed\:30fc\:30d0\:30eb: " <> mainDir <> "\n"];
-    (* --- CLAUDE.local.md → メイン CLAUDE.md に追記 --- *)
-    localClaude = FileNameJoin[{localDir, "CLAUDE.local.md"}];
-    mainClaude = FileNameJoin[{mainDir, "CLAUDE.md"}];
-    If[FileExistsQ[localClaude],
-      Module[{localText = Quiet @ Check[Import[localClaude, "Text"], ""]},
-        If[StringQ[localText] && StringTrim[localText] =!= "" &&
-           !StringMatchQ[StringTrim[localText], "# Project-specific guidelines" ~~ WhitespaceCharacter.. ~~ ("<!--" ~~ ___ ~~ "-->" | "")],
-          Print["  CLAUDE.local.md \:2192 CLAUDE.md \:306b\:8ffd\:8a18"];
-          If[!dryRun && FileExistsQ[mainClaude],
-            Module[{mainText = Import[mainClaude, "Text"], strm},
-              strm = OpenAppend[mainClaude, BinaryFormat -> True];
-              BinaryWrite[strm, ToCharacterCode[
-                "\n\n## Project-specific guidelines (promoted)\n\n" <> localText, "UTF-8"]];
-              Close[strm]]];
-          AppendTo[promoted, "CLAUDE.local.md"],
-          Print["  CLAUDE.local.md: \:7a7a\:307e\:305f\:306f\:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:306e\:307f\:3001\:30b9\:30ad\:30c3\:30d7"]]]];
-    (* --- rules/ のファイルをメインにコピー --- *)
-    localRules = FileNameJoin[{localDir, "rules"}];
-    mainRulesDir = FileNameJoin[{mainDir, "rules"}];
-    If[DirectoryQ[localRules],
-      Scan[Function[f,
-        Module[{dst = FileNameJoin[{mainRulesDir, FileNameTake[f]}]},
-          Print["  rules/" <> FileNameTake[f] <> " \:2192 " <> dst];
-          If[!dryRun,
-            Quiet @ CreateDirectory[mainRulesDir, CreateIntermediateDirectories -> True];
-            Quiet @ CopyFile[f, dst, OverwriteTarget -> True]];
-          AppendTo[promoted, "rules/" <> FileNameTake[f]]]],
-        Select[FileNames["*", localRules], iFileQ]]];
-    (* --- skills/ のスキルをメインにコピー --- *)
-    localSkills = FileNameJoin[{localDir, "skills"}];
-    mainSkillsDir = FileNameJoin[{mainDir, "skills"}];
-    If[DirectoryQ[localSkills],
-      Scan[Function[skillDir,
-        Module[{skillName = FileNameTake[skillDir],
-                dstSkillDir},
-          dstSkillDir = FileNameJoin[{mainSkillsDir, skillName}];
-          Print["  skills/" <> skillName <> "/ \:2192 " <> dstSkillDir];
-          If[!dryRun,
-            iCopyDirectoryRecursive[skillDir, dstSkillDir]];
-          AppendTo[promoted, "skills/" <> skillName <> "/"]]],
-        Select[FileNames["*", localSkills], DirectoryQ]]];
-    (* サマリー *)
-    If[Length[promoted] === 0,
-      Print["\n\:6607\:683c\:5bfe\:8c61\:306e\:30d5\:30a1\:30a4\:30eb\:304c\:3042\:308a\:307e\:305b\:3093\:3002"],
-      Print["\n\:6607\:683c\:5b8c\:4e86: " <> ToString[Length[promoted]] <> " \:30d5\:30a1\:30a4\:30eb"];
-      If[!dryRun,
-        Print["[Install] \:30b0\:30ed\:30fc\:30d0\:30eb\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:518d\:30ed\:30fc\:30c9\:4e2d..."];
-        iLoadClaudeMD[]]];
-    If[dryRun, Print["\n\:203b DryRun \:30e2\:30fc\:30c9: \:5b9f\:969b\:306e\:30b3\:30d4\:30fc\:306f\:884c\:308f\:308c\:3066\:3044\:307e\:305b\:3093\:3002"]];
-    <|"Promoted" -> promoted, "DryRun" -> dryRun,
-      "LocalDir" -> localDir, "GlobalDir" -> mainDir|>
-  ];
-
 (* --- メイン関数 --- *)
 
 ClaudeAddDirective::nosrc = "Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002";
 ClaudeAddDirective::nofile = "\:30bf\:30fc\:30b2\:30c3\:30c8\:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: `1`";
 ClaudeAddDirective::queryerr = "Claude \:30af\:30a8\:30ea\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002";
-ClaudeAddDirective::unsaved = "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304c\:4fdd\:5b58\:3055\:308c\:3066\:3044\:306a\:3044\:305f\:3081 Scope->\"Local\" \:3092\:4f7f\:7528\:3067\:304d\:307e\:305b\:3093\:3002";
-ClaudeAddDirective::nolocaldir = "\:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:304c\:672a\:521d\:671f\:5316\:3067\:3059\:3002\:5148\:306b ClaudeInitProject[] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002";
 
-Options[ClaudeAddDirective] = {DryRun -> False, Scope -> "Global"};
+Options[ClaudeAddDirective] = {DryRun -> False};
 
 ClaudeAddDirective[target_String, description_String, OptionsPattern[]] :=
   Module[{filePath, existing, prompt, refined, backupFile, installResult,
-          dryRunQ = TrueQ[OptionValue[DryRun]],
-          scope = OptionValue[Scope], localDir, nb},
-    nb = Quiet[InputNotebook[]];
+          dryRunQ = TrueQ[OptionValue[DryRun]]},
 
-    (* Scope に応じてファイルパスを解決 *)
-    If[scope === "Local",
-      (* Local: NotebookDirectory/.claude-project/ に書き込み *)
-      localDir = iProjectLocalDir[nb];
-      If[!StringQ[localDir],
-        Message[ClaudeAddDirective::unsaved]; Return[$Failed]];
-      If[!DirectoryQ[localDir],
-        Message[ClaudeAddDirective::nolocaldir]; Return[$Failed]];
-      filePath = If[ToLowerCase[target] === "claude.local.md" || ToLowerCase[target] === "claude.md",
-        FileNameJoin[{localDir, "CLAUDE.local.md"}],
-        FileNameJoin[{localDir, "skills", target, "SKILL.md"}]];
-      (* ローカルスキルディレクトリが無ければ作成 *)
-      If[!FileExistsQ[filePath],
-        Module[{dir = DirectoryName[filePath]},
-          Quiet @ CreateDirectory[dir, CreateIntermediateDirectories -> True];
-          (* 新規ファイルの場合は空テンプレートを作成 *)
-          If[StringEndsQ[filePath, "SKILL.md"],
-            Export[filePath,
-              "---\nname: " <> target <> "\ndescription: Project-specific skill for " <> target <> "\n---\n\n",
-              "Text", CharacterEncoding -> "UTF-8"],
-            Export[filePath, "", "Text"]]]],
-      (* Main: 従来通り *)
-      filePath = iDirectiveFilePath[target];
-      If[filePath === $Failed,
-        Message[ClaudeAddDirective::nosrc]; Return[$Failed]];
-      If[!FileExistsQ[filePath],
-        Message[ClaudeAddDirective::nofile, filePath]; Return[$Failed]]
-    ];
+    (* 1. \:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:89e3\:6c7a *)
+    filePath = iDirectiveFilePath[target];
+    If[filePath === $Failed,
+      Message[ClaudeAddDirective::nosrc]; Return[$Failed]];
+    If[!FileExistsQ[filePath],
+      Message[ClaudeAddDirective::nofile, filePath]; Return[$Failed]];
 
     (* 2. \:65e2\:5b58\:5185\:5bb9\:3092\:8aad\:307f\:8fbc\:307f *)
     existing = Import[filePath, "Text"];
@@ -9705,20 +9059,13 @@ ClaudeAddDirective[target_String, description_String, OptionsPattern[]] :=
     ];
     Print["[OK] \:30d5\:30a1\:30a4\:30eb\:3092\:66f4\:65b0: " <> filePath];
 
-    (* 6. 反映: Local ならマージ+リロード、Main ならインストール *)
-    If[scope === "Local",
-      Print["[Merge] \:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:30de\:30fc\:30b8\:4e2d..."];
-      iMergeProjectDirectives[nb];
-      iLoadClaudeMD[];
-      Print["[OK] \:30de\:30fc\:30b8\:5b8c\:4e86\:3002\:6b21\:56de\:306e ClaudeQuery/ClaudeEval \:304b\:3089\:53cd\:6620\:3055\:308c\:307e\:3059\:3002"],
-      Print["[Install] ClaudeUpdateDirective[] \:3092\:5b9f\:884c\:4e2d..."];
-      installResult = iRunInstallClaudeDirectives[]
-    ];
+    (* 6. ディレクティブを $ClaudeWorkingDirectory へコピー *)
+    Print["[Install] ClaudeUpdateDirective[] \:3092\:5b9f\:884c\:4e2d..."];
+    installResult = iRunInstallClaudeDirectives[];
 
     <|"Target" -> target, "FilePath" -> filePath,
       "BackupFile" -> backupFile, "Refined" -> refined,
-      "Scope" -> scope,
-      "Installed" -> If[scope === "Local", "merged", installResult]|>
+      "Installed" -> installResult|>
   ];
 
 (* --- \:30ea\:30b9\:30c8\:30a2 --- *)
@@ -10083,34 +9430,20 @@ Rules for deciding where to write:\n\
 - For new skills, create skillname/SKILL.md with proper frontmatter\n\
 - Output ONLY the file blocks in the delimiter format above. No other text.\n\n";
 
-Options[ClaudeUpdateDirective] = {Scope -> "Global"};
-
-ClaudeUpdateDirective[text_String, opts:OptionsPattern[]] :=
+ClaudeUpdateDirective[text_String] :=
   Module[{nb, srcDir, prompt, allFiles, fileContents, response,
           files, path, action, content, fullPath, dir,
-          nbCtx, enrichedText, scope, localDir, isLocal},
+          nbCtx, enrichedText},
     nb = Quiet[InputNotebook[]];
-    scope = OptionValue[Scope];
-    isLocal = (scope === "Local");
-
-    (* Scope に応じてソースディレクトリを決定 *)
-    If[isLocal,
-      localDir = iProjectLocalDir[nb];
-      If[!StringQ[localDir] || !DirectoryQ[localDir],
-        nbPrint[nb, "\:26a0 \:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:304c\:672a\:521d\:671f\:5316\:3067\:3059\:3002\:5148\:306b ClaudeInitProject[] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
-        Return[$Failed]];
-      srcDir = localDir,
-      srcDir = iDirectivesSourceDir[];
-      If[srcDir === $Failed,
-        nbPrint[nb, "\:26a0 Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
-        Return[$Failed]]
-    ];
+    srcDir = iDirectivesSourceDir[];
+    If[srcDir === $Failed,
+      nbPrint[nb, "\:26a0 Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
+      Return[$Failed]];
 
     (* セクションヘッダーを入力セルの直前に挿入 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
-      "\:25b6 ClaudeUpdateDirective" <>
-      If[isLocal, " [Local]", ""] <>
-      " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
+      "\:25b6 ClaudeUpdateDirective (" <>
+      DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
 
     (* ノートブックコンテキストを取得して指示に付加 *)
     nbCtx = Quiet @ Check[iCaptureNotebookContext[nb, 0], ""];
@@ -10162,15 +9495,14 @@ ClaudeUpdateDirective[text_String, opts:OptionsPattern[]] :=
         StringTake[response, UpTo[120]] <> ")"];
       Return[$Failed]];
 
-    (* 事前バックアップ: Global のみ（Local は .claude-project に直接書くため不要） *)
-    If[!isLocal,
-      Module[{targetPaths, histDir},
-        targetPaths = Map[
-          FileNameJoin[Flatten[{srcDir, FileNameSplit[Lookup[#, "path", ""]]}]] &, files];
-        targetPaths = Select[targetPaths, FileExistsQ];
-        histDir = iCreateDirectiveHistoryBackup[text, targetPaths];
-        If[StringQ[histDir],
-          nbPrint[nb, "\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: " <> histDir]]]];
+    (* \:4e8b\:524d\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: \:5909\:66f4\:5bfe\:8c61\:30d5\:30a1\:30a4\:30eb\:3092\:5c65\:6b74\:306b\:4fdd\:5b58 *)
+    Module[{targetPaths, histDir},
+      targetPaths = Map[
+        FileNameJoin[Flatten[{srcDir, FileNameSplit[Lookup[#, "path", ""]]}]] &, files];
+      targetPaths = Select[targetPaths, FileExistsQ];
+      histDir = iCreateDirectiveHistoryBackup[text, targetPaths];
+      If[StringQ[histDir],
+        nbPrint[nb, "\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: " <> histDir]]];
 
     (* ファイルを書き込み *)
     Do[
@@ -10190,9 +9522,6 @@ ClaudeUpdateDirective[text_String, opts:OptionsPattern[]] :=
       {fe, files}];
 
     nbPrint[nb, "\:30bd\:30fc\:30b9\:30d5\:30a1\:30a4\:30eb\:3092\:66f4\:65b0\:3057\:307e\:3057\:305f\:3002"];
-    If[isLocal,
-      nbPrint[nb, "[Merge] \:30d7\:30ed\:30b8\:30a7\:30af\:30c8\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:30de\:30fc\:30b8\:4e2d..."];
-      iMergeProjectDirectives[nb]];
     iLoadClaudeMD[]
   ];
 
