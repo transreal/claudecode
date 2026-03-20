@@ -20,7 +20,7 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 パッケージ管理機能 (`ClaudeUpdatePackage`, `ClaudeRestorePackage`) では、既存の .wl パッケージを Claude の支援で更新し、差分ベースの自動バックアップにより安全なイテレーションを実現します。バックアップシステムは `SequenceAlignment` ベースの差分保存を採用し、`.cz`（ベースライン）・`.cdiff`（差分）・`.unchanged`（参照）の3形式でストレージ消費を大幅に削減します。差分チェーンの中間ノードを削除する際も依存関係を自動解決し、復元不能になることを防止します。既存の生バックアップは `ClaudeMigrateBackupHistory` で差分形式に一括変換できます。
 
-ドキュメント生成機能 (`ClaudeCreateDocumentation`, `ClaudeUpdateDocumentation`) では、ソースコードから API リファレンス・使用例・セットアップガイドなどの文書一式を自動生成します。ドキュメント更新時はノートブックの現在のコンテキストも参照でき、「上で議論された内容を反映して」といった自然な指示が可能です。`Disclaimer`・`License` 等のオプションで免責事項・ライセンス情報を指定でき、これらは `doc_options.json` に永続化されて以降の更新でも保持されます。ディレクティブファイルの書き込みには、サイズ退行・タイトル整合性・スキル名保持を検証するガード機構 (`iSafeWriteDirective`) が組み込まれています。
+ドキュメント生成機能 (`ClaudeCreateDocumentation`, `ClaudeUpdateDocumentation`) では、ソースコードから API リファレンス・使用例・セットアップガイドなどの文書一式を自動生成します。ドキュメント更新時はノートブックの現在のコンテキストも参照でき、「上で議論された内容を反映して」といった自然な指示が可能です。`Disclaimer`・`License`・`Acknowledgments` 等のオプションで免責事項・ライセンス情報・謝辞を指定でき、これらは `doc_options.json` に永続化されて以降の更新でも保持されます。ドキュメント生成にはトークン節約のためソースコードのチャンク化が行われ、ドキュメント種別ごとに関連セクションのみを選択的に送信します。ドキュメント生成専用モデル (`$ClaudeDocModel`) を指定でき、Sonnet クラスの安価なモデルでコスト効率よく生成できます。リミット到達時は自動停止し、再実行で未生成分のみ続行します。ディレクティブファイルの書き込みには、サイズ退行・タイトル整合性・スキル名保持を検証するガード機構 (`iSafeWriteDirective`) が組み込まれています。
 
 AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImageGenerate`）と OpenAI TTS API による音声合成（`ClaudeSpeech`）を統合しています。ClaudeQuery のリッチレスポンスモードでは、ユーザーの要求に応じて自動的にこれらの API を呼び出すコードや、安全な可視化コード（Plot、Graphics 等）を自動評価します。
 
@@ -156,6 +156,7 @@ ShowClaudePalette[]
 | `$ClaudePrivateModel` | `{}` | 秘密データ処理用のローカルモデル指定 |
 | `$ClaudeImageModels` | `{{"openai","gpt-image-1"},{"openai","dall-e-3"}}` | 画像生成モデルのリスト |
 | `$ClaudeTTSModels` | `{{"openai","tts-1-hd"},{"openai","tts-1"}}` | 音声生成モデルのリスト |
+| `$ClaudeDocModel` | `"claude-sonnet-4-20250514"` | ドキュメント生成・更新時に使用するモデル。`""` で `$ClaudeModel` と同じモデルを使用 |
 
 ### 主な機能
 
@@ -214,8 +215,8 @@ ShowClaudePalette[]
 - `ClaudeCreatePackage[name, prompt]` — 新規パッケージの作成
 
 **ドキュメント生成**
-- `ClaudeCreateDocumentation["name"]` — パッケージの文書一式を自動生成。`Disclaimer`・`License` 等のオプションで README に免責事項・ライセンス情報を付加可能。リミット到達時は自動停止し、再実行で未生成分のみ続行
-- `ClaudeUpdateDocumentation["name", "指示"]` — 既存ドキュメントの更新。ノートブックのコンテキストも参照可能。オプション設定は `doc_options.json` に永続化
+- `ClaudeCreateDocumentation["name"]` — パッケージの文書一式を自動生成。`Disclaimer`・`License`・`Acknowledgments` 等のオプションで README に免責事項・ライセンス情報・謝辞を付加可能。リミット到達時は自動停止し、再実行で未生成分のみ続行。`$ClaudeDocModel` で生成専用モデルを指定可能
+- `ClaudeUpdateDocumentation["name", "指示"]` — 既存ドキュメントの更新。ノートブックのコンテキストも参照可能。オプション設定は `doc_options.json` に永続化。ソースコードの差分に基づくチャンク化により、トークン消費を最適化
 
 **ディレクティブ管理**
 - `ClaudeAddDirective[target, description]` — CLAUDE.md やスキルファイルにディレクティブを追加。`Scope -> "Local"` でプロジェクト固有のディレクティブも追加可能
@@ -225,8 +226,6 @@ ShowClaudePalette[]
 - `ClaudeListDirectives[]` — 全ディレクティブ一覧
 - `ClaudeDirectiveBackupDataset[]` — ディレクティブ更新履歴を Review/Pull/Delete ボタン付き Grid で表示（ローカル最新版スナップショット付き）
 - `ClaudeSyncDirectives[dir]` — 外部ディレクトリから Claude Directives へファイルを同期
-- `ClaudeInitProject[]` — NotebookDirectory にプロジェクト固有のディレクティブ雛形を作成し、メインのディレクティブと自動マージ
-- `ClaudePromoteProjectDirectives[]` — プロジェクト固有のディレクティブをグローバルに昇格
 
 **Web 検索・取得**
 - `ClaudeWebSearch[query]` — Web 検索を実行し結果をテキストで返す
@@ -278,6 +277,12 @@ ClaudeEval["1から10までのフィボナッチ数を計算して",
 ### 動画
 
 - [claudecode デモ動画 — Mathematica ノートブックから Claude Code を操作する様子を紹介（YouTube）](https://www.youtube.com/watch?v=_Lc-XtBPkl8&t=919s)
+
+### ClaudeQueryの実行例
+
+実際の使用例とサンプルコードは以下のデモノートブックでご覧いただけます：
+
+[ClaudeQuery デモノートブック](https://www.wolframcloud.com/obj/imai/Published/claudecode-examples.nb)
 
 ## 謝辞
 

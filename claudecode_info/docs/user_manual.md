@@ -12,6 +12,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **多言語対応**: `$Language` 設定に基づいてプロンプトの言語指示を動的に生成します。日本語・英語等の環境で適切な応答言語が自動選択されます。
 - **AI 生成機能**: OpenAI Images API による画像生成（`ClaudeImageGenerate`）と OpenAI TTS API による音声生成（`ClaudeSpeech`）を統合しています。
 - **プロジェクト固有ディレクティブ**: ノートブックディレクトリごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。
+- **スマートドキュメント管理**: ドキュメント生成・更新時のモード制御（新規作成・既存更新）、部分更新対象の指定、差分検出による効率的な更新処理を提供します。
 
 内部的には、[NBAccess](https://github.com/transreal/NBAccess) パッケージにノートブックのセル操作・プライバシー管理・履歴 DB を委譲し、[GitHubREST](https://github.com/transreal/github) パッケージと連携して GitHub 上のパッケージ管理を行います。
 
@@ -118,7 +119,7 @@ ClaudeSpeech["こんにちは、世界"]
 | | `ClaudeRestorePackage` | バックアップからの復元 |
 | | `ClaudeConvertToPaclet` | Paclet 形式への変換 |
 | **ドキュメント** | `ClaudeCreateDocumentation` | ドキュメント一式の自動生成 |
-| | `ClaudeUpdateDocumentation` | 差分検出による自動更新 |
+| | `ClaudeUpdateDocumentation` | 差分検出による自動更新・モード制御機能 |
 | **バックアップ** | `ClaudeBackupDataset` | バックアップ履歴の管理・復元 |
 | | `ClaudeMigrateBackupHistory` | 生バックアップを差分形式に変換 |
 | **機密データ** | `Confidential` / `NonConfidential` | 変数の秘匿・解除 |
@@ -350,6 +351,35 @@ ClaudeUpdateDirective["このプロジェクト固有のルールを追加", Sco
 | 考えてみて、少し考えて | `think` | 基本（4K トークン） |
 
 ClaudeUpdatePackage 等の呼び出し時にも、指示文中の日本語表現が自動的にトリガーワードに変換されます。
+
+### ドキュメント生成・更新の高度制御
+
+`ClaudeUpdateDocumentation` は柔軟なモード制御と部分更新機能を提供します。
+
+```mathematica
+(* 基本的なドキュメント更新（既存ファイルを更新） *)
+ClaudeUpdateDocumentation["MyPackage", "新機能の説明を追加"]
+
+(* 新規作成モード（既存内容を無視して新規作成） *)
+ClaudeUpdateDocumentation["MyPackage", "setup.mdを作成", 
+  TargetFiles -> {"setup.md"}, Mode -> "Create"]
+
+(* 特定ファイルのみ更新 *)
+ClaudeUpdateDocumentation["MyPackage", "API仕様を更新", 
+  TargetFiles -> {"api.md"}]
+
+(* 複数ファイルを同時更新 *)
+ClaudeUpdateDocumentation["MyPackage", "全体的な改善", 
+  TargetFiles -> {"README.md", "user_manual.md"}]
+```
+
+| オプション | デフォルト | 説明 |
+|---|---|---|
+| `Mode` | `"Update"` | `"Update"`: 既存を更新、`"Create"`: 新規作成（既存内容無視） |
+| `TargetFiles` | `Automatic` | 更新対象ファイルのリスト。`Automatic` で全ドキュメントを対象 |
+| `References` | `{}` | 参考文献リスト（README.md に反映） |
+| `Demos` | `{}` | デモ動画・使用例 URL（README.md に反映） |
+| `Disclaimer` | `{}` | 免責事項（README.md に反映） |
 
 ### ドキュメント一覧
 

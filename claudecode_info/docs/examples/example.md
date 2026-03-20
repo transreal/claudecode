@@ -46,6 +46,12 @@ ClaudeQuery["秘密データの統計を教えて",
 
 > 指定したモデルに直接ルーティングされ、Claude Code を経由しません。
 
+### ClaudeQueryの実行例
+
+実際の使用例とサンプルコードは以下のデモノートブックでご覧いただけます：
+
+[ClaudeQuery デモノートブック](https://www.wolframcloud.com/obj/imai/Published/claudecode-examples.nb)
+
 ---
 
 ## 2. コード生成と自動実行（ClaudeEval）

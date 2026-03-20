@@ -22,6 +22,26 @@ description: Use for Wolfram Language / Mathematica coding, editing, notebook ou
 - 数値代入が本当に必要になるまでは、できるだけ記号式のまま処理する。
 - ベクトル・行列を扱う場合は、可能な限りベクトル・行列表現を保ったまま計算する。
 
+## 数式タイプセット（ClaudeEval / ClaudeQuery 生成コード）
+
+NBAccess が生成コードを `MakeBoxes[StandardForm]` でタイプセットするため、
+`Integrate` → ∫, `Sum` → Σ, `Subscript` → 下付き, `Sqrt` → √ 等の美しい表示が自動的に得られる。
+ただし `Module`, `Block`, `Show`, `Plot` 等の手続き的コードは FEParser を使用（変数スコーピング保護のため）。
+
+### コメント禁止（コードブロック内）
+`(* ... *)` コメントは `ToExpression` で除去される。
+**コードブロック内にコメントを書かず、説明はブロック外のテキストに記述する。**
+
+### テキスト内の LaTeX 数式（推奨）
+説明テキスト中の数式は `$...$` LaTeX 表記を使う。自動的に Mathematica タイプセットに変換される。
+例: `$\nabla^2 \varphi = 0$`, `$\pm q_m$`, `$\mathbf{B} = -\mu_0 \nabla \varphi$`
+
+### 推奨
+- 数学関数は標準の関数呼び出し形式: `Integrate[f, x]`, `Sum[...]`, `D[f, x]`
+- 下付き/上付き: `Subscript[q, m]`, `Superscript[x, n]`
+- 行列: `MatrixForm[...]`
+- ギリシャ文字: `\[CurlyPhi]`, `\[Mu]` 等
+
 ## 出力方針
 
 - 説明は必要十分にとどめ、冗長にしない。

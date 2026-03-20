@@ -696,16 +696,33 @@ nbPrint[nb_, text_Style, ___] := (
   NotebookWrite[nb,
     Cell[BoxData[ToBoxes[text]], "Text"], After]);
 
-(* \:30b3\:30fc\:30c9\:6587\:5b57\:5217\:3092\:69cb\:6587\:30ab\:30e9\:30fc\:30ea\:30f3\:30b0\:4ed8\:304d Input \:30bb\:30eb\:3068\:3057\:3066\:66f8\:304d\:8fbc\:3080 \:2192 NBAccess\:306b\:59d4\:8b72 *)
+(* 2つ以上のアンダースコアを含む変数名を修正
+   tiling3_12_12 → tiling3X12X12 (Mathematica でパターン解釈されるのを防ぐ)
+   tiling_12 は Subscript[tiling, 12] として正当なので変換しない
+   x_, x_Integer, x__ 等のパターン構文も変換しない *)
+iSanitizeUnderscoreVarNames[code_String] :=
+  Module[{matches, result = code},
+    (* _が2回以上出現する識別子を検出 *)
+    matches = Union @ StringCases[code,
+      RegularExpression["[a-zA-Z][a-zA-Z0-9]*(?:_[a-zA-Z0-9]+){2,}"]];
+    (* 各マッチの _ を X に置換 *)
+    Do[result = StringReplace[result,
+        m -> StringReplace[m, "_" -> "X"]],
+      {m, matches}];
+    result
+  ];
+
+(* コード文字列を構文カラーリング付き Input セルとして書き込む → NBAccessに委譲 *)
 iWriteCodeCell[nb_NotebookObject, code_String] := (
   Quiet[SelectionMove[nb, After, Notebook]];
-  NBAccess`NBWriteCode[nb, code]);
+  NBAccess`NBWriteCode[nb, iSanitizeUnderscoreVarNames[code]]);
 
-(* CellPrint\:30d1\:30bf\:30fc\:30f3\:3092\:81ea\:52d5\:6aa2\:51fa\:3057\:3066\:30b9\:30de\:30fc\:30c8\:306b\:30bb\:30eb\:3092\:66f8\:304d\:8fbc\:3080 \:2192 NBAccess\:306b\:59d4\:8b72 *)
+(* CellPrintパターンを自動検出してスマートにセルを書き込む → NBAccessに委譲 *)
 iWriteSmartCell[nb_, code_String, autoEvaluate_:False] :=
-  Module[{},
+  Module[{sanitized},
+    sanitized = iSanitizeUnderscoreVarNames[code];
     Quiet[SelectionMove[nb, After, Notebook]];
-    NBAccess`NBWriteSmartCode[nb, code];
+    NBAccess`NBWriteSmartCode[nb, sanitized];
     If[TrueQ[autoEvaluate],
       NBAccess`NBEvaluatePreviousCell[nb]]
   ];
@@ -2283,14 +2300,108 @@ cleanMarkdown[s_String] := StringTrim @ StringReplace[s, {
   RegularExpression["\\n{3,}"] -> "\n\n"
 }];
 
+(* テキスト中の $...$ / $$...$$ LaTeX 数式を Mathematica インライン数式に変換して Cell を作る *)
+
+(* TeX前処理: Mathematica の TeXForm パーサーが扱えないコマンドを正規化 *)
+iTeXPreprocess[tex_String] :=
+  StringReplace[tex, {
+    (* \mathbf{X} → X, \mathrm{X} → X, \text{X} → X *)
+    RegularExpression["\\\\math(?:bf|rm|cal|it|sf|tt)\\{([^}]*)\\}"] -> "$1",
+    RegularExpression["\\\\text(?:rm|bf|it|sf)?\\{([^}]*)\\}"] -> "$1",
+    RegularExpression["\\\\boldsymbol\\{([^}]*)\\}"] -> "$1",
+    (* \hat{X} → X, \tilde{X} → X, \bar{X} → X, \vec{X} → X *)
+    RegularExpression["\\\\(?:hat|tilde|bar|vec|dot|ddot|overline|underline|widehat|widetilde)\\{([^}]*)\\}"] -> "$1",
+    (* Mathematica 角括弧混在を丸括弧に変換: \Psi[x,t] → \Psi(x,t) *)
+    RegularExpression["\\\\([A-Za-z]+)\\[([^\\]]*?)\\]"] -> "\\$1($2)",
+    (* 残りの [...] → (...) （TeXにない角括弧記法） *)
+    RegularExpression["([A-Za-z])\\[([^\\]]{1,30})\\]"] -> "$1($2)",
+    (* \, \; \! \quad 等のスペースコマンドを除去 *)
+    RegularExpression["\\\\[,;!]"] -> " ",
+    RegularExpression["\\\\(?:quad|qquad|hspace\\{[^}]*\\})"] -> " ",
+    (* \left \right を除去 *)
+    "\\left" -> "", "\\right" -> "",
+    (* \cdot → * *)
+    "\\cdot" -> " "
+  }];
+
+(* 単一の TeX 式を Mathematica Box に変換。失敗時は $Failed *)
+(* MakeBoxes[HoldAllComplete] を使い、等式(==)等が評価されるのを防ぐ *)
+iTeXToBoxes[tex_String] :=
+  Module[{cleaned, expr, boxes},
+    cleaned = iTeXPreprocess[tex];
+    expr = Quiet @ Check[ToExpression[cleaned, TeXForm, HoldComplete], $Failed];
+    If[expr === $Failed, Return[$Failed]];
+    boxes = Quiet @ Check[
+      expr /. HoldComplete[e_] :> MakeBoxes[e, StandardForm],
+      $Failed];
+    boxes
+  ];
+
+(* 等式を含む TeX 式を分割して変換: "lhs = rhs" → Row[{lhs, "=", rhs}] *)
+iTeXEquationToBoxes[tex_String] :=
+  Module[{eqParts, lhsBoxes, rhsBoxes, sep},
+    (* まず全体を試す *)
+    Module[{direct = iTeXToBoxes[tex]},
+      If[direct =!= $Failed, Return[direct]]];
+    (* "=" で分割して左辺・右辺を個別に変換 *)
+    eqParts = StringSplit[tex, RegularExpression["\\s*=\\s*"], 2];
+    If[Length[eqParts] === 2,
+      lhsBoxes = iTeXToBoxes[StringTrim[eqParts[[1]]]];
+      rhsBoxes = iTeXToBoxes[StringTrim[eqParts[[2]]]];
+      sep = "=";
+      If[lhsBoxes =!= $Failed && rhsBoxes =!= $Failed,
+        Return[RowBox[{lhsBoxes, sep, rhsBoxes}]]];
+      (* 片方だけ成功した場合 *)
+      If[lhsBoxes =!= $Failed,
+        Return[RowBox[{lhsBoxes, "=", StringTrim[eqParts[[2]]]}]]];
+      If[rhsBoxes =!= $Failed,
+        Return[RowBox[{StringTrim[eqParts[[1]]], "=", rhsBoxes}]]]
+    ];
+    $Failed
+  ];
+
+iTeXMathToCell[text_String, style_String] :=
+  Module[{preprocessed, parts, result = {}, tex, boxes},
+    (* $$...$$ → $...$ に正規化（改行を含むケースにも対応） *)
+    preprocessed = StringReplace[text,
+      RegularExpression["(?s)\\$\\$(.+?)\\$\\$"] :> "$" <> "$1" <> "$"];
+    (* $...$ を区切りとして分割（改行を含むケースにも対応） *)
+    parts = StringSplit[preprocessed,
+      RegularExpression["(?s)\\$([^$]+?)\\$"] :> "$TEXMATH$" <> "$1"];
+    If[Length[parts] === 1 && !StringContainsQ[preprocessed, "$"],
+      (* LaTeX 数式なし → 通常のテキストセル *)
+      Return[Cell[text, style]]];
+    Do[
+      If[StringStartsQ[p, "$TEXMATH$"],
+        tex = StringDrop[p, StringLength["$TEXMATH$"]];
+        boxes = iTeXEquationToBoxes[tex];
+        If[boxes =!= $Failed,
+          AppendTo[result,
+            Cell[BoxData[boxes], "InlineFormula"]];
+          Continue[]
+        ];
+        (* 変換失敗 → $tex$ 形式のままイタリックで表示 *)
+        AppendTo[result,
+          Cell[BoxData[StyleBox["$" <> tex <> "$",
+            FontSlant -> "Italic", FontColor -> GrayLevel[0.4]]],
+            "InlineFormula"]],
+        (* 通常テキスト部分 *)
+        If[p =!= "", AppendTo[result, p]]
+      ],
+      {p, parts}];
+    If[Length[result] === 1 && StringQ[First[result]],
+      Cell[First[result], style],
+      Cell[TextData[result], style]]
+  ];
+
 (* ClaudeQuery 応答をマークダウン解析して適切なスタイルのセルで出力 *)
 iFlushQueryTextBuf[nb_NotebookObject, buf_List] :=
   If[Length[buf] > 0,
     Quiet[SelectionMove[nb, After, Notebook]];
     NBAccess`NBWriteCell[nb,
-      Cell[StringJoin[Riffle[buf, "\n"]], "Text"]]];
+      iTeXMathToCell[StringJoin[Riffle[buf, "\n"]], "Text"]]];
 
-iWriteQueryResponse[nb_NotebookObject, text_String] :=
+iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
   Module[{lines, i, line, trimmed, textBuf = {}, content,
           inCodeBlock = False, codeLang = "", codeBuf = {}},
     (* 非同期コールバックからの呼び出し対策: 末尾に移動してから全セルを書き込み *)
@@ -2314,8 +2425,8 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
           If[Length[codeBuf] > 0,
             Module[{codeText = StringJoin[Riffle[codeBuf, "\n"]]},
               If[MemberQ[{"mathematica", "wolfram", "wl", "mma"}, ToLowerCase[codeLang]],
-                (* Mathematica コード → Input セル *)
-                iWriteCodeCell[nb, codeText],
+                (* Mathematica コード → Input セル（AutoEvaluate に従う） *)
+                iWriteSmartCell[nb, codeText, autoEvaluate],
                 (* 他の言語やコードブロック → Program セル *)
                 NBAccess`NBWriteCell[nb, Cell[codeText, "Program"]]]]];
           codeBuf = {};
@@ -2337,7 +2448,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^#{3,}\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, Cell[content, "Subsubsection"]],
+          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsubsection"]],
 
         (* ## 見出し → Subsection *)
         StringMatchQ[trimmed, "##" ~~ " " ~~ __],
@@ -2345,7 +2456,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^#{2}\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, Cell[content, "Subsection"]],
+          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsection"]],
 
         (* # 見出し → Subsection *)
         StringMatchQ[trimmed, "#" ~~ " " ~~ __],
@@ -2353,7 +2464,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^#\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, Cell[content, "Subsection"]],
+          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsection"]],
 
         (* 深いインデントリスト → Subsubitem *)
         StringMatchQ[line, ("      " | "\t\t") ~~ ("-" | "*" | "\[Bullet]") ~~ " " ~~ __],
@@ -2361,7 +2472,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^[-*]\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, Cell[content, "Subsubitem"]],
+          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsubitem"]],
 
         (* 浅いインデントリスト → Subitem *)
         StringMatchQ[line, ("  " | "   " | "\t") ~~ ("-" | "*" | "\[Bullet]") ~~ " " ~~ __],
@@ -2369,7 +2480,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^[-*]\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, Cell[content, "Subitem"]],
+          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subitem"]],
 
         (* リスト項目 (箇条書き) → Item *)
         StringMatchQ[trimmed, ("-" | "*" | "\[Bullet]") ~~ " " ~~ __],
@@ -2377,7 +2488,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^[-*]\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, Cell[content, "Item"]],
+          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Item"]],
 
         (* 番号付きリスト → Item *)
         StringMatchQ[trimmed, DigitCharacter.. ~~ "." ~~ " " ~~ __],
@@ -2385,7 +2496,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^\\d+\\.\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, Cell[content, "Item"]],
+          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Item"]],
 
         (* 水平線 → 無視 *)
         StringMatchQ[trimmed, RegularExpression["^[-*_]{3,}$"]],
@@ -2402,7 +2513,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String] :=
     If[inCodeBlock && Length[codeBuf] > 0,
       Module[{codeText = StringJoin[Riffle[codeBuf, "\n"]]},
         If[MemberQ[{"mathematica", "wolfram", "wl", "mma"}, ToLowerCase[codeLang]],
-          iWriteCodeCell[nb, codeText],
+          iWriteSmartCell[nb, codeText, autoEvaluate],
           NBAccess`NBWriteCell[nb, Cell[codeText, "Program"]]]]];
     (* 残りをフラッシュ *)
     iFlushQueryTextBuf[nb, textBuf];
@@ -3788,11 +3899,12 @@ iAutoMarkNewCellsConfidential[nb_NotebookObject, cellCountBefore_Integer] :=
 iShouldAutoMarkConfidential[accessLevel_?NumericQ] :=
   accessLevel > NBAccess`NBGetProviderMaxAccessLevel["claudecode"];
 
-Options[ClaudeQuery] = {Fallback -> False, WebFetch -> False, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False};
+Options[ClaudeQuery] = {Fallback -> False, WebFetch -> False, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False, AutoEvaluate -> False};
 
 (* ClaudeQuery \:5185\:90e8\:5b9f\:88c5\:ff08\:975e\:540c\:671f\:ff09 *)
 iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFetch_,
-    modelSpec_:Automatic, privSpec_:Automatic, autoPrivate_:False] :=
+    modelSpec_:Automatic, privSpec_:Automatic, autoPrivate_:False,
+    autoEvaluate_:False] :=
   Module[{history, lastEntry, cellCountAfter, notebookCtx,
           fullPrompt, step, entry, jobId, queryCallback,
           accessLevel, availModels, useClaudeCode},
@@ -3847,7 +3959,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
       Module[{response = iDoWebSearch[fullPrompt]},
         NBAccess`NBJobMoveToAnchor[jobId];
         If[StringQ[response],
-          iWriteQueryResponse[nb, response]];
+          iWriteQueryResponse[nb, response, autoEvaluate]];
         NBAccess`NBEndJob[jobId];
         iSessionUpdateLast[nb, tag, <|
           "response"       -> response,
@@ -3856,7 +3968,8 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
       (* \:901a\:5e38\:30d1\:30b9: \:975e\:540c\:671f *)
       queryCallback = With[{nb2 = nb, stag2 = tag, jid = jobId,
             autoMark = iShouldAutoMarkConfidential[accessLevel],
-            ccBefore = NBAccess`NBCellCount[nb]},
+            ccBefore = NBAccess`NBCellCount[nb],
+            ae = autoEvaluate},
         Function[response,
           Module[{},
             (* \:30a2\:30f3\:30ab\:30fc\:306e\:76f4\:5f8c\:306b\:51fa\:529b\:3092\:914d\:7f6e *)
@@ -3870,7 +3983,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
                 "cellCountAfter" -> NBAccess`NBCellCount[nb2]|>];
               Return[]];
             If[StringQ[response],
-              iWriteQueryResponse[nb2, response],
+              iWriteQueryResponse[nb2, response, ae],
               NBAccess`NBWriteCell[nb2,
                 Cell["Error: \:5fdc\:7b54\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002", "Text"]]];
             (* 高 AccessLevel の場合、新規セルを自動秘密マーク *)
@@ -3947,7 +4060,8 @@ ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
   tag     = session["SessionTag"];
   iClaudeQueryImpl[nb, tag, prompt,
     TrueQ[OptionValue[Fallback]], TrueQ[OptionValue[WebFetch]],
-    OptionValue[Model], OptionValue[PrivacySpec], TrueQ[OptionValue[AutoPrivate]]]
+    OptionValue[Model], OptionValue[PrivacySpec], TrueQ[OptionValue[AutoPrivate]],
+    TrueQ[OptionValue[AutoEvaluate]]]
   ]]);
 
 (* セッション対応版 ClaudeQuery（非同期・履歴保存付き） *)
@@ -3963,7 +4077,8 @@ ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
       TrueQ[OptionValue[ClaudeQuery, {opts}, WebFetch]],
       OptionValue[ClaudeQuery, {opts}, Model],
       OptionValue[ClaudeQuery, {opts}, PrivacySpec],
-      TrueQ[OptionValue[ClaudeQuery, {opts}, AutoPrivate]]]
+      TrueQ[OptionValue[ClaudeQuery, {opts}, AutoPrivate]],
+      TrueQ[OptionValue[ClaudeQuery, {opts}, AutoEvaluate]]]
   ]]);
 
 (* ============================================================
@@ -4110,9 +4225,18 @@ iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
 (* ClaudeQuery \:7528\:30d5\:30a9\:30fc\:30de\:30c3\:30c8\:6307\:793a\:ff08\:30d7\:30ed\:30dd\:30fc\:30b7\:30e7\:30ca\:30eb\:30d5\:30a9\:30f3\:30c8\:5411\:3051\:ff09 *)
 $claudeQueryPrefix :=
   "You are a knowledgeable assistant. Your response will be rendered as styled cells in Mathematica's notebook.\n\
-CRITICAL RULE: Do NOT include any code blocks (```mathematica ... ``` or other). \
-ClaudeQuery returns TEXT only. If the user's request requires generating or executing code, \
-respond with a text answer and suggest using ClaudeEval[] instead.\n\
+RESPONSE STYLE:\n\
+ClaudeQuery produces a rich notebook output with text explanations and optional code blocks.\n\
+- Text explanations are rendered as styled cells (headings, items, text).\n\
+- ```mathematica code blocks are inserted as executable Input cells and auto-evaluated.\n\
+When the user asks for graphs, plots, visualizations, or demonstrations, \
+include ```mathematica code blocks that generate them using Plot, ListPlot, Manipulate, etc.\n\
+Mix text explanations with code blocks freely to create a well-structured notebook document.\n\
+VARIABLE NAMING: In ```mathematica code blocks, a single underscore creates a Subscript \
+(e.g. tiling_12 = Subscript[tiling, 12]) which is fine. \
+However, NEVER use TWO OR MORE underscores in a name \
+(e.g. tiling3_12_12, my_var_name). These cause pattern-matching errors. \
+Use camelCase for multi-part names: tiling3Type12x12, myVarName.\n\
 FORMATTING RULES:\n\
 - Use markdown headings (# ## ###) to organize sections.\n\
 - Use bullet lists (- item) or numbered lists (1. item) for structured information.\n\
@@ -4120,6 +4244,22 @@ FORMATTING RULES:\n\
 - Do NOT use markdown tables (no |---|). Tables are not rendered properly.\n\
 - **Bold** is allowed but will be stripped in display.\n\
 - All text must be written in " <> iLanguageName[] <> ".\n\
+- For mathematical expressions, use LaTeX $...$ notation (e.g. $\\nabla^2 \\varphi = 0$, $\\pm q_m$). \
+The notebook converts these into Mathematica typeset display automatically.\n\
+CRITICAL: ALL math notation MUST be wrapped in $...$ delimiters. \
+NEVER write raw LaTeX commands (\\nabla, \\frac, \\partial) outside of $...$. \
+NEVER use $$...$$ (double dollar). Only use single $...$ for inline math.\n\
+Examples:\n\
+  WRONG: The Laplace equation is \\nabla^2 \\varphi = 0\n\
+  CORRECT: The Laplace equation is $\\nabla^2 \\varphi = 0$\n\
+  WRONG: $$\\frac{\\partial^2 u}{\\partial t^2} = c^2 \\nabla^2 u$$\n\
+  CORRECT: $\\frac{\\partial^2 u}{\\partial t^2} = c^2 \\nabla^2 u$\n\
+INSIDE $...$ use PURE LaTeX syntax only (not Mathematica). \
+Use parentheses for function arguments, not square brackets:\n\
+  WRONG: $\\Psi[x,t]$  CORRECT: $\\Psi(x,t)$\n\
+  WRONG: $V[x]$  CORRECT: $V(x)$\n\
+Avoid \\hat{}, \\vec{} if possible; use simple letters. \
+Keep formulas concise — very complex multi-line TeX may not convert.\n\
 SYMBOL REFERENCE CONVENTION: <<n>> in the prompt refers to a specific symbol (variable or function) \
 in the user's Mathematica notebook kernel. Metadata about referenced symbols is appended at the end of the prompt. \
 In your answer, refer to the symbol by name.\n\
@@ -4154,10 +4294,49 @@ Column[{\n\
 }, Spacings -> 1]\n\
 ```\n\n\
 Use idiomatic Wolfram Language style. \
+VARIABLE NAMING: A single underscore creates a Subscript \
+(e.g. q_m = Subscript[q, m]) which is fine and encouraged for mathematical notation. \
+However, NEVER use TWO OR MORE underscores in a name \
+(e.g. tiling3_12_12, my_var_name). These cause pattern-matching errors.\n\
+Use camelCase for multi-part names: tiling3Type12x12, myVarName.\n\
 For brief explanatory text OUTSIDE code blocks (a few sentences only): \
 do NOT use markdown tables (no |---|); \
 do not use markdown bold (**text**) or heading syntax (# ##). \
-All explanatory text must be written in " <> iLanguageName[] <> ".\n\n\
+All explanatory text must be written in " <> iLanguageName[] <> ".\n\
+For mathematical expressions in explanatory text, use LaTeX notation with $...$ delimiters.\n\
+Examples: $\\nabla^2 \\varphi = 0$, $\\pm q_m$, $\\mathbf{B} = -\\mu_0 \\nabla \\varphi$\n\
+The notebook automatically converts $...$ LaTeX math into Mathematica typeset display.\n\n\
+MATHEMATICAL EXPRESSION STYLE (IMPORTANT):\n\
+The notebook automatically typesets code into beautiful mathematical notation using StandardForm.\n\
+- Integrate -> \[Integral], Sum -> \[CapitalSigma], Product -> \[CapitalPi], D -> partial derivative\n\
+- Subscript[q, m] -> subscript display, Sqrt -> radical sign, MatrixForm -> matrix layout\n\
+- Greek letters (\[CurlyPhi], \[Mu], \[Pi] etc.) display as proper symbols\n\
+Use standard Mathematica function-call form for all mathematical expressions.\n\
+NOTE: MakeBoxes typesetting is applied ONLY to simple math expressions (Integrate, Sum, \
+Subscript, Solve, etc.). Complex procedural code (Module, Block, Show, Plot, Manipulate, \
+CompoundExpression) is rendered via FEParser and will NOT be typeset. \
+This is by design to preserve variable scoping and Graphics structures.\n\n\
+CRITICAL: Do NOT put (* comments *) inside ```mathematica code blocks. \
+Comments are stripped by the typesetter. \
+Instead, write explanatory text OUTSIDE code blocks as plain text.\n\
+LATEX MATH IN EXPLANATORY TEXT:\n\
+Use $...$ delimited LaTeX math notation for mathematical expressions in explanatory text.\n\
+The notebook automatically converts these into Mathematica typeset display.\n\
+Examples: $\\nabla^2 \\varphi = 0$, $\\pm q_m$, $\\mathbf{B} = -\\mu_0 \\nabla \\varphi$, $\\int \\sin x \\, dx$\n\
+Do NOT use $$...$$ (display math). Only use single $...$ (inline math).\n\
+INSIDE $...$ use PURE LaTeX syntax (not Mathematica bracket notation):\n\
+  WRONG: $\\Psi[x,t]$  CORRECT: $\\Psi(x,t)$\n\
+  WRONG: $V[x]$  CORRECT: $V(x)$\n\n\
+CRITICAL: NEVER use low-level box constructs or display characters in string literals:\n\
+- NEVER use \\!\\(\\*SuperscriptBox[...]\\) or any \\!\\(\\*...Box[...]\\) inline box syntax in strings.\n\
+- NEVER use \\[Superscript], \\[Subscript], \\[Conjugate] etc. as characters inside strings.\n\
+- For labels/titles needing math, use Row/Superscript/Subscript EXPRESSIONS, not string hacks.\n\
+Example - WRONG:\n\
+  Style[\"\\:30e9\\:30d7\\:30e9\\:30b9\\:65b9\\:7a0b\\:5f0f: \\!\\(\\*SuperscriptBox[\\(\\[Del]\\), \\(2\\)]\\)\\[CurlyPhi] = 0\", Bold]\n\
+  Row[{\"\\[Del]\\[Superscript]2\\[CurlyPhi] = \", expr}]\n\
+Example - CORRECT:\n\
+  Style[Row[{\"\\:30e9\\:30d7\\:30e9\\:30b9\\:65b9\\:7a0b\\:5f0f: \", Superscript[\"\\[Del]\", 2], \"\\[CurlyPhi] = 0\"}], Bold]\n\
+  Row[{Superscript[\"\\[Del]\", 2], \"\\[CurlyPhi] = \", expr}]\n\n\
 UNICODE IN STRINGS (CRITICAL):\n\
 When writing Mathematica string literals, ALWAYS use literal Unicode characters directly. \
 NEVER use \\uXXXX escape sequences (e.g. \\uff08, \\u30fb). \
@@ -4395,7 +4574,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
             Return[]];
           textOnly = iStripContinueEvalGuidance @ cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
           If[textOnly =!= "",
-            NBAccess`NBWriteCell[nb2, Cell[textOnly, "Text"]]];
+            NBAccess`NBWriteCell[nb2, iTeXMathToCell[textOnly, "Text"]]];
           blocks = iWriteResponseBlocks[nb2, response, autoEvaluate];
           If[Length[blocks] === 0,
             Module[{fallbackCode, lines},
@@ -4825,7 +5004,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
             Return[]];
           textOnly = iStripContinueEvalGuidance @ cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
           If[textOnly =!= "",
-            NBAccess`NBWriteCell[nb2, Cell[textOnly, "Text"]]];
+            NBAccess`NBWriteCell[nb2, iTeXMathToCell[textOnly, "Text"]]];
           blocks = iWriteResponseBlocks[nb2, response, autoEvaluate];
           If[Length[blocks] === 0,
             Module[{fallbackCode, lines},
@@ -5830,6 +6009,20 @@ iBackupPull[packageName_String, dir_String] :=
             mdNames];
           If[restoredCount > 0, AssociateTo[result, "MD" -> restoredCount]],
           nbPrint[nb, "\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093: " <> docsDir2]]]];
+    (* doc_options.json の復元 *)
+    Module[{docOptsContent, docOptsDest, refDir, strm3},
+      docOptsContent = iLoadBackupFile[dir, "doc_options.json", packageName];
+      If[StringQ[docOptsContent],
+        refDir = iReferencesDir[packageName];
+        If[!DirectoryQ[refDir],
+          Quiet @ CreateDirectory[refDir, CreateIntermediateDirectories -> True]];
+        docOptsDest = FileNameJoin[{refDir, "doc_options.json"}];
+        Quiet @ Check[
+          strm3 = OpenWrite[docOptsDest, BinaryFormat -> True];
+          BinaryWrite[strm3, ToCharacterCode[docOptsContent, "UTF-8"]];
+          Close[strm3], Null];
+        nbPrint[nb, "\:5fa9\:5143: doc_options.json \:2192 " <> docOptsDest];
+        AssociateTo[result, "DocOptions" -> docOptsDest]]];
     Join[result, <|"Action" -> "Pull", "Package" -> packageName, "Directory" -> dir|>]
   ];
 
@@ -5873,6 +6066,12 @@ iSaveBackupSnapshot[packageName_String] :=
           Quiet @ CopyFile[f, dstF, OverwriteTarget -> True];
           hashes[relPath] = Quiet @ Check[FileHash[f, "SHA256", "HexString"], ""],
           {f, allFiles}]]];
+    (* doc_options.json のスナップショット *)
+    Module[{docOptsFile = iDocOptionsPath[packageName], dstOpts},
+      If[FileExistsQ[docOptsFile],
+        dstOpts = FileNameJoin[{snapDir, "doc_options.json"}];
+        Quiet @ CopyFile[docOptsFile, dstOpts, OverwriteTarget -> True];
+        hashes["doc_options.json"] = Quiet @ Check[FileHash[docOptsFile, "SHA256", "HexString"], ""]]];
     Export[iBackupSnapshotHashPath[packageName], hashes, "RawJSON"];
     <|"Action" -> "SaveBackupSnapshot", "Package" -> packageName,
       "SnapshotDir" -> snapDir, "HashedFiles" -> Length[hashes]|>
@@ -5918,6 +6117,16 @@ iRestoreBackupSnapshot[packageName_String] :=
           nbPrint[nb, "復元: docs/" <> relPath];
           restored++,
           {f, allFiles}]]];
+    (* doc_options.json の復元 *)
+    Module[{snapDocOpts = FileNameJoin[{snapDir, "doc_options.json"}], refDir},
+      If[FileExistsQ[snapDocOpts],
+        refDir = iReferencesDir[packageName];
+        If[!DirectoryQ[refDir],
+          Quiet @ CreateDirectory[refDir, CreateIntermediateDirectories -> True]];
+        dst = FileNameJoin[{refDir, "doc_options.json"}];
+        Quiet @ CopyFile[snapDocOpts, dst, OverwriteTarget -> True];
+        nbPrint[nb, "\:5fa9\:5143: doc_options.json"];
+        restored++]];
     <|"Action" -> "RestoreBackupSnapshot", "Package" -> packageName,
       "FilesRestored" -> restored|>
   ];
@@ -7306,14 +7515,14 @@ iBuildReadmePrompt[sourceCode_String, packageName_String, outDir_String] :=
     "### \:30af\:30a4\:30c3\:30af\:30b9\:30bf\:30fc\:30c8\n" <>
     "### \:4e3b\:306a\:6a5f\:80fd\n" <>
     "### \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:4e00\:89a7\n" <>
-    If[Length[If[ListQ[$iDocDemos], $iDocDemos, {}]] > 0,
-      "### \:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2\n", ""] <>
+    "## \:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2 (MUST use this exact section name; " <>
+    "place Demo URLs and usage examples here)\n" <>
     If[Length[If[ListQ[$iDocReferences], $iDocReferences, {}]] > 0,
-      "### \:53c2\:8003\:6587\:732e\n", ""] <>
+      "## \:53c2\:8003\:6587\:732e\n", ""] <>
     If[Length[If[ListQ[$iDocAcknowledgments], $iDocAcknowledgments, {}]] > 0,
-      "### \:8b1d\:8f9e\n", ""] <>
-    "### \:514d\:8cac\:4e8b\:9805\n" <>
-    "### \:30e9\:30a4\:30bb\:30f3\:30b9\n" <>
+      "## \:8b1d\:8f9e\n", ""] <>
+    "## \:514d\:8cac\:4e8b\:9805\n" <>
+    "## \:30e9\:30a4\:30bb\:30f3\:30b9\n" <>
     "\n" <>
     "CRITICAL: NEVER fabricate or guess GitHub URLs for dependencies.\n" <>
     "Use ONLY the exact URLs provided in the 'GITHUB REPOSITORY URLs' section below.\n" <>
@@ -7633,6 +7842,10 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
         Scan[Function[f,
           Quiet[iSaveBackupFile[histDir, f, packageName]]],
           Select[FileNames["*", outDir], iFileQ]]];
+      (* doc_options.json もバックアップ *)
+      Module[{docOptsFile = iDocOptionsPath[packageName]},
+        If[FileExistsQ[docOptsFile],
+          Quiet[iSaveBackupFile[histDir, docOptsFile, packageName]]]];
 
       nbPrint[nb, Style["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:958b\:59cb: " <> packageName, Bold]];
       nbPrint[nb, "\:30bd\:30fc\:30b9: " <> srcFile <>
@@ -7764,17 +7977,18 @@ iEnsureReadmeLast[docs_List] :=
 $iDocKeywords = <|
   "README.md"       -> {"README", "readme", "\:6982\:8981", "\:306f\:3058\:3081",
                          "\:30e9\:30a4\:30bb\:30f3\:30b9", "License", "\:514d\:8cac", "Disclaimer",
-                         "\:8b1d\:8f9e", "Acknowledgment"},
+                         "\:8b1d\:8f9e", "Acknowledgment",
+                         "\:30c7\:30e2", "\:52d5\:753b", "Demo", "demo", "Demos", "video"},
   "setup.md"        -> {"\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb", "\:30bb\:30c3\:30c8\:30a2\:30c3\:30d7", "setup", "install", "\:74b0\:5883\:69cb\:7bc9", "\:5c0e\:5165"},
   "user_manual.md"  -> {"\:30de\:30cb\:30e5\:30a2\:30eb", "\:4f7f\:3044\:65b9", "\:53d6\:6271\:8aac\:660e", "manual", "usage", "\:64cd\:4f5c"},
   "api.md"          -> {"API", "api", "\:95a2\:6570", "\:5b9a\:7fa9", "\:30ea\:30d5\:30a1\:30ec\:30f3\:30b9"},
   "examples/example.md" -> {"\:4f8b", "example", "\:30b5\:30f3\:30d7\:30eb", "\:4f7f\:7528\:4f8b"}
 |>;
 
-iGuessTargetDocs[instruction_String, docsDir_String] :=
+iGuessTargetDocs[instruction_String, docsDir_String, skipExistCheck_:False] :=
   Module[{hits = {}},
     Do[
-      If[FileExistsQ[FileNameJoin[{docsDir, docFile}]] &&
+      If[(TrueQ[skipExistCheck] || FileExistsQ[FileNameJoin[{docsDir, docFile}]]) &&
          AnyTrue[keywords, StringContainsQ[instruction, #, IgnoreCase -> True] &],
         AppendTo[hits, docFile]],
     {docFile, Keys[$iDocKeywords]}, {keywords, {$iDocKeywords[docFile]}}];
@@ -7853,6 +8067,10 @@ iCreateDocUpdateBackup[packageName_String, srcFile_String, docsDir_String,
       Scan[Function[f,
         Quiet[iSaveBackupFile[histDir, f, packageName]]],
         Select[FileNames["*", docsDir], iFileQ]]];
+    (* doc_options.json もバックアップ *)
+    Module[{docOptsFile = iDocOptionsPath[packageName]},
+      If[FileExistsQ[docOptsFile],
+        Quiet[iSaveBackupFile[histDir, docOptsFile, packageName]]]];
     (* prompt.txt \:306b\:6307\:793a\:3092\:4fdd\:5b58 *)
     If[StringQ[instruction] && instruction =!= "",
       Module[{strm},
@@ -7862,7 +8080,12 @@ iCreateDocUpdateBackup[packageName_String, srcFile_String, docsDir_String,
     histDir
   ];
 
-Options[ClaudeUpdateDocumentation] = {Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, Acknowledgments -> {}, License -> ""};
+Options[ClaudeUpdateDocumentation] = {
+  Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {},
+  Acknowledgments -> {}, License -> "",
+  TargetFiles -> Automatic,  (* Automatic=自動判定, {"api.md"} 等でファイル指定 *)
+  Mode -> "Update"           (* "Update"=既存を更新, "Create"=新規作成（既存内容を無視） *)
+};
 
 (* 1\:5f15\:6570\:7248: \:524d\:56de _documentupdate \:4ee5\:964d\:306e\:5909\:66f4\:3092\:81ea\:52d5\:691c\:51fa\:3057\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0 *)
 ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
@@ -7950,10 +8173,15 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
   $iDocDisclaimer = Replace[OptionValue[Disclaimer], Except[_List] -> {}];
   $iDocAcknowledgments = Replace[OptionValue[Acknowledgments], Except[_List] -> {}];
   $iDocLicense = Replace[OptionValue[License], Except[_String] -> ""];
-  Module[{urlsInInstr},
+  (* 今回の呼び出しで明示的に Demos/References が渡されたか記録 *)
+  Module[{urlsInInstr, explicitDemos, explicitRefs},
+    explicitDemos = Length[$iDocDemos] > 0;
+    explicitRefs = Length[$iDocReferences] > 0;
     urlsInInstr = StringCases[instruction,
       RegularExpression["https?://[^\\s\\)\\]\\>\"]+"] :> "$0"];
+    If[Length[urlsInInstr] > 0, explicitDemos = True];
     $iDocDemos = DeleteDuplicates[Join[$iDocDemos, urlsInInstr]];
+    $iExplicitDemosOrRefs = explicitDemos || explicitRefs;
   ];
   (* 永続化されたオプションをマージ *)
   iLoadAndMergeDocOptions[packageName];
@@ -7964,11 +8192,11 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     If[!StringQ[pkgDir] || pkgDir === "",
       nbPrint[nb, "\:30a8\:30e9\:30fc: $packageDirectory \:304c\:8a2d\:5b9a\:3055\:308c\:3066\:3044\:307e\:305b\:3093\:3002"];
       Return[$Failed]];
-    (* ノートブックコンテキストを取得してinstructionに付加 *)
+    (* ノートブックコンテキストを取得してinstructionに付加（ドキュメント更新では控えめに） *)
     nbCtx = Quiet @ Check[iCaptureNotebookContext[nb, 0], ""];
     enrichedInstruction = If[StringQ[nbCtx] && StringLength[nbCtx] > 0,
       instruction <> "\n\n=== ノートブックコンテキスト（上での議論）===\n" <>
-      StringTake[nbCtx, UpTo[8000]] <> "\n",
+      StringTake[nbCtx, UpTo[2000]] <> "\n",
       instruction];
     pkgDir = Global`$packageDirectory;
     If[!StringQ[pkgDir] || pkgDir === "",
@@ -8001,7 +8229,25 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       nbPrint[nb, "\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: " <> prevBackup];
       iComputeSourceDiff[prevSrcFile, srcFile],
       "(\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306a\:3057 \:2014 \:5168\:30bd\:30fc\:30b9\:3092\:53c2\:7167)"];
-    targetDocs = iGuessTargetDocs[instruction, docsDir];
+    (* Mode を先に解決 *)
+    Module[{mode = Replace[OptionValue[ClaudeUpdateDocumentation, {opts}, Mode],
+              Except["Create" | "Update"] -> "Update"],
+            tf = OptionValue[ClaudeUpdateDocumentation, {opts}, TargetFiles]},
+    (* TargetFiles が明示的に指定されていればそれを使用 *)
+    targetDocs = If[ListQ[tf] && Length[tf] > 0,
+      nbPrint[nb, "TargetFiles \:6307\:5b9a: " <> StringRiffle[tf, ", "]];
+      iEnsureReadmeLast[tf],
+      If[StringQ[tf] && tf =!= "",
+        nbPrint[nb, "TargetFiles \:6307\:5b9a: " <> tf];
+        {tf},
+        (* 自動判定: Create モードならファイル存在チェックをスキップ *)
+        iGuessTargetDocs[instruction, docsDir, mode === "Create"]]];
+    (* 今回の呼び出しで Demos/References が明示的に渡された場合のみ README.md を強制追加 *)
+    If[TrueQ[$iExplicitDemosOrRefs] &&
+       !MemberQ[targetDocs, "README.md"] &&
+       FileExistsQ[FileNameJoin[{docsDir, "README.md"}]],
+      targetDocs = iEnsureReadmeLast[DeleteDuplicates[Append[targetDocs, "README.md"]]]];
+    $iExplicitDemosOrRefs = False;
     If[Length[targetDocs] === 0,
       nbPrint[nb, "\:30a8\:30e9\:30fc: \:66f4\:65b0\:5bfe\:8c61\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
       Return[$Failed]];
@@ -8009,21 +8255,25 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     iWriteSectionHeaderBeforeEvalCell[nb,
       "\:25b6 ClaudeUpdateDocumentation: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
-    nbPrint[nb, Style["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:958b\:59cb: " <> packageName, Bold]];
+    nbPrint[nb, Style["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:958b\:59cb: " <> packageName <>
+      If[mode === "Create", " [\:65b0\:898f\:4f5c\:6210\:30e2\:30fc\:30c9]", ""], Bold]];
     nbPrint[nb, "\:66f4\:65b0\:5bfe\:8c61: " <> StringRiffle[targetDocs, ", "]];
     nbPrint[nb, "\:30bd\:30fc\:30b9\:5dee\:5206: " <> StringTake[diffText, UpTo[100]] <> "..."];
     nbPrint[nb, "\:6307\:793a: " <> StringTake[instruction, UpTo[200]] <> "\n"];
     (* \:5dee\:5206\:4ed8\:304d\:3067\:9806\:6b21\:66f4\:65b0 *)
     iUpdateDocNext[sourceCode, packageName, nb, docsDir, enrichedInstruction, targetDocs, 1,
-      diffText, srcFile]
+      diffText, srcFile, <||>, mode]
+    ] (* end Module mode *)
   ]]);
 
 (* ドキュメントを順次更新する再帰関数 (差分対応版・トークン節約版) *)
 iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     docsDir_String, instruction_String, targetDocs_List, idx_Integer,
-    diffText_String:"", srcFile_String:"", splitCache_Association:<||>] :=
+    diffText_String:"", srcFile_String:"", splitCache_Association:<||>,
+    mode_String:"Update"] :=
   Module[{docFile, docPath, currentContent, fullPrompt, histDir,
-          split, chunkedSource, narrowQ, savedModel},
+          split, chunkedSource, narrowQ, savedModel, isReadme, isApi,
+          promptParts, useInstruction},
     If[idx > Length[targetDocs],
       (* 全ドキュメント更新完了 → バックアップ作成 *)
       If[StringQ[srcFile] && srcFile =!= "",
@@ -8035,68 +8285,96 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       Return[]];
     docFile = targetDocs[[idx]];
     docPath = FileNameJoin[{docsDir, docFile}];
-    currentContent = If[FileExistsQ[docPath], Import[docPath, "Text"], ""];
-    (* ソース分割キャッシュ（初回のみ計算） *)
-    split = If[splitCache =!= <||>, splitCache, iSplitSource[sourceCode]];
-    (* ドキュメント種別ごとにチャンク化ソースを構築（トークン節約の核心） *)
-    chunkedSource = iBuildChunkedSource[split, docFile];
+    (* Mode -> "Create" なら既存内容を無視して新規作成 *)
+    currentContent = If[mode === "Create", "",
+      If[FileExistsQ[docPath], Import[docPath, "Text"], ""]];
+    isReadme = (docFile === "README.md");
+    isApi = (docFile === "api.md");
     narrowQ = iIsNarrowScopeInstruction[instruction];
-    nbPrint[nb, "\:2500 [" <> ToString[idx] <> "/" <> ToString[Length[targetDocs]] <>
-      "] " <> docFile <> " \:3092\:66f4\:65b0\:4e2d... (\:30bd\:30fc\:30b9 " <>
-      ToString[StringLength[sourceCode]] <> " \:2192 " <>
-      ToString[StringLength[chunkedSource]] <> " chars, \:30e2\:30c7\:30eb: " <>
-      iDocModelOverride[] <> ")"];
-    fullPrompt =
-      "You are an expert Wolfram Language / Mathematica documentation writer.\n" <>
-      "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n" <>
-      "You are updating the documentation for package \"" <> packageName <> "\"\n\n" <>
-      "UPDATE INSTRUCTION:\n" <> instruction <> "\n\n" <>
-      (* 差分があればプロンプトに含める *)
-      If[StringQ[diffText] && diffText =!= "" && diffText =!= "(\:5909\:66f4\:306a\:3057)",
+
+    (* api.md にはノートブックコンテキストは不要 → 除去 *)
+    useInstruction = If[isApi,
+      StringReplace[instruction,
+        RegularExpression["(?s)\n\n=== ノートブックコンテキスト.*$"] -> ""],
+      instruction];
+
+    (* === ドキュメント種別ごとのプロンプト構築 ===
+       api.md:        ソースコードのみ（差分・ノートブックコンテキスト不要）
+       user_manual/setup/examples: ソースコード + 差分 + ノートブックコンテキスト
+       README.md:     ソースコード不要。兄弟ドキュメント(api/manual/setup)の内容から生成 *)
+
+    promptParts = {
+      "You are an expert Wolfram Language / Mathematica documentation writer.\n",
+      "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n",
+      "You are updating the documentation for package \"" <> packageName <> "\"\n\n",
+      "UPDATE INSTRUCTION:\n" <> useInstruction <> "\n\n"
+    };
+
+    (* --- 差分: api.md と README.md には不要 --- *)
+    If[!isApi && !isReadme &&
+       StringQ[diffText] && diffText =!= "" && diffText =!= "(\:5909\:66f4\:306a\:3057)",
+      AppendTo[promptParts,
         "SOURCE CODE DIFF (since last documentation update):\n" <>
         "Focus your updates on these changed parts.\n" <>
-        diffText <> "\n\n",
-        ""] <>
+        diffText <> "\n\n"]];
+
+    (* --- 現在のドキュメント --- *)
+    AppendTo[promptParts,
       "CURRENT DOCUMENT (" <> docFile <> "):\n" <>
       If[StringQ[currentContent] && currentContent =!= "",
-        currentContent, "(empty)"] <> "\n\n" <>
-      (* README.md 更新時は他ドキュメント・免責事項・ライセンス・参考文献・GitHub URL を含める *)
-      If[docFile === "README.md",
-        (* 狭いスコープの指示（ライセンス変更等）では兄弟ドキュメントを省略 *)
-        If[narrowQ,
-          "(Sibling documentation files omitted \:2014 narrow-scope update)\n",
-          (* 他の全ドキュメントの最新内容を参照コンテキストとして挿入 *)
-          Module[{siblingDocs, siblingContent = ""},
-            siblingDocs = Join[
-              FileNames["*.md", docsDir],
-              FileNames["*.md", docsDir, 2]];
-            siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
-            siblingDocs = DeleteDuplicates[siblingDocs];
-            If[Length[siblingDocs] > 0,
-              siblingContent = "\n=== OTHER DOCUMENTATION FILES (just updated \:2014 use as reference for README overview) ===\n" <>
-                StringJoin[
-                  Module[{relPath, txt},
-                    relPath = StringReplace[#,
-                      docsDir <> $PathnameSeparator -> ""];
-                    txt = Quiet @ Check[Import[#, "Text"], ""];
-                    If[StringQ[txt],
-                      "--- " <> relPath <> " ---\n" <> StringTake[txt, UpTo[4000]] <> "\n\n",
-                      ""]] & /@ siblingDocs]];
-            siblingContent]
-        ] <>
+        currentContent, "(empty)"] <> "\n\n"];
+
+    (* --- README.md: 兄弟ドキュメントから生成（ソースコード不要） --- *)
+    If[isReadme,
+      If[narrowQ,
+        AppendTo[promptParts, "(Sibling documentation files omitted \:2014 narrow-scope update)\n"],
+        Module[{siblingDocs, siblingContent = ""},
+          siblingDocs = Join[
+            FileNames["*.md", docsDir],
+            FileNames["*.md", docsDir, 2]];
+          siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
+          siblingDocs = DeleteDuplicates[siblingDocs];
+          If[Length[siblingDocs] > 0,
+            siblingContent = "\n=== OTHER DOCUMENTATION FILES (use as source for README overview) ===\n" <>
+              StringJoin[
+                Module[{relPath, txt},
+                  relPath = StringReplace[#,
+                    docsDir <> $PathnameSeparator -> ""];
+                  txt = Quiet @ Check[Import[#, "Text"], ""];
+                  If[StringQ[txt],
+                    "--- " <> relPath <> " ---\n" <> StringTake[txt, UpTo[6000]] <> "\n\n",
+                    ""]] & /@ siblingDocs]];
+          AppendTo[promptParts, siblingContent]]
+      ];
+      AppendTo[promptParts,
         iBuildGitHubLinksContext[] <>
         iDocBuildRefSection[] <>
         iDocBuildAcknowledgmentsPrompt[] <>
         iDocBuildDisclaimerPrompt[] <>
-        iDocBuildLicensePrompt[],
-        (* README 以外でもリンク捏造防止のため URL リストを提供 *)
+        iDocBuildLicensePrompt[]]
+    ];
+
+    (* --- api.md / user_manual / setup / examples: ソースコード添付 --- *)
+    If[!isReadme,
+      split = If[splitCache =!= <||>, splitCache, iSplitSource[sourceCode]];
+      chunkedSource = iBuildChunkedSource[split, docFile];
+      AppendTo[promptParts,
+        "PACKAGE SOURCE CODE (chunked for token efficiency):\n" <> chunkedSource <> "\n\n"];
+      (* README 以外でもリンク捏造防止のため URL リストを提供 *)
+      AppendTo[promptParts,
         iBuildGitHubLinksContext[] <>
         "\nCRITICAL RULE: \:8b1d\:8f9e (Acknowledgments), \:514d\:8cac\:4e8b\:9805 (Disclaimer) and \:30e9\:30a4\:30bb\:30f3\:30b9 (License) sections MUST ONLY exist in README.md.\n" <>
         "Do NOT add, create, or keep any \:8b1d\:8f9e, \:514d\:8cac\:4e8b\:9805 or \:30e9\:30a4\:30bb\:30f3\:30b9 section in this file.\n" <>
-        "If this file currently contains such sections, REMOVE them entirely.\n\n"] <>
-      "PACKAGE SOURCE CODE (chunked for token efficiency):\n" <> chunkedSource <> "\n\n" <>
-      "Output the COMPLETE updated document directly as your response text. " <>
-      If[docFile === "api.md",
+        "If this file currently contains such sections, REMOVE them entirely.\n\n"],
+      (* README はソースコード不添付 *)
+      chunkedSource = "(README.md \:306f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:4e0d\:8981)"
+    ];
+
+    (* --- 出力指示 --- *)
+    AppendTo[promptParts,
+      "Output the COMPLETE updated document directly as your response text. "];
+    If[isApi,
+      AppendTo[promptParts,
         iLanguageInstruction["plain"] <>
         "CRITICAL: api.md is for LLM code generation, NOT for humans.\n" <>
         "FORMAT RULES (token-efficient, high density):\n" <>
@@ -8107,16 +8385,20 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         "- Simple functions: ### FuncName[args] \:2192 ReturnType\\n\:8aac\:660e(1\:884c)\n" <>
         "- Option functions: ### FuncName[args, opts]\\n\:8aac\:660e\\n\:2192 ReturnType\\nOptions: Opt1 -> Def1 (\:8aac\:660e), ...\n" <>
         "- Variables: ### $Var\\n\:578b: Type, \:521d\:671f\:5024: val\\n\:8aac\:660e\n" <>
-        "- List ALL public functions and ALL options. Completeness is critical.\n",
-        iLanguageInstruction["polite"]] <>
+        "- List ALL public functions and ALL options. Completeness is critical.\n"],
+      AppendTo[promptParts, iLanguageInstruction["polite"]]
+    ];
+    AppendTo[promptParts,
       "Do NOT wrap in code fences. Do NOT include markers. Do NOT ask for file permissions.\n" <>
       "Preserve the existing structure and content that is not affected by the update instruction.\n" <>
-      "Add or modify only the parts relevant to the instruction.\n" <>
-      If[docFile === "README.md",
+      "Add or modify only the parts relevant to the instruction.\n"];
+    If[isReadme,
+      AppendTo[promptParts,
         "CRITICAL: README.md is a HIGH-LEVEL OVERVIEW document updated LAST.\n" <>
         If[!narrowQ,
           "You have access to the OTHER DOCUMENTATION FILES above \:2014 they were just updated.\n" <>
-          "Use them to construct an accurate, comprehensive overview.\n\n",
+          "Use them to construct an accurate, comprehensive overview.\n" <>
+          "Do NOT include source code details. Summarize features from the documentation files.\n\n",
           "This is a narrow-scope update. Focus only on the specific section mentioned in the instruction.\n\n"] <>
         "MANDATORY STRUCTURE (in this order):\n" <>
         "1. # \:30d1\:30c3\:30b1\:30fc\:30b8\:540d \:2014 \:8a2d\:8a08\:601d\:60f3\:3068\:5b9f\:88c5\:306e\:6982\:8981\n" <>
@@ -8126,16 +8408,32 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         "   - \:30af\:30a4\:30c3\:30af\:30b9\:30bf\:30fc\:30c8 (minimal working example)\n" <>
         "   - \:4e3b\:306a\:6a5f\:80fd (feature list with brief descriptions)\n" <>
         "   - \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:4e00\:89a7 (links to setup.md, user_manual.md, api.md, examples/)\n" <>
-        "3. ## \:8b1d\:8f9e (ONLY if Acknowledgments are provided \:2014 omit entirely if none)\n" <>
-        "4. ## \:514d\:8cac\:4e8b\:9805\n" <>
-        "5. ## \:30e9\:30a4\:30bb\:30f3\:30b9 (if present \:2014 MUST be last)\n\n" <>
+        "3. ## \:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2 \:2014 Demo URLs and usage examples go HERE (section name MUST be '\:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2')\n" <>
+        "4. ## \:8b1d\:8f9e (ONLY if Acknowledgments are provided \:2014 omit entirely if none)\n" <>
+        "5. ## \:514d\:8cac\:4e8b\:9805\n" <>
+        "6. ## \:30e9\:30a4\:30bb\:30f3\:30b9 (if present \:2014 MUST be last)\n\n" <>
         "RULES:\n" <>
         "- Do NOT copy detailed API descriptions from other docs. Keep it high-level.\n" <>
         "- Do NOT append raw instruction text, prompt fragments, or update notes.\n" <>
         "- Nothing should be added after \:30e9\:30a4\:30bb\:30f3\:30b9.\n" <>
         "- Preserve the existing design philosophy narrative.\n" <>
-        "- Update feature lists and function counts to match the latest source.\n",
-        ""];
+        "- Update feature lists and function counts to match the latest source.\n"]];
+
+    fullPrompt = StringJoin[promptParts];
+
+    (* プロンプト健全性チェック *)
+    If[!StringQ[fullPrompt] || StringLength[fullPrompt] < 100,
+      nbPrint[nb, "\:26a0 \:30d7\:30ed\:30f3\:30d7\:30c8\:69cb\:7bc9\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3059\:3002"];
+      iUpdateDocNext[sourceCode, packageName, nb, docsDir, instruction,
+        targetDocs, idx + 1, diffText, srcFile, split];
+      Return[]];
+
+    nbPrint[nb, "\:2500 [" <> ToString[idx] <> "/" <> ToString[Length[targetDocs]] <>
+      "] " <> docFile <> " \:3092\:66f4\:65b0\:4e2d... (\:30d7\:30ed\:30f3\:30d7\:30c8: " <>
+      ToString[StringLength[fullPrompt]] <> " chars, parts: " <>
+      ToString[Length[promptParts]] <> ", \:30e2\:30c7\:30eb: " <>
+      iDocModelOverride[] <> ")"];
+
     (* ドキュメント生成用モデルでクエリ実行 *)
     savedModel = $ClaudeModel;
     $ClaudeModel = iDocModelOverride[];
@@ -8143,7 +8441,7 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       With[{nb2 = nb, dd = docsDir, tds = targetDocs, i = idx,
             df = docFile, dp = docPath, sc = sourceCode, pn = packageName,
             instr = instruction, dt = diffText, sf = srcFile, sp = split,
-            origModel = savedModel},
+            origModel = savedModel, md = mode},
         Function[response,
           Module[{writeResult},
             (* モデルを元に戻す *)
@@ -8154,7 +8452,7 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
               nbPrint[nb2, "  \:2717 " <> df <> " \:306e\:66f4\:65b0\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408/\:30b5\:30a4\:30ba\:9000\:884c): " <>
                 StringTake[ToString[response], UpTo[200]]]
             ];
-            iUpdateDocNext[sc, pn, nb2, dd, instr, tds, i + 1, dt, sf, sp]
+            iUpdateDocNext[sc, pn, nb2, dd, instr, tds, i + 1, dt, sf, sp, md]
           ]
         ]
       ],
@@ -9811,7 +10109,7 @@ iHistoryReplay[nb_NotebookObject, entry_Association] :=
       StringTake[task, UpTo[200]]];
     textOnly = iStripContinueEvalGuidance @ cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
     If[textOnly =!= "",
-      NBAccess`NBWriteCell[nb, Cell[textOnly, "Text"]]];
+      NBAccess`NBWriteCell[nb, iTeXMathToCell[textOnly, "Text"]]];
     blocks = iWriteResponseBlocks[nb, response, True];
   ];
 
