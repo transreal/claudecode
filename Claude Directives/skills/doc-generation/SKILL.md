@@ -179,6 +179,8 @@ README.md は以下の構造を**この順序で**持たなければならない
 | `Disclaimer` | `{}` | 免責事項に追記する文言リスト |
 | `Acknowledgments` | `{}` | 謝辞セクションに追加する文言リスト。非空なら README.md の免責事項の前に配置 |
 | `License` | `""` | ライセンステキスト。空ならMIT自動生成。文字列指定でカスタムライセンス |
+| `TargetFiles` | `Automatic` | 更新対象ファイルを明示指定。`Automatic` なら指示文から自動判定。`{"api.md", "install.md"}` 等でファイル限定 |
+| `Mode` | `"Update"` | `"Update"` = 既存を差分更新、`"Create"` = 新規作成（既存内容を無視） |
 
 第二引数の指示文中に URL が含まれていれば、自動的に `Demos` に追加される。
 

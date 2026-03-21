@@ -130,6 +130,29 @@ api.md とこのファイルや skills の記載が矛盾する場合は **常�
 
 詳細は `rules/11-core-package-dependency.md` を参照。
 
+### パッケージキーワード自動注入機構
+
+`$ClaudePackageKeywordMap` は外部パッケージがキーワードを登録するための Association である。ClaudeEval/ClaudeQuery のプロンプトにキーワードが含まれると、対応パッケージの `api.md` が自動注入される。
+
+```mathematica
+(* 外部パッケージが自身のロード時に登録する例 *)
+If[AssociationQ[ClaudeCode`$ClaudePackageKeywordMap],
+  ClaudeCode`$ClaudePackageKeywordMap["maildb"] =
+    {"メール", "mail", "〆切", "showMails", ...}
+];
+```
+
+- 基盤パッケージ側はキーワード→パッケージ名のマッピングのみ保持し、パッケージ固有ロジックを一切持たない。
+- 各パッケージは `_info/docs/api.md` に自身の完全な API リファレンスを記載しておくこと。
+
+### メール操作のセキュリティルーティング原則
+
+maildb のメールデータには `privacy` フィールド（セキュリティレベル）がある。**privacy > 0.5 のメールは `$ClaudeModel`（クラウド LLM）に投入してはならない。** `$ClaudePrivateModel`（ローカル LLM）で処理すること。
+
+- `MaxPrivacy -> 0.5` を指定すれば公開メールのみに絞り込める。
+- `mailAskLLM` は内部でセキュリティレベルに基づきモデルを自動分配する。
+- 詳細は `skills/maildb-operations` スキルを参照。
+
 ## Wolfram Language 関数名検証ルール（必須）
 
 **Mathematica に存在しない関数名・定数名・オプション名を推測で生成してはならない。** 

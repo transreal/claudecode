@@ -13,6 +13,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **AI 生成機能**: OpenAI Images API による画像生成（`ClaudeImageGenerate`）と OpenAI TTS API による音声生成（`ClaudeSpeech`）を統合しています。
 - **プロジェクト固有ディレクティブ**: ノートブックディレクトリごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。
 - **スマートドキュメント管理**: ドキュメント生成・更新時のモード制御（新規作成・既存更新）、部分更新対象の指定、差分検出による効率的な更新処理を提供します。
+- **分離原則検証**: NBAccess パッケージとの適切な分離を維持するため、コード内の分離原則違反を自動検出・修正する機能を備えています。
 
 内部的には、[NBAccess](https://github.com/transreal/NBAccess) パッケージにノートブックのセル操作・プライバシー管理・履歴 DB を委譲し、[GitHubREST](https://github.com/transreal/github) パッケージと連携して GitHub 上のパッケージ管理を行います。
 
@@ -24,8 +25,8 @@ ClaudeCode は以下の設計原則に基づいています。
 - Windows 11（macOS/Linux ではパス区切りやシェルコマンドを適宜読み替えてください）
 - Claude Code CLI がインストール済みで、パスが通っていること
 - Node.js（node-pty によるインタラクティブ CLI 実行に使用）
-- NBAccess パッケージ（`NBAccess.wl`）
-- GitHubREST パッケージ（`github.wl`）— オプション、GitHub 連携時に必要
+- [NBAccess](https://github.com/transreal/NBAccess) パッケージ（`NBAccess.wl`）
+- [GitHubREST](https://github.com/transreal/github) パッケージ（`github.wl`）— オプション、GitHub 連携時に必要
 
 ### インストール
 
@@ -63,14 +64,23 @@ $ClaudeTimeout = 1200
 (* ClaudeEval 再帰深度上限 *)
 $ClaudeEvalMaxDepth = 5
 
-(* 画像生成モデル *)
+(* ドキュメント生成用モデル *)
+$ClaudeDocModel = "claude-sonnet-4-20250514"
+
+(* 分離検証用モデル *)
+$ClaudeTestModel = $ClaudeModel
+
+(* 画像生成モデル優先順位 *)
 $ClaudeImageModels = {{"openai", "gpt-image-1"}, {"openai", "dall-e-3"}}
 
-(* 音声生成モデル *)
+(* 音声生成モデル優先順位 *)
 $ClaudeTTSModels = {{"openai", "tts-1-hd"}, {"openai", "tts-1"}}
 
-(* NotebookDirectory のアクセスレベル *)
-$ClaudeNBDirAccess = "list"  (* "list" | "read" | "readwrite" *)
+(* アクセス可能ディレクトリ *)
+$ClaudeAccessibleDirs = {$packageDirectory}
+
+(* 作業ディレクトリ *)
+$ClaudeWorkingDirectory = FileNameJoin[{$HomeDirectory, "Claude Working"}]
 ```
 
 ### クイックスタート
@@ -103,6 +113,9 @@ ClaudeImageGenerate["桜の満開の写真、フォトリアル"]
 
 (* AI 音声生成 *)
 ClaudeSpeech["こんにちは、世界"]
+
+(* GitHub コミット準備 *)
+ClaudePrepareCommit["MyPackage"]
 ```
 
 ### 主な機能
@@ -141,10 +154,11 @@ ClaudeSpeech["こんにちは、世界"]
 | | `ClaudePromoteProjectDirectives` | ローカルディレクティブをグローバルに昇格 |
 | **AI 生成** | `ClaudeImageGenerate` | OpenAI Images API で画像生成 |
 | | `ClaudeSpeech` | OpenAI TTS API で音声生成 |
-| **Web** | `ClaudeWebSearch` | Web 検索（Anthropic API） |
-| | `ClaudeWebFetch` | URL 内容取得・要約 |
+| **Web** | `ClaudeWebSearch` | Web 検索（Claude Code 組み込み） |
+| | `ClaudeWebFetch` | URL 内容取得・要約（Anthropic API） |
 | **分離検証** | `ClaudeCheckSeparation` | NBAccess 分離原則の違反検査 |
 | | `ClaudeFixSeparation` | 違反の自動修正 |
+| **Git 連携** | `ClaudePrepareCommit` | 変更履歴収集・コミット準備 |
 | **ユーティリティ** | `ShowClaudePalette` | 操作パレット表示 |
 | | `ClaudeStatus` | 実行中タスクの状態表示 |
 | | `ClaudeCommand` | CLI スラッシュコマンド実行 |
@@ -158,17 +172,9 @@ ClaudeCode は機密データを含むタスクに対して、自動的にロー
 - **`PrivacySpec`**: アクセスレベルを明示的に制御します
 - **3段階フォールバック**: Claude Code CLI → アクセスレベル対応フォールバックモデル → エラーの順で試行します
 
-### NotebookDirectory アクセス制御
+### アクセス可能ディレクトリ制御
 
-`$ClaudeNBDirAccess` により、Claude Code がノートブックディレクトリ内のファイルにアクセスするレベルを制御できます。
-
-| レベル | 説明 |
-|---|---|
-| `"list"` | ファイル一覧のみ表示。読み書き不可（デフォルト） |
-| `"read"` | 読み取り許可 |
-| `"readwrite"` | 読み書き許可 |
-
-`"list"` モードでプロンプトが NotebookDirectory 内のファイルを参照している場合、権限付与ボタンが自動的に表示されます。ユーザーが「Read 許可」または「Read/Write 許可」をクリックすると、`$ClaudeNBDirAccess` が変更されてタスクが再実行されます。
+`$ClaudeAccessibleDirs` により、Claude Code がアクセスできるディレクトリを制御できます。NotebookDirectory が安全なデフォルトディレクトリ（`$packageDirectory` や `$ClaudeWorkingDirectory` 配下）でない場合、初回使用時にダイアログで許可を求めます。許可設定はノートブックの TaggingRules に永続化されます。
 
 ### パッケージ更新の排他ロック
 
@@ -380,6 +386,79 @@ ClaudeUpdateDocumentation["MyPackage", "全体的な改善",
 | `References` | `{}` | 参考文献リスト（README.md に反映） |
 | `Demos` | `{}` | デモ動画・使用例 URL（README.md に反映） |
 | `Disclaimer` | `{}` | 免責事項（README.md に反映） |
+
+### NBAccess 分離原則検証
+
+ClaudeCode は NBAccess パッケージとの適切な分離を維持するため、分離原則違反の自動検証・修正機能を提供します。
+
+```mathematica
+(* 分離原則違反の検査 *)
+ClaudeCheckSeparation["MyPackage"]
+
+(* 違反の自動修正 *)
+ClaudeFixSeparation["MyPackage"]
+```
+
+検査対象は以下の10項目です：
+
+1. **SystemCredential 直接利用**: `SystemCredential` の直接呼び出し
+2. **CellObject 直接操作**: `NotebookWrite`/`NotebookRead`/`CellGroupData` 等の直接構築
+3. **CellEpilog/CellProlog 直接操作**: セルイベントハンドラの直接設定
+4. **NBAccess`Private` 関数呼び出し**: 内部関数への不正アクセス
+5. **NBAccess 公開グローバル直接更新**: グローバル変数への直接代入
+6. **EvaluationCell[]/CellPrint[] 直接使用**: フロントエンド関数の直接使用
+7. **TaggingRules/CellTags 属性直接アクセス**: `CurrentValue`/`SetOptions` による属性操作
+8. **CellObject の公開 API・戻り値・状態保持への漏洩**: CellObject の不適切な露出
+9. **FrontEnd 状態操作**: `SelectionEvaluate`/`FrontEndTokenExecute` 等の直接使用
+10. **NBAccess 公開グローバルの破壊的更新**: `AppendTo`/`AssociateTo` 等による直接更新
+
+### Git 連携機能
+
+`ClaudePrepareCommit` は前回の GitHub コミット以降の変更点をバックアップ履歴から収集し、コミットメッセージを生成して `GitHubRefreshAndCommit` 実行コマンドを出力します。
+
+```mathematica
+(* コミット準備 *)
+ClaudePrepareCommit["MyPackage"]
+
+(* フォールバック付き *)
+ClaudePrepareCommit["MyPackage", Fallback -> True]
+```
+
+### Web 機能
+
+```mathematica
+(* Web 検索（無料、Claude Code CLI 組み込み） *)
+ClaudeWebSearch["Wolfram Language 新機能"]
+
+(* Web ページ取得・要約（課金あり、Anthropic API 経由） *)
+ClaudeWebFetch["https://example.com/article"]
+
+(* 取得内容に対する指示 *)
+ClaudeWebFetch["https://example.com", "重要なポイントを3つ抽出して"]
+```
+
+`WebSearch -> True/False` オプションで Claude Code CLI の Web 検索を制御し、`WebFetch -> True/False` オプションで Anthropic API 経由の URL 取得を制御できます。WebFetch は課金が発生するため、`Fallback -> True` の場合のみ有効です。
+
+### CLI コマンド実行
+
+```mathematica
+(* Claude Code CLI スラッシュコマンドを実行 *)
+ClaudeCommand["/help"]
+ClaudeCommand["/permissions"]
+
+(* CLI サブコマンドを実行 *)
+ClaudeCommand["config list"]
+ClaudeCommand["--version"]
+```
+
+### 実行中タスクの状態監視
+
+```mathematica
+(* 全実行中タスクのリアルタイム状態表示 *)
+ClaudeStatus[]
+```
+
+各タスクの経過時間、現在の状態（思考中/テキスト生成中/ツール実行中）、生成済みテキスト断片数、思考断片数、ツール使用数をリアルタイムで表示します。
 
 ### ドキュメント一覧
 

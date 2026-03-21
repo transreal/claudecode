@@ -6,6 +6,21 @@ If[StringQ[$InputFileName] && $InputFileName =!= "",
 ];
 BeginPackage["ClaudeCode`"];
 
+(* パッケージリロード時に古い内部関数定義が残らないよう、
+   変更された主要内部関数をクリアする *)
+Quiet[ClearAll[
+  iEnsureDefaultSession, iResolveNotebookFiles, iCollectAccessibleDirs,
+  iCLIPermissionFlags, iFileAccessContext, iNeedsFileList, iSafeReadStreamFile,
+  iUpdateStreamProgress, iExtractResultFromStreamJson,
+  iAskDirPermission, iEnsureDirPermission, iIsSafeDefaultDir,
+  iGetDirPermission, iSetDirPermission,
+  iResolveWebFetch, iResolveWebFetchWithFallback,
+  iWriteQueryResponse, iFlushQueryTextBuf, iSaveDocOptions, iLoadAndMergeDocOptions,
+  iDocGet, iDocInitState, iDocBuildRefSection, iDocGlobalInstructionPrompt,
+  iDocBuildAcknowledgmentsPrompt, iDocBuildDisclaimerPrompt, iDocBuildLicensePrompt,
+  ClaudePrepareCommit, iCollectChangeSummaries, iFormatCommitMessage, iWrapCommitBodyLines
+]];
+
 (* NBAccess \:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:30ed\:30fc\:30c9 (\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:8aad\:307f\:66f8\:304d\:30fb\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:7ba1\:7406) *)
 (* NBAccess パッケージをロード (ShiftJIS 環境でも UTF-8 で読み込む) *)
 Block[{$CharacterEncoding = "UTF-8"},
@@ -32,14 +47,16 @@ Scan[
    "MarkConfidential","UnmarkConfidential","IsConfidential","Confidential","NonConfidential",
    "ScanConfidentialCells","ShowClaudePalette","ClaudeQueryShowContext",
    "ClaudeShowAccessConfig","ClaudeSessionStatus","ClaudeCompactHistory","ClaudeHistorySize",
-   "ClaudeWebSearch","ClaudeWebFetch","WebFetch",
+   "ClaudeWebSearch","ClaudeWebFetch","WebFetch","WebSearch",
    "ClaudeCommand","ClaudeCheckSeparation","ClaudeFixSeparation","ClaudeStatus",
+   "ClaudePrepareCommit",
    "$ClaudeTimeout", "$ClaudeMDPath", "$ClaudeMDContent", "$ClaudeModel",
    "$ClaudeTestModel",
    "$ClaudeFallbackModels", "$ClaudeWorkingDirectory", "$ClaudeAccessibleDirs",
    "$ClaudeDocRetryDelay", "$ClaudeDocMaxRetries", "$ClaudeDocMaxChunkChars",
    "$ClaudeDocModel",
    "$ClaudePrivateModel",
+   "$ClaudePackageKeywordMap",
    "Fallback", "AutoPrivate", "References", "Demos", "Disclaimer", "Acknowledgments"}
 ];
 
@@ -57,7 +74,11 @@ $ClaudePrivateModel::usage =
   "AutoPrivate -> True \:6642\:306b\:79d8\:5bc6\:5909\:6570\:3092\:542b\:3080\:30bf\:30b9\:30af\:306e\:751f\:6210\:30b3\:30fc\:30c9\:306b\:4f7f\:7528\:3055\:308c\:308b\:3002\n" <>
   "\:4f8b: $ClaudePrivateModel = {\"lmstudio\", \"openai/gpt-oss-20b\", \"http://127.0.0.1:1234\"}";
 
-AutoPrivate::usage =
+$ClaudePackageKeywordMap::usage =
+  "$ClaudePackageKeywordMap \:306f\:5916\:90e8\:30d1\:30c3\:30b1\:30fc\:30b8\:304c\:30ad\:30fc\:30ef\:30fc\:30c9\:3092\:767b\:9332\:3059\:308b\:305f\:3081\:306e Association\:3002\n" <>
+  "\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:30ad\:30fc\:30ef\:30fc\:30c9\:304c\:542b\:307e\:308c\:308b\:3068\:3001\:5bfe\:5fdc\:30d1\:30c3\:30b1\:30fc\:30b8\:306e api.md \:304c\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306b\:81ea\:52d5\:6ce8\:5165\:3055\:308c\:308b\:3002\n" <>
+  "\:5404\:30d1\:30c3\:30b1\:30fc\:30b8\:304c\:81ea\:8eab\:306e\:30ed\:30fc\:30c9\:6642\:306b\:767b\:9332\:3059\:308b\:3002claudecode.wl \:5074\:306f\:30d1\:30c3\:30b1\:30fc\:30b8\:975e\:4f9d\:5b58\:3002\n" <>
+  "\:4f8b: $ClaudePackageKeywordMap[\"maildb\"] = {\"\\:30e1\\:30fc\\:30eb\", \"mail\", \"\\:3012\\:5207\"};";
   "AutoPrivate \:306f ClaudeQuery/ClaudeEval/ContinueEval \:306e\:30aa\:30d7\:30b7\:30e7\:30f3\:3002\n" <>
   "True: \:79d8\:5bc6\:5909\:6570\:306b\:30a2\:30af\:30bb\:30b9\:3059\:308b\:30bf\:30b9\:30af\:306e\:5834\:5408\:3001\:751f\:6210\:30b3\:30fc\:30c9\:306b\n" <>
   "  Model -> $ClaudePrivateModel, PrivacySpec -> Automatic \:3092\:4ed8\:4e0e\:3059\:308b\:3002\n" <>
@@ -86,11 +107,128 @@ $ClaudeAccessibleDirs::usage =
   "iPrepareClaudeProjectDirectory \:304c\:4e00\:6642 settings.json \:306b Read \:8a31\:53ef\:3092\:6ce8\:5165\:3059\:308b\:3002\n" <>
   "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e TaggingRules \:306b\:3082 NBSetAccessibleDirs \:3067\:6c38\:7d9a\:5316\:53ef\:80fd\:3002\n" <>
   "\:30c7\:30d5\:30a9\:30eb\:30c8: {$packageDirectory}\:3002\n" <>
+  "NotebookDirectory \:306f\:521d\:56de\:4f7f\:7528\:6642\:306b\:30c0\:30a4\:30a2\:30ed\:30b0\:3067\:8a31\:53ef\:3092\:78ba\:8a8d ($packageDirectory \:914d\:4e0b\:3092\:9664\:304f)\:3002\n" <>
   "\:4f8b: $ClaudeAccessibleDirs = {$packageDirectory, \"F:\\\\Dropbox\\\\Mathematica-oneDrive\"}";
 
 If[!ListQ[$ClaudeAccessibleDirs],
   $ClaudeAccessibleDirs = Select[{Global`$packageDirectory},
-    StringQ[#] && StringLength[#] > 0 &]];
+    StringQ[#] && StringLength[#] > 0 &],
+  (* 既にリストの場合でも $packageDirectory がロード後に設定されていれば追加 *)
+  If[StringQ[Global`$packageDirectory] && StringLength[Global`$packageDirectory] > 0 &&
+     !MemberQ[$ClaudeAccessibleDirs, Global`$packageDirectory],
+    AppendTo[$ClaudeAccessibleDirs, Global`$packageDirectory]]];
+
+(* ============================================================
+   ディレクトリアクセス許可システム
+   NotebookDirectory が $packageDirectory や $ClaudeWorkingDirectory と
+   異なる場合、ユーザーに許可を求めるダイアログを表示する。
+   許可結果はノートブックの TaggingRules に永続化される。
+   ============================================================ *)
+
+(* セッション内キャッシュ: 同じディレクトリについて再度ダイアログを出さない *)
+$iDirPermissionCache = <||>;
+
+(* パッケージ別ドキュメントオプション状態。
+   キー: packageName, 値: <|"References"->..., "Demos"->..., ...|
+   非同期ドキュメント生成中にグローバル変数がリセットされる問題を防ぐ。 *)
+$iDocState = <||>;
+
+(* 安全なデフォルトディレクトリか判定。
+   $packageDirectory またはその親、
+   $ClaudeWorkingDirectory またはその親に含まれるなら安全。 *)
+iIsSafeDefaultDir[dir_String] := Module[{normDir, safeDirs},
+  normDir = StringReplace[dir, "\\" -> "/"];
+  safeDirs = Select[{
+    Global`$packageDirectory,
+    $ClaudeWorkingDirectory,
+    iClaudeWorkingDirectory[]
+  }, StringQ[#] && StringLength[#] > 0 &];
+  safeDirs = StringReplace[#, "\\" -> "/"] & /@ safeDirs;
+  AnyTrue[safeDirs,
+    StringStartsQ[normDir, #] || StringStartsQ[#, normDir] &]
+];
+
+(* TaggingRules からディレクトリ許可設定を取得。
+   戻り値: "read" | "denied" | None
+   後方互換: 旧バージョンで保存された "readwrite" も "read" と同等に扱う *)
+iGetDirPermission[nb_NotebookObject, dir_String] :=
+  Module[{perms},
+    perms = Quiet @ NBAccess`NBGetTaggingRule[nb, "claudeDirPermissions"];
+    If[AssociationQ[perms], Lookup[perms, dir, None], None]
+  ];
+
+(* TaggingRules にディレクトリ許可設定を保存 *)
+iSetDirPermission[nb_NotebookObject, dir_String, perm_String] :=
+  Module[{perms},
+    perms = Quiet @ NBAccess`NBGetTaggingRule[nb, "claudeDirPermissions"];
+    If[!AssociationQ[perms], perms = <||>];
+    perms[dir] = perm;
+    Quiet @ NBAccess`NBSetTaggingRule[nb, "claudeDirPermissions", perms]
+  ];
+
+(* ユーザーに許可を求めるダイアログ。
+   戻り値: "read" | "denied"
+   注: Claude Code CLI の --print モードでは Write ツールは使用不可のため、
+   Read 許可と不許可の2択のみ提示する。 *)
+iAskDirPermission[nb_NotebookObject, dir_String] :=
+  Module[{shortDir, dialog},
+    shortDir = If[StringLength[dir] > 50,
+      "\:2026" <> StringTake[dir, -45], dir];
+    dialog = DialogInput[
+      Pane[
+        Column[{
+          Style["\:30d5\:30a1\:30a4\:30eb\:306e\:8aad\:307f\:53d6\:308a\:3092\:8a31\:53ef\:3057\:307e\:3059\:304b\:ff1f", Bold, 11],
+          Style[shortDir, FontSize -> 9, FontColor -> GrayLevel[0.4]],
+          Spacer[1],
+          Row[{
+            Button["\:8a31\:53ef", DialogReturn["read"],
+              ImageSize -> {60, 25}],
+            Spacer[6],
+            Button["\:62d2\:5426", DialogReturn["denied"],
+              ImageSize -> {60, 25}]
+          }]
+        }, Spacings -> 0.2],
+        ImageSize -> {260, Automatic},
+        ImageSizeAction -> "ShrinkToFit"
+      ],
+      WindowTitle -> "Claude Code",
+      WindowMargins -> Automatic
+    ];
+    If[StringQ[dialog], dialog, "denied"]
+  ];
+
+(* ディレクトリの許可を確認し、必要ならダイアログを表示。
+   戻り値: True（アクセス許可）/ False（不許可）
+   副作用: 許可された場合 $ClaudeAccessibleDirs に追加し TaggingRules に保存 *)
+iEnsureDirPermission[nb_NotebookObject, dir_String] :=
+  Module[{perm},
+    (* 安全なデフォルトディレクトリならダイアログ不要 *)
+    If[iIsSafeDefaultDir[dir], Return[True]];
+    (* セッション内キャッシュをチェック *)
+    If[KeyExistsQ[$iDirPermissionCache, dir],
+      Return[$iDirPermissionCache[dir] =!= "denied"]];
+    (* TaggingRules に保存済みの許可を確認 *)
+    perm = iGetDirPermission[nb, dir];
+    If[StringQ[perm],
+      $iDirPermissionCache[dir] = perm;
+      If[perm =!= "denied",
+        $ClaudeAccessibleDirs = DeleteDuplicates[
+          Append[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], dir]]];
+      Return[perm =!= "denied"]];
+    (* ダイアログを表示して許可を求める *)
+    perm = iAskDirPermission[nb, dir];
+    $iDirPermissionCache[dir] = perm;
+    iSetDirPermission[nb, dir, perm];
+    If[perm =!= "denied",
+      $ClaudeAccessibleDirs = DeleteDuplicates[
+        Append[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], dir]];
+      (* TaggingRules のアクセス可能ディレクトリにも追加 *)
+      Module[{currentDirs = Quiet @ NBAccess`NBGetAccessibleDirs[nb]},
+        If[!ListQ[currentDirs], currentDirs = {}];
+        Quiet @ NBAccess`NBSetAccessibleDirs[nb,
+          DeleteDuplicates[Append[currentDirs, dir]]]]];
+    perm =!= "denied"
+  ];
 
 $ClaudeFallbackModels::usage =
   "$ClaudeFallbackModels \:306f\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:30e2\:30c7\:30eb\:512a\:5148\:9806\:4f4d\:3002\n" <>
@@ -189,12 +327,16 @@ $iSeparationCheckCache = <||>;
 (* \:975e\:540c\:671f\:30d1\:30b9\:306e\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:5236\:5fa1\:7528\:30b0\:30ed\:30fc\:30d0\:30eb\:30d5\:30e9\:30b0 *)
 $currentUseFallback = False;
 
+(* Claude Code CLI \:306e Web \:691c\:7d22\:30c4\:30fc\:30eb\:8a31\:53ef\:30d5\:30e9\:30b0 *)
+$iAllowWebSearch = True;
+
 (* \:5b9f\:884c\:30bb\:30eb\:306e\:76f4\:5f8c\:306b\:30a2\:30f3\:30ab\:30fc\:3092\:914d\:7f6e\:3059\:308b\:305f\:3081\:306e\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570 *)
 
 
 ClaudeQuery::usage =
   "ClaudeQuery[prompt] \:306f Claude Code \:306b prompt \:3092\:9001\:308a\:3001\:5fdc\:7b54\:6587\:5b57\:5217\:3092\:8fd4\:3059\:ff08\:540c\:671f\:ff09\:3002\n" <>
-  "ClaudeQuery[session, prompt] \:306f\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:3068\:76f4\:524d\:306e\:51fa\:529b/\:30a8\:30e9\:30fc\:3092\:8003\:616e\:3057\:3066\:56de\:7b54\:3059\:308b\:3002";ClaudeMath::usage =
+  "ClaudeQuery[session, prompt] \:306f\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:3068\:76f4\:524d\:306e\:51fa\:529b/\:30a8\:30e9\:30fc\:3092\:8003\:616e\:3057\:3066\:56de\:7b54\:3059\:308b\:3002\n" <>
+  "Options: WebSearch->True(\:30c7\:30d5\:30a9\:30eb\:30c8,\:7121\:6599), WebFetch->False(\:8ab2\:91d1\:3042\:308a,Fallback->True\:5fc5\:9808), Fallback";ClaudeMath::usage =
   "ClaudeMath[task] \:306f Mathematica \:30b3\:30fc\:30c9\:751f\:6210\:306b\:7279\:5316\:3057\:305f\:30d7\:30ed\:30f3\:30d7\:30c8\:3067 Claude \:3092\:547c\:3073\:51fa\:3059\:3002";ClaudeExtractCode::usage =
   "ClaudeExtractCode[response] \:306f Claude \:306e\:5fdc\:7b54\:304b\:3089\:6700\:521d\:306e ```mathematica \:30d6\:30ed\:30c3\:30af\:3092\:62bd\:51fa\:3059\:308b\:3002";ClaudeExtractAllCode::usage =
   "ClaudeExtractAllCode[response] \:306f Claude \:306e\:5fdc\:7b54\:304b\:3089\:5168 ```mathematica \:30d6\:30ed\:30c3\:30af\:3092\:30ea\:30b9\:30c8\:3067\:8fd4\:3059\:3002";ClaudeEval::usage =
@@ -323,6 +465,15 @@ ClaudeStatus::usage =
   "\:5404\:30bf\:30b9\:30af\:306e\:7d4c\:904e\:6642\:9593\:3001\:73fe\:5728\:306e\:72b6\:614b\:ff08\:601d\:8003\:4e2d/\:30c6\:30ad\:30b9\:30c8\:751f\:6210\:4e2d/\:30c4\:30fc\:30eb\:5b9f\:884c\:4e2d\:ff09\:3001\n" <>
   "\:751f\:6210\:6e08\:307f\:30c6\:30ad\:30b9\:30c8\:65ad\:7247\:6570\:3001\:601d\:8003\:65ad\:7247\:6570\:3001\:30c4\:30fc\:30eb\:4f7f\:7528\:6570\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
   "\:5b9f\:884c\:4e2d\:306e\:30bf\:30b9\:30af\:304c\:306a\:3044\:5834\:5408\:306f\:305d\:306e\:65e8\:3092\:8868\:793a\:3059\:308b\:3002";
+ClaudePrepareCommit::usage =
+  "ClaudePrepareCommit[packageName] \:306f\:524d\:56de\:306e GitHub \:30b3\:30df\:30c3\:30c8\:4ee5\:964d\:306e\:5909\:66f4\:70b9\:3092\n" <>
+  "\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:304b\:3089\:53ce\:96c6\:3057\:3001\:30b3\:30df\:30c3\:30c8\:30e1\:30c3\:30bb\:30fc\:30b8\:3092\:751f\:6210\:3057\:3066\n" <>
+  "GitHubRefreshAndCommit \:5b9f\:884c\:30b3\:30de\:30f3\:30c9\:3092 Input \:30bb\:30eb\:3068\:3057\:3066\:51fa\:529b\:3059\:308b\:3002\n" <>
+  "ClaudePrepareCommit[packageName, subject] \:306f 1\:884c\:76ee\:3092\:6307\:5b9a\:3057\:3001\:672c\:6587\:306f\:81ea\:52d5\:53ce\:96c6\:3002\n" <>
+  "Options: Fallback -> False, DryRun -> False, " <>
+  "Owner -> Automatic, Repository -> Automatic, " <>
+  "Branch -> Automatic, BaseBranch -> Automatic\:3002\n" <>
+  "DryRun -> True \:3067\:30b3\:30de\:30f3\:30c9\:3092\:751f\:6210\:305b\:305a\:30e1\:30c3\:30bb\:30fc\:30b8\:306e\:307f\:8fd4\:3059\:3002";
 ClaudeWebSearch::usage =
   "ClaudeWebSearch[query] \:306f Web \:691c\:7d22\:3092\:5b9f\:884c\:3057\:3001\:7d50\:679c\:3092\:30c6\:30ad\:30b9\:30c8\:3067\:8fd4\:3059\:3002\n" <>
   "Anthropic API \:306e web_search \:30c4\:30fc\:30eb\:3092\:4f7f\:7528\:3059\:308b\:3002";
@@ -334,7 +485,14 @@ WebFetch::usage =
   "True: \:5fc5\:305a Web \:691c\:7d22\:3092\:884c\:3046\:3002\n" <>
   "False: Web \:691c\:7d22\:3092\:884c\:308f\:306a\:3044\:3002\n" <>
   "Automatic (ClaudeEval \:306e\:30c7\:30d5\:30a9\:30eb\:30c8): Claude \:304c\:30bf\:30b9\:30af\:3092\:5206\:6790\:3057\:3001\:5fc5\:8981\:306a\:3089\:81ea\:52d5\:3067 Web \:691c\:7d22\:3059\:308b\:3002\n" <>
-  "ClaudeQuery \:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:306f False\:3002";
+  "ClaudeQuery \:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:306f False\:3002\n" <>
+  "\:91cd\:8981: WebFetch \:306f Anthropic API \:7d4c\:7531\:3067\:8ab2\:91d1\:304c\:767a\:751f\:3059\:308b\:305f\:3081\:3001Fallback -> True \:306e\:5834\:5408\:306e\:307f\:6709\:52b9\:3002";
+WebSearch::usage =
+  "WebSearch \:306f ClaudeQuery/ClaudeEval \:306e\:30aa\:30d7\:30b7\:30e7\:30f3\:3002\n" <>
+  "True (\:30c7\:30d5\:30a9\:30eb\:30c8): Claude Code CLI \:306e\:7d44\:307f\:8fbc\:307f Web \:691c\:7d22\:30c4\:30fc\:30eb\:3092\:8a31\:53ef\:3059\:308b\:3002\n" <>
+  "False: Claude Code CLI \:306e Web \:691c\:7d22\:3092\:7981\:6b62\:3059\:308b\:3002\n" <>
+  "\:3053\:308c\:306f Claude Code \:81ea\:4f53\:306e Web \:691c\:7d22\:6a5f\:80fd\:3067\:3042\:308a\:3001API \:7d4c\:7531\:306e\:8ab2\:91d1\:306f\:767a\:751f\:3057\:306a\:3044\:3002\n" <>
+  "WebFetch (\:8ab2\:91d1\:3042\:308a) \:3068\:306f\:7570\:306a\:308b\:3002";
 ClaudeCompactHistory::usage =
   "ClaudeCompactHistory[] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\:3092\:624b\:52d5\:3067\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:3059\:308b\:3002\n" <>
   "ClaudeCompactHistory[name] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:3059\:308b\:3002\n" <>
@@ -387,6 +545,7 @@ ClaudeFixSeparation::usage =
 If[!ValueQ[$ClaudeModel], $ClaudeModel = ""];
 If[!ValueQ[$ClaudeTimeout], $ClaudeTimeout = 1200];
 If[!ValueQ[$ClaudePrivateModel], $ClaudePrivateModel = {}];
+If[!AssociationQ[$ClaudePackageKeywordMap], $ClaudePackageKeywordMap = <||>];
 iClaudeWorkingDirectory[] := Module[{dir = $ClaudeWorkingDirectory},
   If[!StringQ[dir] || dir === "",
     dir = FileNameJoin[{$HomeDirectory, "Claude Working"}]
@@ -443,18 +602,24 @@ iCopyDirectoryRecursive[src_String, dst_String] := Module[{entries},
   dst
 ];
 
-(* ノートブック TaggingRules + グローバル変数からアクセス可能ディレクトリを収集 *)
-iCollectAccessibleDirs[] := Module[{nbDirs = {}, attDirs = {}, nbDir},
+(* ノートブック TaggingRules + グローバル変数からアクセス可能ディレクトリを収集。
+   $packageDirectory と $ClaudeWorkingDirectory は常にベースとして含める。
+   注: NotebookDirectory はここに含めない。--add-dir に含めると Read も可能になるため。
+   ファイルカタログ表示は iFileAccessContext が Mathematica 側の FileNames[] で
+   プロンプトに埋め込むので、Claude Code の --add-dir や Glob は不要。 *)
+iCollectAccessibleDirs[] := Module[{nbDirs = {}, attDirs = {}, baseDirs},
+  (* $packageDirectory と作業ディレクトリは常に保証 *)
+  baseDirs = Select[{Global`$packageDirectory, iClaudeWorkingDirectory[]},
+    StringQ[#] && StringLength[#] > 0 && DirectoryQ[#] &];
   Quiet[nbDirs = NBAccess`NBGetAccessibleDirs[EvaluationNotebook[]]];
   attDirs = DeleteDuplicates[DirectoryName /@ Select[
     If[ListQ[$iCurrentSessionAttachments], $iCurrentSessionAttachments, {}],
     StringQ[#] && FileExistsQ[#] &]];
-  nbDir = Quiet @ Check[NotebookDirectory[InputNotebook[]], None];
   DeleteDuplicates @ Select[
-    Join[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}],
+    Join[baseDirs,
+         If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}],
          If[ListQ[nbDirs], nbDirs, {}],
-         attDirs,
-         If[StringQ[nbDir] && DirectoryQ[nbDir], {nbDir}, {}]],
+         attDirs],
     StringQ[#] && StringLength[#] > 0 &]
 ];
 
@@ -462,11 +627,20 @@ iCollectAccessibleDirs[] := Module[{nbDirs = {}, attDirs = {}, nbDir},
    ClaudeQuery/ClaudeEval が呼ばれるたびにセッションヘッダーから読み込む *)
 $iCurrentSessionAttachments = {};
 
-(* プロンプト中のファイル名を NotebookDirectory 内で解決する *)
+(* プロンプト中のファイル名を NotebookDirectory 内で解決する。
+   NotebookDirectory が Read 許可されていない場合は解決しない。
+   注: この関数は fullPrompt（ファイル一覧コンテキスト含む）に対して呼ばれるため、
+   ここでダイアログを出すと常にトリガーされてしまう。
+   Read 許可は iEnsureDefaultSession での保存済み許可復元、
+   または $ClaudeAccessibleDirs への手動追加で設定する。 *)
 iResolveNotebookFiles[prompt_String] :=
   Module[{nbDir, filePattern, candidates, found},
     nbDir = Quiet @ Check[NotebookDirectory[InputNotebook[]], None];
     If[!StringQ[nbDir] || !DirectoryQ[nbDir], Return[prompt]];
+    (* Read 許可済みかチェック（未許可なら何もしない） *)
+    If[!(iIsSafeDefaultDir[nbDir] ||
+         MemberQ[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], nbDir]),
+      Return[prompt]];
     filePattern = RegularExpression[
       "(?<![/\\\\\\w])([\\w][\\w\\s\\-\\.]*\\." <>
       "(?:pdf|txt|csv|tsv|wl|wls|m|nb|json|xml|html|md|py|r|jl|rb|js|tex|" <>
@@ -491,18 +665,38 @@ iInjectAttachments[prompt_] :=
     ]
   ];
 
+(* ユーザープロンプトがファイル一覧を必要としているかを判定する。
+   ファイル一覧は NotebookDirectory のファイルリストをプロンプトに含めるかどうかの判定に使う。 *)
+iNeedsFileList[prompt_String] :=
+  AnyTrue[
+    {"\:30d5\:30a1\:30a4\:30eb", "\:4e00\:89a7", "\:30ea\:30b9\:30c8", "file", "list",
+     "NotebookDirectory", "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30d5\:30a9\:30eb\:30c0", "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30c7\:30a3\:30ec\:30af\:30c8\:30ea",
+     "\:30c7\:30b9\:30af\:30c8\:30c3\:30d7", "Desktop", "\:30d5\:30a9\:30eb\:30c0", "directory", "dir",
+     "folder", "ls", "\:691c\:7d22", "search", "\:63a2"},
+    StringContainsQ[prompt, #, IgnoreCase -> True] &
+  ] ||
+  (* 明示的なファイル名参照: xxx.pdf 等 *)
+  StringContainsQ[prompt,
+    RegularExpression["[\\w\\x{3000}-\\x{9fff}]+\\.(pdf|nb|csv|xlsx?|txt|wl|wls|py|md|json|html|tex|dat|svg|png|jpg)"]];
+iNeedsFileList[""] := False;
+iNeedsFileList[_] := False;
+
 (* プロンプトに注入するファイルアクセス情報を生成する。
-   Claude がどのファイルにアクセスできるかを明示的に伝えることで、
-   読み取ったファイルの内容を「架空」と誤認する問題を防ぐ。 *)
-iFileAccessContext[] := Module[
-  {nbDir, workDir, lines = {}, attachments, nbFiles, pkgDir, wlFiles, pacletDirs, pkgNames},
+   userPrompt: ユーザーが入力した質問/タスク文字列。
+   NotebookDirectory のファイル一覧は以下の条件で含める:
+     - Read 許可済み → 常に含める
+     - Read 未許可 → iNeedsFileList[userPrompt] が True のときだけ含める
+   $packageDirectory のパッケージ一覧は常に含める。 *)
+iFileAccessContext[userPrompt_String:""] := Module[
+  {nbDir, workDir, lines = {}, attachments, nbFiles, pkgDir, wlFiles, pacletDirs, pkgNames,
+   nbDirReadable = False, includeFileList = False, fileCount = 0},
   nbDir = Quiet @ Check[NotebookDirectory[InputNotebook[]], None];
   workDir = iClaudeWorkingDirectory[];
   pkgDir = Global`$packageDirectory;
 
   AppendTo[lines, "=== File Access Context ==="];
 
-  (* $packageDirectory \:306e\:30d1\:30c3\:30b1\:30fc\:30b8\:4e00\:89a7 *)
+  (* $packageDirectory \:306e\:30d1\:30c3\:30b1\:30fc\:30b8\:4e00\:89a7: \:5e38\:306b\:542b\:3081\:308b *)
   If[StringQ[pkgDir] && DirectoryQ[pkgDir],
     AppendTo[lines, "$packageDirectory: " <> pkgDir];
     wlFiles = Quiet @ FileNames["*.wl", pkgDir];
@@ -518,20 +712,35 @@ iFileAccessContext[] := Module[
       AppendTo[lines, "Packages in $packageDirectory (" <> ToString[Length[pkgNames]] <> "):"];
       Scan[AppendTo[lines, #] &, Take[pkgNames, UpTo[30]]]]];
 
+  (* NotebookDirectory のアクセス状態を判定 *)
   If[StringQ[nbDir] && DirectoryQ[nbDir],
+    nbDirReadable = iIsSafeDefaultDir[nbDir] ||
+      MemberQ[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], nbDir];
     nbFiles = Quiet @ FileNames["*", nbDir];
     nbFiles = Select[nbFiles, !DirectoryQ[#] &];
-    AppendTo[lines, "NotebookDirectory: " <> nbDir];
-    If[Length[nbFiles] > 0,
-      AppendTo[lines, "Files in NotebookDirectory (" <>
-        ToString[Length[nbFiles]] <> "):"];
-      Do[AppendTo[lines, "  - " <> FileNameTake[f] <>
-        " (" <> ToString[FileByteCount[f]] <> " bytes, " <>
-        DateString[FileDate[f], {"Year","/","Month","/","Day"," ","Hour",":","Minute"}] <>
-        ")"],
-        {f, Take[nbFiles, UpTo[20]]}];
-      If[Length[nbFiles] > 20,
-        AppendTo[lines, "  ... and " <> ToString[Length[nbFiles] - 20] <> " more"]]]];
+    fileCount = Length[nbFiles];
+    (* ファイル一覧を含めるかの判定 *)
+    includeFileList = nbDirReadable || iNeedsFileList[userPrompt];
+    AppendTo[lines, "NotebookDirectory: " <> nbDir <>
+      If[nbDirReadable, " [Read \:8a31\:53ef]", " [Read \:4e0d\:53ef]"]];
+    If[includeFileList,
+      (* ファイル一覧を含める *)
+      If[fileCount > 0,
+        AppendTo[lines, "Files in NotebookDirectory (" <>
+          ToString[fileCount] <> "):"];
+        Do[AppendTo[lines, "  - " <> FileNameTake[f] <>
+          " (" <> ToString[Quiet @ Check[FileByteCount[f], 0]] <> " bytes, " <>
+          DateString[Quiet @ Check[FileDate[f], {2000}],
+            {"Year","/","Month","/","Day"," ","Hour",":","Minute"}] <>
+          ")"],
+          {f, Take[nbFiles, UpTo[20]]}];
+        If[fileCount > 20,
+          AppendTo[lines, "  ... and " <> ToString[fileCount - 20] <> " more"]],
+      (* ファイルなし *)
+      AppendTo[lines, "(NotebookDirectory is empty)"]],
+      (* ファイル一覧を省略 *)
+      AppendTo[lines, "(" <> ToString[fileCount] <>
+        " files \:2014 use \"\:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\" or similar keyword to see the list)"]]];
 
   attachments = If[ListQ[$iCurrentSessionAttachments],
     Select[$iCurrentSessionAttachments, StringQ[#] && FileExistsQ[#] &], {}];
@@ -539,10 +748,18 @@ iFileAccessContext[] := Module[
     AppendTo[lines, "Session Attachments:"];
     Do[AppendTo[lines, "  - " <> a], {a, attachments}]];
 
-  AppendTo[lines, "IMPORTANT: When files from NotebookDirectory or attachments " <>
-    "are referenced in a prompt, Claude Code reads their actual content via the Read tool. " <>
-    "The data in the generated code comes from these real files, not from fabrication. " <>
-    "Always acknowledge file sources accurately."];
+  If[nbDirReadable,
+    AppendTo[lines, "IMPORTANT: When files from NotebookDirectory or attachments " <>
+      "are referenced in a prompt, Claude Code reads their actual content via the Read tool. " <>
+      "The data in the generated code comes from these real files, not from fabrication. " <>
+      "Always acknowledge file sources accurately."],
+    If[StringQ[nbDir] && DirectoryQ[nbDir],
+      AppendTo[lines, "RESTRICTION: NotebookDirectory file listing is for reference only. " <>
+        "Do NOT use the Read tool to read file contents from NotebookDirectory. " <>
+        "The user has not granted Read permission for this directory. " <>
+        "If the user asks you to read or process a file from NotebookDirectory, " <>
+        "tell them to run: AppendTo[$ClaudeAccessibleDirs, \"" <> nbDir <> "\"] " <>
+        "to grant Read permission."]]];
 
   StringJoin[Riffle[lines, "\n"]] <> "\n\n"
 ];
@@ -1406,15 +1623,26 @@ iEnsureDefaultSession[nb_NotebookObject] := Module[{tag, nbDirs, nbDir},
   tag = iSessionTag[];
   NBAccess`NBHistoryCreate[nb, tag, {"fullPrompt", "response", "code"},
     <|"name" -> "$default"|>];
+  (* $packageDirectory がロード時に未定義だった場合に備え、ここで再保証 *)
+  If[StringQ[Global`$packageDirectory] && StringLength[Global`$packageDirectory] > 0 &&
+     !MemberQ[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], Global`$packageDirectory],
+    $ClaudeAccessibleDirs = DeleteDuplicates[
+      Prepend[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], Global`$packageDirectory]]];
+  (* TaggingRules に保存済みのディレクトリを復元（ユーザーが以前承認済み） *)
   nbDirs = NBAccess`NBGetAccessibleDirs[nb];
   If[ListQ[nbDirs] && Length[nbDirs] > 0,
     $ClaudeAccessibleDirs = DeleteDuplicates[
       Join[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], nbDirs]]];
-  (* ノートブックのディレクトリを自動的にアクセス可能にする *)
+  (* TaggingRules に保存済みの Read 許可も復元（ダイアログは出さない） *)
   nbDir = Quiet @ Check[NotebookDirectory[nb], None];
-  If[StringQ[nbDir] && DirectoryQ[nbDir],
-    $ClaudeAccessibleDirs = DeleteDuplicates[
-      Append[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], nbDir]]];
+  If[StringQ[nbDir] && DirectoryQ[nbDir] && !iIsSafeDefaultDir[nbDir],
+    Module[{savedPerm = iGetDirPermission[nb, nbDir]},
+      If[StringQ[savedPerm] && savedPerm =!= "denied",
+        $iDirPermissionCache[nbDir] = savedPerm;
+        $ClaudeAccessibleDirs = DeleteDuplicates[
+          Append[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], nbDir]],
+      (* 未許可でもキャッシュに記録しない — 後で必要時にダイアログ表示 *)
+      Null]]];
   (* セッションアタッチメントを読み込み *)
   $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
   <|"SessionTag" -> tag, "Notebook" -> nb, "Name" -> "default",
@@ -1446,11 +1674,14 @@ iClaudeCallPrefix[] :=
 $claudeProgress = <||>;
 
 (* --print モードではツール使用許可プロンプトに応答できないため
-   Read ツールのみを許可し、Write/Edit 等のファイル書き込みツールを禁止する。
-   $iAllowReadTool が True の場合は Glob/Grep も追加し、ファイル検索・内容検索を許可する。 *)
-iCLIPermissionFlags[] := If[TrueQ[$iAllowReadTool],
-  " --allowedTools \"Read,Glob,Grep\"",
-  " --allowedTools \"Read\""];
+   Read ツールと Glob（ファイルリスト）を常に許可する。
+   $iAllowReadTool が True の場合は Grep も追加し、内容検索を許可する。
+   $iAllowWebSearch が True の場合は WebSearch も追加し、Claude Code の Web 検索を許可する。
+   Glob はファイルカタログ取得のみで低リスクなため常に有効とする。 *)
+iCLIPermissionFlags[] := Module[{tools = {"Read", "Glob"}},
+  If[TrueQ[$iAllowReadTool], AppendTo[tools, "Grep"]];
+  If[TrueQ[$iAllowWebSearch], AppendTo[tools, "WebSearch"]];
+  " --allowedTools \"" <> StringRiffle[tools, ","] <> "\""];
 
 iMakeBat[promptFile_String, outFile_String, imageDirs_List:{}] :=
   Module[{batFile, bc, strm, addDirFlags, permFlags, workDir, allDirs},
@@ -1510,6 +1741,20 @@ iMakeBatStreamJson[promptFile_String, outFile_String, imageDirs_List:{}] :=
 
 (* --- stream-json パースヘルパー --- *)
 
+(* Windows でのファイルロック競合を回避する安全なファイル読み取り。
+   Import["...","Text"] は書き込み中のファイルをブロックする可能性があるため、
+   ReadByteArray を使用して非ブロッキングで読み取る。 *)
+iSafeReadStreamFile[file_String] :=
+  Quiet @ Check[
+    Module[{bytes},
+      bytes = ReadByteArray[File[file]];
+      If[ByteArrayQ[bytes] && Length[bytes] > 0,
+        ByteArrayToString[bytes, "UTF-8"],
+        ""]
+    ],
+    ""
+  ];
+
 (* 1行のJSONLをパースしてイベント情報を返す *)
 iParseStreamJsonLine[line_String] :=
   Quiet @ Check[Developer`ReadRawJSONString[line], $Failed];
@@ -1520,7 +1765,7 @@ iExtractResultFromStreamJson[outFile_String] :=
   Module[{raw, lines, textDeltas = {}, resultText = None, j, evt, delta,
           stderrLines = {}},
     If[!FileExistsQ[outFile] || FileByteCount[outFile] === 0, Return[""]];
-    raw = Quiet @ Check[Import[outFile, "Text"], ""];
+    raw = iSafeReadStreamFile[outFile];
     If[!StringQ[raw] || raw === "", Return[""]];
     lines = Select[StringSplit[raw, "\n"], StringLength[#] > 0 &];
     Do[
@@ -1558,14 +1803,20 @@ iExtractResultFromStreamJson[outFile_String] :=
     ]
   ];
 
-(* stream-json 出力ファイルの新規行を読み取り $claudeProgress を更新する *)
+(* stream-json 出力ファイルの新規行を読み取り $claudeProgress を更新する。
+   注意: ScheduledTask 内で毎秒呼ばれるため、Import ではなく iSafeReadStreamFile を使い
+   Windows のファイルロック競合によるカーネルフリーズを防止する。 *)
 iUpdateStreamProgress[key_String, outFile_String] :=
-  Module[{raw, allLines, prevCount, newLines, j, evt, delta, info},
+  Module[{raw, allLines, prevCount, newLines, j, evt, delta, info, prevSize},
     If[!AssociationQ[$claudeProgress[key]], Return[]];
     info = $claudeProgress[key];
     prevCount = Lookup[info, "lineCount", 0];
-    If[!FileExistsQ[outFile] || FileByteCount[outFile] === 0, Return[]];
-    raw = Quiet @ Check[Import[outFile, "Text"], ""];
+    If[!FileExistsQ[outFile], Return[]];
+    prevSize = Lookup[info, "lastByteCount", 0];
+    With[{curSize = Quiet @ Check[FileByteCount[outFile], 0]},
+      If[curSize === 0 || curSize === prevSize, Return[]];
+      info["lastByteCount"] = curSize];
+    raw = iSafeReadStreamFile[outFile];
     If[!StringQ[raw] || raw === "", Return[]];
     allLines = Select[StringSplit[raw, "\n"], StringLength[#] > 0 &];
     If[Length[allLines] <= prevCount, Return[]];
@@ -1853,6 +2104,8 @@ Print[
   "  ClaudeEval[{text, data, ...}]   \[RightArrow] Dataset/Image/\:5f0f\:3092\:542b\:3080\:30b3\:30fc\:30c9\:751f\:6210\n" <>
   "  ClaudeEval[session, task]        \[RightArrow] \:975e\:540c\:671f\:30b3\:30fc\:30c9\:751f\:6210\:ff08\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:ff09\n" <>
   "    Options: Fallback, AutoEvaluate, StartTime\:ff08\:4f8b: StartTime -> Now + Quantity[3,\"Hours\"]\:ff09\n" <>
+  "    WebSearch->True(\:30c7\:30d5\:30a9\:30eb\:30c8): Claude Code \:306e Web \:691c\:7d22\:30c4\:30fc\:30eb\:3092\:8a31\:53ef(\:7121\:6599)\n" <>
+  "    WebFetch->False/True/Automatic: API \:7d4c\:7531 Web \:691c\:7d22(\:8ab2\:91d1\:3042\:308a\:3001Fallback->True \:6642\:306e\:307f\:6709\:52b9)\n" <>
   "  ContinueEval[\"\:6307\:793a\"]              \[RightArrow] \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:3067\:7d99\:7d9a\n" <>
   "  ContinueEval[session, \"\:6307\:793a\"]    \[RightArrow] \:30bb\:30c3\:30b7\:30e7\:30f3\:7d99\:7d9a\:30fb\:30a8\:30e9\:30fc\:4fee\:6b63\:30fb\:6539\:826f\n" <>
   "  ContinueEval[]                   \[RightArrow] \"\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\" \:3067\:7d99\:7d9a\n" <>
@@ -1888,9 +2141,10 @@ Print[
   "  ClaudeSessionStatus[]            \[RightArrow] \:30bb\:30c3\:30b7\:30e7\:30f3\:72b6\:614b\:30fb\:30a2\:30af\:30bb\:30b9\:53ef\:80fd\:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\n" <>
   "  ClaudeStatus[]                   \[RightArrow] \:5b9f\:884c\:4e2d\:30bf\:30b9\:30af\:306e\:30ea\:30a2\:30eb\:30bf\:30a4\:30e0\:72b6\:614b\:8868\:793a\n" <>
   "  ClaudeCompactHistory[]           \[RightArrow] \:5c65\:6b74\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3 (\:901a\:5e38\:81ea\:52d5)\n" <>
-  "  ClaudeWebSearch[query]           \[RightArrow] Web \:691c\:7d22 (Anthropic API)\n" <>
-  "  ClaudeWebFetch[url]              \[RightArrow] URL \:5185\:5bb9\:53d6\:5f97\:30fb\:8981\:7d04\n" <>
-  "  \:2192 WebFetch->True/False/Automatic: ClaudeEval \:306f\:30c7\:30d5\:30a9\:30eb\:30c8 Automatic(\:81ea\:52d5\:5224\:5b9a)\n" <>
+  "  ClaudeWebSearch[query]           \[RightArrow] Web \:691c\:7d22 (Anthropic API, \:8ab2\:91d1\:3042\:308a)\n" <>
+  "  ClaudeWebFetch[url]              \[RightArrow] URL \:5185\:5bb9\:53d6\:5f97\:30fb\:8981\:7d04 (Anthropic API, \:8ab2\:91d1\:3042\:308a)\n" <>
+  "  \:2192 WebSearch->True(\:30c7\:30d5\:30a9\:30eb\:30c8): Claude Code \:306e\:7d44\:307f\:8fbc\:307f Web \:691c\:7d22(\:7121\:6599)\n" <>
+  "  \:2192 WebFetch->True/False/Automatic: API \:7d4c\:7531 Web \:691c\:7d22(\:8ab2\:91d1\:3042\:308a\:3001Fallback->True \:5fc5\:9808)\n" <>
   "  ClaudeCommand[\"/cmd\"]           \[RightArrow] Claude Code CLI \:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9\:5b9f\:884c\n" <>
   "  ClaudeCheckSeparation[target]   \[RightArrow] NBAccess \:5206\:96e2\:539f\:5247\:306e\:9055\:53cd\:691c\:67fb\n" <>
   "  ClaudeFixSeparation[target]     \[RightArrow] \:5206\:96e2\:9055\:53cd\:306e\:81ea\:52d5\:4fee\:6b63\n" <>
@@ -2443,7 +2697,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {},
 
         (* ### 見出し → Subsubsection *)
-        StringMatchQ[trimmed, "###" ~~ " " ~~ __],
+        StringContainsQ[trimmed, RegularExpression["^#{3,}\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^#{3,}\\s*"] -> ""]];
@@ -2451,7 +2705,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsubsection"]],
 
         (* ## 見出し → Subsection *)
-        StringMatchQ[trimmed, "##" ~~ " " ~~ __],
+        StringContainsQ[trimmed, RegularExpression["^#{2}\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^#{2}\\s*"] -> ""]];
@@ -2459,7 +2713,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsection"]],
 
         (* # 見出し → Subsection *)
-        StringMatchQ[trimmed, "#" ~~ " " ~~ __],
+        StringContainsQ[trimmed, RegularExpression["^#\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^#\\s*"] -> ""]];
@@ -2467,31 +2721,31 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsection"]],
 
         (* 深いインデントリスト → Subsubitem *)
-        StringMatchQ[line, ("      " | "\t\t") ~~ ("-" | "*" | "\[Bullet]") ~~ " " ~~ __],
+        StringContainsQ[line, RegularExpression["^(\\s{4,}|\\t\\t)[-*\:2022]\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
-            RegularExpression["^[-*]\\s*"] -> ""]];
+            RegularExpression["^[-*\:2022]\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsubitem"]],
 
         (* 浅いインデントリスト → Subitem *)
-        StringMatchQ[line, ("  " | "   " | "\t") ~~ ("-" | "*" | "\[Bullet]") ~~ " " ~~ __],
+        StringContainsQ[line, RegularExpression["^(\\s{2,3}|\\t)[-*\:2022]\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
-            RegularExpression["^[-*]\\s*"] -> ""]];
+            RegularExpression["^[-*\:2022]\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subitem"]],
 
         (* リスト項目 (箇条書き) → Item *)
-        StringMatchQ[trimmed, ("-" | "*" | "\[Bullet]") ~~ " " ~~ __],
+        StringContainsQ[trimmed, RegularExpression["^[-*\:2022]\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
-            RegularExpression["^[-*]\\s*"] -> ""]];
+            RegularExpression["^[-*\:2022]\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Item"]],
 
         (* 番号付きリスト → Item *)
-        StringMatchQ[trimmed, DigitCharacter.. ~~ "." ~~ " " ~~ __],
+        StringContainsQ[trimmed, RegularExpression["^\\d+\\.\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^\\d+\\.\\s*"] -> ""]];
@@ -3798,6 +4052,9 @@ iClaudeSessionStatusImpl[nb_NotebookObject, tag_String, name_String] :=
       ToString[Lookup[NBAccess`NBGetPrivacySpec[], "AccessLevel", 0.5]]];
     Print["  Provider MaxAccessLevel: ",
       ToString[Normal[NBAccess`Private`$iProviderMaxAccessLevel]]];
+    If[AssociationQ[$ClaudePackageKeywordMap] && Length[$ClaudePackageKeywordMap] > 0,
+      Print["  PackageKeywordMap: ",
+        StringRiffle[Keys[$ClaudePackageKeywordMap], ", "]]];
 
     result = <|
       "Session" -> name,
@@ -3899,7 +4156,7 @@ iAutoMarkNewCellsConfidential[nb_NotebookObject, cellCountBefore_Integer] :=
 iShouldAutoMarkConfidential[accessLevel_?NumericQ] :=
   accessLevel > NBAccess`NBGetProviderMaxAccessLevel["claudecode"];
 
-Options[ClaudeQuery] = {Fallback -> False, WebFetch -> False, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False, AutoEvaluate -> False};
+Options[ClaudeQuery] = {Fallback -> False, WebFetch -> False, WebSearch -> True, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False, AutoEvaluate -> False};
 
 (* ClaudeQuery \:5185\:90e8\:5b9f\:88c5\:ff08\:975e\:540c\:671f\:ff09 *)
 iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFetch_,
@@ -3927,7 +4184,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
         ""] <>
       If[StringQ[notebookCtx] && notebookCtx =!= "",
         "=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:73fe\:5728\:306e\:72b6\:614b ===\n" <> notebookCtx, ""] <>
-      iFileAccessContext[] <>
+      iFileAccessContext[If[StringQ[prompt], prompt, ""]] <>
       iPackageDocsContext[If[StringQ[prompt], prompt, ""]] <>
       iAutoPrivatePrompt[autoPrivate] <>
       "=== \:8cea\:554f ===\n" <> iExpandSymbolRefs[prompt];
@@ -3954,8 +4211,8 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
     (* Claude Code 自体がアクセスレベルに対応可能か判定 *)
     useClaudeCode = NBAccess`NBProviderCanAccess["claudecode", accessLevel];
 
-    If[TrueQ[useWebFetch],
-      (* WebFetch \:306f\:540c\:671f\:3067\:5b9f\:884c *)
+    If[TrueQ[useWebFetch] && TrueQ[useFallback],
+      (* WebFetch \:306f\:540c\:671f\:3067\:5b9f\:884c\:3002\:8ab2\:91d1\:304c\:767a\:751f\:3059\:308b API \:7d4c\:7531\:306e\:305f\:3081 Fallback->True \:304c\:5fc5\:9808 *)
       Module[{response = iDoWebSearch[fullPrompt]},
         NBAccess`NBJobMoveToAnchor[jobId];
         If[StringQ[response],
@@ -4030,6 +4287,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
 ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = True;
+    $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
   With[{nb = Quiet[EvaluationNotebook[]]},
   Module[{session, tag},
   (* 現在のノートブックの実際の機密マークから $confidentialSymbols を再構築 *)
@@ -4068,6 +4326,7 @@ ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
 ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ClaudeQuery, {opts}, Fallback]];
     $iAllowReadTool = True;
+    $iAllowWebSearch = TrueQ[OptionValue[ClaudeQuery, {opts}, WebSearch]];
   With[{nb = session["Notebook"]},
   Module[{tag},
     tag = session["SessionTag"];
@@ -4270,7 +4529,11 @@ PACKAGE AWARENESS:\n\
 When the question mentions a package name from the 'Packages in $packageDirectory' list in File Access Context,\n\
 answer based on the package documentation (shown in the prompt if available and fresh).\n\
 If the user wants to MODIFY a package, suggest using ClaudeEval with ClaudeUpdatePackage.\n\
-Do NOT attempt to read or write package files directly.\n\n";
+Do NOT attempt to read or write package files directly.\n\
+WEB SEARCH:\n\
+You have access to the WebSearch tool. When the user's question would benefit from current information \
+(recent events, latest documentation, API references, etc.), use the WebSearch tool proactively.\n\
+Web search via Claude Code's built-in tool does not incur additional costs and is encouraged.\n\n";
 
 
 $claudeMathPromptPrefix :=
@@ -4345,6 +4608,13 @@ Simply write the actual characters: \:ff08 not \\uff08, \:30fb not \\u30fb.\n\n\
 When data (Dataset, Association, List, etc.) is provided in the prompt, \
 treat it as Mathematica data available in the current session. \
 If the user refers to 'this dataset' or similar, the data shown in the prompt is the target.\n\n\
+NOTEBOOK CONTEXT RESOLUTION (CRITICAL):\n\
+When the user mentions 'error', 'output', 'result', 'this code', or similar ambiguous references \
+WITHOUT specifying a package name or file name, ALWAYS assume they refer to the \
+RECENT NOTEBOOK OUTPUT shown in the '=== \\:30ce\\:30fc\\:30c8\\:30d6\\:30c3\\:30af\\:306e\\:73fe\\:5728\\:306e\\:72b6\\:614b ===' section of this prompt. \
+Examine that section for error messages, warnings, or unexpected outputs, \
+and generate code that fixes or addresses the issues found there. \
+Do NOT ask the user which package or code has errors when the notebook context already contains error messages.\n\n\
 IMPORTANT: When asked to produce PDF, image, or any file output, \
 always generate Mathematica CODE that creates the output, \
 rather than attempting to return the binary data directly. \
@@ -4498,7 +4768,8 @@ ToString[$ClaudeEvalMaxDepth] <> ").\n" <>
 iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     autoEvaluate_:True, modelSpec_:Automatic, privSpec_:Automatic, autoPrivate_:False] :=
   Module[{step, entry, jobId, history, contextPrompt, evalCallback,
-          accessLevel, availModels, useClaudeCode},
+          accessLevel, availModels, useClaudeCode,
+          lastEntry, cellCountAfter, notebookCtx},
     (* アクセスレベルの解決: PrivacySpec と Model の両方を考慮 *)
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
     (* 再帰深さチェック *)
@@ -4511,11 +4782,20 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     history = iSessionHistoryWithInherit[nb, tag];
     step    = Length[iSessionHistory[nb, tag]];
 
+    (* ノートブックコンテキスト収集: 直近のセル出力（エラー含む）を取得 *)
+    lastEntry      = If[Length[history] > 0, Last[history], <||>];
+    cellCountAfter = Replace[Lookup[lastEntry, "cellCountAfter",
+                       Lookup[lastEntry, "cellCount", 0]], Except[_Integer] -> 0];
+    notebookCtx    = With[{r = Quiet[iCaptureNotebookContext[nb, cellCountAfter, accessLevel]]},
+                       If[StringQ[r], r, ""]];
+
     contextPrompt = If[Length[history] > 0,
       iClaudeSysPrompt[] <>
       "\:4ee5\:4e0b\:306f Mathematica \:3067\:306e\:4f5c\:696d\:5c65\:6b74\:3067\:3059\:3002\n\n" <>
       iSessionToContext[history] <>
-      iFileAccessContext[] <>
+      If[StringQ[notebookCtx] && notebookCtx =!= "",
+        "=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:73fe\:5728\:306e\:72b6\:614b ===\n" <> notebookCtx, ""] <>
+      iFileAccessContext[task] <>
       iPackageDocsContext[task] <>
       If[$iClaudeEvalCurrentDepth > 1,
         "=== ClaudeEval Recursion Depth: " <> ToString[$iClaudeEvalCurrentDepth] <>
@@ -4524,7 +4804,10 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
         "). Do NOT generate further ClaudeEval calls if remaining is 0. ===\n", ""] <>
       iAutoPrivatePrompt[autoPrivate] <>
       "=== \:65b0\:3057\:3044\:6307\:793a ===\nTask: " <> iExpandSymbolRefs[task],
-      iClaudeSysPrompt[] <> iFileAccessContext[] <>
+      iClaudeSysPrompt[] <>
+      If[StringQ[notebookCtx] && notebookCtx =!= "",
+        "=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:73fe\:5728\:306e\:72b6\:614b ===\n" <> notebookCtx, ""] <>
+      iFileAccessContext[task] <>
       iPackageDocsContext[task] <>
       If[$iClaudeEvalCurrentDepth > 1,
         "=== ClaudeEval Recursion Depth: " <> ToString[$iClaudeEvalCurrentDepth] <>
@@ -4633,7 +4916,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
   ];
 
 (* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:7248 ClaudeEval\:ff08\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:8fd4\:3055\:306a\:3044\:ff09 *)
-Options[ClaudeEval] = {Fallback -> False, AutoEvaluate -> True, StartTime -> Now, WebFetch -> Automatic, RepeatInterval -> None, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False};
+Options[ClaudeEval] = {Fallback -> False, AutoEvaluate -> True, StartTime -> Now, WebFetch -> Automatic, WebSearch -> True, RepeatInterval -> None, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False};
 
 (* StartTime \:30b9\:30b1\:30b8\:30e5\:30fc\:30ea\:30f3\:30b0\:30d8\:30eb\:30d1\:30fc:
    \:958b\:59cb\:6642\:523b\:304c\:672a\:6765\:306a\:3089 SessionSubmit + ScheduledTask \:3067\:9045\:5ef6\:5b9f\:884c\:3001
@@ -4759,7 +5042,12 @@ iNeedsWebSearch[task_String] :=
 (* WebFetch オプションの解決:
    True     -> 必ず検索
    False    -> 検索しない
-   Automatic -> Claude に判断させる *)
+   Automatic -> Claude に判断させる
+   重要: WebFetch は Anthropic API 経由で課金が発生するため、
+   Fallback -> True の場合のみ有効。Fallback が False なら強制的に False。 *)
+iResolveWebFetchWithFallback[task_String, wfOpt_, fallbackQ_] :=
+  If[!TrueQ[fallbackQ], task, iResolveWebFetch[task, wfOpt]];
+
 iResolveWebFetch[task_String, True] := iEnrichWithWebSearch[task];
 iResolveWebFetch[task_String, False] := task;
 iResolveWebFetch[task_String, Automatic] :=
@@ -4775,8 +5063,9 @@ iResolveWebFetch[task_String, Automatic] :=
 ClaudeEval[task_String, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = False;
+    $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
   With[{nb = EvaluationNotebook[], st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate],
-        actualTask = iResolveWebFetch[task, OptionValue[WebFetch]],
+        actualTask = iResolveWebFetchWithFallback[task, OptionValue[WebFetch], $currentUseFallback],
         ri = OptionValue[RepeatInterval],
         mdl = Replace[OptionValue[Model], Except[_List] -> Automatic],
         ps = OptionValue[PrivacySpec], ap = TrueQ[OptionValue[AutoPrivate]]},
@@ -4794,20 +5083,22 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := (
 ClaudeEval[items_List, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = False;
+    $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
   With[{nb = EvaluationNotebook[], st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate],
         wf = OptionValue[WebFetch], ri = OptionValue[RepeatInterval], mdl = OptionValue[Model],
-        ps = OptionValue[PrivacySpec], ap = TrueQ[OptionValue[AutoPrivate]]},
+        ps = OptionValue[PrivacySpec], ap = TrueQ[OptionValue[AutoPrivate]],
+        fb = $currentUseFallback},
   Module[{norm},
     norm = iNormalizePrompt[items];
     If[ri === None,
       iScheduleAt[
         iClaudeEvalImpl[nb, iSessionTag[],
-          iResolveWebFetch[norm["text"], wf],
+          iResolveWebFetchWithFallback[norm["text"], wf, fb],
           norm["imageDirs"], ae, mdl, ps, ap],
         st],
       iScheduleRepeating[
         iClaudeEvalImpl[nb, iSessionTag[],
-          iResolveWebFetch[norm["text"], wf],
+          iResolveWebFetchWithFallback[norm["text"], wf, fb],
           norm["imageDirs"], ae, mdl, ps, ap],
         st, ri]
     ]
@@ -4817,8 +5108,9 @@ ClaudeEval[items_List, opts:OptionsPattern[]] := (
 ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ClaudeEval, {opts}, Fallback]];
     $iAllowReadTool = False;
+    $iAllowWebSearch = TrueQ[OptionValue[ClaudeEval, {opts}, WebSearch]];
   With[{st = OptionValue[ClaudeEval, {opts}, StartTime], ae = OptionValue[ClaudeEval, {opts}, AutoEvaluate],
-        actualTask = iResolveWebFetch[task, OptionValue[ClaudeEval, {opts}, WebFetch]],
+        actualTask = iResolveWebFetchWithFallback[task, OptionValue[ClaudeEval, {opts}, WebFetch], $currentUseFallback],
         ri = OptionValue[ClaudeEval, {opts}, RepeatInterval], mdl = OptionValue[ClaudeEval, {opts}, Model],
         ps = OptionValue[ClaudeEval, {opts}, PrivacySpec], ap = TrueQ[OptionValue[ClaudeEval, {opts}, AutoPrivate]]},
     If[ri === None,
@@ -4834,22 +5126,24 @@ ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := (
 ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ClaudeEval, {opts}, Fallback]];
     $iAllowReadTool = False;
+    $iAllowWebSearch = TrueQ[OptionValue[ClaudeEval, {opts}, WebSearch]];
   Module[{norm = iNormalizePrompt[items], st = OptionValue[ClaudeEval, {opts}, StartTime],
           ae = OptionValue[ClaudeEval, {opts}, AutoEvaluate],
           wf = OptionValue[ClaudeEval, {opts}, WebFetch],
           ri = OptionValue[ClaudeEval, {opts}, RepeatInterval],
           mdl = OptionValue[ClaudeEval, {opts}, Model],
           ps = OptionValue[ClaudeEval, {opts}, PrivacySpec],
-          ap = TrueQ[OptionValue[ClaudeEval, {opts}, AutoPrivate]]},
+          ap = TrueQ[OptionValue[ClaudeEval, {opts}, AutoPrivate]],
+          fb = $currentUseFallback},
     If[ri === None,
       iScheduleAt[
         iClaudeEvalImpl[session["Notebook"], session["SessionTag"],
-          iResolveWebFetch[norm["text"], wf],
+          iResolveWebFetchWithFallback[norm["text"], wf, fb],
           norm["imageDirs"], ae, mdl, ps, ap],
         st],
       iScheduleRepeating[
         iClaudeEvalImpl[session["Notebook"], session["SessionTag"],
-          iResolveWebFetch[norm["text"], wf],
+          iResolveWebFetchWithFallback[norm["text"], wf, fb],
           norm["imageDirs"], ae, mdl, ps, ap],
         st, ri]
     ]
@@ -4868,12 +5162,12 @@ iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :
       $claudeSpecPrefix <>
       "\:4ee5\:4e0b\:306f Mathematica \:3067\:306e\:4f5c\:696d\:5c65\:6b74\:3067\:3059\:3002\n\n" <>
       iSessionToContext[history] <>
-      iFileAccessContext[] <>
+      iFileAccessContext[task] <>
       "=== \:65b0\:3057\:3044\:6307\:793a ===\nTask: " <> iExpandSymbolRefs[task],
       If[$ClaudeMDContent =!= "",
         "## Project guidelines (CLAUDE.md)\n\n" <> $ClaudeMDContent <> "\n\n---\n\n",
         ""] <>
-      $claudeSpecPrefix <> iFileAccessContext[] <>
+      $claudeSpecPrefix <> iFileAccessContext[task] <>
       "Task: " <> iExpandSymbolRefs[task]
     ];
 
@@ -4960,7 +5254,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
       iSessionToContext[history] <>
       If[StringQ[notebookCtx] && notebookCtx =!= "",
         "=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:73fe\:5728\:306e\:72b6\:614b ===\n" <> notebookCtx, ""] <>
-      iFileAccessContext[] <>
+      iFileAccessContext[instruction] <>
       iAutoPrivatePrompt[autoPrivate] <>
       "=== \:65b0\:3057\:3044\:6307\:793a ===\n" <> iExpandSymbolRefs[instruction] <> "\n\n" <>
       "\:76f4\:524d\:306e\:30b3\:30fc\:30c9\:3068\:5c65\:6b74\:3092\:8e0f\:307e\:3048\:3066\:3001\:4fee\:6b63\:30fb\:6539\:826f\:3057\:305f\:30b3\:30fc\:30c9\:3092\:63d0\:793a\:3057\:3066\:304f\:3060\:3055\:3044\:3002";
@@ -5050,11 +5344,12 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
   ];
 
 (* \:30bb\:30c3\:30b7\:30e7\:30f3\:6307\:5b9a\:7248 *)
-Options[ContinueEval] = {Fallback -> False, AutoEvaluate -> True, StartTime -> Now, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False};
+Options[ContinueEval] = {Fallback -> False, AutoEvaluate -> True, StartTime -> Now, WebSearch -> True, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False};
 
 ContinueEval[session_Association, instruction_String:"\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044",
     opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
+    $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
   With[{st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate], mdl = OptionValue[Model],
         ps = OptionValue[PrivacySpec], ap = TrueQ[OptionValue[AutoPrivate]]},
     iScheduleAt[
@@ -5066,6 +5361,7 @@ ContinueEval[session_Association, instruction_String:"\:30a8\:30e9\:30fc\:3092\:
 ContinueEval[instruction_String, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ContinueEval, {opts}, Fallback]];
     $iAllowReadTool = False;
+    $iAllowWebSearch = TrueQ[OptionValue[ContinueEval, {opts}, WebSearch]];
   With[{nb = EvaluationNotebook[], st = OptionValue[ContinueEval, {opts}, StartTime],
         ae = OptionValue[ContinueEval, {opts}, AutoEvaluate],
         mdl = OptionValue[ContinueEval, {opts}, Model],
@@ -5081,6 +5377,7 @@ ContinueEval[session_Association, instruction_String:"\:30a8\:30e9\:30fc\:3092\:
     opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = False;
+    $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
   With[{st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate], mdl = OptionValue[Model],
         ps = OptionValue[PrivacySpec], ap = TrueQ[OptionValue[AutoPrivate]]},
     iScheduleAt[
@@ -5284,7 +5581,8 @@ iClaudeReviewChunkedAsync[nb_, chunks_, label_, i_, results_] :=
           iClaudeReviewChunkedAsync[nb2, ch, lb, ni+1, Append[nr, response]]
         ]
       ],
-      nb]
+      nb];
+    $ClaudeModel = savedModel;
   ];
 
 (* ============================================================
@@ -5518,50 +5816,92 @@ iEnsureReferencesAccessible[packageName_String] :=
    ClaudeCreateDocumentation / ClaudeUpdateDocumentation で自動復元する。
    ============================================================ *)
 
+(* パッケージ別 Doc 状態の読み出しヘルパー *)
+iDocGet[packageName_String, key_String] :=
+  Module[{state},
+    state = Lookup[$iDocState, packageName, <||>];
+    If[!AssociationQ[state], state = <||>];
+    Lookup[state, key, If[key === "License" || key === "GlobalInstruction", "", {}]]
+  ];
+
+(* パッケージ別 Doc 状態の初期化。
+   エントリポイント (ClaudeCreate/UpdateDocumentation) で呼ぶ。 *)
+iDocInitState[packageName_String, refs_List, demos_List,
+    disclaimer_List, acks_List, license_String, instruction_String:"",
+    explicitDemosOrRefs_:False] :=
+  ($iDocState[packageName] = <|
+    "References" -> refs, "Demos" -> demos,
+    "Disclaimer" -> disclaimer, "Acknowledgments" -> acks,
+    "License" -> license, "GlobalInstruction" -> instruction,
+    "ExplicitDemosOrRefs" -> explicitDemosOrRefs
+  |>);
+
 iDocOptionsPath[packageName_String] :=
   FileNameJoin[{iReferencesDir[packageName], "doc_options.json"}];
 
-(* 現在の $iDoc* 変数を JSON に保存 *)
+(* 現在の $iDoc* 変数を JSON に保存。
+   既存ファイルが存在する場合、空でない値のみ上書きする（read-modify-write）。
+   これにより、非同期コールバック中に $iDoc* がリセットされても
+   既存の保存値が破壊されない。 *)
 iSaveDocOptions[packageName_String] :=
-  Module[{path, data, refDir},
+  Module[{path, existing, data, refDir, merged},
     refDir = iReferencesDir[packageName];
     If[!DirectoryQ[refDir],
       Quiet @ CreateDirectory[refDir, CreateIntermediateDirectories -> True]];
     path = iDocOptionsPath[packageName];
+    (* 既存ファイルを読み込む *)
+    existing = If[FileExistsQ[path],
+      Quiet @ Check[Import[path, "RawJSON"], <||>], <||>];
+    If[!AssociationQ[existing], existing = <||>];
+    (* $iDocState[packageName] から値を取得 *)
     data = <|
-      "References" -> If[ListQ[$iDocReferences], $iDocReferences, {}],
-      "Demos" -> If[ListQ[$iDocDemos], $iDocDemos, {}],
-      "Disclaimer" -> If[ListQ[$iDocDisclaimer], $iDocDisclaimer, {}],
-      "Acknowledgments" -> If[ListQ[$iDocAcknowledgments], $iDocAcknowledgments, {}],
-      "License" -> If[StringQ[$iDocLicense], $iDocLicense, ""]
+      "References" -> Replace[iDocGet[packageName, "References"], Except[_List] -> {}],
+      "Demos" -> Replace[iDocGet[packageName, "Demos"], Except[_List] -> {}],
+      "Disclaimer" -> Replace[iDocGet[packageName, "Disclaimer"], Except[_List] -> {}],
+      "Acknowledgments" -> Replace[iDocGet[packageName, "Acknowledgments"], Except[_List] -> {}],
+      "License" -> Replace[iDocGet[packageName, "License"], Except[_String] -> ""]
     |>;
-    Quiet @ Export[path, data, "RawJSON"];
+    (* マージ: 新しい値が空でなければ採用、空なら既存値を保持 *)
+    merged = <|
+      "References" -> If[Length[data["References"]] > 0,
+        data["References"],
+        Replace[Lookup[existing, "References", {}], Except[_List] -> {}]],
+      "Demos" -> If[Length[data["Demos"]] > 0,
+        data["Demos"],
+        Replace[Lookup[existing, "Demos", {}], Except[_List] -> {}]],
+      "Disclaimer" -> If[Length[data["Disclaimer"]] > 0,
+        data["Disclaimer"],
+        Replace[Lookup[existing, "Disclaimer", {}], Except[_List] -> {}]],
+      "Acknowledgments" -> If[Length[data["Acknowledgments"]] > 0,
+        data["Acknowledgments"],
+        Replace[Lookup[existing, "Acknowledgments", {}], Except[_List] -> {}]],
+      "License" -> If[StringQ[data["License"]] && data["License"] =!= "",
+        data["License"],
+        Replace[Lookup[existing, "License", ""], Except[_String] -> ""]]
+    |>;
+    Quiet @ Export[path, merged, "RawJSON"];
   ];
 
 (* JSON から読み込み、現在のオプション値とマージ。
    オプションで明示的に指定された値を優先し、永続化された値は追加のみ。 *)
 iLoadAndMergeDocOptions[packageName_String] :=
-  Module[{path, saved},
+  Module[{path, saved, state, key},
     path = iDocOptionsPath[packageName];
     If[!FileExistsQ[path], Return[]];
     saved = Quiet @ Check[Import[path, "RawJSON"], $Failed];
     If[!AssociationQ[saved], Return[]];
+    state = Lookup[$iDocState, packageName, <||>];
+    If[!AssociationQ[state], state = <||>];
     (* マージ: 現在値が空なら永続値を採用、非空なら重複排除で結合 *)
-    $iDocReferences = DeleteDuplicates @ Join[
-      If[ListQ[$iDocReferences], $iDocReferences, {}],
-      Replace[Lookup[saved, "References", {}], Except[_List] -> {}]];
-    $iDocDemos = DeleteDuplicates @ Join[
-      If[ListQ[$iDocDemos], $iDocDemos, {}],
-      Replace[Lookup[saved, "Demos", {}], Except[_List] -> {}]];
-    $iDocDisclaimer = DeleteDuplicates @ Join[
-      If[ListQ[$iDocDisclaimer], $iDocDisclaimer, {}],
-      Replace[Lookup[saved, "Disclaimer", {}], Except[_List] -> {}]];
-    $iDocAcknowledgments = DeleteDuplicates @ Join[
-      If[ListQ[$iDocAcknowledgments], $iDocAcknowledgments, {}],
-      Replace[Lookup[saved, "Acknowledgments", {}], Except[_List] -> {}]];
+    Do[
+      state[key] = DeleteDuplicates @ Join[
+        Replace[Lookup[state, key, {}], Except[_List] -> {}],
+        Replace[Lookup[saved, key, {}], Except[_List] -> {}]],
+      {key, {"References", "Demos", "Disclaimer", "Acknowledgments"}}];
     (* License: 明示指定があればそちらを優先、なければ永続値 *)
-    If[!StringQ[$iDocLicense] || $iDocLicense === "",
-      $iDocLicense = Replace[Lookup[saved, "License", ""], Except[_String] -> ""]];
+    If[!StringQ[Lookup[state, "License", ""]] || Lookup[state, "License", ""] === "",
+      state["License"] = Replace[Lookup[saved, "License", ""], Except[_String] -> ""]];
+    $iDocState[packageName] = state;
   ];
 
 (* Paclet 形式か単一ファイルかを判定 *)
@@ -7286,10 +7626,10 @@ iIsDocLimitError[response_String] := !iIsValidDocContent[response];
 (* README.md 用の特別プロンプトを構築: 他ドキュメントの内容を読み込んで概要生成 *)
 
 (* 参考文献・デモ動画情報をプロンプト用テキストに変換 *)
-iDocBuildRefSection[] :=
+iDocBuildRefSection[packageName_String] :=
   Module[{refs, demos, result = ""},
-    refs = If[ListQ[$iDocReferences], $iDocReferences, {}];
-    demos = If[ListQ[$iDocDemos], $iDocDemos, {}];
+    refs = Replace[iDocGet[packageName, "References"], Except[_List] -> {}];
+    demos = Replace[iDocGet[packageName, "Demos"], Except[_List] -> {}];
     If[Length[refs] > 0,
       result = result <>
         "\n=== REFERENCES (add to README under '## \:53c2\:8003\:6587\:732e' section) ===\n" <>
@@ -7310,12 +7650,14 @@ iDocBuildRefSection[] :=
   ];
 
 (* 指示文テキストを生成用プロンプトに変換 *)
-iDocGlobalInstructionPrompt[] :=
-  If[StringQ[$iDocGlobalInstruction] && StringTrim[$iDocGlobalInstruction] =!= "",
-    "\n=== GLOBAL INSTRUCTION FROM USER ===\n" <>
-    "Follow this instruction when generating ALL documentation files:\n" <>
-    $iDocGlobalInstruction <> "\n\n",
-    ""
+iDocGlobalInstructionPrompt[packageName_String] :=
+  Module[{instr = iDocGet[packageName, "GlobalInstruction"]},
+    If[StringQ[instr] && StringTrim[instr] =!= "",
+      "\n=== GLOBAL INSTRUCTION FROM USER ===\n" <>
+      "Follow this instruction when generating ALL documentation files:\n" <>
+      instr <> "\n\n",
+      ""
+    ]
   ];
 
 (* $packageDirectory 内の全パッケージの GitHub URL 一覧をプロンプト用に構築 *)
@@ -7388,9 +7730,9 @@ iCompactSourceForUpdate[sourceCode_String, split_Association, docFile_String,
   ];
 
 (* 謝辞セクションのプロンプト *)
-iDocBuildAcknowledgmentsPrompt[] :=
+iDocBuildAcknowledgmentsPrompt[packageName_String] :=
   Module[{items},
-    items = If[ListQ[$iDocAcknowledgments], $iDocAcknowledgments, {}];
+    items = Replace[iDocGet[packageName, "Acknowledgments"], Except[_List] -> {}];
     If[Length[items] === 0, Return[""]];
     "\n=== ACKNOWLEDGMENTS SECTION (add BEFORE 免責事項 in README.md) ===\n" <>
     "Add a '## 謝辞' section in README.md, placed BEFORE 免責事項.\n" <>
@@ -7400,14 +7742,14 @@ iDocBuildAcknowledgmentsPrompt[] :=
   ];
 
 (* 免責事項セクションのプロンプト *)
-iDocBuildDisclaimerPrompt[] :=
+iDocBuildDisclaimerPrompt[packageName_String] :=
   Module[{extras, base},
     base = "本ソフトウェアは \"as is\"（現状有姿）で提供されており、明示・黙示を問わずいかなる保証もありません。\n" <>
       "本ソフトウェアの使用または使用不能から生じるいかなる損害についても責任を負いません。\n" <>
       "今後の動作保証のための更新が行われるとは限りません。\n" <>
       "本ソフトウェアとドキュメントはほぼすべてが生成AIによって生成されたものです。\n" <>
       "Windows 11上での実行を想定しており、MacOS, LinuxのMathematicaでの動作検証は一切していません(生成AIの処理で対応可能と想定されます)。";
-    extras = If[ListQ[$iDocDisclaimer], $iDocDisclaimer, {}];
+    extras = Replace[iDocGet[packageName, "Disclaimer"], Except[_List] -> {}];
     "\n=== DISCLAIMER SECTION (add AFTER 謝辞 if present, BEFORE ライセンス in README.md) ===\n" <>
     "Add a '## 免責事項' section in README.md with this text:\n" <>
     base <> "\n" <>
@@ -7419,17 +7761,18 @@ iDocBuildDisclaimerPrompt[] :=
   ];
 
 (* ライセンスセクションのプロンプト *)
-iDocBuildLicensePrompt[] :=
-  Module[{holder, licText, yearStr, createdYear, currentYear},
+iDocBuildLicensePrompt[packageName_String] :=
+  Module[{holder, licText, yearStr, createdYear, currentYear, docLicense},
+    docLicense = iDocGet[packageName, "License"];
     (* License オプションに文字列が指定されていればそれを使用 *)
-    If[StringQ[$iDocLicense] && StringTrim[$iDocLicense] =!= "",
+    If[StringQ[docLicense] && StringTrim[docLicense] =!= "",
       Return[
         "\n=== LICENSE SECTION (MUST add at the very end of README.md, after 免責事項) ===\n" <>
         "Add a '## \:30e9\:30a4\:30bb\:30f3\:30b9' section.\n" <>
         "CRITICAL: The license text below is a LEGAL document. Copy it VERBATIM.\n" <>
         "Do NOT translate, paraphrase, or modify any wording.\n" <>
         "Insert the following text exactly as-is:\n\n" <>
-        "```\n" <> $iDocLicense <> "\n```\n"]];
+        "```\n" <> docLicense <> "\n```\n"]];
     (* $GitHubLicenseHolder を取得 *)
     holder = Quiet @ Check[GitHubREST`$GitHubLicenseHolder, ""];
     If[!StringQ[holder] || StringTrim[holder] === "",
@@ -7517,9 +7860,9 @@ iBuildReadmePrompt[sourceCode_String, packageName_String, outDir_String] :=
     "### \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:4e00\:89a7\n" <>
     "## \:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2 (MUST use this exact section name; " <>
     "place Demo URLs and usage examples here)\n" <>
-    If[Length[If[ListQ[$iDocReferences], $iDocReferences, {}]] > 0,
+    If[Length[Replace[iDocGet[packageName, "References"], Except[_List] -> {}]] > 0,
       "## \:53c2\:8003\:6587\:732e\n", ""] <>
-    If[Length[If[ListQ[$iDocAcknowledgments], $iDocAcknowledgments, {}]] > 0,
+    If[Length[Replace[iDocGet[packageName, "Acknowledgments"], Except[_List] -> {}]] > 0,
       "## \:8b1d\:8f9e\n", ""] <>
     "## \:514d\:8cac\:4e8b\:9805\n" <>
     "## \:30e9\:30a4\:30bb\:30f3\:30b9\n" <>
@@ -7531,12 +7874,12 @@ iBuildReadmePrompt[sourceCode_String, packageName_String, outDir_String] :=
     "Do NOT wrap in code fences. Do NOT ask for file permissions.\n\n" <>
     "=== EXISTING DOCUMENTATION (for overview synthesis) ===\n" <>
     docsContent <> "\n" <>
-    iDocBuildRefSection[] <>
+    iDocBuildRefSection[packageName] <>
     iBuildGitHubLinksContext[] <>
     iReadDesignMemos[packageName] <>
-    iDocBuildAcknowledgmentsPrompt[] <>
-    iDocBuildDisclaimerPrompt[] <>
-    iDocBuildLicensePrompt[] <>
+    iDocBuildAcknowledgmentsPrompt[packageName] <>
+    iDocBuildDisclaimerPrompt[packageName] <>
+    iDocBuildLicensePrompt[packageName] <>
     "=== PACKAGE SOURCE CODE (summary) ===\n" <>
     StringTake[sourceCode, UpTo[$ClaudeDocMaxChunkChars]]
   ];
@@ -7659,7 +8002,7 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       "You are documenting the package \"" <> packageName <> "\".\n\n" <>
       "CRITICAL RULE: \:8b1d\:8f9e (Acknowledgments), \:514d\:8cac\:4e8b\:9805 (Disclaimer) and \:30e9\:30a4\:30bb\:30f3\:30b9 (License) sections MUST ONLY exist in README.md.\n" <>
       "Do NOT add any \:8b1d\:8f9e, \:514d\:8cac\:4e8b\:9805 or \:30e9\:30a4\:30bb\:30f3\:30b9 section to this file.\n\n" <>
-      iDocGlobalInstructionPrompt[] <>
+      iDocGlobalInstructionPrompt[packageName] <>
       iBuildGitHubLinksContext[] <>
       promptTemplate <> "\n\n" <>
       "Output ONLY the Markdown content directly as your response text.\n" <>
@@ -7667,16 +8010,18 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       "Do NOT include ===BEGIN=== / ===END=== markers.\n\n" <>
       "=== PACKAGE SOURCE CODE (chunked) ===\n" <> chunked
     ];
-    (* ドキュメント生成用モデルでクエリ実行 *)
+    (* ドキュメント生成用モデルでクエリ実行。
+       $ClaudeModel はバッチファイル生成時にのみ参照されるため、
+       iClaudeQueryAsyncWithProgress から戻った直後に復元する。
+       コールバック内での復元は不要（非同期中に他の操作と干渉するため）。 *)
     Module[{savedModel = $ClaudeModel},
     $ClaudeModel = iDocModelOverride[];
     iClaudeQueryAsyncWithProgress[fullPrompt,
       With[{nb2 = nb, od = outDir, q = queue, i = idx,
             of = outFile, dt = docTitle, sc = sourceCode, pn = packageName,
-            rc = retryCount, sp = split, origModel = savedModel},
+            rc = retryCount, sp = split},
         Function[response,
           Module[{destPath, writeResult},
-            $ClaudeModel = origModel;
             destPath = FileNameJoin[{od, of}];
             writeResult = iSafeWriteDoc[destPath, response];
             If[writeResult =!= $Failed,
@@ -7708,7 +8053,8 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
           ]
         ]
       ],
-      nb]
+      nb];
+    $ClaudeModel = savedModel;
     ] (* end Module savedModel *)
   ];
 
@@ -7761,17 +8107,18 @@ ClaudeCreateDocumentation[packageName_String, opts:OptionsPattern[]] :=
 (* 2\:5f15\:6570\:7248: \:5927\:57df\:7684\:6307\:793a\:4ed8\:304d *)
 ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPattern[]] := (
   $currentUseFallback = TrueQ[OptionValue[Fallback]];
-  $iDocGlobalInstruction = instruction;
-  $iDocReferences = Replace[OptionValue[References], Except[_List] -> {}];
-  $iDocDemos = Replace[OptionValue[Demos], Except[_List] -> {}];
-  $iDocDisclaimer = Replace[OptionValue[Disclaimer], Except[_List] -> {}];
-  $iDocAcknowledgments = Replace[OptionValue[Acknowledgments], Except[_List] -> {}];
-  $iDocLicense = Replace[OptionValue[License], Except[_String] -> ""];
-  (* \:6307\:793a\:6587\:4e2d\:306e URL \:3082\:81ea\:52d5\:691c\:51fa\:3057\:3066 Demos/References \:306b\:8ffd\:52a0 *)
-  Module[{urlsInInstr},
+  Module[{urlsInInstr, initDemos},
+    initDemos = Replace[OptionValue[Demos], Except[_List] -> {}];
     urlsInInstr = StringCases[instruction,
       RegularExpression["https?://[^\\s\\)\\]\\>\"]+"] :> "$0"];
-    $iDocDemos = DeleteDuplicates[Join[$iDocDemos, urlsInInstr]];
+    initDemos = DeleteDuplicates[Join[initDemos, urlsInInstr]];
+    iDocInitState[packageName,
+      Replace[OptionValue[References], Except[_List] -> {}],
+      initDemos,
+      Replace[OptionValue[Disclaimer], Except[_List] -> {}],
+      Replace[OptionValue[Acknowledgments], Except[_List] -> {}],
+      Replace[OptionValue[License], Except[_String] -> ""],
+      instruction];
   ];
   (* 永続化されたオプションをマージ *)
   iLoadAndMergeDocOptions[packageName];
@@ -7906,7 +8253,7 @@ iPackageDocsContext[task_String] :=
       StringContainsQ[task, #, IgnoreCase -> True] &];
     (* \:57fa\:76e4\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30ad\:30fc\:30ef\:30fc\:30c9\:691c\:51fa: \:30bf\:30b9\:30af\:6587\:306b\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:304c\:306a\:304f\:3066\:3082
        \:95a2\:9023\:30ad\:30fc\:30ef\:30fc\:30c9\:304c\:3042\:308c\:3070 api.md \:3092\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306b\:542b\:3081\:308b *)
-    Module[{kwMap, pkg, kws},
+    Module[{kwMap, pkg, kws, extMap},
       kwMap = {
         "github" -> {"GitHub", "PR", "\:30d7\:30eb\:30ea\:30af\:30a8\:30b9\:30c8", "\:30ea\:30dd\:30b8\:30c8\:30ea",
           "\:30b3\:30df\:30c3\:30c8", "\:30d6\:30e9\:30f3\:30c1", "commit", "push", "pull request",
@@ -7914,6 +8261,10 @@ iPackageDocsContext[task_String] :=
         "NBAccess" -> {"NBAccess", "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30bb\:30eb", "\:6a5f\:5bc6\:30bb\:30eb",
           "Confidential", "TaggingRules", "CellEpilog"}
       };
+      (* 外部パッケージが $ClaudePackageKeywordMap に登録したキーワードをマージ *)
+      extMap = If[AssociationQ[$ClaudePackageKeywordMap],
+        Normal[$ClaudePackageKeywordMap], {}];
+      kwMap = Join[kwMap, extMap];
       Do[
         pkg = kv[[1]]; kws = kv[[2]];
         If[!MemberQ[mentioned, pkg] &&
@@ -8090,11 +8441,12 @@ Options[ClaudeUpdateDocumentation] = {
 (* 1\:5f15\:6570\:7248: \:524d\:56de _documentupdate \:4ee5\:964d\:306e\:5909\:66f4\:3092\:81ea\:52d5\:691c\:51fa\:3057\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0 *)
 ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
   $currentUseFallback = TrueQ[OptionValue[Fallback]];
-  $iDocReferences = Replace[OptionValue[References], Except[_List] -> {}];
-  $iDocDemos = Replace[OptionValue[Demos], Except[_List] -> {}];
-  $iDocDisclaimer = Replace[OptionValue[Disclaimer], Except[_List] -> {}];
-  $iDocAcknowledgments = Replace[OptionValue[Acknowledgments], Except[_List] -> {}];
-  $iDocLicense = Replace[OptionValue[License], Except[_String] -> ""];
+  iDocInitState[packageName,
+    Replace[OptionValue[References], Except[_List] -> {}],
+    Replace[OptionValue[Demos], Except[_List] -> {}],
+    Replace[OptionValue[Disclaimer], Except[_List] -> {}],
+    Replace[OptionValue[Acknowledgments], Except[_List] -> {}],
+    Replace[OptionValue[License], Except[_String] -> ""]];
   (* 永続化されたオプションをマージ *)
   iLoadAndMergeDocOptions[packageName];
   With[{nb = EvaluationNotebook[]},
@@ -8168,20 +8520,21 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
 (* 2\:5f15\:6570\:7248: \:6307\:793a\:4ed8\:304d\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0 *)
 ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPattern[]] := (
   $currentUseFallback = TrueQ[OptionValue[Fallback]];
-  $iDocReferences = Replace[OptionValue[References], Except[_List] -> {}];
-  $iDocDemos = Replace[OptionValue[Demos], Except[_List] -> {}];
-  $iDocDisclaimer = Replace[OptionValue[Disclaimer], Except[_List] -> {}];
-  $iDocAcknowledgments = Replace[OptionValue[Acknowledgments], Except[_List] -> {}];
-  $iDocLicense = Replace[OptionValue[License], Except[_String] -> ""];
-  (* 今回の呼び出しで明示的に Demos/References が渡されたか記録 *)
-  Module[{urlsInInstr, explicitDemos, explicitRefs},
-    explicitDemos = Length[$iDocDemos] > 0;
-    explicitRefs = Length[$iDocReferences] > 0;
+  Module[{urlsInInstr, initDemos, initRefs, explicitDemos, explicitRefs},
+    initRefs = Replace[OptionValue[References], Except[_List] -> {}];
+    initDemos = Replace[OptionValue[Demos], Except[_List] -> {}];
+    explicitDemos = Length[initDemos] > 0;
+    explicitRefs = Length[initRefs] > 0;
     urlsInInstr = StringCases[instruction,
       RegularExpression["https?://[^\\s\\)\\]\\>\"]+"] :> "$0"];
     If[Length[urlsInInstr] > 0, explicitDemos = True];
-    $iDocDemos = DeleteDuplicates[Join[$iDocDemos, urlsInInstr]];
-    $iExplicitDemosOrRefs = explicitDemos || explicitRefs;
+    initDemos = DeleteDuplicates[Join[initDemos, urlsInInstr]];
+    iDocInitState[packageName, initRefs, initDemos,
+      Replace[OptionValue[Disclaimer], Except[_List] -> {}],
+      Replace[OptionValue[Acknowledgments], Except[_List] -> {}],
+      Replace[OptionValue[License], Except[_String] -> ""],
+      instruction,
+      explicitDemos || explicitRefs];
   ];
   (* 永続化されたオプションをマージ *)
   iLoadAndMergeDocOptions[packageName];
@@ -8243,11 +8596,10 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
         (* 自動判定: Create モードならファイル存在チェックをスキップ *)
         iGuessTargetDocs[instruction, docsDir, mode === "Create"]]];
     (* 今回の呼び出しで Demos/References が明示的に渡された場合のみ README.md を強制追加 *)
-    If[TrueQ[$iExplicitDemosOrRefs] &&
+    If[TrueQ[iDocGet[packageName, "ExplicitDemosOrRefs"]] &&
        !MemberQ[targetDocs, "README.md"] &&
        FileExistsQ[FileNameJoin[{docsDir, "README.md"}]],
       targetDocs = iEnsureReadmeLast[DeleteDuplicates[Append[targetDocs, "README.md"]]]];
-    $iExplicitDemosOrRefs = False;
     If[Length[targetDocs] === 0,
       nbPrint[nb, "\:30a8\:30e9\:30fc: \:66f4\:65b0\:5bfe\:8c61\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
       Return[$Failed]];
@@ -8348,10 +8700,10 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       ];
       AppendTo[promptParts,
         iBuildGitHubLinksContext[] <>
-        iDocBuildRefSection[] <>
-        iDocBuildAcknowledgmentsPrompt[] <>
-        iDocBuildDisclaimerPrompt[] <>
-        iDocBuildLicensePrompt[]]
+        iDocBuildRefSection[packageName] <>
+        iDocBuildAcknowledgmentsPrompt[packageName] <>
+        iDocBuildDisclaimerPrompt[packageName] <>
+        iDocBuildLicensePrompt[packageName]]
     ];
 
     (* --- api.md / user_manual / setup / examples: ソースコード添付 --- *)
@@ -8441,11 +8793,9 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       With[{nb2 = nb, dd = docsDir, tds = targetDocs, i = idx,
             df = docFile, dp = docPath, sc = sourceCode, pn = packageName,
             instr = instruction, dt = diffText, sf = srcFile, sp = split,
-            origModel = savedModel, md = mode},
+            md = mode},
         Function[response,
           Module[{writeResult},
-            (* モデルを元に戻す *)
-            $ClaudeModel = origModel;
             writeResult = iSafeWriteDoc[dp, response, pn];
             If[writeResult =!= $Failed,
               nbPrint[nb2, "  \:2713 " <> df <> " \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
@@ -8456,7 +8806,8 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
           ]
         ]
       ],
-      nb]
+      nb];
+    $ClaudeModel = savedModel;
   ];
 
 
@@ -8509,10 +8860,9 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
     Module[{savedModel = $ClaudeModel},
     $ClaudeModel = iDocModelOverride[];
     iClaudeQueryAsyncWithProgress[prompt,
-      With[{nb2 = nb, af = apiFile, pn = packageName, origModel = savedModel},
+      With[{nb2 = nb, af = apiFile, pn = packageName},
         Function[response,
           Module[{writeResult},
-            $ClaudeModel = origModel;
             writeResult = iSafeWriteDoc[af, response, pn];
             If[writeResult =!= $Failed,
               nbPrint[nb2, "  \:2713 " <> pn <> " \:306e api.md \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
@@ -8521,7 +8871,8 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
             ]]
         ]
       ],
-      nb]
+      nb];
+    $ClaudeModel = savedModel;
     ] (* end Module savedModel *)
   ];
 
@@ -11217,6 +11568,189 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
 (* ClaudeUpdatePackage のパッケージ名のみ呼び出し: 分離違反修正 *)
 ClaudeUpdatePackage[packageName_String] :=
   ClaudeFixSeparation[packageName];
+
+(* ============================================================
+   ClaudePrepareCommit: 前回コミット以降の変更を収集し
+   コミットメッセージ付きの GitHubRefreshAndCommit コマンドを出力
+   ============================================================ *)
+
+(* バックアップディレクトリ名のタイムスタンプを AbsoluteTime に変換 *)
+iBackupDirToAbsoluteTime[dirName_String] :=
+  Module[{ts, m},
+    ts = iBackupTimestampPart[dirName];
+    (* YYYYMMDD_HHMMSS 形式 *)
+    m = StringCases[ts,
+      RegularExpression["^(\\d{4})(\\d{2})(\\d{2})_(\\d{2})(\\d{2})(\\d{2})$"] :>
+        {"$1", "$2", "$3", "$4", "$5", "$6"}];
+    If[Length[m] > 0,
+      Quiet @ AbsoluteTime[{
+        StringJoin[Riffle[First[m], {"-", "-", " ", ":", ":"}]],
+        {"Year", "-", "Month", "-", "Day", " ", "Hour", ":", "Minute", ":", "Second"}}],
+      (* YYYYMMDDHHMM 形式 *)
+      m = StringCases[ts,
+        RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
+          {"$1", "$2", "$3", "$4", "$5"}];
+      If[Length[m] > 0,
+        Quiet @ AbsoluteTime[{
+          StringJoin[Riffle[First[m], {"-", "-", " ", ":"}]],
+          {"Year", "-", "Month", "-", "Day", " ", "Hour", ":", "Minute"}}],
+        0]]];
+
+(* 前回コミット以降のバックアップエントリから変更サマリーを収集 *)
+iCollectChangeSummaries[packageName_String, sinceTime_?NumericQ] :=
+  Module[{entries, filtered, summaries = {}},
+    entries = iAllBackupEntries[packageName];
+    (* sinceTime 以降のエントリをフィルタ *)
+    filtered = Select[entries,
+      iBackupDirToAbsoluteTime[#["DirName"]] > sinceTime &];
+    (* pre_ バックアップは除外（更新前の保存であり変更内容ではない） *)
+    filtered = Select[filtered, !StringStartsQ[#["DirName"], "pre_"] &];
+    Do[
+      Module[{prompt = entry["Prompt"], btype = entry["Type"]},
+        If[StringQ[prompt] && StringLength[StringTrim[prompt]] > 0,
+          Module[{summary = StringTrim[prompt], label},
+            (* 長すぎるプロンプトは先頭を抽出 *)
+            If[StringLength[summary] > 200,
+              summary = StringTake[summary, 200]];
+            (* INSTRUCTION: 以降を抽出 *)
+            summary = First[StringCases[summary,
+              "INSTRUCTION: " ~~ rest__ :> rest], summary];
+            (* 定型句を除去 *)
+            summary = StringReplace[summary, {
+              "\:524d\:56de\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:4ee5\:964d\:306e\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:5909\:66f4\:3092\:53cd\:6620\:3057\:3066\:3001\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0\:3057\:3066\:304f\:3060\:3055\:3044\:3002" ->
+                "auto-update docs"}];
+            summary = StringTrim[summary];
+            If[StringLength[summary] > 0,
+              label = Switch[btype,
+                "doc", "[docs] ",
+                "update", "",
+                _, ""];
+              AppendTo[summaries, label <> summary]]]]],
+      {entry, filtered}];
+    summaries
+  ];
+
+(* 変更サマリーリストを "- " 付き72文字折り返しで整形 *)
+iWrapCommitBodyLines[summaries_List] :=
+  Module[{bodyLines},
+    bodyLines = Map[
+      Function[s,
+        Module[{line = "- " <> s, wrapped = {}},
+          While[StringLength[line] > 72,
+            Module[{breakPos},
+              breakPos = StringPosition[StringTake[line, 72], " "];
+              breakPos = If[Length[breakPos] > 0, Last[breakPos][[1]], 72];
+              AppendTo[wrapped, StringTake[line, breakPos]];
+              line = "  " <> StringTrim[StringDrop[line, breakPos]]]];
+          AppendTo[wrapped, line];
+          StringJoin[Riffle[wrapped, "\n"]]]],
+      summaries];
+    StringJoin[Riffle[bodyLines, "\n"]]
+  ];
+
+(* 変更サマリーリストからコミットメッセージを構築。
+   1行目: 50文字以内の要約
+   本文: 各変更を72文字折り返しで列挙 *)
+iFormatCommitMessage[packageName_String, summaries_List] :=
+  Module[{subject, body},
+    If[Length[summaries] === 0,
+      Return["Update " <> packageName]];
+    (* 1行目: 最初のサマリーをベースに短い要約を生成 *)
+    subject = If[Length[summaries] === 1,
+      summaries[[1]],
+      summaries[[1]] <> " + " <> ToString[Length[summaries] - 1] <> " more"];
+    (* 50文字に収める *)
+    If[StringLength[subject] > 50,
+      subject = StringTake[subject, 47] <> "..."];
+    body = iWrapCommitBodyLines[summaries];
+    subject <> "\n\n" <> body
+  ];
+
+Options[ClaudePrepareCommit] = {
+  Fallback -> False,
+  Owner -> Automatic, Repository -> Automatic,
+  Branch -> Automatic, BaseBranch -> Automatic,
+  DryRun -> False
+};
+
+(* 2引数版: subject を直接指定。本文は自動収集した変更点から構築。 *)
+ClaudePrepareCommit[packageName_String, subject_String, opts:OptionsPattern[]] :=
+  iClaudePrepareCommitImpl[packageName, subject, opts];
+
+(* 1引数版: コミットメッセージも自動生成 *)
+ClaudePrepareCommit[packageName_String, opts:OptionsPattern[]] :=
+  iClaudePrepareCommitImpl[packageName, Automatic, opts];
+
+iClaudePrepareCommitImpl[packageName_String, subjectSpec_, opts:OptionsPattern[ClaudePrepareCommit]] :=
+  With[{nb = EvaluationNotebook[]},
+  Module[{commits, lastCommitTime = 0, lastCommitMsg = "",
+          summaries, commitMsg, escapedMsg, command, body,
+          ghOpts, dryRun},
+    dryRun = TrueQ[OptionValue[ClaudePrepareCommit, {opts}, DryRun]];
+    ghOpts = Sequence[
+      Owner -> OptionValue[ClaudePrepareCommit, {opts}, Owner],
+      Repository -> OptionValue[ClaudePrepareCommit, {opts}, Repository],
+      Branch -> OptionValue[ClaudePrepareCommit, {opts}, Branch],
+      BaseBranch -> OptionValue[ClaudePrepareCommit, {opts}, BaseBranch],
+      Fallback -> OptionValue[ClaudePrepareCommit, {opts}, Fallback]];
+
+    (* 最新コミットを取得 *)
+    Print[Style["\:25b6 " <> packageName <> " \:306e\:6700\:65b0\:30b3\:30df\:30c3\:30c8\:3092\:53d6\:5f97\:4e2d...", Bold]];
+    commits = Quiet @ GitHubREST`GitHubListCommits[packageName,
+      MaxItems -> 1, ghOpts];
+    If[!FailureQ[commits] && ListQ[commits] && Length[commits] > 0,
+      Module[{latest = First[commits], dateStr, msg},
+        dateStr = Quiet @ Check[
+          latest["commit"]["committer"]["date"], None];
+        If[StringQ[dateStr],
+          lastCommitTime = Quiet @ Check[
+            AbsoluteTime[{dateStr, {"Year", "-", "Month", "-", "Day",
+              "T", "Hour", ":", "Minute", ":", "Second", "Z"}}], 0]];
+        msg = Quiet @ Check[
+          latest["commit"]["message"], ""];
+        If[StringQ[msg], lastCommitMsg = First[StringSplit[msg, "\n"], msg]];
+        Print["  \:6700\:7d42\:30b3\:30df\:30c3\:30c8: ", lastCommitMsg];
+        Print["  \:65e5\:6642: ", If[StringQ[dateStr], dateStr, "(\:4e0d\:660e)"]]],
+      Print["  \:30b3\:30df\:30c3\:30c8\:5c65\:6b74\:306a\:3057\:ff08\:65b0\:898f\:30ea\:30dd\:30b8\:30c8\:30ea\:ff09"]];
+
+    (* 前回コミット以降の変更サマリーを収集 *)
+    Print[Style["\:25b6 \:524d\:56de\:30b3\:30df\:30c3\:30c8\:4ee5\:964d\:306e\:5909\:66f4\:3092\:53ce\:96c6\:4e2d...", Bold]];
+    summaries = iCollectChangeSummaries[packageName, lastCommitTime];
+    If[Length[summaries] === 0,
+      Print["  \:5909\:66f4\:5c65\:6b74\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002" <>
+        If[subjectSpec === Automatic, "\:30c7\:30d5\:30a9\:30eb\:30c8\:30e1\:30c3\:30bb\:30fc\:30b8\:3092\:4f7f\:7528\:3057\:307e\:3059\:3002", ""]],
+      Print["  " <> ToString[Length[summaries]] <> " \:4ef6\:306e\:5909\:66f4\:3092\:691c\:51fa"]];
+
+    (* コミットメッセージを構築 *)
+    If[subjectSpec === Automatic,
+      (* 1引数版: subject も自動生成 *)
+      commitMsg = iFormatCommitMessage[packageName, summaries],
+      (* 2引数版: subject はユーザー指定、本文は自動収集 *)
+      If[StringLength[subjectSpec] > 50,
+        Print[Style["  \:26a0 subject \:304c 50\:6587\:5b57\:3092\:8d85\:3048\:3066\:3044\:307e\:3059 (" <>
+          ToString[StringLength[subjectSpec]] <> "\:6587\:5b57)\:3002git \:306e\:6163\:4f8b\:3067\:306f 50\:6587\:5b57\:4ee5\:5185\:304c\:63a8\:5968\:3067\:3059\:3002",
+          RGBColor[0.8, 0.4, 0]]]];
+      body = If[Length[summaries] > 0,
+        iWrapCommitBodyLines[summaries], ""];
+      commitMsg = If[body =!= "",
+        subjectSpec <> "\n\n" <> body,
+        subjectSpec]];
+
+    Print[Style["\:25b6 \:30b3\:30df\:30c3\:30c8\:30e1\:30c3\:30bb\:30fc\:30b8:", Bold]];
+    Print[Style[commitMsg, FontFamily -> "Consolas", FontSize -> 10]];
+
+    If[dryRun,
+      Print["\n", Style["(DryRun: \:30b3\:30de\:30f3\:30c9\:306f\:751f\:6210\:3055\:308c\:307e\:305b\:3093)", Italic]];
+      Return[commitMsg]];
+
+    (* GitHubRefreshAndCommit コマンドを Input セルとして出力 *)
+    escapedMsg = StringReplace[commitMsg, {"\\" -> "\\\\", "\"" -> "\\\"", "\n" -> "\\n"}];
+    command = "GitHubRefreshAndCommit[\"" <> packageName <> "\", \"" <>
+      escapedMsg <> "\"]";
+    Print[""];
+    Print[Style["\:25b6 \:4ee5\:4e0b\:3092\:5b9f\:884c\:3057\:3066\:30b3\:30df\:30c3\:30c8:", Bold]];
+    NBAccess`NBWriteCell[nb, Cell[BoxData[command], "Input"]];
+  ]];
 
 AddToPalettesMenu[{{"Claude Code",
   "Needs[\"ClaudeCode`\"]; ClaudeCode`ShowClaudePalette[]"}}];
