@@ -1852,6 +1852,7 @@ iClaudeCallPrefix[] :=
 
 (* \:540c\:671f\:30fb\:975e\:540c\:671f\:5171\:901a\:306e\:30d0\:30c3\:30c1\:30d5\:30a1\:30a4\:30eb\:751f\:6210 *)
 $claudeProgress = <||>;
+$iDeferredWork = <||>;
 
 (* --print モードではツール使用許可プロンプトに応答できないため
    Read ツールと Glob（ファイルリスト）を常に許可する。
@@ -2275,11 +2276,16 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
             (* === Phase: done — ScheduledTask のクリーンアップのみ ===
                NBEndJob はキューの最終 thunk または非キュー callback 内で実行済み。 *)
             phase === "done",
-              $claudeProgress = KeyDrop[$claudeProgress, k];
-              Quiet[StopScheduledTask[sym]];
-              Quiet[RemoveScheduledTask[sym]];
-              Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
-              If[!uj, NBAccess`NBDeleteCellsByTag[pNb, ptag]]
+              Module[{deferred = Quiet @ $iDeferredWork[jid]},
+                $claudeProgress = KeyDrop[$claudeProgress, k];
+                Quiet[StopScheduledTask[sym]];
+                Quiet[RemoveScheduledTask[sym]];
+                Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
+                If[!uj, NBAccess`NBDeleteCellsByTag[pNb, ptag]];
+                (* 重い処理 (TaggingRules 書き込み等) を完了後に実行 *)
+                If[Head[deferred] === Function,
+                  Quiet @ deferred[];
+                  $iDeferredWork = KeyDrop[$iDeferredWork, jid]]]
           ]
         ]
       ],
@@ -5133,9 +5139,8 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
               AppendTo[queue, With[{fc = fallbackCode}, Function[
                 iWriteSmartCell[nb2, fc, ae]]]];
               blocks = {fallbackCode}]];
-          (* クリーンアップを複数の軽量ステップに分割:
-             各 thunk が 1 ScheduledTask ティック (1秒) で完了し、
-             ティック間で WindowStatusArea のカウンタが更新される。 *)
+          (* クリーンアップ: 軽量操作のみキューに入れる。
+             重い TaggingRules 書き込みは done フェーズに移動。 *)
           If[TrueQ[autoMark],
             AppendTo[queue, Function[
               iAutoMarkNewCellsConfidential[nb2, ccBefore]]]];
@@ -5145,16 +5150,14 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
             NBAccess`NBJobResetSlotWritten[jid, 1];
             NBAccess`NBEndJob[jid];
             $iClaudeEvalCurrentDepth = Max[0, $iClaudeEvalCurrentDepth - 1]]];
-          (* セッション履歴更新: TaggingRules 書き込みは重い場合があるため独立ティック *)
-          AppendTo[queue, Function[
+          (* done フェーズで実行する重い処理を jobId で保存 *)
+          $iDeferredWork[jid] = Function[
             NBAccess`NBHistoryUpdateLast[nb2, stag2, <|
               "response"       -> response,
               "code"           -> StringJoin[Riffle[blocks, "\n\n"]],
               "cellCountAfter" -> NBAccess`NBCellCount[nb2]
-            |>]]];
-          (* コンパクションチェック: 独立ティック *)
-          AppendTo[queue, Function[
-            Quiet @ iCheckHistoryCompaction[nb2, stag2]]];
+            |>];
+            Quiet @ iCheckHistoryCompaction[nb2, stag2]];
           (* キューを返す: ScheduledTask の writing フェーズが消費 *)
           queue
         ]
