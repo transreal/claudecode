@@ -2282,10 +2282,14 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                 Quiet[RemoveScheduledTask[sym]];
                 Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
                 If[!uj, NBAccess`NBDeleteCellsByTag[pNb, ptag]];
-                (* 重い処理 (TaggingRules 書き込み等) を完了後に実行 *)
+                (* 重い処理を完全に別の ScheduledTask で非同期実行。
+                   現在のティックは即座に完了し、FrontEnd に制御が戻る。 *)
                 If[Head[deferred] === Function,
-                  Quiet @ deferred[];
-                  $iDeferredWork = KeyDrop[$iDeferredWork, jid]]]
+                  RunScheduledTask[
+                    Quiet[RemoveScheduledTask[$ScheduledTask]];
+                    Quiet @ deferred[];
+                    $iDeferredWork = KeyDrop[$iDeferredWork, jid],
+                    {0.1}]]]
           ]
         ]
       ],
