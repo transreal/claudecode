@@ -5133,20 +5133,28 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
               AppendTo[queue, With[{fc = fallbackCode}, Function[
                 iWriteSmartCell[nb2, fc, ae]]]];
               blocks = {fallbackCode}]];
-          (* クリーンアップステップ *)
+          (* クリーンアップを複数の軽量ステップに分割:
+             各 thunk が 1 ScheduledTask ティック (1秒) で完了し、
+             ティック間で WindowStatusArea のカウンタが更新される。 *)
+          If[TrueQ[autoMark],
+            AppendTo[queue, Function[
+              iAutoMarkNewCellsConfidential[nb2, ccBefore]]]];
           AppendTo[queue, Function[
-            If[TrueQ[autoMark],
-              iAutoMarkNewCellsConfidential[nb2, ccBefore]];
-            iWriteContinueEvalButton[nb2, ae];
-            (* 進捗スロット (slot 1) を未使用に戻して NBEndJob で削除させる *)
+            iWriteContinueEvalButton[nb2, ae]]];
+          AppendTo[queue, Function[
             NBAccess`NBJobResetSlotWritten[jid, 1];
             NBAccess`NBEndJob[jid];
-            $iClaudeEvalCurrentDepth = Max[0, $iClaudeEvalCurrentDepth - 1];
-            iSessionUpdateLast[nb2, stag2, <|
+            $iClaudeEvalCurrentDepth = Max[0, $iClaudeEvalCurrentDepth - 1]]];
+          (* セッション履歴更新: TaggingRules 書き込みは重い場合があるため独立ティック *)
+          AppendTo[queue, Function[
+            NBAccess`NBHistoryUpdateLast[nb2, stag2, <|
               "response"       -> response,
               "code"           -> StringJoin[Riffle[blocks, "\n\n"]],
               "cellCountAfter" -> NBAccess`NBCellCount[nb2]
             |>]]];
+          (* コンパクションチェック: 独立ティック *)
+          AppendTo[queue, Function[
+            Quiet @ iCheckHistoryCompaction[nb2, stag2]]];
           (* キューを返す: ScheduledTask の writing フェーズが消費 *)
           queue
         ]
