@@ -13,6 +13,11 @@ Claude CLI に渡すモデル名。空文字は CLI デフォルト。
 秘密データ処理用のローカルモデル指定。`AutoPrivate -> True` 時に秘密変数を含むタスクの生成コードに `Model -> $ClaudePrivateModel` が付与される。
 例: `$ClaudePrivateModel = {"lmstudio", "openai/gpt-oss-20b", "http://127.0.0.1:1234"}`
 
+### $ClaudePackageKeywordMap
+型: Association, 初期値: `<||>`
+外部パッケージがキーワードを登録するためのAssociation。プロンプトにキーワードが含まれると、対応パッケージのapi.mdがコンテキストに自動注入される。各パッケージが自身のロード時に登録する。claudecode.wl側はパッケージ非依存。
+例: `$ClaudePackageKeywordMap["maildb"] = {"メール", "mail", "受切"};`
+
 ### $ClaudeTimeout
 型: Integer, 初期値: `1200`
 ClaudeQuery/ClaudeEval 等のタイムアウト秒数。
@@ -301,7 +306,7 @@ Options: `DryRun -> False`
 ## ドキュメント生成
 ### ClaudeCreateDocumentation[name, opts]
 パッケージの包括的ドキュメント一式（setup.md, user_manual.md, api.md, examples/example.md, README.md）を自動生成。リミット到達時に自動リトライし、再実行で未生成分のみ続行する。
-Options: `Fallback -> False`, `References -> {}`, `Demos -> {}`, `Disclaimer -> {}`, `License -> ""`
+Options: `Fallback -> False`, `References -> {}`, `Demos -> {}`, `Disclaimer -> {}`, `Acknowledgments -> {}`, `License -> ""`
 
 ### ClaudeCreateDocumentation[name, instruction, opts]
 大域的指示付きでドキュメント生成。指示文中の URL も自動検出して Demos に追加。Options は同上。
@@ -309,7 +314,7 @@ Options: `Fallback -> False`, `References -> {}`, `Demos -> {}`, `Disclaimer -> 
 
 ### ClaudeUpdateDocumentation[name, opts]
 前回の _documentupdate 以降のソースコード変更を自動検出し全ドキュメントを更新する。
-Options: `Fallback -> False`, `References -> {}`, `Demos -> {}`, `Disclaimer -> {}`, `License -> ""`
+Options: `Fallback -> False`, `References -> {}`, `Demos -> {}`, `Disclaimer -> {}`, `Acknowledgments -> {}`, `License -> ""`
 
 ### ClaudeUpdateDocumentation[name, instruction, opts]
 指示に従ってドキュメントを更新する。ノートブックのコンテキストも参照可能（「上で議論されている内容を反映して」など）。Options は同上。
@@ -430,6 +435,10 @@ ClaudeCreateDocumentation/ClaudeUpdateDocumentation のオプション。デモ�
 ### Disclaimer
 型: List (オプション), デフォルト: {}
 ClaudeCreateDocumentation/ClaudeUpdateDocumentation のオプション。免責事項セクションに追記する文言のリスト。
+
+### Acknowledgments
+型: List (オプション), デフォルト: {}
+ClaudeCreateDocumentation/ClaudeUpdateDocumentation のオプション。謝辞セクションに追加する文言のリスト。指定時は README.md の免責事項の前に配置。
 
 ### License
 型: String (オプション), デフォルト: ""

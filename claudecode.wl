@@ -1308,7 +1308,7 @@ iRebuildConfidentialSymbols[nb_NotebookObject] :=
 (* \:5168\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304b\:3089\:6a5f\:5bc6\:5909\:6570\:3092\:518d\:69cb\:7bc9 *)
 iRebuildConfidentialSymbolsAll[] :=
   Module[{allNBs, nCells},
-    allNBs = Quiet[Notebooks[]];
+    allNBs = NBAccess`NBUserNotebooks[];
     If[!ListQ[allNBs], Return[]];
     Do[
       nCells = NBAccess`NBCellCount[nbx];
@@ -1326,7 +1326,7 @@ iRebuildConfidentialSymbolsAll[] :=
    既存の $confidentialSymbols は保持したまま差分追加する。 *)
 iRebuildConfidentialSymbolsIncremental[afterLine_Integer] :=
   Module[{allNBs, cells, lineNum},
-    allNBs = Quiet[Notebooks[]];
+    allNBs = NBAccess`NBUserNotebooks[];
     If[!ListQ[allNBs], Return[]];
     Do[
       cells = Quiet[Cells[nbx]];
@@ -1489,7 +1489,7 @@ iPrecisionConfidentialCheck[nb_NotebookObject] :=
        allDepVars が変化した場合: 変化があったNBのみ走査。
        変化なし: CellEpilog インストールチェックのみ。 *)
     If[Sort[allDepVars] =!= Sort[prevAllDepVars],
-      Module[{allNBs = Quiet[Notebooks[]], targetNBs},
+      Module[{allNBs = NBAccess`NBUserNotebooks[], targetNBs},
         If[ListQ[allNBs],
           (* allDepVars が変化 + NB構造が変化したNBのみ走査。
              ただし初回 (prevAllDepVars が空) は全NB走査。 *)
@@ -1503,7 +1503,7 @@ iPrecisionConfidentialCheck[nb_NotebookObject] :=
                 iInstallCellEpilog[nbx]];
               Quiet[NBAccess`NBScanDependentCells[nbx, allDepVars, globalDeps]]],
             {nbx, targetNBs}]]],
-      Module[{allNBs = Quiet[Notebooks[]]},
+      Module[{allNBs = NBAccess`NBUserNotebooks[]},
         If[ListQ[allNBs],
           Do[If[!NBAccess`NBConfidentialEpilogInstalledQ[nbx,
                    ClaudeCode`Private`iConfidentialCellEpilog],
@@ -2124,18 +2124,18 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
     |>;
 
     With[{k = ts, jid = jobId, uj = useJob},
+      (* 進捗表示: Dynamic を使わず、ScheduledTask から直接スロット/セルを更新。
+         Dynamic は kernel がブロック中に評価要求が累積し FrontEnd をフリーズさせるため廃止。 *)
+      $claudeProgress[k]["disp"] = "Claude に問い合わせ中...";
       If[uj,
         NBAccess`NBWriteSlot[jid, 1,
-          Cell[BoxData[DynamicBox[
-            ToBoxes[If[AssociationQ[$claudeProgress[k]], $claudeProgress[k]["disp"], ""]],
-            UpdateInterval -> 1]],
+          Cell["Claude に問い合わせ中...",
             "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]],
+        (* 非 Job パス: CellPrint で静的セルを配置、ScheduledTask が更新 *)
         Quiet[SelectionMove[nb, After, Notebook]];
-        NBAccess`NBWriteDynamicCell[nb,
-          DynamicBox[
-            ToBoxes[If[AssociationQ[$claudeProgress[k]], $claudeProgress[k]["disp"], ""]],
-            UpdateInterval -> 1],
-          progTag]
+        CellPrint[Cell["Claude に問い合わせ中...",
+          "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11,
+          CellTags -> {progTag}]]
       ]
     ];
 
@@ -2161,6 +2161,18 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
               " (\:30c6\:30ad\:30b9\:30c8:" <> ToString[info["textFragments"]] <> ")", ""] <>
             If[Lookup[info, "toolUses", 0] > 0,
               " (\:30c4\:30fc\:30eb:" <> ToString[info["toolUses"]] <> ")", ""];
+          (* 進捗テキストをスロット/セルに直接書き込み (Dynamic 不要) *)
+          Quiet @ If[uj,
+            NBAccess`NBWriteSlot[jid, 1,
+              Cell[$claudeProgress[k]["disp"],
+                "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]],
+            Module[{progCells = Quiet[Cells[pNb, CellTags -> ptag]]},
+              If[ListQ[progCells] && Length[progCells] > 0,
+                Quiet[SelectionMove[First[progCells], All, Cell]];
+                NotebookWrite[pNb,
+                  Cell[$claudeProgress[k]["disp"],
+                    "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11,
+                    CellTags -> {ptag}], All]]]];
           status = ProcessStatus[p];
           If[status === "Finished" || elapsed > $ClaudeTimeout,
             $claudeProgress = KeyDrop[$claudeProgress, k];
@@ -3891,16 +3903,11 @@ iFallbackNotifyAndLog[nb_NotebookObject, text_String, color_] := (
 iFallbackInsertProgress[nb_NotebookObject, key_String, provider_String, model_String] := (
   $iFallbackProgress[key] = <|"disp" ->
     "Fallback: " <> provider <> "/" <> model <> " \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s"|>;
-  With[{k = key},
-    NBAccess`NBWriteDynamicCell[nb,
-      DynamicBox[
-        ToBoxes[
-          If[AssociationQ[$iFallbackProgress[k]],
-            $iFallbackProgress[k]["disp"],
-            ""]
-        ], UpdateInterval -> 1],
-      "claude-fb-prog-" <> k,
-      FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]]);
+  With[{tag = "claude-fb-prog-" <> key},
+    NotebookWrite[nb,
+      Cell["Fallback: " <> provider <> "/" <> model <> " \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s",
+        "Print", CellTags -> {tag},
+        FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11], After]]);
 
 (* \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:7528\:30d7\:30ed\:30b0\:30ec\:30b9\:30bb\:30eb\:3092\:524a\:9664 *)
 iFallbackDeleteProgress[nb_NotebookObject, key_String] := (
@@ -3972,10 +3979,7 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
       $iFallbackProgress[progKey] = <|"disp" ->
         "Fallback: " <> provider <> "/" <> model <> " \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s"|>;
       NBAccess`NBWriteSlot[jobId, 1,
-        Cell[BoxData[DynamicBox[
-          ToBoxes[If[AssociationQ[$iFallbackProgress[progKey]],
-            $iFallbackProgress[progKey]["disp"], ""]],
-          UpdateInterval -> 1]],
+        Cell["Fallback: " <> provider <> "/" <> model <> " \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s",
           "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]],
       iFallbackInsertProgress[nb, progKey, provider, model]];
     With[{gSym = Symbol["ClaudeCode`Private`$fbTask" <> ts]},
@@ -3998,7 +4002,12 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
           If[KeyExistsQ[$iFallbackProgress, pk],
             $iFallbackProgress[pk] = <|"disp" ->
               "Fallback: " <> prov <> "/" <> mdl <>
-              " \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... " <> ToString[elapsed] <> "s"|>];
+              " \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... " <> ToString[elapsed] <> "s"|>;
+            (* 進捗テキストをスロットに直接書き込み *)
+            Quiet @ If[uj,
+              NBAccess`NBWriteSlot[jid, 1,
+                Cell[$iFallbackProgress[pk]["disp"],
+                  "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]]]];
           status = ProcessStatus[p];
           If[status === "Finished" || elapsed > $iFallbackTimeout,
             Quiet[StopScheduledTask[sym]];
