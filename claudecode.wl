@@ -2223,27 +2223,23 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                         cb["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"]]
                     ]]]],
 
-            (* === Phase: received — 結果取得済み → callback を非同期起動 === *)
+            (* === Phase: received — 結果取得済み → 表示更新のみ、cb は次ティックで === *)
             phase === "received",
               iUpdateDisp[
                 "\:2713 Claude \:304b\:3089\:306e\:5fdc\:7b54\:3092\:53d6\:5f97 (" <> ToString[elapsed] <> "s)\:3002\:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d...",
                 RGBColor[0.3, 0.6, 0.3]];
-              $claudeProgress[k]["phase"] = "writing";
-              (* callback を RunScheduledTask で次のティックに遅延実行。
-                 cb 完了後に自身を削除するワンショット方式。 *)
-              With[{result3 = $claudeProgress[k]["result"], kk = k},
-                RunScheduledTask[
-                  Quiet[RemoveScheduledTask[$ScheduledTask]];
-                  cb[result3];
-                  If[KeyExistsQ[$claudeProgress, kk],
-                    $claudeProgress[kk]["phase"] = "done"],
-                  {0.05}]],
+              $claudeProgress[k]["phase"] = "writing",
 
-            (* === Phase: writing — callback 実行中 → 進捗カウント継続 === *)
+            (* === Phase: writing — 進捗更新 → callback 実行 → done === *)
             phase === "writing",
               iUpdateDisp[
                 "\:2713 \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d... (" <> ToString[elapsed] <> "s)",
-                RGBColor[0.3, 0.6, 0.3]],
+                RGBColor[0.3, 0.6, 0.3]];
+              (* callback をこのティック内で実行。
+                 iUpdateDisp が先に FrontEnd に送信されるため、
+                 「書き込み中 (Ns)」表示が反映されてから cb がブロック開始する。 *)
+              cb[$claudeProgress[k]["result"]];
+              $claudeProgress[k]["phase"] = "done",
 
             (* === Phase: done — クリーンアップ === *)
             phase === "done",
