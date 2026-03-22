@@ -903,15 +903,13 @@ iClaudeSysPrompt[] :=
 (* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:51fa\:529b\:30d8\:30eb\:30d1\:30fc (\:5185\:90e8\:4e92\:63db\:5c64) \:2192 NBAccess\:306b\:59d4\:8b72
    非同期コールバック中にユーザーが別のセルを編集していても、
    常にノートブック末尾に追記することでセル破損を防止する。 *)
-nbPrint[nb_, text_String, style_String:"Text"] := (
-  Quiet[SelectionMove[nb, After, Notebook]];
-  NBAccess`NBWriteText[nb, text, style]);
+nbPrint[nb_, text_String, style_String:"Text"] :=
+  NBAccess`NBWriteText[nb, text, style];
 
 (* Style 付きテキストのオーバーロード *)
-nbPrint[nb_, text_Style, ___] := (
-  Quiet[SelectionMove[nb, After, Notebook]];
+nbPrint[nb_, text_Style, ___] :=
   NotebookWrite[nb,
-    Cell[BoxData[ToBoxes[text]], "Text"], After]);
+    Cell[BoxData[ToBoxes[text]], "Text"], After];
 
 (* 2つ以上のアンダースコアを含む変数名を修正
    tiling3_12_12 → tiling3X12X12 (Mathematica でパターン解釈されるのを防ぐ)
@@ -931,14 +929,12 @@ iSanitizeUnderscoreVarNames[code_String] :=
 
 (* コード文字列を構文カラーリング付き Input セルとして書き込む → NBAccessに委譲 *)
 iWriteCodeCell[nb_NotebookObject, code_String] := (
-  Quiet[SelectionMove[nb, After, Notebook]];
   NBAccess`NBWriteCode[nb, iSanitizeUnderscoreVarNames[code]]);
 
 (* CellPrintパターンを自動検出してスマートにセルを書き込む → NBAccessに委譲 *)
 iWriteSmartCell[nb_, code_String, autoEvaluate_:False] :=
   Module[{sanitized},
     sanitized = iSanitizeUnderscoreVarNames[code];
-    Quiet[SelectionMove[nb, After, Notebook]];
     NBAccess`NBWriteSmartCode[nb, sanitized];
     If[TrueQ[autoEvaluate],
       NBAccess`NBEvaluatePreviousCell[nb]]
@@ -956,10 +952,10 @@ iWriteSectionHeaderBeforeEvalCell[nb_NotebookObject, title_String] :=
     headerCell = Cell[title, "Subsubsection",
       CellGroupingRules -> {"SectionGrouping", 68}];
     If[Head[evalCell] === CellObject,
-      (* EvaluationCell の前に移動して挿入し、その後末尾に戻る *)
+      (* EvaluationCell の前にヘッダーを挿入し、EvalCell の後に移動 *)
       Quiet[SelectionMove[evalCell, Before, Cell]];
       NotebookWrite[nb, headerCell, After];
-      Quiet[SelectionMove[nb, After, Notebook]],
+      Quiet[SelectionMove[evalCell, After, Cell]],
       (* フォールバック: 末尾に追記 *)
       Quiet[SelectionMove[nb, After, Notebook]];
       NBAccess`NBWriteCell[nb, headerCell]
@@ -983,6 +979,12 @@ iWriteSectionHeaderBeforeEvalCell[nb_NotebookObject, title_String] :=
 If[!AssociationQ[$confidentialSymbols], $confidentialSymbols = <||>];
 If[!AssociationQ[$confVarTimes], $confVarTimes = <||>];
 If[!AssociationQ[$allConfidentialVars], $allConfidentialVars = <||>];
+
+(* インクリメンタル依存グラフキャッシュ:
+   iPrecisionConfidentialCheck が全NB統合依存グラフを構築した際に、
+   グラフと最終 $Line を記録する。次回呼び出し時は新しいセルのみ追加走査。 *)
+If[!AssociationQ[$iGlobalDepsCache], $iGlobalDepsCache = <||>];
+If[!IntegerQ[$iGlobalDepsCacheLastLine], $iGlobalDepsCacheLastLine = 0];
 
 (* \:79d8\:5bc6\:5909\:6570\:3092\:767b\:9332\:3059\:308b\:30d8\:30eb\:30d1\:30fc:
    ClaudeCode\:5185\:90e8\:306e $confidentialSymbols \:3068
@@ -1265,11 +1267,21 @@ iConfidentialCellEpilog[] := Quiet @ Module[
       ];
       (* Input はマークしない。Output のみ橙マーク。
          ただし NonConfidential で明示解除済みなら上書きしない *)
-      If[isDependent && idx < nCells,
-        ocStyle = NBAccess`NBCellStyle[nb, idx + 1];
-        If[MemberQ[{"Output", "Print"}, ocStyle] &&
-           !iIsExplicitlyUnmarked[nb, idx + 1],
-          NBAccess`NBMarkCellDependent[nb, idx + 1]]]]
+      If[isDependent,
+        (* === チェーン伝播: LHS 変数を $confidentialSymbols に登録 ===
+           これにより a→b→d→y のような推移的依存が
+           CellEpilog レベルで正しく検出される。
+           例: b=2a で b が登録 → d=2c+b で d も登録 → y=2c+d で y も登録 *)
+        If[ListQ[assigns] && Length[assigns] > 0,
+          Do[With[{lhs = First[a]},
+            If[!KeyExistsQ[$confidentialSymbols, lhs],
+              $confidentialSymbols[lhs] = AbsoluteTime[]]],
+            {a, assigns}]];
+        If[idx < nCells,
+          ocStyle = NBAccess`NBCellStyle[nb, idx + 1];
+          If[MemberQ[{"Output", "Print"}, ocStyle] &&
+             !iIsExplicitlyUnmarked[nb, idx + 1],
+            NBAccess`NBMarkCellDependent[nb, idx + 1]]]]]
   ]
 ];
 
@@ -1309,6 +1321,40 @@ iRebuildConfidentialSymbolsAll[] :=
       {nbx, allNBs}]
   ];
 
+(* インクリメンタル版: 前回結果をベースに、
+   新しく評価されたセル (CellLabel In[x] で x > afterLine) のみ走査。
+   既存の $confidentialSymbols は保持したまま差分追加する。 *)
+iRebuildConfidentialSymbolsIncremental[afterLine_Integer] :=
+  Module[{allNBs, cells, lineNum},
+    allNBs = Quiet[Notebooks[]];
+    If[!ListQ[allNBs], Return[]];
+    Do[
+      cells = Quiet[Cells[nbx]];
+      If[!ListQ[cells], Continue[]];
+      Do[Module[{lbl, num, tag, depTag},
+        (* CellLabel から In[x] の x を取得 *)
+        lbl = Quiet[CurrentValue[c, CellLabel]];
+        If[!StringQ[lbl], Continue[]];
+        num = First[StringCases[lbl,
+          RegularExpression["In\\[(\\d+)\\]"] -> "$1"], None];
+        If[num === None, Continue[]];
+        lineNum = Quiet @ Check[ToExpression[num], 0];
+        If[!IntegerQ[lineNum] || lineNum <= afterLine, Continue[]];
+        (* このセルは前回チェック以降に評価された → 秘密チェック *)
+        tag = Quiet[CurrentValue[c,
+          {TaggingRules, "claudecode", "confidential"}]];
+        depTag = Quiet[CurrentValue[c,
+          {TaggingRules, "claudecode", "dependent"}]];
+        If[TrueQ[tag] && !TrueQ[depTag],
+          Module[{text, assigns},
+            text = Quiet[NBAccess`iCellToInputText[c]];
+            If[StringQ[text],
+              assigns = NBAccess`NBExtractAssignments[text];
+              Do[iRegisterConfidentialVar[First[a]], {a, assigns}]]]]],
+      {c, cells}],
+    {nbx, allNBs}]
+  ];
+
 (* CellEpilog \:304c\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\:6e08\:307f\:304b\:78ba\:8a8d\:3057\:3001\:672a\:8a2d\:5b9a\:306a\:3089\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb *)
 iEnsureCellEpilog[] := iEnsureCellEpilog[Quiet[EvaluationNotebook[]]];
 iEnsureCellEpilog[nb_NotebookObject] :=
@@ -1323,7 +1369,7 @@ iEnsureCellEpilog[nb_NotebookObject] :=
 
 ScanConfidentialCells[] := ScanConfidentialCells[Quiet[EvaluationNotebook[]]];
 ScanConfidentialCells[nb_NotebookObject] :=
-  Module[{nCells, directConfVars, n},
+  Module[{nCells, directConfVars, n, deps, allDepVars},
     nCells = NBAccess`NBCellCount[nb];
     If[nCells === 0, Return[0]];
     (* シンボルテーブルを完全にクリアしてから再構築。
@@ -1340,9 +1386,147 @@ ScanConfidentialCells[nb_NotebookObject] :=
           iRegisterConfidentialVars[NBAccess`NBCellExtractVarNames[nb, i]]]],
       {i, nCells}];
     directConfVars = Keys[$confidentialSymbols];
+    (* 依存セルを走査・マーキング *)
     n = NBAccess`NBScanDependentCells[nb, directConfVars];
+    (* 推移的依存変数を $confidentialSymbols に反映
+       （CellEpilog のチェーン伝播が後続セル評価で正しく動作するため） *)
+    If[Length[directConfVars] > 0,
+      deps = Quiet[NBAccess`NBBuildVarDependencies[nb]];
+      If[AssociationQ[deps],
+        allDepVars = Quiet[NBAccess`NBTransitiveDependents[deps, directConfVars]];
+        If[ListQ[allDepVars],
+          Do[If[!KeyExistsQ[$confidentialSymbols, v],
+              $confidentialSymbols[v] = AbsoluteTime[]],
+            {v, allDepVars}];
+          $allConfidentialVars = Association[# -> True & /@ allDepVars];
+          NBAccess`NBSetConfidentialVars[$allConfidentialVars]]]];
     n
   ];
+
+(* ============================================================
+   精密秘密依存チェック (第2層: LLM送信直前)
+   全ノートブックを走査して完全な依存グラフを構築し、
+   秘密依存変数の最終判定を行う。
+   第1層 (CellEpilog) は現在NBのみの軽量チェック。
+   第2層は全NB統合の精密チェックで、別NB経由の依存も検出する。
+   ============================================================ *)
+
+iPrecisionConfidentialCheck[nb_NotebookObject] :=
+  Module[{directConfVars, globalDeps, allDepVars, localDeps,
+          localDepVars, newlyFound, updateResult, currentLine,
+          prevAllDepVars},
+
+    currentLine = If[IntegerQ[$Line], $Line, 0];
+
+    (* === 高速パス: 前回チェックから変化なし ===
+       $Line が前回チェック時から 1 以下の増加（= ClaudeQuery 自身のみ）の場合、
+       キャッシュが有効なので全NB走査をスキップ。
+       FrontEnd round-trip を完全に回避し、0.01秒で完了する。 *)
+    If[IntegerQ[$iGlobalDepsCacheLastLine] && $iGlobalDepsCacheLastLine > 0 &&
+       currentLine <= $iGlobalDepsCacheLastLine + 1,
+      $iGlobalDepsCacheLastLine = currentLine;
+      Return[Length[$allConfidentialVars]]];
+
+    (* === フルパス（新しいセルが評価された場合） ===
+       ただし前回の結果を起点にインクリメンタルに更新する。 *)
+
+    (* Cells[] キャッシュのスマートリフレッシュ:
+       ModifiedInMemory=False のNBは FE call なしでスキップ。
+       Cells[] リスト不変のNBもキャッシュ保持。
+       返り値: 変化があったNBのリスト *)
+    Module[{changedNBs = NBAccess`NBRefreshCellsCache[]},
+
+    (* Step 1: 秘密変数の再構築
+       前回の結果をベースに、新しく評価されたセル (In[x] > lastLine) のみ追加走査。 *)
+    If[Length[$confidentialSymbols] > 0 && $iGlobalDepsCacheLastLine > 0,
+      iRebuildConfidentialSymbolsIncremental[$iGlobalDepsCacheLastLine],
+      $confidentialSymbols = <||>;
+      $confVarTimes = <||>;
+      NBAccess`NBClearConfidentialVars[];
+      iRebuildConfidentialSymbolsAll[]];
+    directConfVars = Keys[$confidentialSymbols];
+
+    If[Length[directConfVars] === 0,
+      $allConfidentialVars = <||>;
+      NBAccess`NBSetConfidentialVars[<||>];
+      $iGlobalDepsCacheLastLine = currentLine;
+      Return[0]];
+
+    (* Step 2: 現在NBの軽量版依存グラフ（Step 7 の通知比較用） *)
+    localDeps = Quiet[NBAccess`NBBuildVarDependencies[nb]];
+    If[!AssociationQ[localDeps], localDeps = <||>];
+    localDepVars = Quiet[NBAccess`NBTransitiveDependents[localDeps, directConfVars]];
+    If[!ListQ[localDepVars], localDepVars = directConfVars];
+
+    (* Step 3: 全NB統合依存グラフ（インクリメンタル更新） *)
+    If[AssociationQ[$iGlobalDepsCache] && Length[$iGlobalDepsCache] > 0 &&
+       IntegerQ[$iGlobalDepsCacheLastLine] && $iGlobalDepsCacheLastLine > 0,
+      updateResult = Quiet[
+        NBAccess`NBUpdateGlobalVarDependencies[
+          $iGlobalDepsCache, $iGlobalDepsCacheLastLine]];
+      If[ListQ[updateResult] && Length[updateResult] === 2,
+        globalDeps = updateResult[[1]],
+        globalDeps = Quiet[NBAccess`NBBuildGlobalVarDependencies[]]],
+      globalDeps = Quiet[NBAccess`NBBuildGlobalVarDependencies[]]];
+    If[!AssociationQ[globalDeps], globalDeps = localDeps];
+    $iGlobalDepsCache = globalDeps;
+
+    (* Step 4: 推移的依存を計算 *)
+    allDepVars = Quiet[NBAccess`NBTransitiveDependents[globalDeps, directConfVars]];
+    If[!ListQ[allDepVars], allDepVars = directConfVars];
+
+    (* Step 5: $allConfidentialVars を更新 *)
+    prevAllDepVars = Keys[$allConfidentialVars];
+    $allConfidentialVars = Association[# -> True & /@ allDepVars];
+    NBAccess`NBSetConfidentialVars[$allConfidentialVars];
+
+    (* Step 5b: $confidentialSymbols に推移的依存変数を反映 *)
+    Do[If[!KeyExistsQ[$confidentialSymbols, v],
+        $confidentialSymbols[v] = AbsoluteTime[]],
+      {v, allDepVars}];
+
+    (* Step 6: 依存セルの橙マーク更新
+       allDepVars が変化した場合: 変化があったNBのみ走査。
+       変化なし: CellEpilog インストールチェックのみ。 *)
+    If[Sort[allDepVars] =!= Sort[prevAllDepVars],
+      Module[{allNBs = Quiet[Notebooks[]], targetNBs},
+        If[ListQ[allNBs],
+          (* allDepVars が変化 + NB構造が変化したNBのみ走査。
+             ただし初回 (prevAllDepVars が空) は全NB走査。 *)
+          targetNBs = If[Length[prevAllDepVars] === 0,
+            allNBs,
+            If[Length[changedNBs] > 0, changedNBs, allNBs]];
+          Do[
+            Quiet @ Module[{},
+              If[!NBAccess`NBConfidentialEpilogInstalledQ[nbx,
+                   ClaudeCode`Private`iConfidentialCellEpilog],
+                iInstallCellEpilog[nbx]];
+              Quiet[NBAccess`NBScanDependentCells[nbx, allDepVars, globalDeps]]],
+            {nbx, targetNBs}]]],
+      Module[{allNBs = Quiet[Notebooks[]]},
+        If[ListQ[allNBs],
+          Do[If[!NBAccess`NBConfidentialEpilogInstalledQ[nbx,
+                   ClaudeCode`Private`iConfidentialCellEpilog],
+                iInstallCellEpilog[nbx]],
+            {nbx, allNBs}]]]];
+
+    (* Step 7: 新たに検出された秘密依存を通知 *)
+    If[Sort[allDepVars] =!= Sort[prevAllDepVars],
+      newlyFound = Complement[allDepVars, localDepVars];
+      If[Length[newlyFound] > 0,
+        Module[{msg},
+          msg = "\[WarningSign] 精密チェック: 別ノートブック経由の秘密依存を " <>
+                ToString[Length[newlyFound]] <> " 個検出しました (" <>
+                StringRiffle[Take[newlyFound, UpTo[5]], ", "] <>
+                If[Length[newlyFound] > 5, ", ...", ""] <>
+                ")。これらはコンテキスト送信から除外されます。";
+          NBAccess`NBWritePrintNotice[None, msg, RGBColor[0.85, 0.5, 0.1]]]]];
+
+    ]; (* Module changedNBs end *)
+    $iGlobalDepsCacheLastLine = currentLine;
+    Length[allDepVars]
+  ];
+
 (* ============================================================
    アクセスレベル解決ヘルパー
    PrivacySpec と Model の両方から実効アクセスレベルを決定する。
@@ -1458,18 +1642,19 @@ iWriteSessionHeader[nb_NotebookObject, tag_String, header_Association] :=
 iReadSessionHeader[nb_NotebookObject, tag_String] :=
   NBAccess`NBHistoryReadHeader[nb, tag];
 
-(* 1エントリを追記 (差分圧縮 + privacylevel 付与) + 自動コンパクション *)
-iSessionAppend[nb_NotebookObject, tag_String, entry_Association] := (
+(* 1エントリを追記 (差分圧縮 + privacylevel 付与)
+   コンパクションは iSessionUpdateLast に移動済み（レスポンス受信後に実行） *)
+iSessionAppend[nb_NotebookObject, tag_String, entry_Association] :=
   NBAccess`NBHistoryAppend[nb, tag, entry];
-  Quiet @ iCheckHistoryCompaction[nb, tag]);
 
 (* 全エントリを返す (復元済み) *)
 iSessionHistory[nb_NotebookObject, tag_String] :=
   NBAccess`NBHistoryEntries[nb, tag];
 
-(* 最後のエントリを更新 *)
-iSessionUpdateLast[nb_NotebookObject, tag_String, updates_Association] :=
+(* 最後のエントリを更新 + レスポンス受信後にコンパクションチェック *)
+iSessionUpdateLast[nb_NotebookObject, tag_String, updates_Association] := (
   NBAccess`NBHistoryUpdateLast[nb, tag, updates];
+  Quiet @ iCheckHistoryCompaction[nb, tag]);
 
 (* 継承を含む全履歴を取得（親セッションの履歴 + 自分の履歴） *)
 iSessionHistoryWithInherit[nb_NotebookObject, tag_String] :=
@@ -1511,22 +1696,17 @@ iMakeLocalSummary[entry_Association] :=
       "\n\:30b3\:30fc\:30c9: " <> code, ""]
   ];
 
-(* API でサマリーペアを結合要約 *)
+(* サマリーペアをローカルで結合
+   旧実装では API (Haiku) を呼び出していたが、
+   コンパクション毎に数秒〜十数秒のブロックが発生するため廃止。
+   簡潔な連結で十分機能する。 *)
 iMergeSummaries[sum1_String, sum2_String] :=
-  Module[{apiKey, prompt, result},
-    apiKey = Quiet[NBAccess`NBGetAPIKey["anthropic",
-      PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
-    If[!StringQ[apiKey],
-      Return[sum1 <> "\n---\n" <> sum2]];
-    prompt =
-      "\:4ee5\:4e0b\:306e2\:3064\:306e\:30b9\:30c6\:30c3\:30d7\:306e\:6982\:8981\:3092\:7d44\:307f\:5408\:308f\:305b\:3066\:3001" <>
-      "3\:884c\:4ee5\:5185\:306e\:7c21\:6f54\:306a\:65e5\:672c\:8a9e\:306e\:8981\:7d04\:306b\:3057\:3066\:304f\:3060\:3055\:3044\:3002\n\n" <>
-      "=== \:30b9\:30c6\:30c3\:30d71 ===\n" <> sum1 <> "\n\n" <>
-      "=== \:30b9\:30c6\:30c3\:30d72 ===\n" <> sum2;
-    result = Quiet @ Check[
-      iQueryAnthropicAPI[apiKey, "claude-haiku-4-5-20251001", prompt],
-      $Failed];
-    If[StringQ[result], result, sum1 <> "\n---\n" <> sum2]
+  Module[{s1 = StringTrim[sum1], s2 = StringTrim[sum2]},
+    (* 合計が600文字を超える場合は各300文字に切り詰め *)
+    If[StringLength[s1] + StringLength[s2] > 600,
+      s1 = StringTake[s1, UpTo[300]];
+      s2 = StringTake[s2, UpTo[300]]];
+    s1 <> "\n" <> s2
   ];
 
 (* 履歴コンパクション実行 *)
@@ -2651,15 +2831,16 @@ iTeXMathToCell[text_String, style_String] :=
 (* ClaudeQuery 応答をマークダウン解析して適切なスタイルのセルで出力 *)
 iFlushQueryTextBuf[nb_NotebookObject, buf_List] :=
   If[Length[buf] > 0,
-    Quiet[SelectionMove[nb, After, Notebook]];
+    (* Job システムがカーソルをアンカー位置に配置済み。
+       NotebookWrite[..., After] で順次チェインする。 *)
     NBAccess`NBWriteCell[nb,
       iTeXMathToCell[StringJoin[Riffle[buf, "\n"]], "Text"]]];
 
 iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
   Module[{lines, i, line, trimmed, textBuf = {}, content,
           inCodeBlock = False, codeLang = "", codeBuf = {}},
-    (* 非同期コールバックからの呼び出し対策: 末尾に移動してから全セルを書き込み *)
-    Quiet[SelectionMove[nb, After, Notebook]];
+    (* Job システムがカーソルをアンカー位置に配置済み。
+       ここから After 書き込みが順次チェインする。 *)
     lines = StringSplit[text, "\n"];
     Do[
       line = lines[[i]];
@@ -4290,30 +4471,10 @@ ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
     $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
   With[{nb = Quiet[EvaluationNotebook[]]},
   Module[{session, tag},
-  (* 現在のノートブックの実際の機密マークから $confidentialSymbols を再構築 *)
-  (* セッション全体の古い情報が残らないようクリアしてから再登録 *)
-   $confidentialSymbols = <||>;
-  $confVarTimes = <||>;
-  $allConfidentialVars = <||>;
-  NBAccess`NBClearConfidentialVars[];
-  iRebuildConfidentialSymbols[nb];
-  (* 機密変数が存在する場合のみ、高コストな依存グラフ構築・走査を実行 *)
-  With[{confVars = Keys[$confidentialSymbols]},
-    If[Length[confVars] > 0,
-      (* 推移的依存変数を含む全機密変数セットを構築 *)
-      With[{deps = Quiet[NBAccess`NBBuildVarDependencies[nb]]},
-        If[AssociationQ[deps],
-          $allConfidentialVars = Association[
-            # -> True & /@ Quiet[NBAccess`NBTransitiveDependents[deps, confVars]]];
-          NBAccess`NBSetConfidentialVars[$allConfidentialVars];
-          (* 依存セルのオレンジスタイルを更新（deps を再利用して二重計算を回避） *)
-          Quiet[NBAccess`NBScanDependentCells[nb, confVars, deps]],
-          (* deps 構築失敗時のフォールバック *)
-          $allConfidentialVars = $confidentialSymbols;
-          NBAccess`NBSetConfidentialVars[$confidentialSymbols]]],
-      (* 機密変数なし: 高コスト処理をすべてスキップ *)
-      $allConfidentialVars = <||>;
-      NBAccess`NBSetConfidentialVars[<||>]]];
+  (* LLM 送信直前の精密チェック (第2層):
+     全ノートブックを走査して完全な依存グラフを構築し、
+     秘密依存変数の最終判定を行う *)
+  iPrecisionConfidentialCheck[nb];
   session = iEnsureDefaultSession[nb];
   tag     = session["SessionTag"];
   iClaudeQueryImpl[nb, tag, prompt,
@@ -4330,6 +4491,8 @@ ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
   With[{nb = session["Notebook"]},
   Module[{tag},
     tag = session["SessionTag"];
+    (* LLM 送信直前の精密チェック (第2層) *)
+    iPrecisionConfidentialCheck[nb];
     $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
     iClaudeQueryImpl[nb, tag, prompt,
       TrueQ[OptionValue[ClaudeQuery, {opts}, Fallback]],
@@ -4778,6 +4941,10 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
         ") \:306b\:9054\:3057\:307e\:3057\:305f\:3002\:5fc5\:8981\:306a\:3089 $ClaudeEvalMaxDepth \:3092\:5897\:3084\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
       Return[$Failed]];
     $iClaudeEvalCurrentDepth++;
+    (* LLM 送信直前の精密チェック (第2層):
+       再帰呼び出しでは親が既にチェック済みなので、トップレベルのみ実行 *)
+    If[$iClaudeEvalCurrentDepth === 1,
+      iPrecisionConfidentialCheck[nb]];
     $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
     history = iSessionHistoryWithInherit[nb, tag];
     step    = Length[iSessionHistory[nb, tag]];
@@ -5213,6 +5380,7 @@ iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :
 ClaudeSpec[task_String] := (
     $currentUseFallback = True;
   With[{nb = EvaluationNotebook[]},
+    iPrecisionConfidentialCheck[nb];
     iClaudeSpecImpl[nb, iSessionTag[], task]
   ]);
 
@@ -5220,6 +5388,7 @@ ClaudeSpec[items_List] := (
     $currentUseFallback = True;
   With[{nb = EvaluationNotebook[]},
   Module[{norm},
+    iPrecisionConfidentialCheck[nb];
     norm = iNormalizePrompt[items];
     iClaudeSpecImpl[nb, iSessionTag[], norm["text"], norm["imageDirs"]]
   ]]);
@@ -5231,6 +5400,8 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
           contextPrompt, step, entry, anchorTag, continueCallback,
           accessLevel, availModels, useClaudeCode},
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
+    (* LLM 送信直前の精密チェック (第2層) *)
+    iPrecisionConfidentialCheck[nb];
     history = iSessionHistoryWithInherit[nb, tag];
     If[Length[history] === 0,
       nbPrint[nb, "\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> tag];
@@ -5454,6 +5625,8 @@ iBuildContinueUpdatePrompt[originalPrompt_, instruction_String, response_String,
 
 (* --- ContinueUpdate 本体 --- *)
 
+Options[ContinueUpdate] = {Fallback -> False, StartTime -> Now, "UpdateApiMd" -> False};
+
 (* ContinueUpdate["pkg", "instruction", opts] *)
 ContinueUpdate[packageName_String, instruction_String, opts:OptionsPattern[]] :=
   Module[{info, nb, origPrompt, response, nbOutput, newPrompt},
@@ -5474,6 +5647,7 @@ ContinueUpdate[packageName_String, instruction_String, opts:OptionsPattern[]] :=
     nbOutput   = iCaptureRecentOutput[nb,
       Replace[Lookup[info, "cellCountAfter", 0], Except[_Integer] -> 0]];
     newPrompt  = iBuildContinueUpdatePrompt[origPrompt, instruction, response, nbOutput];
+    $iContinueUpdateFlag = True;
     ClaudeUpdatePackage[packageName, newPrompt,
       Fallback -> TrueQ[OptionValue[Fallback]],
       "UpdateApiMd" -> TrueQ[OptionValue["UpdateApiMd"]],
@@ -6982,6 +7156,7 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
   With[{nb = EvaluationNotebook[]},
   Module[{destFile, prompt, beginMark, endMark, sessionDir, bdir, timestamp,
           packagePromptNorm, imgDirs, jobId},
+  iPrecisionConfidentialCheck[nb];
 
   destFile = FileNameJoin[{Global`$packageDirectory, packageName <> ".wl"}];
   If[FileExistsQ[destFile] || iPacletQ[packageName],
@@ -7100,10 +7275,11 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
     nb, imgDirs, jobId]
   ]]);
 
-Options[ClaudeUpdatePackage] = {TargetFunctions -> Automatic, StartTime -> Now, Fallback -> False, "UpdateApiMd" -> True};
+Options[ClaudeUpdatePackage] = {TargetFunctions -> Automatic, StartTime -> Now, Fallback -> False, "UpdateApiMd" -> False};
 
 (* ContinueUpdate 用: 直前の ClaudeUpdatePackage 呼び出し情報を保持 *)
 If[!AssociationQ[$iLastUpdateInfo], $iLastUpdateInfo = <||>];
+$iContinueUpdateFlag = False;  (* ContinueUpdate から呼ばれた場合に True *)
 
 ClaudeUpdatePackage[packageName_String, updatePrompt_, opts:OptionsPattern[]] := (
   $currentUseFallback = TrueQ[OptionValue[Fallback]];
@@ -7125,8 +7301,9 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
   Module[{srcFile, currentCode, prompt,
           beginMark, endMark, timestamp, sessionDir, bdir,
           allBlocks, allNames, targets, targetCode,
-          jsPlaceholder, jsBlock, updatePromptNorm, imgDirs},
+          jsPlaceholder, jsBlock, updatePromptNorm, imgDirs, jobId},
 
+  iPrecisionConfidentialCheck[nb];
   srcFile = iPackageSourceFile[packageName];
   If[!FileExistsQ[srcFile],
     nbPrint[nb, "\:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> srcFile]; Return[$Failed]];
@@ -7139,13 +7316,19 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
 
   (* セクションヘッダーを入力セルの直前に挿入 *)
   iWriteSectionHeaderBeforeEvalCell[nb,
-    "\:25b6 ClaudeUpdatePackage: " <> packageName <>
+    If[TrueQ[$iContinueUpdateFlag],
+      "\:25b6 ContinueUpdate: ",
+      "\:25b6 ClaudeUpdatePackage: "] <> packageName <>
     " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
+
+  (* Job システム: 出力をEvalCell直後に配置 *)
+  jobId = NBAccess`NBBeginJobAtEvalCell[nb];
 
   updatePromptNorm = iNormalizePrompt[updatePrompt];
   imgDirs = updatePromptNorm["imageDirs"];
   currentCode = Import[srcFile, "Text"];
-  timestamp   = DateString[Now, {"Year","Month","Day","_","Hour24","Minute","Second"}];
+  timestamp   = DateString[Now, {"Year","Month","Day","_","Hour24","Minute","Second"}] <>
+    If[TrueQ[$iContinueUpdateFlag], "_continue", ""];
   bdir        = backupDir[packageName];
 
   (* \:2500\:2500 \:6bce\:56de\:306e\:4e8b\:524d\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:ff08\:5fc5\:305a\:5b9f\:884c\:ff09\:2500\:2500 *)
@@ -7225,9 +7408,11 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
     With[{nb2=nb, sd=sessionDir, pn=packageName, sf=srcFile,
           blks=allBlocks, tgts=targets, jp=jsPlaceholder, jb=jsBlock,
           bm=beginMark, em=endMark, origCode=Import[srcFile, "Text"],
-          doUpdateApi=updateApiMd},
+          doUpdateApi=updateApiMd, jid=jobId},
       Function[response,
         Module[{newFuncs, newCode, newWlFile, validationErrors = {}},
+          (* アンカーの直後に出力を配置 *)
+          NBAccess`NBJobMoveToAnchor[jid];
           (* コールバック完了時に必ずロック解放するラッパー *)
           Internal`WithLocalSettings[Null,
 
@@ -7373,17 +7558,23 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
             nbPrint[nb2, "\:518d\:30ed\:30fc\:30c9\:3057\:307e\:3057\:305f\:3002"];
             With[{afterEnd2 = StringTrim[Last[StringSplit[response, em, 2], ""]]},
               If[afterEnd2 =!= "", nbPrint[nb2, afterEnd2]]];
-            (* api.md を自動更新 *)
-            If[doUpdateApi, iAutoUpdateApiMd[nb2, pn]],
+            (* api.md を自動更新: オンなら自動実行 *)
+            If[doUpdateApi, iAutoUpdateApiMd[nb2, pn]];
+            (* ContinueUpdate フラグをリセット *)
+            $iContinueUpdateFlag = False;
+            (* 完了メッセージ: クリック可能なアクション付き *)
+            iWriteUpdateCompletionMessage[nb2, pn, doUpdateApi],
             nbPrint[nb2, "\:8b66\:544a: \:66f8\:304d\:8fbc\:307f\:5931\:6557\:3002\:624b\:52d5\:3067\:30b3\:30d4\:30fc\:3057\:3066\:304f\:3060\:3055\:3044:\n" <>
               "  \:5143: " <> newWlFile <> "\n  \:5148: " <> sf]]
 
           , (* Internal`WithLocalSettings cleanup *)
+          $iContinueUpdateFlag = False;
+          NBAccess`NBEndJob[jid];
           iReleasePackageLock[pn]]
         ]
       ]
     ],
-    nb, imgDirs]
+    nb, imgDirs, jobId]
   ]];
 
 ClaudeRestorePackage[packageName_String] :=
@@ -8125,6 +8316,7 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, sourceCode, outDir, pkgDir, bdir, histDir, timestamp,
           resumeInfo, filteredQueue},
+    iPrecisionConfidentialCheck[nb];
     pkgDir = Global`$packageDirectory;
     If[!StringQ[pkgDir] || pkgDir === "",
       nbPrint[nb, "\:30a8\:30e9\:30fc: $packageDirectory \:304c\:8a2d\:5b9a\:3055\:308c\:3066\:3044\:307e\:305b\:3093\:3002"];
@@ -8452,6 +8644,7 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, sourceCode, docsDir, pkgDir, allDocs,
           prevBackup, prevSrcFile, diffText, autoInstruction},
+    iPrecisionConfidentialCheck[nb];
     pkgDir = Global`$packageDirectory;
     If[!StringQ[pkgDir] || pkgDir === "",
       nbPrint[nb, "\:30a8\:30e9\:30fc: $packageDirectory \:304c\:8a2d\:5b9a\:3055\:308c\:3066\:3044\:307e\:305b\:3093\:3002"];
@@ -8541,6 +8734,7 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, sourceCode, docsDir, pkgDir, targetDocs,
           prevBackup, prevSrcFile, diffText, enrichedInstruction, nbCtx},
+    iPrecisionConfidentialCheck[nb];
     pkgDir = Global`$packageDirectory;
     If[!StringQ[pkgDir] || pkgDir === "",
       nbPrint[nb, "\:30a8\:30e9\:30fc: $packageDirectory \:304c\:8a2d\:5b9a\:3055\:308c\:3066\:3044\:307e\:305b\:3093\:3002"];
@@ -9075,6 +9269,7 @@ ClaudeConvertToPaclet[packageName_String] :=
   Module[{srcFile, code, publicSymbols, pacletDir, kernelDir, docDir,
           guidesDir, tutorialsDir, refsDir, symbolsDir, testsDir, docsDir,
           bdir, timestamp, preDir},
+    iPrecisionConfidentialCheck[nb];
 
     (* \:5143\:30d5\:30a1\:30a4\:30eb\:306e\:5b58\:5728\:78ba\:8a8d *)
     srcFile = FileNameJoin[{Global`$packageDirectory, packageName <> ".wl"}];
@@ -10820,9 +11015,42 @@ iWriteContinueEvalButton[nb_NotebookObject, autoEvaluate_:True] :=
           ],
           "[] で継続できます。"
         }],
-        "Text"
+        "Print", FontWeight -> Bold, FontColor -> GrayLevel[0.4], FontSize -> 11,
+        CellTags -> {"claudecode-notice"}
       ]
     ]
+  ];
+
+(* ClaudeUpdatePackage 完了メッセージ:
+   ContinueUpdate[] ハイパーリンク + api.md 更新リンク (自動更新オフ時) *)
+iWriteUpdateCompletionMessage[nb_NotebookObject, packageName_String,
+    apiMdAlreadyUpdated_:False] :=
+  Module[{textParts},
+    textParts = {
+      "完了。コードを実行して確認し、必要なら ",
+      ButtonBox["ContinueUpdate",
+        BaseStyle -> "Hyperlink",
+        ButtonFunction :> Module[{target = InputNotebook[]},
+          NotebookWrite[target,
+            Cell[BoxData[RowBox[{"ContinueUpdate", "[", "]"}]], "Input"]];
+          SelectionMove[target, Previous, Cell];
+          SelectionMove[target, All, CellContents]],
+        Evaluator -> Automatic, Method -> "Queued"],
+      "[] で継続できます。"
+    };
+    (* api.md 自動更新がオフの場合: 更新リンクを追加 *)
+    If[!TrueQ[apiMdAlreadyUpdated],
+      AppendTo[textParts, "  "];
+      AppendTo[textParts,
+        ButtonBox["api.md を更新",
+          BaseStyle -> "Hyperlink",
+          ButtonFunction :> Module[{target = InputNotebook[]},
+            iAutoUpdateApiMd[target, packageName]],
+          Evaluator -> Automatic, Method -> "Queued"]]];
+    NBAccess`NBWriteCell[nb,
+      Cell[TextData[textParts], "Print",
+        FontWeight -> Bold, FontColor -> GrayLevel[0.4], FontSize -> 11,
+        CellTags -> {"claudecode-notice"}]]
   ];
 
 (* \:2500\:2500\:2500 \:6a5f\:5bc6\:5909\:6570\:4e00\:89a7 \:2500\:2500\:2500 *)
@@ -11298,6 +11526,7 @@ ClaudeCheckSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :
   Module[{resolved, files, pkgName, prompt, result, docsCtx, ignoreList,
           nb = Quiet[InputNotebook[]]},
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
+    iPrecisionConfidentialCheck[nb];
     {files, pkgName} = iResolveSeparationTarget[target];
     If[Length[files] === 0,
       Print["\:30a8\:30e9\:30fc: \:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> target];
@@ -11434,6 +11663,7 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
   Module[{resolved, files, pkgName, cached, ext, timestamp,
           nb = Quiet[InputNotebook[]]},
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
+    iPrecisionConfidentialCheck[nb];
     {files, pkgName} = iResolveSeparationTarget[target];
     If[Length[files] === 0,
       Print["\:30a8\:30e9\:30fc: \:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> target];
