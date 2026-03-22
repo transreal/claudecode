@@ -2178,7 +2178,13 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
             $claudeProgress = KeyDrop[$claudeProgress, k];
             Quiet[StopScheduledTask[sym]];
             Quiet[RemoveScheduledTask[sym]];
-            If[!uj, NBAccess`NBDeleteCellsByTag[pNb, ptag]];
+            (* 進捗セルを即座に削除 *)
+            If[uj,
+              Module[{slotTag = $NBJobTable[jid]["slotTags"][[1]]},
+                NBAccess`NBDeleteCellsByTag[$NBJobTable[jid]["nb"], slotTag];
+                $NBJobTable[jid, "written"] =
+                  ReplacePart[$NBJobTable[jid]["written"], 1 -> False]],
+              NBAccess`NBDeleteCellsByTag[pNb, ptag]];
             Quiet @ DeleteFile /@ Select[{bFile, pFile}, FileExistsQ];
             If[status =!= "Finished",
               KillProcess[p];
@@ -4013,8 +4019,14 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
             Quiet[StopScheduledTask[sym]];
             Quiet[RemoveScheduledTask[sym]];
             $iFallbackActiveTasks = DeleteCases[$iFallbackActiveTasks, sym];
-            If[!uj, iFallbackDeleteProgress[pNb, pk],
-              $iFallbackProgress = KeyDrop[$iFallbackProgress, pk]];
+            If[!uj,
+              iFallbackDeleteProgress[pNb, pk],
+              (* Job パス: スロット1の進捗セルを即座に削除 *)
+              $iFallbackProgress = KeyDrop[$iFallbackProgress, pk];
+              Module[{slotTag = $NBJobTable[jid]["slotTags"][[1]]},
+                NBAccess`NBDeleteCellsByTag[$NBJobTable[jid]["nb"], slotTag];
+                $NBJobTable[jid, "written"] =
+                  ReplacePart[$NBJobTable[jid]["written"], 1 -> False]]];
             If[status =!= "Finished",
               Quiet[KillProcess[p]];
               Quiet @ DeleteDirectory[td, DeleteContents -> True];
