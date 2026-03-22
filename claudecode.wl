@@ -2178,12 +2178,14 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
             $claudeProgress = KeyDrop[$claudeProgress, k];
             Quiet[StopScheduledTask[sym]];
             Quiet[RemoveScheduledTask[sym]];
-            (* 進捗セルを不可視に戻す (NBEndJob で最終削除) *)
+            (* 進捗セルを「出力中」に更新し、NBEndJob で削除されるよう written=False にする。
+               こうすることで callback が全セルを書き終えるまで進捗表示が残る。 *)
             If[uj,
               Quiet @ NBAccess`NBWriteSlot[jid, 1,
-                Cell["", "Text", CellOpen -> False, ShowCellBracket -> False,
-                  CellMargins -> {{0,0},{0,0}},
-                  CellElementSpacings -> {"CellMinHeight" -> 0}]],
+                Cell["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... " <> ToString[elapsed] <> "s | \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d...",
+                  "Print", FontWeight -> Bold, FontColor -> RGBColor[0.3, 0.6, 0.3], FontSize -> 11]];
+              $NBJobTable[jid, "written"] =
+                ReplacePart[$NBJobTable[jid]["written"], 1 -> False],
               NBAccess`NBDeleteCellsByTag[pNb, ptag]];
             Quiet @ DeleteFile /@ Select[{bFile, pFile}, FileExistsQ];
             If[status =!= "Finished",
@@ -4021,12 +4023,13 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
             $iFallbackActiveTasks = DeleteCases[$iFallbackActiveTasks, sym];
             If[!uj,
               iFallbackDeleteProgress[pNb, pk],
-              (* Job パス: スロット1を不可視に戻す *)
+              (* Job パス: 進捗テキストを更新し written=False で NBEndJob に任せる *)
               $iFallbackProgress = KeyDrop[$iFallbackProgress, pk];
               Quiet @ NBAccess`NBWriteSlot[jid, 1,
-                Cell["", "Text", CellOpen -> False, ShowCellBracket -> False,
-                  CellMargins -> {{0,0},{0,0}},
-                  CellElementSpacings -> {"CellMinHeight" -> 0}]]];
+                Cell["Fallback: " <> prov <> "/" <> mdl <> " | \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d...",
+                  "Print", FontWeight -> Bold, FontColor -> RGBColor[0.3, 0.6, 0.3], FontSize -> 11]];
+              $NBJobTable[jid, "written"] =
+                ReplacePart[$NBJobTable[jid]["written"], 1 -> False]];
             If[status =!= "Finished",
               Quiet[KillProcess[p]];
               Quiet @ DeleteDirectory[td, DeleteContents -> True];
