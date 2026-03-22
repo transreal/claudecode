@@ -2223,23 +2223,37 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                         cb["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"]]
                     ]]]],
 
-            (* === Phase: received — 結果取得済み → 表示更新のみ、cb は次ティックで === *)
+            (* === Phase: received — callback でキューを準備 === *)
             phase === "received",
               iUpdateDisp[
                 "\:2713 Claude \:304b\:3089\:306e\:5fdc\:7b54\:3092\:53d6\:5f97 (" <> ToString[elapsed] <> "s)\:3002\:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d...",
                 RGBColor[0.3, 0.6, 0.3]];
-              $claudeProgress[k]["phase"] = "writing",
+              (* callback を呼んでキュー（サンクのリスト）を取得 *)
+              Module[{queue = cb[$claudeProgress[k]["result"]]},
+                If[ListQ[queue] && Length[queue] > 0,
+                  $claudeProgress[k]["writeQueue"] = queue;
+                  $claudeProgress[k]["writeTotal"] = Length[queue];
+                  $claudeProgress[k]["writeIdx"] = 1;
+                  $claudeProgress[k]["phase"] = "writing",
+                  (* キューが空 (エラーパス等): 直接完了 *)
+                  $claudeProgress[k]["phase"] = "done"]],
 
-            (* === Phase: writing — 進捗更新 → callback 実行 → done === *)
+            (* === Phase: writing — 1ティック1操作でキューを消費 === *)
             phase === "writing",
-              iUpdateDisp[
-                "\:2713 \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d... (" <> ToString[elapsed] <> "s)",
-                RGBColor[0.3, 0.6, 0.3]];
-              (* callback をこのティック内で実行。
-                 iUpdateDisp が先に FrontEnd に送信されるため、
-                 「書き込み中 (Ns)」表示が反映されてから cb がブロック開始する。 *)
-              cb[$claudeProgress[k]["result"]];
-              $claudeProgress[k]["phase"] = "done",
+              Module[{idx, total, queue, thunk},
+                idx   = Lookup[$claudeProgress[k], "writeIdx", 1];
+                total = Lookup[$claudeProgress[k], "writeTotal", 0];
+                queue = Lookup[$claudeProgress[k], "writeQueue", {}];
+                iUpdateDisp[
+                  "\:2713 \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d... (" <> ToString[elapsed] <> "s, " <>
+                  ToString[idx] <> "/" <> ToString[total] <> ")",
+                  RGBColor[0.3, 0.6, 0.3]];
+                If[idx <= Length[queue],
+                  thunk = queue[[idx]];
+                  Quiet @ thunk[];
+                  $claudeProgress[k]["writeIdx"] = idx + 1,
+                  (* 全ステップ完了 *)
+                  $claudeProgress[k]["phase"] = "done"]],
 
             (* === Phase: done — クリーンアップ === *)
             phase === "done",
@@ -5059,15 +5073,18 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
       {}];
     useClaudeCode = NBAccess`NBProviderCanAccess["claudecode", accessLevel];
 
-    (* \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:3092\:5171\:901a\:5316 *)
+    (* コールバックを書き込みキュー方式に変換:
+       各セル書き込みを個別のサンク(引数なし関数)としてキューに積み、
+       ScheduledTask の writing フェーズが1ティック1操作で実行する。
+       これによりティック間でカウンタが更新される。 *)
     evalCallback = With[{nb2 = nb, stag2 = tag, st = step, jid = jobId,
           autoMark = iShouldAutoMarkConfidential[accessLevel],
-          ccBefore = NBAccess`NBCellCount[nb]},
+          ccBefore = NBAccess`NBCellCount[nb], ae = autoEvaluate},
       Function[response,
-        Module[{textOnly, blocks},
-          (* \:30a2\:30f3\:30ab\:30fc\:306e\:76f4\:5f8c\:306b\:51fa\:529b\:3092\:914d\:7f6e *)
+        Module[{textOnly, blocks, queue = {}, fallbackCode, lines},
+          (* アンカーの直後に出力を配置 *)
           NBAccess`NBJobMoveToAnchor[jid];
-          (* \:30a8\:30e9\:30fc/\:5236\:9650\:30ec\:30b9\:30dd\:30f3\:30b9\:306f\:901a\:77e5\:30b9\:30bf\:30a4\:30eb\:3067\:8868\:793a\:3057\:3066\:7d42\:4e86 *)
+          (* エラー/制限レスポンスは即座に処理して終了 *)
           If[iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"],
             NBAccess`NBWritePrintNotice[nb2, response, RGBColor[0.8, 0, 0]];
             NBAccess`NBEndJob[jid];
@@ -5075,35 +5092,45 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
             iSessionUpdateLast[nb2, stag2, <|
               "response" -> response, "code" -> "",
               "cellCountAfter" -> NBAccess`NBCellCount[nb2]|>];
-            Return[]];
+            Return[{}]];
+          (* テキスト部分を準備 *)
           textOnly = iStripContinueEvalGuidance @ cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
           If[textOnly =!= "",
-            NBAccess`NBWriteCell[nb2, iTeXMathToCell[textOnly, "Text"]]];
-          blocks = iWriteResponseBlocks[nb2, response, autoEvaluate];
+            AppendTo[queue, Function[
+              NBAccess`NBWriteCell[nb2, iTeXMathToCell[textOnly, "Text"]]]]];
+          (* コードブロックを個別にキューに追加 *)
+          blocks = StringCases[response,
+            RegularExpression["```(?:mathematica|wolfram)?\\n([\\s\\S]*?)```"] :> "$1"];
+          Do[With[{code = StringTrim[blk]},
+            AppendTo[queue, Function[
+              iWriteSmartCell[nb2, code, ae]]]],
+          {blk, blocks}];
+          (* コードブロックがない場合のフォールバック *)
           If[Length[blocks] === 0,
-            Module[{fallbackCode, lines},
-              lines = Select[StringSplit[textOnly, "\n"], StringTrim[#] =!= "" &];
-              If[Length[lines] > 0,
-                fallbackCode = "Column[{\n" <>
-                  StringJoin[Riffle[
-                    ("  " <> ToString[#, InputForm]) & /@ lines,
-                    ",\n"]] <>
-                  "\n}, Spacings -> 0.5]";
-                iWriteSmartCell[nb2, fallbackCode, autoEvaluate];
-                blocks = {fallbackCode}
-              ]
-            ]];
-          (* 高 AccessLevel の場合、新規セルを自動秘密マーク *)
-          If[TrueQ[autoMark],
-            iAutoMarkNewCellsConfidential[nb2, ccBefore]];
-          (* \:30b8\:30e7\:30d6\:7d42\:4e86: \:672a\:4f7f\:7528\:30b9\:30ed\:30c3\:30c8\:3068\:30a2\:30f3\:30ab\:30fc\:3092\:524a\:9664 *)
-          NBAccess`NBEndJob[jid];
-          $iClaudeEvalCurrentDepth = Max[0, $iClaudeEvalCurrentDepth - 1];
-          iSessionUpdateLast[nb2, stag2, <|
-            "response"       -> response,
-            "code"           -> StringJoin[Riffle[blocks, "\n\n"]],
-            "cellCountAfter" -> NBAccess`NBCellCount[nb2]
-          |>]
+            lines = Select[StringSplit[textOnly, "\n"], StringTrim[#] =!= "" &];
+            If[Length[lines] > 0,
+              fallbackCode = "Column[{\n" <>
+                StringJoin[Riffle[
+                  ("  " <> ToString[#, InputForm]) & /@ lines,
+                  ",\n"]] <>
+                "\n}, Spacings -> 0.5]";
+              AppendTo[queue, With[{fc = fallbackCode}, Function[
+                iWriteSmartCell[nb2, fc, ae]]]];
+              blocks = {fallbackCode}]];
+          (* クリーンアップステップ *)
+          AppendTo[queue, Function[
+            If[TrueQ[autoMark],
+              iAutoMarkNewCellsConfidential[nb2, ccBefore]];
+            iWriteContinueEvalButton[nb2, ae];
+            NBAccess`NBEndJob[jid];
+            $iClaudeEvalCurrentDepth = Max[0, $iClaudeEvalCurrentDepth - 1];
+            iSessionUpdateLast[nb2, stag2, <|
+              "response"       -> response,
+              "code"           -> StringJoin[Riffle[blocks, "\n\n"]],
+              "cellCountAfter" -> NBAccess`NBCellCount[nb2]
+            |>]]];
+          (* キューを返す: ScheduledTask の writing フェーズが消費 *)
+          queue
         ]
       ]
     ];
