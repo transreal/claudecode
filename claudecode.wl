@@ -57,7 +57,11 @@ Scan[
    "$ClaudeDocModel",
    "$ClaudePrivateModel",
    "$ClaudePackageKeywordMap",
-   "Fallback", "AutoPrivate", "References", "Demos", "Disclaimer", "Acknowledgments"}
+   "Fallback", "AutoPrivate", "AutoEvaluate", "StartTime",
+   "TargetFiles", "TargetFunctions", "Mode", "DryRun", "Inherit",
+   "License", "Model", "WebFetch", "WebSearch", "RepeatInterval",
+   "Owner", "Repository", "Branch", "BaseBranch",
+   "References", "Demos", "Disclaimer", "Acknowledgments"}
 ];
 
 ClaudeSpec::usage =
@@ -407,7 +411,10 @@ Options: TargetFunctions -> Automatic, StartTime -> Now, \"UpdateApiMd\" -> True
   "ClaudeUpdateDocumentation[\"packageName\"] \:306f\:30bd\:30fc\:30b9\:5dee\:5206\:306b\:57fa\:3065\:304d\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:81ea\:52d5\:66f4\:65b0\:3059\:308b\:3002\n" <>
   "ClaudeUpdateDocumentation[\"packageName\", \"\:66f4\:65b0\:6307\:793a\"] \:306f\:6307\:793a\:306b\:5f93\:3063\:3066\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0\:3059\:308b\:3002\n" <>
   "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3082\:53c2\:7167\:53ef\:80fd\:ff08\:300c\:4e0a\:3067\:8b70\:8ad6\:3055\:308c\:3066\:3044\:308b\:5185\:5bb9\:3092\:53cd\:6620\:3057\:3066\:300d\:306a\:3069\:ff09\:3002\n" <>
-  "\:4f8b: ClaudeUpdateDocumentation[\"claudecode\", \"api.md\:306e\:307f\:66f4\:65b0\:3057\:3066\"]";ClaudeUpdatePackageHistory::usage =
+  "Option TargetFiles -> Automatic \:3067\:81ea\:52d5\:5224\:5b9a\:3001{\"api.md\"} \:7b49\:3067\:30d5\:30a1\:30a4\:30eb\:6307\:5b9a\:3002\n" <>
+  "Option Mode -> \"Update\" (\:65e2\:5b58\:66f4\:65b0) \:307e\:305f\:306f \"Create\" (\:65b0\:898f\:4f5c\:6210)\:3002\n" <>
+  "\:4f8b: ClaudeUpdateDocumentation[\"claudecode\", \"api.md\:306e\:307f\:66f4\:65b0\:3057\:3066\"]\n" <>
+  "\:4f8b: ClaudeUpdateDocumentation[\"pkg\", \"...\", TargetFiles -> {\"api.md\"}]";ClaudeUpdatePackageHistory::usage =
   "ClaudeUpdatePackageHistory[] \:306f\:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:306e ClaudeUpdatePackage \:547c\:3073\:51fa\:3057\:5c65\:6b74\:3092\:8868\:793a\:3057\:30ea\:30b9\:30c8\:3067\:8fd4\:3059\:3002\n\
 ClaudeUpdatePackageHistory[packageName] \:306f\:6307\:5b9a\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:66f4\:65b0\:5c65\:6b74\:3092\:8868\:793a\:3057\:30ea\:30b9\:30c8\:3067\:8fd4\:3059\:3002\n\
 \:5404\:30a8\:30f3\:30c8\:30ea\:306f <|\"Package\"->\[Ellipsis], \"Timestamp\"->\[Ellipsis], \"Directory\"->\[Ellipsis]|> \:306e Association\:3002";ClaudeBackupDataset::usage =
@@ -903,13 +910,23 @@ iClaudeSysPrompt[] :=
 (* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:51fa\:529b\:30d8\:30eb\:30d1\:30fc (\:5185\:90e8\:4e92\:63db\:5c64) \:2192 NBAccess\:306b\:59d4\:8b72
    非同期コールバック中にユーザーが別のセルを編集していても、
    常にノートブック末尾に追記することでセル破損を防止する。 *)
-nbPrint[nb_, text_String, style_String:"Text"] :=
-  NBAccess`NBWriteText[nb, text, style];
+(* Job active 中は SelectionMove[After, Notebook] をスキップするフラグ。
+   NBJobMoveToAnchor 後は Job がカーソル位置を制御しているため、
+   nbPrint が末尾に飛ばすと出力位置がずれる。
+   非 Job パス (ClaudeUpdateDocumentation 等) では末尾移動が必要。 *)
+$iJobActiveNb = None;
+
+nbPrint[nb_, text_String, style_String:"Text"] := (
+  If[nb =!= $iJobActiveNb,
+    Quiet[SelectionMove[nb, After, Notebook]]];
+  NBAccess`NBWriteText[nb, text, style]);
 
 (* Style 付きテキストのオーバーロード *)
-nbPrint[nb_, text_Style, ___] :=
+nbPrint[nb_, text_Style, ___] := (
+  If[nb =!= $iJobActiveNb,
+    Quiet[SelectionMove[nb, After, Notebook]]];
   NotebookWrite[nb,
-    Cell[BoxData[ToBoxes[text]], "Text"], After];
+    Cell[BoxData[ToBoxes[text]], "Text"], After]);
 
 (* 2つ以上のアンダースコアを含む変数名を修正
    tiling3_12_12 → tiling3X12X12 (Mathematica でパターン解釈されるのを防ぐ)
@@ -2089,6 +2106,7 @@ iParseVerboseLog[logFile_String, prevSize_Integer] :=
    ScheduledTask の polling/received フェーズで NBWriteSlot が written=True に設定するため、
    そのままだと NBEndJob がスロットを削除しない。 *)
 iEndJobCleanSlot[jid_String] := (
+  $iJobActiveNb = None;
   NBAccess`NBJobResetSlotWritten[jid, 1];
   NBAccess`NBEndJob[jid]);
 
@@ -2133,19 +2151,9 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
     |>;
 
     With[{k = ts, jid = jobId, uj = useJob},
-      (* 進捗表示: Dynamic を使わず、ScheduledTask から直接スロット/セルを更新。
-         Dynamic は kernel がブロック中に評価要求が累積し FrontEnd をフリーズさせるため廃止。 *)
-      $claudeProgress[k]["disp"] = "Claude に問い合わせ中...";
-      If[uj,
-        NBAccess`NBWriteSlot[jid, 1,
-          Cell["Claude に問い合わせ中...",
-            "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]],
-        (* 非 Job パス: CellPrint で静的セルを配置、ScheduledTask が更新 *)
-        Quiet[SelectionMove[nb, After, Notebook]];
-        CellPrint[Cell["Claude に問い合わせ中...",
-          "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11,
-          CellTags -> {progTag}]]
-      ]
+      (* 全フェーズで WindowStatusArea を使用: カーソル位置に影響しない *)
+      $claudeProgress[k]["disp"] = "Claude に問い合わせ中... 0s";
+      Quiet[CurrentValue[nb, WindowStatusArea] = "Claude に問い合わせ中... 0s"]
     ];
 
     With[{gSym = Symbol["ClaudeCode`Private`$task" <> ts]},
@@ -2159,17 +2167,9 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
           elapsed = Round[AbsoluteTime[] - t0, 1];
           phase = Lookup[$claudeProgress[k], "phase", "polling"];
 
-          (* === 進捗テキスト更新ヘルパー === *)
+          (* === 進捗テキスト更新ヘルパー: WindowStatusArea に統一 === *)
           iUpdateDisp[text_String, color_:RGBColor[0.8, 0.4, 0]] :=
-            Quiet @ If[uj,
-              NBAccess`NBWriteSlot[jid, 1,
-                Cell[text, "Print", FontWeight -> Bold, FontColor -> color, FontSize -> 11]],
-              Module[{progCells = Quiet[Cells[pNb, CellTags -> ptag]]},
-                If[ListQ[progCells] && Length[progCells] > 0,
-                  Quiet[SelectionMove[First[progCells], All, Cell]];
-                  NotebookWrite[pNb,
-                    Cell[text, "Print", FontWeight -> Bold, FontColor -> color, FontSize -> 11,
-                      CellTags -> {ptag}], All]]]];
+            Quiet[CurrentValue[pNb, WindowStatusArea] = text];
 
           Which[
             (* === Phase: polling — プロセス実行中 === *)
@@ -2197,6 +2197,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                   If[uj,
                     NBAccess`NBAbortJob[jid,
                       "Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08" <> ToString[$ClaudeTimeout] <> "\:79d2\:ff09"],
+                    Quiet[SelectionMove[pNb, After, Notebook]];
                     cb["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08" <> ToString[$ClaudeTimeout] <> "\:79d2\:ff09\:3057\:307e\:3057\:305f\:3002"]],
                   (* 正常完了: 結果ファイルを読み取り *)
                   Module[{retries2 = 0, result2, isEmpty2},
@@ -2214,6 +2215,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                           iStartFallbackAsync[norm["text"], pNb,
                             Function[fbResult,
                               If[StringQ[fbResult] && fbResult =!= $Failed,
+                                If[!uj, Quiet[SelectionMove[pNb, After, Notebook]]];
                                 cb[fbResult],
                                 If[uj,
                                   NBAccess`NBAbortJob[jid, result2],
@@ -2228,12 +2230,16 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                       $claudeProgress[k]["phase"] = "done";
                       If[uj,
                         NBAccess`NBAbortJob[jid, "Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"],
+                        Quiet[SelectionMove[pNb, After, Notebook]];
                         cb["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"]]
                     ]]]],
 
             (* === Phase: received — callback でキューを準備 === *)
             phase === "received",
               If[uj, NBAccess`NBJobResetSlotWritten[jid, 1]];
+              (* 非 Job パス: カーソルをノートブック末尾に移動してから cb を呼ぶ。
+                 Job パスは callback 内の NBJobMoveToAnchor が位置を制御する。 *)
+              If[!uj, Quiet[SelectionMove[pNb, After, Notebook]]];
               Module[{queue, t1 = AbsoluteTime[], dt},
                 queue = cb[$claudeProgress[k]["result"]];
                 dt = AbsoluteTime[] - t1;
@@ -2243,10 +2249,8 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                   $claudeProgress[k]["writeTotal"] = Length[queue];
                   $claudeProgress[k]["writeIdx"] = 1;
                   $claudeProgress[k]["phase"] = "writing";
-                  (* 進捗をウィンドウステータスバーに表示開始
-                     WindowStatusArea は SelectionMove を使わずカーソルに影響しない *)
                   Quiet[CurrentValue[pNb, WindowStatusArea] =
-                    "\:2713 \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d... (" <> ToString[elapsed] <> "s, 0/" <>
+                    "Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... " <> ToString[elapsed] <> "s | \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d (0/" <>
                     ToString[Length[queue]] <> ")"],
                   $claudeProgress[k]["phase"] = "done"]],
 
@@ -2264,9 +2268,9 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                   Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
                   $claudeProgress[k]["phase"] = "done",
                   If[sub === "disp",
-                    (* 表示ティック: WindowStatusArea 更新のみ。thunk は次のティックで。 *)
+                    (* 表示ティック: polling と同じフォーマット + 書き込み進捗 *)
                     Quiet[CurrentValue[pNb, WindowStatusArea] =
-                      "\:2713 \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d... (" <> ToString[elapsed] <> "s, " <>
+                      "Claude に問い合わせ中... " <> ToString[elapsed] <> "s | 出力を書き込み中 (" <>
                       ToString[idx] <> "/" <> ToString[total] <> ")"];
                     $claudeProgress[k]["writeSub"] = "exec",
                     (* 実行ティック: thunk を 1 つ実行 + 所要時間を記録 *)
@@ -4124,7 +4128,8 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
                         FontWeight -> Bold, FontColor -> RGBColor[0, 0.5, 0.2], FontSize -> 11]],
                     iFallbackNotifyAndLog[pNb,
                       "\[Checkmark] " <> mods[[mIdx, 1]] <> "/" <> mods[[mIdx, 2]] <>
-                      " \:3067\:5fdc\:7b54\:3092\:53d6\:5f97\:3057\:307e\:3057\:305f\:3002", RGBColor[0, 0.5, 0.2]]];
+                      " \:3067\:5fdc\:7b54\:3092\:53d6\:5f97\:3057\:307e\:3057\:305f\:3002", RGBColor[0, 0.5, 0.2]];
+                    Quiet[SelectionMove[pNb, After, Notebook]]];
                   cb[text]],
                 iStartFallbackAsync[pmt, pNb, cb, mods, mIdx + 1, jid]
               ]
@@ -4497,8 +4502,10 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
       (* WebFetch \:306f\:540c\:671f\:3067\:5b9f\:884c\:3002\:8ab2\:91d1\:304c\:767a\:751f\:3059\:308b API \:7d4c\:7531\:306e\:305f\:3081 Fallback->True \:304c\:5fc5\:9808 *)
       Module[{response = iDoWebSearch[fullPrompt]},
         NBAccess`NBJobMoveToAnchor[jobId];
+        $iJobActiveNb = nb;
         If[StringQ[response],
           iWriteQueryResponse[nb, response, autoEvaluate]];
+        $iJobActiveNb = None;
         NBAccess`NBEndJob[jobId];
         iSessionUpdateLast[nb, tag, <|
           "response"       -> response,
@@ -4513,10 +4520,12 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
           Module[{},
             (* \:30a2\:30f3\:30ab\:30fc\:306e\:76f4\:5f8c\:306b\:51fa\:529b\:3092\:914d\:7f6e *)
             NBAccess`NBJobMoveToAnchor[jid];
+            $iJobActiveNb = nb2;
             (* \:30a8\:30e9\:30fc/\:5236\:9650\:30ec\:30b9\:30dd\:30f3\:30b9\:306f\:901a\:77e5\:30b9\:30bf\:30a4\:30eb\:3067\:8868\:793a\:3057\:3066\:7d42\:4e86 *)
             If[StringQ[response] && (iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"]),
               NBAccess`NBWritePrintNotice[nb2, response, RGBColor[0.8, 0, 0]];
               NBAccess`NBJobResetSlotWritten[jid, 1];
+              $iJobActiveNb = None;
               NBAccess`NBEndJob[jid];
               iSessionUpdateLast[nb2, stag2, <|
                 "response" -> response,
@@ -4531,6 +4540,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
               iAutoMarkNewCellsConfidential[nb2, ccBefore]];
             (* ジョブ終了: 進捗スロットを未使用に戻して削除 *)
             NBAccess`NBJobResetSlotWritten[jid, 1];
+            $iJobActiveNb = None;
             NBAccess`NBEndJob[jid];
             iSessionUpdateLast[nb2, stag2, <|
               "response"       -> response,
@@ -4557,6 +4567,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
               Cell["\[WarningSign] AccessLevel " <> ToString[accessLevel] <>
                 " \:306b\:5bfe\:5fdc\:3059\:308b\:30e2\:30c7\:30eb\:304c\:3042\:308a\:307e\:305b\:3093\:3002", "Print",
                 FontWeight -> Bold, FontColor -> Red, FontSize -> 11]];
+            $iJobActiveNb = None;
             NBAccess`NBEndJob[jobId];
             iSessionUpdateLast[nb, tag, <|
               "response" -> "Error: AccessLevel " <> ToString[accessLevel] <>
@@ -5119,9 +5130,11 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
         Module[{textOnly, blocks, queue = {}, fallbackCode, lines},
           (* アンカーの直後に出力を配置 *)
           NBAccess`NBJobMoveToAnchor[jid];
+          $iJobActiveNb = nb2;
           (* エラー/制限レスポンスは即座に処理して終了 *)
           If[iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"],
             NBAccess`NBWritePrintNotice[nb2, response, RGBColor[0.8, 0, 0]];
+            $iJobActiveNb = None;
             NBAccess`NBEndJob[jid];
             $iClaudeEvalCurrentDepth = Max[0, $iClaudeEvalCurrentDepth - 1];
             iSessionUpdateLast[nb2, stag2, <|
@@ -5133,12 +5146,20 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
           If[textOnly =!= "",
             AppendTo[queue, Function[
               NBAccess`NBWriteCell[nb2, iTeXMathToCell[textOnly, "Text"]]]]];
-          (* コードブロックを個別にキューに追加 *)
+          (* コードブロックを個別にキューに追加。
+             NBWriteSmartCode の ToExpression はシンボル作成時に
+             DeclarePackage 等のオートロードをトリガーして
+             数十秒ブロックする場合があるため、軽量な直接書き込みを使用。 *)
           blocks = StringCases[response,
             RegularExpression["```(?:mathematica|wolfram)?\\n([\\s\\S]*?)```"] :> "$1"];
           Do[With[{code = StringTrim[blk]},
             AppendTo[queue, Function[
-              iWriteSmartCell[nb2, code, ae]]]],
+              NotebookWrite[nb2,
+                Cell[code, "Input", CellAutoOverwrite -> True], After]]];
+            (* AutoEvaluate: 書き込み後に別ティックで評価 *)
+            If[TrueQ[ae],
+              AppendTo[queue, Function[
+                NBAccess`NBEvaluatePreviousCell[nb2]]]]],
           {blk, blocks}];
           (* コードブロックがない場合のフォールバック *)
           If[Length[blocks] === 0,
@@ -5150,7 +5171,11 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
                   ",\n"]] <>
                 "\n}, Spacings -> 0.5]";
               AppendTo[queue, With[{fc = fallbackCode}, Function[
-                iWriteSmartCell[nb2, fc, ae]]]];
+                NotebookWrite[nb2,
+                  Cell[fc, "Input", CellAutoOverwrite -> True], After]]]];
+              If[TrueQ[ae],
+                AppendTo[queue, Function[
+                  NBAccess`NBEvaluatePreviousCell[nb2]]]];
               blocks = {fallbackCode}]];
           (* クリーンアップ: 軽量操作のみキューに入れる。
              重い TaggingRules 書き込みは done フェーズに移動。 *)
@@ -5161,6 +5186,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
             iWriteContinueEvalButton[nb2, ae]]];
           AppendTo[queue, Function[
             NBAccess`NBJobResetSlotWritten[jid, 1];
+            $iJobActiveNb = None;
             NBAccess`NBEndJob[jid];
             $iClaudeEvalCurrentDepth = Max[0, $iClaudeEvalCurrentDepth - 1]]];
           (* done フェーズで実行する重い処理を jobId で保存 *)
@@ -5193,6 +5219,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
             Cell["\[WarningSign] AccessLevel " <> ToString[accessLevel] <>
               " \:306b\:5bfe\:5fdc\:3059\:308b\:30e2\:30c7\:30eb\:304c\:3042\:308a\:307e\:305b\:3093\:3002", "Print",
               FontWeight -> Bold, FontColor -> Red, FontSize -> 11]];
+          $iJobActiveNb = None;
           NBAccess`NBEndJob[jobId];
           $iClaudeEvalCurrentDepth = Max[0, $iClaudeEvalCurrentDepth - 1];
           iSessionUpdateLast[nb, tag, <|
@@ -5482,12 +5509,14 @@ iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :
           Module[{specText},
             (* \:30a2\:30f3\:30ab\:30fc\:306e\:76f4\:5f8c\:306b\:4ed5\:69d8\:30bb\:30eb\:3092\:914d\:7f6e *)
             NBAccess`NBJobMoveToAnchor[jid];
+            $iJobActiveNb = nb2;
             specText = cleanMarkdown @ StringTrim[response];
             NBAccess`NBWriteCell[nb2,
               Cell[specText, "Text",
                 Sequence @@ $specCellOpts,
                 CellTags -> {"claude-spec-output"}]];
             (* \:30b8\:30e7\:30d6\:7d42\:4e86 *)
+            $iJobActiveNb = None;
             NBAccess`NBEndJob[jid];
             iSessionUpdateLast[nb2, stag2, <|
               "response" -> response,
@@ -5917,6 +5946,23 @@ iSaveBackupFile[histDir_String, srcFilePath_String, packageName_String,
     content = Quiet @ Check[Import[srcFilePath, "Text"], ""];
     If[!StringQ[content] || content === "", Return[$Failed]];
     iSaveBackupFileContent[histDir, FileNameTake[srcFilePath], content, packageName, fullBaseline]
+  ];
+
+(* サブディレクトリ構造を保持してバックアップ:
+   baseDir からの相対パスを fileName として使用 *)
+iSaveBackupFileRelative[histDir_String, srcFilePath_String, baseDir_String,
+    packageName_String, fullBaseline:(True|False):False] :=
+  Module[{content, relPath, subDir},
+    content = Quiet @ Check[Import[srcFilePath, "Text"], ""];
+    If[!StringQ[content] || content === "", Return[$Failed]];
+    (* baseDir からの相対パスを計算 *)
+    relPath = StringReplace[srcFilePath,
+      StartOfString ~~ baseDir ~~ ($PathnameSeparator | "/") -> ""];
+    (* 相対パスにサブディレクトリが含まれる場合、histDir 内にディレクトリを作成 *)
+    subDir = DirectoryName[FileNameJoin[{histDir, relPath}]];
+    If[subDir =!= "" && subDir =!= histDir,
+      Quiet @ CreateDirectory[subDir, CreateIntermediateDirectories -> True]];
+    iSaveBackupFileContent[histDir, relPath, content, packageName, fullBaseline]
   ];
 
 (* --- 汎用保存: コンテンツ直接指定 --- *)
@@ -7344,10 +7390,12 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
         Module[{newCode, newWlFile, codeBlocks, strm2},
           Export[FileNameJoin[{sd, "response.txt"}], response, "Text"];
           If[StringStartsQ[response, "Error (ExitCode="] || StringStartsQ[response, "Error:"],
+            $iJobActiveNb = None;
             NBAccess`NBAbortJob[jid, "Claude \:547c\:3073\:51fa\:3057\:30a8\:30e9\:30fc"];
             Return[]];
           (* API エラー/制限メッセージの早期検出 — ファイル破損防止 *)
           If[iIsAPIErrorResponse[response],
+            $iJobActiveNb = None;
             NBAccess`NBAbortJob[jid,
               "\:26d4 API \:30a8\:30e9\:30fc\:307e\:305f\:306f\:5229\:7528\:5236\:9650\:3092\:691c\:51fa\:3002\:30d1\:30c3\:30b1\:30fc\:30b8\:306f\:4f5c\:6210\:3055\:308c\:307e\:305b\:3093\:3002\n" <>
               StringTake[response, UpTo[200]]];
@@ -7362,6 +7410,7 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
               newCode = StringJoin[Riffle[codeBlocks, "\n\n"]]]];
           (* \:691c\:8a3c: BeginPackage \:304c\:542b\:307e\:308c\:3066\:3044\:308b\:304b *)
           If[newCode === "" || !StringContainsQ[newCode, "BeginPackage"],
+            $iJobActiveNb = None;
             NBAccess`NBAbortJob[jid,
               "\:30a8\:30e9\:30fc: \:6709\:52b9\:306a\:30d1\:30c3\:30b1\:30fc\:30b8\:30b3\:30fc\:30c9\:3092\:62bd\:51fa\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002\nresponse.txt: " <>
               FileNameJoin[{sd, "response.txt"}]];
@@ -7381,6 +7430,7 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
             ]
           ];
           NBAccess`NBJobMoveToAnchor[jid];
+          $iJobActiveNb = nb2;
           If[Quiet @ Check[(CopyFile[newWlFile, sf, OverwriteTarget -> False]; True),
                 False] && FileExistsQ[sf],
             nbPrint[nb2, "\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:4f5c\:6210\:3057\:307e\:3057\:305f: " <> sf];
@@ -7391,6 +7441,7 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
             iAutoUpdateApiMd[nb2, pn],
             nbPrint[nb2, "\:8b66\:544a: \:66f8\:304d\:8fbc\:307f\:5931\:6557\:3002\:624b\:52d5\:3067\:30b3\:30d4\:30fc\:3057\:3066\:304f\:3060\:3055\:3044:\n" <>
               "  " <> newWlFile]];
+          $iJobActiveNb = None;
           NBAccess`NBEndJob[jid]
         ]
       ]
@@ -7536,6 +7587,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
         Module[{newFuncs, newCode, newWlFile, validationErrors = {}},
           (* アンカーの直後に出力を配置 *)
           NBAccess`NBJobMoveToAnchor[jid];
+          $iJobActiveNb = nb2;
           (* コールバック完了時に必ずロック解放するラッパー *)
           Internal`WithLocalSettings[Null,
 
@@ -7692,6 +7744,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
 
           , (* Internal`WithLocalSettings cleanup *)
           $iContinueUpdateFlag = False;
+          $iJobActiveNb = None;
           NBAccess`NBEndJob[jid];
           iReleasePackageLock[pn]]
         ]
@@ -8249,7 +8302,7 @@ $iDocSectionKW = <|
   "setup.md" -> {"\:521d\:671f\:5316", "\:30c7\:30a3\:30ec\:30af\:30c8\:30ea", "node-pty"},
   "user_manual.md" -> {"\:30b3\:30a2\:547c\:3073\:51fa\:3057", "\:975e\:540c\:671f", "\:30d1\:30ec\:30c3\:30c8", "\:30bb\:30c3\:30b7\:30e7\:30f3",
                         "\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6", "Web", "Mathematica"},
-  "api.md" -> {"\:30b3\:30a2\:547c\:3073\:51fa\:3057", "\:30bb\:30c3\:30b7\:30e7\:30f3", "\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6", "Web"},
+  "api.md" -> All,  (* 全セクション: API リファレンスは全関数を網羅する必要がある *)
   "examples/example.md" -> {"\:30b3\:30a2\:547c\:3073\:51fa\:3057", "\:30bb\:30c3\:30b7\:30e7\:30f3", "Web"},
   "README.md" -> {}
 |>;
@@ -8261,10 +8314,15 @@ iBuildChunkedSource[split_Association, docFile_String] :=
     secs = split["sections"];
     maxC = $ClaudeDocMaxChunkChars;
     kws = Lookup[$iDocSectionKW, docFile, {}];
-    selIdx = If[kws === {}, {},
-      Select[Range[Length[secs]],
+    (* All → 全セクション選択 (api.md 等)、{} → セクションなし (README等)、
+       リスト → キーワードマッチでフィルタ *)
+    selIdx = Which[
+      kws === All, Range[Length[secs]],
+      kws === {} || !ListQ[kws], {},
+      True, Select[Range[Length[secs]],
         Function[si, AnyTrue[kws,
-          Function[kw, StringContainsQ[secs[[si]]["title"], kw, IgnoreCase -> True]]]]]];
+          Function[kw, StringContainsQ[secs[[si]]["title"], kw, IgnoreCase -> True]]]]]
+    ];
     sel = secs[[selIdx]];
     total = StringLength[pub] + Total[#["chars"] & /@ sel];
     If[total > maxC && Length[sel] > 0,
@@ -8502,8 +8560,8 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       Quiet[iSaveBackupWl[histDir, srcFile, packageName]];
       If[DirectoryQ[outDir],
         Scan[Function[f,
-          Quiet[iSaveBackupFile[histDir, f, packageName]]],
-          Select[FileNames["*", outDir], iFileQ]]];
+          Quiet[iSaveBackupFileRelative[histDir, f, outDir, packageName]]],
+          Select[FileNames["*", outDir, Infinity], iFileQ]]];
       (* doc_options.json もバックアップ *)
       Module[{docOptsFile = iDocOptionsPath[packageName]},
         If[FileExistsQ[docOptsFile],
@@ -8536,7 +8594,7 @@ iDocsAvailableAndFresh[packageName_String] :=
     pkgDir  = Global`$packageDirectory;
     docsDir = iPackageDocsDir[packageName];
     If[!StringQ[docsDir] || !DirectoryQ[docsDir], Return[False]];
-    docFiles = FileNames["*.md", docsDir];
+    docFiles = FileNames["*.md", docsDir, Infinity];
     If[Length[docFiles] === 0, Return[False]];
     (* \:30bd\:30fc\:30b9\:306e\:6700\:7d42\:66f4\:65b0\:65e5\:6642 *)
     srcFile = Which[
@@ -8731,8 +8789,8 @@ iCreateDocUpdateBackup[packageName_String, srcFile_String, docsDir_String,
     Quiet[iSaveBackupWl[histDir, srcFile, packageName]];
     If[DirectoryQ[docsDir],
       Scan[Function[f,
-        Quiet[iSaveBackupFile[histDir, f, packageName]]],
-        Select[FileNames["*", docsDir], iFileQ]]];
+        Quiet[iSaveBackupFileRelative[histDir, f, docsDir, packageName]]],
+        Select[FileNames["*", docsDir, Infinity], iFileQ]]];
     (* doc_options.json もバックアップ *)
     Module[{docOptsFile = iDocOptionsPath[packageName]},
       If[FileExistsQ[docOptsFile],
@@ -8805,15 +8863,27 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
       nbPrint[nb, "\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306b\:5909\:66f4\:304c\:3042\:308a\:307e\:305b\:3093\:3002\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:6700\:65b0\:3067\:3059\:3002"];
       Return[]];
     (* \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:5bfe\:8c61\:306b\:3059\:308b *)
-    (* 全ドキュメントファイルを対象にする (サブディレクトリ含む) *)
-    allDocs = Join[
-      FileNameTake /@ FileNames["*.md", docsDir],
+    (* 全ドキュメントファイルを対象にする (サブディレクトリ含む)
+       ルートと docs/ 等に同名ファイルがある場合はルートを優先 *)
+    allDocs = Module[{rootDocs, subDocs, rootNames, tf},
+      (* TargetFiles オプションが指定されていればそれを使用 *)
+      tf = OptionValue[TargetFiles];
+      If[ListQ[tf] && Length[tf] > 0,
+        Return[iEnsureReadmeLast[tf], Module]];
+      If[StringQ[tf] && tf =!= "",
+        Return[{tf}, Module]];
+      (* Automatic: 全ファイルを検出 *)
+      rootDocs = FileNameTake /@ FileNames["*.md", docsDir];
+      rootNames = rootDocs;
       (* examples/ などのサブディレクトリ内の .md *)
-      Module[{subFiles},
+      subDocs = Module[{subFiles},
         subFiles = FileNames["*.md", docsDir, 2];
         subFiles = Select[subFiles, DirectoryName[#] =!= docsDir &];
-        (FileNameTake[DirectoryName[#], -1] <> "/" <> FileNameTake[#]) & /@ subFiles]
-    ] // DeleteDuplicates;
+        (FileNameTake[DirectoryName[#], -1] <> "/" <> FileNameTake[#]) & /@ subFiles];
+      (* サブディレクトリのファイルがルートと同名なら除外 *)
+      subDocs = Select[subDocs, !MemberQ[rootNames, FileNameTake[#]] &];
+      DeleteDuplicates[Join[rootDocs, subDocs]]
+    ];
     (* README.md は他のドキュメント参照のため必ず最後 *)
     allDocs = iEnsureReadmeLast[allDocs];
     If[Length[allDocs] === 0,
@@ -8975,9 +9045,30 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     promptParts = {
       "You are an expert Wolfram Language / Mathematica documentation writer.\n",
       "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n",
-      "You are updating the documentation for package \"" <> packageName <> "\"\n\n",
-      "UPDATE INSTRUCTION:\n" <> useInstruction <> "\n\n"
+      "You are " <> If[isApi, "generating", "updating"] <>
+        " the documentation for package \"" <> packageName <> "\"\n\n"
     };
+
+    (* --- api.md 専用指示: ソースコードのみから生成、LLM消費向け --- *)
+    If[isApi,
+      AppendTo[promptParts,
+        "CRITICAL: This is an LLM-optimized API reference. NOT for human reading.\n" <>
+        "An LLM reading ONLY this file must write correct code using the package.\n" <>
+        "Generate ENTIRELY from the source code below. Do NOT reference any prior version.\n\n" <>
+        iLanguageInstruction["plain"] <> "\n" <>
+        "FORMAT RULES (token-efficient, high density):\n" <>
+        "- Minimize blank lines: only 1 before ## section headings.\n" <>
+        "- Do NOT use --- separators. Do NOT use bold labels like **\:5f15\:6570:**.\n" <>
+        "- Do NOT add usage examples for trivial functions.\n" <>
+        "- Only add examples for complex options or non-obvious patterns.\n" <>
+        "- FORMAT for simple functions: ### FuncName[args] \:2192 ReturnType\\n\:8aac\:660e(1\:884c)\n" <>
+        "- FORMAT for option functions: ### FuncName[args, opts]\\n\:8aac\:660e\\n\:2192 ReturnType\\nOptions: Opt1 -> Def1 (\:8aac\:660e), ...\n" <>
+        "- FORMAT for complex functions: add \:4f8b: FuncName[...] line\n" <>
+        "- FORMAT for variables: ### $Var\\n\:578b: Type, \:521d\:671f\:5024: val\\n\:8aac\:660e\n\n" <>
+        "List ALL public functions and ALL options. Completeness is critical.\n\n"],
+      (* --- 非 api.md の通常指示 --- *)
+      AppendTo[promptParts,
+        "UPDATE INSTRUCTION:\n" <> useInstruction <> "\n\n"]];
 
     (* --- 差分: api.md と README.md には不要 --- *)
     If[!isApi && !isReadme &&
@@ -8987,22 +9078,24 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         "Focus your updates on these changed parts.\n" <>
         diffText <> "\n\n"]];
 
-    (* --- 現在のドキュメント --- *)
-    AppendTo[promptParts,
-      "CURRENT DOCUMENT (" <> docFile <> "):\n" <>
-      If[StringQ[currentContent] && currentContent =!= "",
-        currentContent, "(empty)"] <> "\n\n"];
+    (* --- 現在のドキュメント: api.md 以外にのみ送信 ---
+       api.md はソースコードのみから生成する。過去の api.md を参照すると
+       古い情報が残存したり、LLM が既存構造を保持しようとして不完全になる *)
+    If[!isApi,
+      AppendTo[promptParts,
+        "CURRENT DOCUMENT (" <> docFile <> "):\n" <>
+        If[StringQ[currentContent] && currentContent =!= "",
+          currentContent, "(empty)"] <> "\n\n"]];
 
     (* --- README.md: 兄弟ドキュメントから生成（ソースコード不要） --- *)
     If[isReadme,
       If[narrowQ,
         AppendTo[promptParts, "(Sibling documentation files omitted \:2014 narrow-scope update)\n"],
         Module[{siblingDocs, siblingContent = ""},
-          siblingDocs = Join[
+          siblingDocs = DeleteDuplicates @ Join[
             FileNames["*.md", docsDir],
             FileNames["*.md", docsDir, 2]];
           siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
-          siblingDocs = DeleteDuplicates[siblingDocs];
           If[Length[siblingDocs] > 0,
             siblingContent = "\n=== OTHER DOCUMENTATION FILES (use as source for README overview) ===\n" <>
               StringJoin[
@@ -9134,7 +9227,7 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
    ============================================================ *)
 
 iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
-  Module[{docsDir, apiFile, srcFile, sourceCode, currentApi, prompt},
+  Module[{docsDir, apiFile, srcFile, sourceCode, prompt},
     docsDir = iPackageDocsDir[packageName];
     If[!StringQ[docsDir], Return[]];
     (* docs ディレクトリがなければ作成 *)
@@ -9145,8 +9238,6 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
     If[!FileExistsQ[srcFile], Return[]];
     sourceCode = Quiet @ Check[Import[srcFile, "Text"], ""];
     If[!StringQ[sourceCode] || sourceCode === "", Return[]];
-    currentApi = If[FileExistsQ[apiFile],
-      Quiet @ Check[Import[apiFile, "Text"], ""], ""];
     prompt =
       "You are an expert Wolfram Language / Mathematica documentation writer.\n" <>
       "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n" <>
@@ -9167,10 +9258,8 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
       "List ALL public functions and ALL options. Completeness is critical.\n" <>
       "Format: Markdown. Output the COMPLETE document directly as your response text.\n" <>
       "Do NOT wrap in code fences. Do NOT include markers. Do NOT ask for file permissions.\n\n" <>
-      If[StringQ[currentApi] && currentApi =!= "",
-        "CURRENT api.md (update and keep structure where appropriate):\n" <>
-        currentApi <> "\n\n",
-        ""] <>
+      (* api.md は過去の内容を参照せず、ソースコードのみから生成する。
+         既存 api.md を送ると古い情報が残存し不完全になるため。 *)
       "PACKAGE SOURCE CODE:\n" <>
       iBuildChunkedSource[iSplitSource[sourceCode], "api.md"];
     nbPrint[nb, "\:2500 api.md \:3092\:81ea\:52d5\:66f4\:65b0\:4e2d... (\:30e2\:30c7\:30eb: " <> iDocModelOverride[] <> ")"];

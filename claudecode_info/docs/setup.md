@@ -50,8 +50,8 @@ claude auth login
 
 claudecode パッケージは以下の依存関係があります：
 
-- **NBAccess** パッケージ（ノートブック操作用）
-- **GitHubREST** パッケージ（GitHub 連携用）
+- **[NBAccess](https://github.com/transreal/NBAccess)** パッケージ（ノートブック操作用）
+- **[github](https://github.com/transreal/github)** パッケージ（GitHub 連携用）
 
 これらのパッケージを `$packageDirectory` に配置してください。
 
@@ -101,7 +101,22 @@ $ClaudeWorkingDirectory = FileNameJoin[{$HomeDirectory, "Claude Working"}]
 $ClaudeAccessibleDirs = {$packageDirectory}
 ```
 
-### 3. フォールバックモデルの設定（オプション）
+### 3. パッケージキーワードマップの設定
+
+新機能として、パッケージごとのキーワード自動登録システムが追加されました：
+
+```mathematica
+(* パッケージキーワードマップの設定例 *)
+$ClaudePackageKeywordMap["maildb"] = {"メール", "mail", "切"}
+$ClaudePackageKeywordMap["github"] = {"GitHub", "git", "リポジトリ"}
+
+(* 設定確認 *)
+$ClaudePackageKeywordMap
+```
+
+プロンプトにキーワードが含まれると、対応パッケージの api.md がコンテキストに自動注入されます。
+
+### 4. フォールバックモデルの設定（オプション）
 
 Claude Code が利用できない場合のバックアップとして、他の LLM を設定できます：
 
@@ -112,6 +127,20 @@ $ClaudeFallbackModels = {
   {"openai", "gpt-4"},
   {"lmstudio", "local-model", "http://127.0.0.1:1234"}
 }
+```
+
+### 5. ドキュメント生成設定
+
+```mathematica
+(* ドキュメント生成用モデル *)
+$ClaudeDocModel = "claude-sonnet-4-20250514"
+
+(* リトライ設定 *)
+$ClaudeDocMaxRetries = 3
+$ClaudeDocRetryDelay = 60
+
+(* チャンク分割の最大文字数 *)
+$ClaudeDocMaxChunkChars = 60000
 ```
 
 ## 動作確認
@@ -143,6 +172,16 @@ ClaudeCreatePackage["testpkg", "簡単な挨拶関数を含むパッケージを
 ClaudeUpdatePackageHistory[]
 ```
 
+### 4. 新機能のテスト
+
+```mathematica
+(* パッケージ更新とapi.md自動更新のテスト *)
+ClaudeUpdatePackage["testpkg", "新機能を追加", "UpdateApiMd" -> True]
+
+(* キーワード連携のテスト（maildbキーワードを含むクエリ） *)
+ClaudeQuery["メールを処理するプログラムを作りたい"]
+```
+
 ## 設定のカスタマイズ
 
 ### プライバシー設定
@@ -157,15 +196,25 @@ $ClaudePrivateModel = {"lmstudio", "local-model", "http://127.0.0.1:1234"}
 ClaudeEval["機密データの処理", AutoPrivate -> True]
 ```
 
-### ドキュメント生成設定
+### パフォーマンス設定
 
 ```mathematica
-(* ドキュメント生成用モデル *)
-$ClaudeDocModel = "claude-sonnet-4-20250514"
+(* 履歴コンパクションの設定 *)
+ClaudeHistorySize[]
+ClaudeCompactHistory[]
 
-(* リトライ設定 *)
-$ClaudeDocMaxRetries = 3
-$ClaudeDocRetryDelay = 60
+(* 再帰実行の深度制限 *)
+$ClaudeEvalMaxDepth = 5
+```
+
+### Web 検索設定
+
+```mathematica
+(* Web検索設定（Claude Code CLI組み込み、無料） *)
+ClaudeEval["最新の技術情報を調べてください", WebSearch -> True]
+
+(* WebFetch設定（API経由、課金あり、Fallback->True必須） *)
+ClaudeEval["このURLの内容を要約して", WebFetch -> True, Fallback -> True]
 ```
 
 ## トラブルシューティング
@@ -208,6 +257,20 @@ ClaudeCompactHistory[]
 ClaudeHistorySize[]
 ```
 
+#### 5. パッケージキーワードマップの問題
+
+```mathematica
+(* キーワードマップの確認 *)
+$ClaudePackageKeywordMap
+
+(* キーワードマップのリセット *)
+$ClaudePackageKeywordMap = <||>
+
+(* パッケージの再読み込みでキーワード再登録 *)
+Get["maildb.wl"]
+Get["github.wl"]
+```
+
 ### デバッグ情報の取得
 
 ```mathematica
@@ -220,6 +283,57 @@ ClaudeShowAccessConfig[]
 
 (* 実行中のタスク情報 *)
 ClaudeStatus[]
+
+(* パッケージ更新履歴の確認 *)
+ClaudeUpdatePackageHistory[]
+
+(* バックアップ履歴の確認 *)
+ClaudeBackupDataset[]
+```
+
+## 高度な設定
+
+### api.md 自動更新の設定
+
+パッケージ更新時の api.md 自動更新を制御できます：
+
+```mathematica
+(* 自動更新を有効化（デフォルト） *)
+ClaudeUpdatePackage["pkg", "修正指示", "UpdateApiMd" -> True]
+
+(* 自動更新を無効化 *)
+ClaudeUpdatePackage["pkg", "修正指示", "UpdateApiMd" -> False]
+```
+
+### 遅延実行とスケジューリング
+
+```mathematica
+(* 指定時刻での実行 *)
+ClaudeEval["タスク", StartTime -> Now + Quantity[3, "Hours"]]
+
+(* 繰り返し実行 *)
+ClaudeEval["定期タスク", 
+  StartTime -> Now + Quantity[1, "Hours"],
+  RepeatInterval -> Quantity[2, "Hours"]]
+
+(* 最大実行回数付きの繰り返し *)
+ClaudeEval["制限付きタスク", 
+  RepeatInterval -> {Quantity[1, "Hours"], 5}]
+```
+
+### 分離原則の検証
+
+NBAccess 分離原則の違反をチェックできます：
+
+```mathematica
+(* 分離原則チェック *)
+ClaudeCheckSeparation["claudecode"]
+
+(* 違反の自動修正 *)
+ClaudeFixSeparation["claudecode"]
+
+(* テストモデルの設定 *)
+$ClaudeTestModel = "claude-sonnet-4-20250514"
 ```
 
 ## 次のステップ
@@ -239,3 +353,4 @@ ShowClaudePalette[]
 (* ヘルプ情報 *)
 ?ClaudeEval
 ?ClaudeUpdatePackage
+?$ClaudePackageKeywordMap

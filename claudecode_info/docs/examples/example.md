@@ -486,7 +486,36 @@ ClaudeStatus[]
 
 ---
 
-## 16. ディレクティブ管理
+## 16. パッケージキーワードマッピングシステム（$ClaudePackageKeywordMap）
+
+外部パッケージが特定のキーワードを登録し、プロンプトにそのキーワードが含まれる場合に自動的に関連する API ドキュメントをコンテキストに注入するシステムです。
+
+### キーワード登録の仕組み
+
+各パッケージは自身のロード時に `$ClaudePackageKeywordMap` にキーワードを登録します。
+
+```mathematica
+(* maildb パッケージの例 *)
+$ClaudePackageKeywordMap["maildb"] = {"メール", "mail", "検切"};
+```
+
+### 自動コンテキスト注入
+
+プロンプトに登録されたキーワードが含まれると、対応するパッケージの `api.md` が自動的にコンテキストに注入されます。
+
+```mathematica
+ClaudeEval["メールの送信履歴を分析して"]
+```
+
+> `"メール"` キーワードにより maildb パッケージの api.md がコンテキストに自動注入されます。
+
+### パッケージ独立性
+
+`claudecode.wl` 側はパッケージ非依存であり、各パッケージが独立してキーワードを管理します。これにより、新しいパッケージも既存の claudecode システムを変更せずにキーワードマッピングを利用できます。
+
+---
+
+## 17. ディレクティブ管理
 
 ### プロジェクト固有ディレクティブの初期化（ClaudeInitProject）
 
@@ -576,9 +605,13 @@ ClaudeSyncDirectives["C:\\Users\\user\\Claude Directives"]
 
 ---
 
-## 17. Think トリガー（日本語の励まし表現）
+## 18. Think トリガー（日本語の励まし表現）
 
 日本語の励まし表現を使うと、自動的に Claude の thinking budget が設定されます。
+
+### 自動 Think 注入システム
+
+特定の日本語表現が検出されると、Claude の thinking budget が自動的に設定されます：
 
 ```mathematica
 ClaudeEval["死ぬ気で考えてバグを直せ"]
@@ -591,11 +624,20 @@ ClaudeEval["考えてみて最適なアルゴリズムを選んで"]
 (* → think が自動挿入される *)
 ```
 
-> ClaudeUpdatePackage 等のコード生成時にも、生成される指示文字列に think トリガーが自動注入されます。
+### パッケージ操作時の自動注入
+
+ClaudeUpdatePackage 等のコード生成時にも、生成される指示文字列に think トリガーが自動注入されます。これにより、パッケージの更新や修正において、Claude がより深く思考して質の高いコードを生成します。
+
+### 段階的思考レベル
+
+思考の強度に応じて適切な thinking budget が自動選択されます：
+- **ultrathink**: 最高レベルの思考（「死ぬ気で」「必死に」等）
+- **think hard**: 集中的思考（「よく考えて」「しっかり考えて」等）  
+- **think**: 基本的思考（「考えてみて」「考えて」等）
 
 ---
 
-## 18. NBAccess 分離検証（ClaudeCheckSeparation / ClaudeFixSeparation）
+## 19. NBAccess 分離検証（ClaudeCheckSeparation / ClaudeFixSeparation）
 
 パッケージコードが NBAccess の分離原則に違反していないか検証します。
 
@@ -627,7 +669,7 @@ ClaudeFixSeparation["claudecode"]
 
 ---
 
-## 19. NotebookDirectory アクセス制御
+## 20. NotebookDirectory アクセス制御
 
 `$ClaudeNBDirAccess` でノートブックディレクトリのアクセスレベルを制御します。
 
@@ -646,7 +688,7 @@ $ClaudeNBDirAccess = "readwrite"
 
 ---
 
-## 20. Claude Code CLI コマンド実行（ClaudeCommand）
+## 21. Claude Code CLI コマンド実行（ClaudeCommand）
 
 Claude Code CLI のスラッシュコマンドやサブコマンドを Mathematica から実行できます。
 
@@ -662,7 +704,7 @@ ClaudeCommand["config list"]   (* 設定一覧 *)
 
 ---
 
-## 21. ドキュメント生成と更新
+## 22. ドキュメント生成と更新
 
 ### ドキュメント自動生成（ClaudeCreateDocumentation）
 
@@ -702,7 +744,7 @@ ClaudeUpdateDocumentation["myUtils", "api.md のみ更新して"]
 
 ---
 
-## 22. シンボル参照（<<変数名>> 記法）
+## 23. シンボル参照（<<変数名>> 記法）
 
 プロンプト中で `<<変数名>>` と書くと、ノートブックカーネル内のシンボル情報が自動展開されます。
 
@@ -714,7 +756,7 @@ ClaudeEval["<<data>> の最初の10行を表示して"]
 
 ---
 
-## 23. パッケージ新規作成（ClaudeCreatePackage）
+## 24. パッケージ新規作成（ClaudeCreatePackage）
 
 新しいパッケージを仕様指示から自動生成します。
 
@@ -728,7 +770,7 @@ ClaudeCreatePackage["MyCalculator",
 
 ---
 
-## 24. Paclet 変換（ClaudeConvertToPaclet）
+## 25. Paclet 変換（ClaudeConvertToPaclet）
 
 単一 .wl ファイルのパッケージを Paclet 形式に変換します。
 
@@ -737,3 +779,40 @@ ClaudeConvertToPaclet["myUtils"]
 ```
 
 > `myUtils/` ディレクトリに PacletInfo.wl, Kernel/, Documentation/, Tests/ 等が生成されます。元の .wl ファイルはバックアップ後に削除されます。
+
+---
+
+## 26. コミット準備（ClaudePrepareCommit）
+
+前回の GitHub コミット以降の変更点をバックアップ履歴から収集し、コミットメッセージを生成して GitHub への反映コマンドを準備します。
+
+### 基本的な使用法
+
+```mathematica
+ClaudePrepareCommit["myUtils"]
+```
+
+> 前回コミット以降の変更をバックアップ履歴から自動収集し、適切なコミットメッセージを生成して `GitHubRefreshAndCommit` 実行コマンドを Input セルとして出力します。
+
+### 件名指定でのコミット準備
+
+```mathematica
+ClaudePrepareCommit["myUtils", "新機能追加: CSV出力サポート"]
+```
+
+> 1行目（件名）は指定されたテキストを使用し、本文は変更サマリーから自動構築されます。
+
+### オプション指定
+
+```mathematica
+ClaudePrepareCommit["myUtils", 
+  DryRun -> True,
+  Branch -> "feature/csv-export",
+  BaseBranch -> "develop"]
+```
+
+> `DryRun -> True` でコマンドを生成せずメッセージのみ表示、ブランチ指定で特定のブランチへの反映が可能です。
+
+### 変更サマリーの自動整形
+
+バックアップ履歴から収集された変更点は、適切な日本語で 72 文字での折り返しを含む箇条書き形式に自動整形されます。各変更点には変更の種類（追加/修正/削除）も自動判定されて含まれます。
