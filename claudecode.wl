@@ -4696,12 +4696,28 @@ iExtractAllCodeBlocks[response_String] := Module[{raw},
     ]], raw]
 ];
 
-(* \uXXXX 形式の JavaScript/Python 式 Unicode エスケープを実文字に変換 *)
-(* Mathematica は \:XXXX 形式なので \uXXXX はリテラルとして残ってしまう *)
+(* \uXXXX / \xNN 形式の Unicode エスケープを実文字に変換。
+   Claude が日本語を \x4e00\x81f4 や \u30d1\u30c3 のように出力する問題への対策。
+   Mathematica は \:XXXX 形式なので \uXXXX / \xNN はリテラルとして残ってしまう。 *)
 iFixUnicodeEscapes[code_String] :=
-  StringReplace[code,
-    "\\u" ~~ hex : Repeated[HexadecimalCharacter, {4}] :>
-      FromCharacterCode[FromDigits[hex, 16]]];
+  Module[{result},
+    (* Step 1: \uXXXX → 実文字 *)
+    result = StringReplace[code,
+      "\\u" ~~ hex : Repeated[HexadecimalCharacter, {4}] :>
+        FromCharacterCode[FromDigits[hex, 16]]];
+    (* Step 2: \xNN\xNN... (UTF-8 バイト列) → 実文字
+       連続する \xNN を UTF-8 バイト列として解釈 *)
+    result = StringReplace[result,
+      s : Repeated["\\x" ~~ Repeated[HexadecimalCharacter, {2}], {2, Infinity}] :>
+        Module[{bytes},
+          bytes = FromDigits[#, 16] & /@
+            StringCases[s, "\\x" ~~ h : Repeated[HexadecimalCharacter, {2}] :> h];
+          Quiet @ Check[
+            FromCharacterCode[bytes, "UTF-8"],
+            s  (* デコード失敗時は元のまま *)
+          ]]];
+    result
+  ];
 
 (* ExternalLanguage セルを書き込む *)
 iWriteExternalLanguageCell[nb_NotebookObject, code_String,
@@ -4877,11 +4893,15 @@ Example - WRONG:\n\
 Example - CORRECT:\n\
   Style[Row[{\"\\:30e9\\:30d7\\:30e9\\:30b9\\:65b9\\:7a0b\\:5f0f: \", Superscript[\"\\[Del]\", 2], \"\\[CurlyPhi] = 0\"}], Bold]\n\
   Row[{Superscript[\"\\[Del]\", 2], \"\\[CurlyPhi] = \", expr}]\n\n\
-UNICODE IN STRINGS (CRITICAL):\n\
-When writing Mathematica string literals, ALWAYS use literal Unicode characters directly. \
-NEVER use \\uXXXX escape sequences (e.g. \\uff08, \\u30fb). \
-Mathematica does not interpret \\uXXXX; it uses \\:XXXX syntax. \
-Simply write the actual characters: \:ff08 not \\uff08, \:30fb not \\u30fb.\n\n\
+UNICODE IN STRINGS (CRITICAL \:2014 ABSOLUTE RULE):\n\
+When writing Mathematica string literals that contain Japanese or other non-ASCII text, \
+ALWAYS write the actual characters directly as UTF-8. \
+NEVER use any escape sequence for Japanese characters:\n\
+- NEVER \\xNN\\xNN (e.g. \\x4e00\\x81f4) \:2014 this is the most common mistake\n\
+- NEVER \\uXXXX (e.g. \\uff08)\n\
+- NEVER \\:XXXX (e.g. \\:4e00) in notebook code (only allowed in .wl package files)\n\
+Simply write: \"\:4e00\:81f4\" not \"\\x4e00\\x81f4\", \"\:30d1\:30c3\:30b1\:30fc\:30b8\" not \"\\x30d1\\x30c3\\x30b1\\x30fc\\x30b8\".\n\
+This applies to ALL strings: Style text, Grid headers, error messages, comments, etc.\n\n\
 When data (Dataset, Association, List, etc.) is provided in the prompt, \
 treat it as Mathematica data available in the current session. \
 If the user refers to 'this dataset' or similar, the data shown in the prompt is the target.\n\n\
@@ -5152,7 +5172,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
              数十秒ブロックする場合があるため、軽量な直接書き込みを使用。 *)
           blocks = StringCases[response,
             RegularExpression["```(?:mathematica|wolfram)?\\n([\\s\\S]*?)```"] :> "$1"];
-          Do[With[{code = StringTrim[blk]},
+          Do[With[{code = iFixUnicodeEscapes[StringTrim[blk]]},
             AppendTo[queue, Function[
               NotebookWrite[nb2,
                 Cell[code, "Input", CellAutoOverwrite -> True], After]]];

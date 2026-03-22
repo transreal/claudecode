@@ -7,6 +7,21 @@ description: Use when generating or editing .wl or .m files, dealing with Unicod
 
 制約は `rules/30-encoding-safety.md` に従う。このスキルは検証方法と修正手順を定める。
 
+## 最重要: ノートブック出力コードの日本語
+
+ClaudeQuery / ClaudeEval が生成する `\`\`\`mathematica` コードブロック内の文字列では、**日本語を必ずリテラル UTF-8 でそのまま書く**。
+
+| 書き方 | 判定 | 例 |
+|--------|------|-----|
+| リテラル日本語 | ✅ 正しい | `"一致 ✓"` |
+| `\xNN` エスケープ | ❌ 絶対禁止 | `"\x4e00\x81f4"` |
+| `\uXXXX` エスケープ | ❌ 禁止 | `"\u4e00\u81f4"` |
+| `\:XXXX` (.wl以外) | ❌ 禁止 | `"\:4e00\:81f4"` |
+
+- Style テキスト、Grid ヘッダー、エラーメッセージ、Print 文など **全ての文字列** に適用。
+- `.wl` パッケージファイルの編集時のみ `\:XXXX` が許可される (Windows ShiftJIS 対策)。
+
+
 ## A. Unicode エスケープの検証
 
 | 形式 | Mathematica での扱い | 結果 |

@@ -51,12 +51,14 @@ Node.js の LTS 版を [公式サイト](https://nodejs.org/) からインスト
 node --version
 ```
 
-Claude Code CLI をインストールし、認証を行います。
+Claude Code CLI をインストールし、起動後のガイドに従って認証を行います。
 
 ```
 npm install -g @anthropic-ai/claude-code
-claude auth login
+claude
 ```
+
+claude コマンドを実行すると、対話形式でログイン手順が表示されるため、画面の案内に従って認証を完了してください。
 
 #### 2. パッケージファイルの配置
 
