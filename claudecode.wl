@@ -2230,37 +2230,40 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                         cb["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"]]
                     ]]]],
 
-            (* === Phase: received — callback でキューを準備 ===
-               iUpdateDisp を呼ばない: NBWriteSlot の SelectionMove がカーソルを
-               スロット1に移動させ、後続のセル書き込み位置を壊すため。
-               polling の最後のプログレス表示がそのまま残る。 *)
+            (* === Phase: received — callback でキューを準備 === *)
             phase === "received",
-              (* 進捗スロットを未使用に戻す (polling で written[1]=True になっている)。
-                 キュー方式: cleanup thunk 内で NBEndJob 前に再度 False にする。
-                 非キュー方式: callback 内の NBEndJob で削除される。 *)
               If[uj, NBAccess`NBJobResetSlotWritten[jid, 1]];
-              (* callback を呼んでキュー（サンクのリスト）を取得 *)
               Module[{queue = cb[$claudeProgress[k]["result"]]},
                 If[ListQ[queue] && Length[queue] > 0,
                   $claudeProgress[k]["writeQueue"] = queue;
                   $claudeProgress[k]["writeTotal"] = Length[queue];
                   $claudeProgress[k]["writeIdx"] = 1;
-                  $claudeProgress[k]["phase"] = "writing",
-                  (* キューが空 or 非リスト (ClaudeQuery等): 直接完了 *)
+                  $claudeProgress[k]["phase"] = "writing";
+                  (* 進捗をウィンドウステータスバーに表示開始
+                     WindowStatusArea は SelectionMove を使わずカーソルに影響しない *)
+                  Quiet[CurrentValue[pNb, WindowStatusArea] =
+                    "\:2713 \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d... (" <> ToString[elapsed] <> "s, 0/" <>
+                    ToString[Length[queue]] <> ")"],
                   $claudeProgress[k]["phase"] = "done"]],
 
             (* === Phase: writing — 1ティック1操作でキューを消費 ===
-               iUpdateDisp を呼ばない (カーソル位置保護)。
-               thunk は NotebookWrite[..., After] で順次チェインする。 *)
+               進捗表示は WindowStatusArea で更新 (カーソル位置に影響しない)。 *)
             phase === "writing",
-              Module[{idx, queue, thunk},
+              Module[{idx, total, queue, thunk},
                 idx   = Lookup[$claudeProgress[k], "writeIdx", 1];
+                total = Lookup[$claudeProgress[k], "writeTotal", 0];
                 queue = Lookup[$claudeProgress[k], "writeQueue", {}];
+                (* WindowStatusArea でカウンタ更新 *)
+                Quiet[CurrentValue[pNb, WindowStatusArea] =
+                  "\:2713 \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d... (" <> ToString[elapsed] <> "s, " <>
+                  ToString[idx] <> "/" <> ToString[total] <> ")"];
                 If[idx <= Length[queue],
                   thunk = queue[[idx]];
                   If[idx === 1 && uj, NBAccess`NBJobMoveToAnchor[jid]];
                   Quiet @ thunk[];
                   $claudeProgress[k]["writeIdx"] = idx + 1,
+                  (* 全ステップ完了: ステータスバーをクリア *)
+                  Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
                   $claudeProgress[k]["phase"] = "done"]],
 
             (* === Phase: done — ScheduledTask のクリーンアップのみ ===
@@ -2269,7 +2272,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
               $claudeProgress = KeyDrop[$claudeProgress, k];
               Quiet[StopScheduledTask[sym]];
               Quiet[RemoveScheduledTask[sym]];
-              (* 非 Job パスの進捗セルのみ削除 (Job パスは NBEndJob で削除済み) *)
+              Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
               If[!uj, NBAccess`NBDeleteCellsByTag[pNb, ptag]]
           ]
         ]
