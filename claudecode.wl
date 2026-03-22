@@ -2112,6 +2112,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
     $claudeProgress[ts] = <|
       "disp" -> "Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s",
       "status" -> "\:521d\:671f\:5316",
+      "phase" -> "polling",
       "startTime" -> startTime,
       "outFile" -> outFile,
       "process" -> proc,
@@ -2145,82 +2146,115 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
             oFile = outFile, bFile = batFile, pFile = promptFile,
             pNb = nb, ptag = progTag, useFb = useFallback, sym = gSym,
             jid = jobId, uj = useJob, fbMdls = fallbackModels},
-        Module[{status, raw, retries = 0, elapsed, info, statusStr},
+        Module[{elapsed, info, statusStr, phase, status, iUpdateDisp},
           If[!KeyExistsQ[$claudeProgress, k], Return[]];
           elapsed = Round[AbsoluteTime[] - t0, 1];
-          (* stream-json ファイルを差分読み取りして状態を更新 *)
-          iUpdateStreamProgress[k, oFile];
-          info = $claudeProgress[k];
-          statusStr = Lookup[info, "status", "?"];
-          $claudeProgress[k]["disp"] =
-            "Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... " <> ToString[elapsed] <> "s | " <>
-            statusStr <>
-            If[Lookup[info, "thinkingFragments", 0] > 0,
-              " (\:601d\:8003:" <> ToString[info["thinkingFragments"]] <> ")", ""] <>
-            If[Lookup[info, "textFragments", 0] > 0,
-              " (\:30c6\:30ad\:30b9\:30c8:" <> ToString[info["textFragments"]] <> ")", ""] <>
-            If[Lookup[info, "toolUses", 0] > 0,
-              " (\:30c4\:30fc\:30eb:" <> ToString[info["toolUses"]] <> ")", ""];
-          (* 進捗テキストをスロット/セルに直接書き込み (Dynamic 不要) *)
-          Quiet @ If[uj,
-            NBAccess`NBWriteSlot[jid, 1,
-              Cell[$claudeProgress[k]["disp"],
-                "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]],
-            Module[{progCells = Quiet[Cells[pNb, CellTags -> ptag]]},
-              If[ListQ[progCells] && Length[progCells] > 0,
-                Quiet[SelectionMove[First[progCells], All, Cell]];
-                NotebookWrite[pNb,
-                  Cell[$claudeProgress[k]["disp"],
-                    "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11,
-                    CellTags -> {ptag}], All]]]];
-          status = ProcessStatus[p];
-          If[status === "Finished" || elapsed > $ClaudeTimeout,
-            $claudeProgress = KeyDrop[$claudeProgress, k];
-            Quiet[StopScheduledTask[sym]];
-            Quiet[RemoveScheduledTask[sym]];
-            (* 進捗セルを「出力中」に更新し、NBEndJob で削除されるよう written=False にする。
-               こうすることで callback が全セルを書き終えるまで進捗表示が残る。 *)
-            If[uj,
-              Quiet @ NBAccess`NBWriteSlot[jid, 1,
-                Cell["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... " <> ToString[elapsed] <> "s | \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d...",
-                  "Print", FontWeight -> Bold, FontColor -> RGBColor[0.3, 0.6, 0.3], FontSize -> 11]];
-              $NBJobTable[jid, "written"] =
-                ReplacePart[$NBJobTable[jid]["written"], 1 -> False],
-              NBAccess`NBDeleteCellsByTag[pNb, ptag]];
-            Quiet @ DeleteFile /@ Select[{bFile, pFile}, FileExistsQ];
-            If[status =!= "Finished",
-              KillProcess[p];
+          phase = Lookup[$claudeProgress[k], "phase", "polling"];
+
+          (* === 進捗テキスト更新ヘルパー === *)
+          iUpdateDisp[text_String, color_:RGBColor[0.8, 0.4, 0]] :=
+            Quiet @ If[uj,
+              NBAccess`NBWriteSlot[jid, 1,
+                Cell[text, "Print", FontWeight -> Bold, FontColor -> color, FontSize -> 11]],
+              Module[{progCells = Quiet[Cells[pNb, CellTags -> ptag]]},
+                If[ListQ[progCells] && Length[progCells] > 0,
+                  Quiet[SelectionMove[First[progCells], All, Cell]];
+                  NotebookWrite[pNb,
+                    Cell[text, "Print", FontWeight -> Bold, FontColor -> color, FontSize -> 11,
+                      CellTags -> {ptag}], All]]]];
+
+          Which[
+            (* === Phase: polling — プロセス実行中 === *)
+            phase === "polling",
+              iUpdateStreamProgress[k, oFile];
+              info = $claudeProgress[k];
+              statusStr = Lookup[info, "status", "?"];
+              $claudeProgress[k]["disp"] =
+                "Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... " <> ToString[elapsed] <> "s | " <>
+                statusStr <>
+                If[Lookup[info, "thinkingFragments", 0] > 0,
+                  " (\:601d\:8003:" <> ToString[info["thinkingFragments"]] <> ")", ""] <>
+                If[Lookup[info, "textFragments", 0] > 0,
+                  " (\:30c6\:30ad\:30b9\:30c8:" <> ToString[info["textFragments"]] <> ")", ""] <>
+                If[Lookup[info, "toolUses", 0] > 0,
+                  " (\:30c4\:30fc\:30eb:" <> ToString[info["toolUses"]] <> ")", ""];
+              iUpdateDisp[$claudeProgress[k]["disp"]];
+              status = ProcessStatus[p];
+              If[status === "Finished" || elapsed > $ClaudeTimeout,
+                (* プロセス完了: 結果を保存し次のティックで処理 *)
+                Quiet @ DeleteFile /@ Select[{bFile, pFile}, FileExistsQ];
+                If[status =!= "Finished",
+                  KillProcess[p];
+                  $claudeProgress[k]["phase"] = "done";
+                  If[uj,
+                    NBAccess`NBAbortJob[jid,
+                      "Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08" <> ToString[$ClaudeTimeout] <> "\:79d2\:ff09"],
+                    cb["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08" <> ToString[$ClaudeTimeout] <> "\:79d2\:ff09\:3057\:307e\:3057\:305f\:3002"]],
+                  (* 正常完了: 結果ファイルを読み取り *)
+                  Module[{retries2 = 0, result2, isEmpty2},
+                    While[!FileExistsQ[oFile] && retries2 < 3, Pause[0.5]; retries2++];
+                    If[FileExistsQ[oFile] && FileByteCount[oFile] > 0,
+                      result2 = iExtractResultFromStreamJson[oFile];
+                      Quiet[DeleteFile[oFile]];
+                      isEmpty2 = (result2 === "");
+                      If[isEmpty2,
+                        result2 = "Error: Claude Code \:304c\:7a7a\:306e\:30ec\:30b9\:30dd\:30f3\:30b9\:3092\:8fd4\:3057\:307e\:3057\:305f\:3002\:5229\:7528\:5236\:9650\:306b\:9054\:3057\:3066\:3044\:308b\:53ef\:80fd\:6027\:304c\:3042\:308a\:307e\:3059\:3002"];
+                      If[TrueQ[useFb] && (isEmpty2 || iIsLimitError[result2]),
+                        (* フォールバック: 直接起動して完了 *)
+                        $claudeProgress[k]["phase"] = "done";
+                        Module[{fbModels2 = fbMdls},
+                          iStartFallbackAsync[norm["text"], pNb,
+                            Function[fbResult,
+                              If[StringQ[fbResult] && fbResult =!= $Failed,
+                                cb[fbResult],
+                                If[uj,
+                                  NBAccess`NBAbortJob[jid, result2],
+                                  iFlushFallbackLog[pNb];
+                                  Quiet[SelectionMove[pNb, After, Notebook]];
+                                  NBAccess`NBWriteCell[pNb, Cell[result2, "Text"]]]]],
+                            fbModels2, 1, jid]],
+                        (* 正常結果: 次のティックで callback 実行 *)
+                        $claudeProgress[k]["result"] = result2;
+                        $claudeProgress[k]["phase"] = "received"],
+                      (* エラーなし・フォールバック不要: ファイルなし *)
+                      $claudeProgress[k]["phase"] = "done";
+                      If[uj,
+                        NBAccess`NBAbortJob[jid, "Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"],
+                        cb["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"]]
+                    ]]]],
+
+            (* === Phase: received — 結果取得済み → callback を非同期起動 === *)
+            phase === "received",
+              iUpdateDisp[
+                "\:2713 Claude \:304b\:3089\:306e\:5fdc\:7b54\:3092\:53d6\:5f97 (" <> ToString[elapsed] <> "s)\:3002\:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d...",
+                RGBColor[0.3, 0.6, 0.3]];
+              $claudeProgress[k]["phase"] = "writing";
+              (* callback を RunScheduledTask で次のティックに遅延実行。
+                 cb 完了後に自身を削除するワンショット方式。 *)
+              With[{result3 = $claudeProgress[k]["result"], kk = k},
+                RunScheduledTask[
+                  Quiet[RemoveScheduledTask[$ScheduledTask]];
+                  cb[result3];
+                  If[KeyExistsQ[$claudeProgress, kk],
+                    $claudeProgress[kk]["phase"] = "done"],
+                  {0.05}]],
+
+            (* === Phase: writing — callback 実行中 → 進捗カウント継続 === *)
+            phase === "writing",
+              iUpdateDisp[
+                "\:2713 \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d... (" <> ToString[elapsed] <> "s)",
+                RGBColor[0.3, 0.6, 0.3]],
+
+            (* === Phase: done — クリーンアップ === *)
+            phase === "done",
+              $claudeProgress = KeyDrop[$claudeProgress, k];
+              Quiet[StopScheduledTask[sym]];
+              Quiet[RemoveScheduledTask[sym]];
+              (* 進捗セルを削除: Job パスは written=False で NBEndJob に任せる *)
               If[uj,
-                NBAccess`NBAbortJob[jid,
-                  "Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08" <> ToString[$ClaudeTimeout] <> "\:79d2\:ff09"],
-                cb["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08" <> ToString[$ClaudeTimeout] <> "\:79d2\:ff09\:3057\:307e\:3057\:305f\:3002"]],
-              While[!FileExistsQ[oFile] && retries < 3, Pause[0.5]; retries++];
-              If[FileExistsQ[oFile] && FileByteCount[oFile] > 0,
-                Module[{result = iExtractResultFromStreamJson[oFile],
-                        isEmpty = False},
-                  Quiet[DeleteFile[oFile]];
-                  (* 空レスポンスの場合: プロセスは終了したが結果が得られなかった *)
-                  If[result === "",
-                    isEmpty = True;
-                    result = "Error: Claude Code \:304c\:7a7a\:306e\:30ec\:30b9\:30dd\:30f3\:30b9\:3092\:8fd4\:3057\:307e\:3057\:305f\:3002\:5229\:7528\:5236\:9650\:306b\:9054\:3057\:3066\:3044\:308b\:53ef\:80fd\:6027\:304c\:3042\:308a\:307e\:3059\:3002"];
-                  If[TrueQ[useFb] && (isEmpty || iIsLimitError[result]),
-                    Module[{fbModels = fbMdls},
-                      iStartFallbackAsync[norm["text"], pNb,
-                        Function[fbResult,
-                          If[StringQ[fbResult] && fbResult =!= $Failed,
-                            cb[fbResult],
-                            If[uj,
-                              NBAccess`NBAbortJob[jid, result],
-                              iFlushFallbackLog[pNb];
-                              Quiet[SelectionMove[pNb, After, Notebook]];
-                              NBAccess`NBWriteCell[pNb, Cell[result, "Text"]]]]],
-                        fbModels, 1, jid]],
-                    cb[result]]],
-                If[uj,
-                  NBAccess`NBAbortJob[jid, "Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"],
-                  cb["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"]]
-              ]
-            ]
+                $NBJobTable[jid, "written"] =
+                  ReplacePart[$NBJobTable[jid]["written"], 1 -> False],
+                NBAccess`NBDeleteCellsByTag[pNb, ptag]]
           ]
         ]
       ],
@@ -4026,7 +4060,7 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
               (* Job パス: 進捗テキストを更新し written=False で NBEndJob に任せる *)
               $iFallbackProgress = KeyDrop[$iFallbackProgress, pk];
               Quiet @ NBAccess`NBWriteSlot[jid, 1,
-                Cell["Fallback: " <> prov <> "/" <> mdl <> " | \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d...",
+                Cell["\:2713 Fallback: " <> prov <> "/" <> mdl <> " \:304b\:3089\:306e\:5fdc\:7b54\:3092\:53d6\:5f97\:3002\:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d...",
                   "Print", FontWeight -> Bold, FontColor -> RGBColor[0.3, 0.6, 0.3], FontSize -> 11]];
               $NBJobTable[jid, "written"] =
                 ReplacePart[$NBJobTable[jid]["written"], 1 -> False]];
