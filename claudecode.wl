@@ -2246,25 +2246,31 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                     ToString[Length[queue]] <> ")"],
                   $claudeProgress[k]["phase"] = "done"]],
 
-            (* === Phase: writing — 1ティック1操作でキューを消費 ===
-               進捗表示は WindowStatusArea で更新 (カーソル位置に影響しない)。 *)
+            (* === Phase: writing — 表示と実行を交互ティックで分離 ===
+               writeSub="disp": WindowStatusArea 更新のみ (FrontEnd に描画時間を与える)
+               writeSub="exec": thunk 1つ実行 *)
             phase === "writing",
-              Module[{idx, total, queue, thunk},
+              Module[{idx, total, queue, thunk, sub},
                 idx   = Lookup[$claudeProgress[k], "writeIdx", 1];
                 total = Lookup[$claudeProgress[k], "writeTotal", 0];
                 queue = Lookup[$claudeProgress[k], "writeQueue", {}];
-                (* WindowStatusArea でカウンタ更新 *)
-                Quiet[CurrentValue[pNb, WindowStatusArea] =
-                  "\:2713 \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d... (" <> ToString[elapsed] <> "s, " <>
-                  ToString[idx] <> "/" <> ToString[total] <> ")"];
-                If[idx <= Length[queue],
-                  thunk = queue[[idx]];
-                  If[idx === 1 && uj, NBAccess`NBJobMoveToAnchor[jid]];
-                  Quiet @ thunk[];
-                  $claudeProgress[k]["writeIdx"] = idx + 1,
-                  (* 全ステップ完了: ステータスバーをクリア *)
+                sub   = Lookup[$claudeProgress[k], "writeSub", "disp"];
+                If[idx > Length[queue],
+                  (* 全ステップ完了 *)
                   Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
-                  $claudeProgress[k]["phase"] = "done"]],
+                  $claudeProgress[k]["phase"] = "done",
+                  If[sub === "disp",
+                    (* 表示ティック: WindowStatusArea 更新のみ。thunk は次のティックで。 *)
+                    Quiet[CurrentValue[pNb, WindowStatusArea] =
+                      "\:2713 \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d... (" <> ToString[elapsed] <> "s, " <>
+                      ToString[idx] <> "/" <> ToString[total] <> ")"];
+                    $claudeProgress[k]["writeSub"] = "exec",
+                    (* 実行ティック: thunk を 1 つ実行 *)
+                    thunk = queue[[idx]];
+                    If[idx === 1 && uj, NBAccess`NBJobMoveToAnchor[jid]];
+                    Quiet @ thunk[];
+                    $claudeProgress[k]["writeIdx"] = idx + 1;
+                    $claudeProgress[k]["writeSub"] = "disp"]]],
 
             (* === Phase: done — ScheduledTask のクリーンアップのみ ===
                NBEndJob はキューの最終 thunk または非キュー callback 内で実行済み。 *)
