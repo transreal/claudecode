@@ -2088,9 +2088,7 @@ iParseVerboseLog[logFile_String, prevSize_Integer] :=
    ScheduledTask の polling/received フェーズで NBWriteSlot が written=True に設定するため、
    そのままだと NBEndJob がスロットを削除しない。 *)
 iEndJobCleanSlot[jid_String] := (
-  If[KeyExistsQ[$NBJobTable, jid],
-    Quiet[$NBJobTable[jid, "written"] =
-      ReplacePart[$NBJobTable[jid]["written"], 1 -> False]]];
+  NBAccess`NBJobResetSlotWritten[jid, 1];
   NBAccess`NBEndJob[jid]);
 
 (* \:30d7\:30ed\:30b0\:30ec\:30b9\:8868\:793a\:4ed8\:304d\:975e\:540c\:671f\:5b9f\:884c (Job \:30b7\:30b9\:30c6\:30e0\:5bfe\:5fdc) — stream-json \:7248 *)
@@ -2240,9 +2238,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
               (* 進捗スロットを未使用に戻す (polling で written[1]=True になっている)。
                  キュー方式: cleanup thunk 内で NBEndJob 前に再度 False にする。
                  非キュー方式: callback 内の NBEndJob で削除される。 *)
-              If[uj && KeyExistsQ[$NBJobTable, jid],
-                $NBJobTable[jid, "written"] =
-                  ReplacePart[$NBJobTable[jid]["written"], 1 -> False]];
+              If[uj, NBAccess`NBJobResetSlotWritten[jid, 1]];
               (* callback を呼んでキュー（サンクのリスト）を取得 *)
               Module[{queue = cb[$claudeProgress[k]["result"]]},
                 If[ListQ[queue] && Length[queue] > 0,
@@ -4082,8 +4078,7 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
               Quiet @ NBAccess`NBWriteSlot[jid, 1,
                 Cell["\:2713 Fallback: " <> prov <> "/" <> mdl <> " \:304b\:3089\:306e\:5fdc\:7b54\:3092\:53d6\:5f97\:3002\:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d...",
                   "Print", FontWeight -> Bold, FontColor -> RGBColor[0.3, 0.6, 0.3], FontSize -> 11]];
-              $NBJobTable[jid, "written"] =
-                ReplacePart[$NBJobTable[jid]["written"], 1 -> False]];
+              NBAccess`NBJobResetSlotWritten[jid, 1]];
             If[status =!= "Finished",
               Quiet[KillProcess[p]];
               Quiet @ DeleteDirectory[td, DeleteContents -> True];
@@ -4493,9 +4488,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
             (* \:30a8\:30e9\:30fc/\:5236\:9650\:30ec\:30b9\:30dd\:30f3\:30b9\:306f\:901a\:77e5\:30b9\:30bf\:30a4\:30eb\:3067\:8868\:793a\:3057\:3066\:7d42\:4e86 *)
             If[StringQ[response] && (iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"]),
               NBAccess`NBWritePrintNotice[nb2, response, RGBColor[0.8, 0, 0]];
-              If[KeyExistsQ[$NBJobTable, jid],
-                $NBJobTable[jid, "written"] =
-                  ReplacePart[$NBJobTable[jid]["written"], 1 -> False]];
+              NBAccess`NBJobResetSlotWritten[jid, 1];
               NBAccess`NBEndJob[jid];
               iSessionUpdateLast[nb2, stag2, <|
                 "response" -> response,
@@ -4509,9 +4502,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
             If[TrueQ[autoMark],
               iAutoMarkNewCellsConfidential[nb2, ccBefore]];
             (* ジョブ終了: 進捗スロットを未使用に戻して削除 *)
-            If[KeyExistsQ[$NBJobTable, jid],
-              $NBJobTable[jid, "written"] =
-                ReplacePart[$NBJobTable[jid]["written"], 1 -> False]];
+            NBAccess`NBJobResetSlotWritten[jid, 1];
             NBAccess`NBEndJob[jid];
             iSessionUpdateLast[nb2, stag2, <|
               "response"       -> response,
@@ -5139,9 +5130,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
               iAutoMarkNewCellsConfidential[nb2, ccBefore]];
             iWriteContinueEvalButton[nb2, ae];
             (* 進捗スロット (slot 1) を未使用に戻して NBEndJob で削除させる *)
-            If[KeyExistsQ[$NBJobTable, jid],
-              $NBJobTable[jid, "written"] =
-                ReplacePart[$NBJobTable[jid]["written"], 1 -> False]];
+            NBAccess`NBJobResetSlotWritten[jid, 1];
             NBAccess`NBEndJob[jid];
             $iClaudeEvalCurrentDepth = Max[0, $iClaudeEvalCurrentDepth - 1];
             iSessionUpdateLast[nb2, stag2, <|
