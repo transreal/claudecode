@@ -2234,7 +2234,10 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
             (* === Phase: received — callback でキューを準備 === *)
             phase === "received",
               If[uj, NBAccess`NBJobResetSlotWritten[jid, 1]];
-              Module[{queue = cb[$claudeProgress[k]["result"]]},
+              Module[{queue, t1 = AbsoluteTime[], dt},
+                queue = cb[$claudeProgress[k]["result"]];
+                dt = AbsoluteTime[] - t1;
+                If[dt > 1, $iLastSlowCb = <|"elapsed" -> Round[dt, 0.1], "key" -> k|>];
                 If[ListQ[queue] && Length[queue] > 0,
                   $claudeProgress[k]["writeQueue"] = queue;
                   $claudeProgress[k]["writeTotal"] = Length[queue];
@@ -2266,10 +2269,16 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                       "\:2713 \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d... (" <> ToString[elapsed] <> "s, " <>
                       ToString[idx] <> "/" <> ToString[total] <> ")"];
                     $claudeProgress[k]["writeSub"] = "exec",
-                    (* 実行ティック: thunk を 1 つ実行 *)
+                    (* 実行ティック: thunk を 1 つ実行 + 所要時間を記録 *)
                     thunk = queue[[idx]];
                     If[idx === 1 && uj, NBAccess`NBJobMoveToAnchor[jid]];
-                    Quiet @ thunk[];
+                    Module[{t1 = AbsoluteTime[], dt},
+                      Quiet @ thunk[];
+                      dt = AbsoluteTime[] - t1;
+                      (* デバッグ: 1秒以上かかった thunk を記録 *)
+                      If[dt > 1, $iLastSlowThunk = <|
+                        "idx" -> idx, "total" -> total,
+                        "elapsed" -> Round[dt, 0.1], "key" -> k|>]];
                     $claudeProgress[k]["writeIdx"] = idx + 1;
                     $claudeProgress[k]["writeSub"] = "disp"]]],
 
