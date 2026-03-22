@@ -2178,12 +2178,12 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
             $claudeProgress = KeyDrop[$claudeProgress, k];
             Quiet[StopScheduledTask[sym]];
             Quiet[RemoveScheduledTask[sym]];
-            (* 進捗セルを即座に削除 *)
+            (* 進捗セルを不可視に戻す (NBEndJob で最終削除) *)
             If[uj,
-              Module[{slotTag = $NBJobTable[jid]["slotTags"][[1]]},
-                NBAccess`NBDeleteCellsByTag[$NBJobTable[jid]["nb"], slotTag];
-                $NBJobTable[jid, "written"] =
-                  ReplacePart[$NBJobTable[jid]["written"], 1 -> False]],
+              Quiet @ NBAccess`NBWriteSlot[jid, 1,
+                Cell["", "Text", CellOpen -> False, ShowCellBracket -> False,
+                  CellMargins -> {{0,0},{0,0}},
+                  CellElementSpacings -> {"CellMinHeight" -> 0}]],
               NBAccess`NBDeleteCellsByTag[pNb, ptag]];
             Quiet @ DeleteFile /@ Select[{bFile, pFile}, FileExistsQ];
             If[status =!= "Finished",
@@ -4021,12 +4021,12 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
             $iFallbackActiveTasks = DeleteCases[$iFallbackActiveTasks, sym];
             If[!uj,
               iFallbackDeleteProgress[pNb, pk],
-              (* Job パス: スロット1の進捗セルを即座に削除 *)
+              (* Job パス: スロット1を不可視に戻す *)
               $iFallbackProgress = KeyDrop[$iFallbackProgress, pk];
-              Module[{slotTag = $NBJobTable[jid]["slotTags"][[1]]},
-                NBAccess`NBDeleteCellsByTag[$NBJobTable[jid]["nb"], slotTag];
-                $NBJobTable[jid, "written"] =
-                  ReplacePart[$NBJobTable[jid]["written"], 1 -> False]]];
+              Quiet @ NBAccess`NBWriteSlot[jid, 1,
+                Cell["", "Text", CellOpen -> False, ShowCellBracket -> False,
+                  CellMargins -> {{0,0},{0,0}},
+                  CellElementSpacings -> {"CellMinHeight" -> 0}]]];
             If[status =!= "Finished",
               Quiet[KillProcess[p]];
               Quiet @ DeleteDirectory[td, DeleteContents -> True];
