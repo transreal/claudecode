@@ -28,7 +28,9 @@ AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImag
 
 外部ファイルのアタッチメント機構や Web 検索・取得機能により、ノートブック外の情報源も活用できます。ディレクティブ管理機能を通じて、Claude Code の振る舞いを制御する CLAUDE.md やルール・スキルファイルの追加・更新・整合性チェックをノートブック内から行えます。`ClaudeUpdateDirective[]` はソースコードの公開 API とディレクティブファイルの整合性を自動検査・修正することで、ドキュメントとコードの乖離を防ぎます。`ClaudeUpdateDirective[text]` ではテキストの内容を Claude で解釈し、CLAUDE.md / rules / skills の適切なファイルに反映できます。ディレクティブの変更履歴は自動バックアップされ、`ClaudeDirectiveBackupDataset[]` で閲覧・復元が可能です。
 
-多言語対応として、`$Language` に基づいてプロンプト内の言語指定を動的に生成します。日本語環境では日本語で、英語環境では英語でドキュメントや説明文が生成されます。日本語の励まし表現（「死ぬ気で考えろ」「よく考えて」等）を自動検出し、Claude の thinking budget を適切に設定する Think トリガー自動挿入機能も搭載しています。
+多言語対応として、`$Language` に基づいてプロンプト内の言語指定を動的に生成します。`$Language` が `"Japanese"` の場合は日本語で応答するよう指示し、それ以外（英語環境など）の場合は英語に切り替わります。日本語の励まし表現（「死ぬ気で考えろ」「よく考えて」等）を自動検出し、Claude の thinking budget を適切に設定する Think トリガー自動挿入機能も搭載しています。
+
+操作パレット (`ShowClaudePalette[]`) を使うことで、よく使う操作をボタンひとつで実行できます。ClaudeEval の実行・ContinueEval による継続・セッション管理・パッケージ更新など主要な操作がパレット上に集約されており、コードを入力せずにノートブックから直接 Claude を操作できます。
 
 ## 詳細説明
 
@@ -240,11 +242,36 @@ ShowClaudePalette[]
 - `ClaudeCheckSeparation[target]` — NBAccess の分離原則への違反箇所を検出（静的パターン走査 + LLM 判定の二段階検査）
 - `ClaudeFixSeparation[target]` — 分離違反を修正
 
+**パレット**
+- `ShowClaudePalette[]` — 操作用パレットの表示。ClaudeEval・ContinueEval・セッション管理・パッケージ更新など主要操作をボタンひとつで実行できる。コードを入力せずにノートブックから直接 Claude を操作可能
+
 **ユーティリティ**
-- `ShowClaudePalette[]` — 操作用パレットの表示
 - `ClaudeCommand["/command"]` — Claude Code CLI コマンドの直接実行
 - `ClaudeQueryShowContext[]` — 次回送信されるノートブックコンテキストの確認（デバッグ用）
 - `ClaudeShowAccessConfig[]` — ファイルアクセス設定の確認（デバッグ用）
+
+### パレットの使い方
+
+`ShowClaudePalette[]` を実行すると、以下のような操作パレットが表示されます。
+
+![パレット画面](palette.png)
+
+パレットには主要な操作がボタンとして配置されています。
+
+| ボタン / 入力欄 | 機能 |
+|----------------|------|
+| タスク入力欄 | ClaudeEval に渡す自然言語タスクを入力 |
+| **Eval** | 入力欄のテキストで ClaudeEval を実行 |
+| **Continue** | ContinueEval を実行（エラー修正・続きの依頼） |
+| **Status** | ClaudeStatus[] でリアルタイム状態を表示 |
+| **History** | ClaudeShowHistory[] で会話履歴を表示 |
+| **Compact** | ClaudeCompactHistory[] で履歴を圧縮 |
+| **Session** | セッション一覧（ClaudeListSessions[]）を表示 |
+| **Attach** | ファイルをセッションに添付（ClaudeAttach） |
+| **Update Pkg** | パッケージ名と指示を入力して ClaudeUpdatePackage を実行 |
+| **Backup** | ClaudeBackupDataset[] でバックアップ履歴を表示 |
+
+パレットからの操作は、選択中のノートブックに対して実行されます。タスク入力欄に自然言語で指示を入力し、**Eval** ボタンを押すだけで ClaudeEval が起動します。実行中の状態は **Status** ボタンでリアルタイムに確認できます。
 
 ### LM Studio 対応
 
@@ -267,6 +294,22 @@ ClaudeEval["1から10までのフィボナッチ数を計算して",
 ```
 
 `$ClaudeFallbackModels` の各エントリは `{provider, modelName}` または `{provider, modelName, url}` の形式です。`"lmstudio"` プロバイダーを指定すると、指定 URL（デフォルト `http://localhost:1234`）の `/v1/chat/completions` エンドポイントに接続します。
+
+### 多言語対応
+
+`$Language` の値に基づいてプロンプト内の言語指定が動的に生成されます。`$Language` が `"Japanese"` に設定されている場合は日本語で応答するよう Claude に指示し、それ以外の値（`"English"` 等）の場合は英語に切り替わります。
+
+```mathematica
+(* 日本語モード（デフォルト） *)
+$Language = "Japanese"
+ClaudeQuery["フィボナッチ数列の実装方法を教えてください"]
+(* → 日本語で説明が返る *)
+
+(* 英語モードに切り替え *)
+$Language = "English"
+ClaudeQuery["Explain how to implement Fibonacci sequence"]
+(* → English explanation is returned *)
+```
 
 ### ドキュメント一覧
 
@@ -322,7 +365,7 @@ AI-Generated Code Notice
 
 This software includes code generated with the assistance of AI tools (e.g., Claude Code).
 
-The author has not fully verified the originality of all generated code. Some parts of the implementation may be derived from patterns learned by the AI model.
+The author has not fully verified the originality of all generated code.Some parts of the implementation may be derived from patterns learned by the AI model.
 
 Intellectual Property Disclaimer
 
@@ -336,4 +379,4 @@ In addition to the MIT License, the author assumes no responsibility for any leg
 
 Research Funding
 
-This work was supported by the Satake Technology Promotion Foundation (2025).
+This work was partially supported by the Satake Technology Promotion Foundation (2025).
