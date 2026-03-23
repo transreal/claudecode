@@ -5,7 +5,8 @@
 	],
 	"directories":[
 		"claudecode_info",
-		"Claude Directives"
+		"Claude Directives",
+		"Templates"
 	],
 	"excludePatterns":[
 		"claudecode_info\/history\/",
