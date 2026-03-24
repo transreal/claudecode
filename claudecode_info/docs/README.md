@@ -47,17 +47,19 @@ AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImag
 
 #### 1. 外部ツールのインストール
 
-Node.js の LTS 版を [公式サイト](https://nodejs.org/) からインストールしてください。
+Claude Code CLI を[公式サイト](https://claude.ai/download)からダウンロードしてインストールしてください。
 
+```bash
+# Claude Code CLI の確認
+claude --version
 ```
+
+[Node.js 公式サイト](https://nodejs.org/) から最新の LTS バージョンをダウンロードしてインストールしてください。
+
+```bash
+# Node.js の確認
 node --version
-```
-
-Claude Code CLI をインストールし、起動後のガイドに従って認証を行います。
-
-```
-npm install -g @anthropic-ai/claude-code
-claude
+npm --version
 ```
 
 claude コマンドを実行すると、対話形式でログイン手順が表示されるため、画面の案内に従って認証を完了してください。
