@@ -1506,6 +1506,19 @@ iPrecisionConfidentialCheck[nb_NotebookObject] :=
       $iGlobalDepsCacheLastLine = currentLine;
       Return[Length[$allConfidentialVars]]];
 
+    (* === 超高速パス: 秘密変数が存在しない場合 ===
+       $confidentialSymbols と $allConfidentialVars の両方が空で、
+       かつ過去に少なくとも1回フルチェックを完了済みなら、
+       重い NBRefreshCellsCache / iRebuildConfidentialSymbolsAll を
+       完全にスキップする。カーネル再起動後の初回は必ずフルパスを通る。
+       Confidential[] / MarkConfidential は呼び出し時に即座に
+       $confidentialSymbols を更新するため、ここでの再走査は不要。 *)
+    If[Length[$confidentialSymbols] === 0 &&
+       Length[$allConfidentialVars] === 0 &&
+       IntegerQ[$iGlobalDepsCacheLastLine] && $iGlobalDepsCacheLastLine > 0,
+      $iGlobalDepsCacheLastLine = currentLine;
+      Return[0]];
+
     (* === フルパス（新しいセルが評価された場合） ===
        ただし前回の結果を起点にインクリメンタルに更新する。 *)
 
