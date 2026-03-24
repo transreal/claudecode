@@ -10,10 +10,10 @@
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[       154,          7]
-NotebookDataLength[    183904,       3386]
-NotebookOptionsPosition[     95727,       2115]
-NotebookOutlinePosition[    152449,       2905]
-CellTagsIndexPosition[    152231,       2897]
+NotebookDataLength[    185508,       3419]
+NotebookOptionsPosition[     97098,       2144]
+NotebookOutlinePosition[    153820,       2934]
+CellTagsIndexPosition[    153602,       2926]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
@@ -2094,7 +2094,36 @@ Markdown\:306e",
 }], "Text",
  CellChangeTimes->{{3.9832272896474953`*^9, 
   3.983227376101227*^9}},ExpressionUUID->"c831cdda-23a0-4945-b022-\
-a0db98f3975e"]
+a0db98f3975e"],
+
+Cell[CellGroupData[{
+
+Cell["\:30bb\:30ad\:30e5\:30ea\:30c6\:30a3", "Subsubsection",
+ CellChangeTimes->{
+  3.9833245198366604`*^9},ExpressionUUID->"afb74b63-c653-ee48-8abc-\
+7a71c50cdcb0"],
+
+Cell["\<\
+\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:30a2\:30af\:30bb\:30b9\:3092\:7981\:6b62\
+\:3057\:3066\:3082\:3001\:4f8b\:3048\:3070\:3001Mathematica\:30b3\:30fc\:30c9\
+\:3092\:4f7f\:3063\:3066$packageDirectory\:3078\:306e\:30b3\:30d4\:30fc\:3092\
+\:5b9f\:884c\:3067\:304d\:308b\:3002
+\:30d5\:30a1\:30a4\:30eb\:79fb\:52d5\:3068\:3001\:79d8\:533f\:30c7\:30fc\:30bf\
+\:306e$ClaudeAccessibleDirs\:3078\:306e\:4fdd\:5b58\:3092\:3059\:3079\:3066\
+\:30ac\:30fc\:30c9\:3059\:308b\:5fc5\:8981\:304c\:3042\:308b\:3002
+
+Mail\:9001\:4fe1\:3001Discord\:3078\:306e\:30dd\:30b9\:30c8\:306a\:3069\:306f\
+\:3001\:3068\:308a\:3042\:3048\:305aMathematica\:5074\:3067\:6b62\:3081\:308b\
+\:3088\:3046\:306b\:3057\:3066\:304a\:304f
+GitHub\:3078\:306e\:30b3\:30df\:30c3\:30c8\:306e\:6271\:3044\:3002\:3080\:3057\
+\:308d\:3001\:30e6\:30fc\:30b6\:306e\:30b1\:30a2\:30ec\:30b9\:30df\:30b9\:306e\
+\:65b9\:304c\:30ea\:30b9\:30af\:304c\:9ad8\:3044\:3002\
+\>", "Text",
+ CellChangeTimes->{{3.983324392805582*^9, 3.983324481181555*^9}, {
+  3.983324532371006*^9, 3.9833246588248158`*^9}, {3.9833246971984787`*^9, 
+  3.9833247238253384`*^9}},ExpressionUUID->"72fb94ff-beb0-ef46-9e8c-\
+92c33005d28e"]
+}, Open  ]]
 }, Open  ]],
 
 Cell[CellGroupData[{
@@ -2896,10 +2925,10 @@ CellTagsIndex->{
 *)
 (*CellTagsIndex
 CellTagsIndex->{
- {"cjob1773742500x10803-s1", 151569, 2882},
- {"cjob1773991495x6589-s1", 151735, 2885},
- {"cjob1773996564x2396-s1", 151901, 2888},
- {"cjob1773996760x25810-s1", 152069, 2891}
+ {"cjob1773742500x10803-s1", 152940, 2911},
+ {"cjob1773991495x6589-s1", 153106, 2914},
+ {"cjob1773996564x2396-s1", 153272, 2917},
+ {"cjob1773996760x25810-s1", 153440, 2920}
  }
 *)
 (*NotebookFileOutline
@@ -3382,11 +3411,15 @@ Cell[CellGroupData[{
 Cell[92960, 2051, 169, 3, 54, "Section",ExpressionUUID->"3105a98e-7e21-5541-a9e1-5bf15f3e4d03"],
 Cell[93132, 2056, 489, 7, 55, "Text",ExpressionUUID->"26e4efe1-e782-f04f-858f-3a6de66ef26a"],
 Cell[93624, 2065, 221, 4, 33, "Text",ExpressionUUID->"f15f739f-4a63-b144-a493-05f8d0f1f684"],
-Cell[93848, 2071, 1229, 25, 163, "Text",ExpressionUUID->"c831cdda-23a0-4945-b022-a0db98f3975e"]
+Cell[93848, 2071, 1229, 25, 163, "Text",ExpressionUUID->"c831cdda-23a0-4945-b022-a0db98f3975e"],
+Cell[CellGroupData[{
+Cell[95102, 2100, 165, 3, 45, "Subsubsection",ExpressionUUID->"afb74b63-c653-ee48-8abc-7a71c50cdcb0"],
+Cell[95270, 2105, 1166, 19, 141, "Text",ExpressionUUID->"72fb94ff-beb0-ef46-9e8c-92c33005d28e"]
+}, Open  ]]
 }, Open  ]],
 Cell[CellGroupData[{
-Cell[95114, 2101, 74, 0, 68, "Section",ExpressionUUID->"6ba1916d-d93c-0646-b5a4-3943df4ac82b"],
-Cell[95191, 2103, 520, 9, 55, "Text",ExpressionUUID->"89551503-520f-044a-9c61-a99dccca3bcf"]
+Cell[96485, 2130, 74, 0, 68, "Section",ExpressionUUID->"6ba1916d-d93c-0646-b5a4-3943df4ac82b"],
+Cell[96562, 2132, 520, 9, 55, "Text",ExpressionUUID->"89551503-520f-044a-9c61-a99dccca3bcf"]
 }, Open  ]]
 }
 ]

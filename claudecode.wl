@@ -1132,6 +1132,7 @@ iExtractAssigned[expr_] :=
 (* \:2500\:2500\:2500 \:516c\:958b API \:2500\:2500\:2500 *)
 
 MarkConfidential[nb_NotebookObject, cellIdx_Integer] := (
+  NBAccess`NBInvalidateCellsCache[nb];
   iSetConfidentialTag[nb, cellIdx];
   NBAccess`NBCellSetOptions[nb, cellIdx, Sequence @@ $confidentialCellOpts];
   iRegisterConfidentialVars[NBAccess`NBCellExtractVarNames[nb, cellIdx]];
@@ -1180,6 +1181,7 @@ SetAttributes[Confidential, HoldFirst];
 Confidential[expr_] :=
   Module[{nb, cellIdx, result, assignedNames, cellNames},
     nb = Quiet[EvaluationNotebook[]];
+    If[Head[nb] === NotebookObject, NBAccess`NBInvalidateCellsCache[nb]];
     cellIdx = If[Head[nb] === NotebookObject,
       NBAccess`NBCurrentCellIndex[nb], 0];
     assignedNames = iExtractAssigned[expr];
@@ -1282,6 +1284,7 @@ iConfidentialCellEpilog[] := Quiet @ Module[
   {nb, idx, nCells, inputText, ocStyle},
   nb = NBAccess`NBParentNotebookOfCurrentCell[];
   If[Head[nb] =!= NotebookObject, Return[]];
+  NBAccess`NBInvalidateCellsCache[nb];
   idx = NBAccess`NBCurrentCellIndex[nb];
   If[idx < 1, Return[]];
   nCells = NBAccess`NBCellCount[nb];
@@ -1445,6 +1448,7 @@ iEnsureCellEpilog[nb_NotebookObject] :=
 ScanConfidentialCells[] := ScanConfidentialCells[Quiet[EvaluationNotebook[]]];
 ScanConfidentialCells[nb_NotebookObject] :=
   Module[{nCells, directConfVars, n, deps, allDepVars},
+    NBAccess`NBInvalidateCellsCache[];
     nCells = NBAccess`NBCellCount[nb];
     If[nCells === 0, Return[0]];
     (* シンボルテーブルを完全にクリアしてから再構築。
