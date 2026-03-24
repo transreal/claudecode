@@ -3339,11 +3339,19 @@ iIsLimitError[response_String] :=
 iIsAPIErrorResponse[response_String] :=
   StringStartsQ[response, "Error"] ||
   StringContainsQ[response,
-    "hit your limit" | "rate limit" | "overloaded" | "unavailable",
+    "hit your limit" | "rate limit" | "overloaded",
     IgnoreCase -> True] ||
-  (* CenterDot (·) 付きリミットメッセージ: "You've hit your limit · resets..." *)
-  StringContainsQ[response, "\[CenterDot]"] ||
-  StringContainsQ[response, "\:00b7"] ||  (* UTF-8 middle dot *)
+  (* CenterDot (·) 付きリミットメッセージ: "You've hit your limit · resets..." のみ検出。
+     注意: · は物理式の積 (F·v) や箇条書きにも使われるため、単独では誤検知する。
+     "unavailable" も通常の説明文に出現するため、単独チェックから除外。 *)
+  ((StringContainsQ[response, "\[CenterDot]"] ||
+    StringContainsQ[response, "\:00b7"]) &&
+   StringContainsQ[response, "limit" | "resets",
+     IgnoreCase -> True]) ||
+  (* "unavailable" は "service unavailable" など API エラー文脈のみ検出 *)
+  (StringContainsQ[response, "unavailable", IgnoreCase -> True] &&
+   StringContainsQ[response, "service" | "temporarily" | "503",
+     IgnoreCase -> True]) ||
   (* 短すぎる応答 (正常なドキュメントやコードにはならない) *)
   (StringLength[response] < 100 &&
    StringContainsQ[response, "resets" | "limit" | "error" | "failed",
