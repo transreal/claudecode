@@ -1,0 +1,1205 @@
+(* Content-type: application/vnd.wolfram.mathematica *)
+
+(*** Wolfram Notebook File ***)
+(* http://www.wolfram.com/nb *)
+
+(* CreatedBy='Wolfram 14.3' *)
+
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[       154,          7]
+NotebookDataLength[     67471,       1197]
+NotebookOptionsPosition[     25960,        567]
+NotebookOutlinePosition[     59522,       1069]
+CellTagsIndexPosition[     59479,       1066]
+WindowFrame->Normal*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+Cell[BoxData[
+ RowBox[{"ClaudeQuery", 
+  "[", "\"\<\:73fe\:72b6\:306eclaudecode.wl\:306e\:30b3\:30fc\:30c7\:30a3\
+\:30f3\:30b0\:80fd\:529b\:306f\:3001Claude\:30c1\:30e3\:30c3\:30c8\:3092\:30a2\
+\:30d7\:30ea\:3084\:30d6\:30e9\:30a6\:30b6\:3067\:4f7f\:3046\:3068\:304d\:306b\
+\:6bd4\:3079\:308b\:3068\:3001\:307e\:3060\:4f4e\:3044\:3088\:3046\:3067\:3042\
+\:308b\:3002\:3084\:306f\:308a\:30c1\:30e3\:30c3\:30c8\:306e\:5c65\:6b74\:7ba1\
+\:7406\:306a\:3069\:306b\:3088\:308a\:5de5\:592b\:304c\:3042\:308b\:3068\:601d\
+\:308f\:308c\:308b\:3002\:3053\:306e\:70b9\:306b\:95a2\:3057\:3066\:6539\:5584\
+\:3067\:304d\:308b\:70b9\:306b\:3064\:3044\:3066\:307e\:3068\:3081\:3066\:307b\
+\:3057\:3044\:3002\>\"", "]"}]], "Input",
+ CellChangeTimes->{{3.98338277643981*^9, 3.9833829085120697`*^9}},
+ CellLabel->"In[25]:=",ExpressionUUID->"ad361b09-dc70-394b-9b42-327799a78658"],
+
+Cell["\<\
+claudecode.wl \:306e\:30bd\:30fc\:30b9\:3092\:7cbe\:67fb\:3057\:307e\:3057\
+\:305f\:3002\:4ee5\:4e0b\:306b\:3001Claude \:30c1\:30e3\:30c3\:30c8\:ff08\
+\:30a2\:30d7\:30ea/\:30d6\:30e9\:30a6\:30b6\:ff09\:3068\:306e\:4e3b\:8981\
+\:306a\:5dee\:7570\:3068\:6539\:5584\:63d0\:6848\:3092\:307e\:3068\:3081\:307e\
+\:3059\:3002\
+\>", "Text",ExpressionUUID->"31103b44-4ae9-264a-bdd1-4975e80f3f5d"],
+
+Cell["claudecode.wl \:306e\:30b3\:30fc\:30c7\:30a3\:30f3\:30b0\:80fd\:529b\
+\:6539\:5584\:306b\:95a2\:3059\:308b\:5206\:6790", "Subsection",ExpressionUUID\
+->"e5e0e255-0722-ee4f-9536-53e2086f7285"],
+
+Cell[CellGroupData[{
+
+Cell["1. \:4f1a\:8a71\:69cb\:9020\:306e\:6839\:672c\:7684\:306a\:9055\:3044", \
+"Subsection",ExpressionUUID->"0d924c93-f5aa-5b42-bf53-e31ba03a4fce"],
+
+Cell[CellGroupData[{
+
+Cell["\:73fe\:72b6\:306e\:554f\:984c", "Subsubsection",ExpressionUUID->"e600bb5c-989e-694c-97ec-ca45473354fc"],
+
+Cell["\<\
+claudecode.wl \:306f\:6bce\:56de Claude Code CLI \:3092 \:65b0\:898f\:30d7\
+\:30ed\:30bb\:30b9 \:3068\:3057\:3066\:8d77\:52d5\:3057\:3001\:5c65\:6b74\
+\:30fb\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\
+\:30fb\:8cea\:554f\:3092\:3059\:3079\:3066 1\:3064\:306e\:30c6\:30ad\:30b9\
+\:30c8\:30d6\:30ed\:30d6 \:3068\:3057\:3066 `stdin` \:306b\:6d41\:3057\:8fbc\
+\:3093\:3067\:3044\:308b\:3002\:4e00\:65b9\:3001Claude \:30c1\:30e3\:30c3\
+\:30c8\:306f Messages API \:306e `role: user / assistant` \:306e\:69cb\:9020\
+\:5316\:3055\:308c\:305f\:30bf\:30fc\:30f3\:3092\:7dad\:6301\:3057\:3001\:30e2\
+\:30c7\:30eb\:304c\:300c\:8ab0\:304c\:4f55\:3092\:8a00\:3063\:305f\:304b\:300d\
+\:3092\:6b63\:78ba\:306b\:628a\:63e1\:3067\:304d\:308b\:3002\
+\>", "Text",ExpressionUUID->"cfda87f1-9c92-9b4f-9cd7-a06cd17a529a"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["\:6539\:5584\:6848", "Subsubsection",ExpressionUUID->"5b1aaa4e-9a67-9446-b9f2-86fde7cba6b2"],
+
+Cell["\<\
+\:69cb\:9020\:5316\:5c65\:6b74\:306e\:5c0e\:5165: \:73fe\:5728 \
+`iSessionToContext` \:304c\:5c65\:6b74\:3092\:30d5\:30e9\:30c3\:30c8\:306a\
+\:30c6\:30ad\:30b9\:30c8\:306b\:5909\:63db\:3057\:3066\:3044\:308b\:304c\:3001\
+\:3053\:308c\:3092 `--resume` \:30d5\:30e9\:30b0\:3084\:4f1a\:8a71 ID \:306e\
+\:6c38\:7d9a\:5316\:3067 Claude Code CLI \:306e\:30bb\:30c3\:30b7\:30e7\:30f3\
+\:7d99\:7d9a\:6a5f\:80fd \:3092\:6d3b\:7528\:3059\:308b\:5f62\:306b\:5909\
+\:66f4\:3059\:308b\:3002CLI \:81ea\:4f53\:304c\:4f1a\:8a71\:30bf\:30fc\:30f3\
+\:3092\:7ba1\:7406\:3059\:308c\:3070\:3001\:30e2\:30c7\:30eb\:306f proper \
+multi-turn context \:3092\:5f97\:3089\:308c\:308b\:3002\
+\>", "Item",ExpressionUUID->"be9695d0-9ae7-d74c-9173-91f223bbfb53"],
+
+Cell["\<\
+\:3082\:3057 CLI \:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:7d99\:7d9a\:304c\:96e3\
+\:3057\:3044\:5834\:5408\:3001\:30d7\:30ed\:30f3\:30d7\:30c8\:5185\:3067 \
+`[USER TURN 1]` / `[ASSISTANT TURN 1]` \:306e\:3088\:3046\:306a \:660e\:793a\
+\:7684\:306a\:30bf\:30fc\:30f3\:533a\:5207\:308a\:30de\:30fc\:30ab\:30fc \
+\:3092\:5c0e\:5165\:3057\:3001\:30e2\:30c7\:30eb\:304c\:4f1a\:8a71\:306e\:6d41\
+\:308c\:3092\:8b58\:5225\:3057\:3084\:3059\:304f\:3059\:308b\:3002\
+\>", "Item",ExpressionUUID->"57c0e71a-9568-1945-8098-f7e41bf09c90"]
+}, Open  ]]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["2. \:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:5727\:7e2e\:6226\:7565\:306e\
+\:6539\:5584", "Subsection",ExpressionUUID->"fb9ce211-f4ff-844d-8179-\
+a524a1509847"],
+
+Cell[CellGroupData[{
+
+Cell["\:73fe\:72b6\:306e\:554f\:984c", "Subsubsection",ExpressionUUID->"077e871f-401f-db43-a563-2a4b57b67ddf"],
+
+Cell[TextData[{
+ "`iCompactHistory` \:306f ",
+ Cell[BoxData[
+ "p"], "InlineFormula",ExpressionUUID->"26f4e889-93d7-e242-8c17-347dfa2ec3f0"],
+ " \:30b9\:30c6\:30c3\:30d7\:9593\:9694\:3067\:30b5\:30f3\:30d7\:30ea\:30f3\
+\:30b0\:3057\:3001\:53e4\:3044\:5c65\:6b74\:306e `fullPrompt/response/code` \
+\:3092\:524a\:9664\:3057\:3066\:30b5\:30de\:30ea\:30fc\:306b\:7f6e\:304d\:63db\
+\:3048\:308b\:3002",
+ Cell[BoxData[
+ "p"], "InlineFormula",ExpressionUUID->"236f0368-348a-b749-9fcf-00527144fb47"],
+ " \:306f\:5727\:7e2e\:3054\:3068\:306b\:500d\:5897\:ff08",
+ Cell[BoxData[
+  RowBox[{"p", "\[Rule]", 
+   RowBox[{"2", " ", "p"}]}]], "InlineFormula",ExpressionUUID->
+  "d86e698a-fcbd-e14e-b199-a04e35515d9c"],
+ "\:ff09\:3059\:308b\:305f\:3081\:3001\:53e4\:3044\:4f1a\:8a71\:306f\:307e\
+\:3059\:307e\:3059\:7c97\:304f\:306a\:308b\:3002"
+}], "Text",ExpressionUUID->"40be00ca-f624-5e4f-8b0e-57cc120f06be"],
+
+Cell["\:3057\:304b\:3057\:3053\:306e\:65b9\:5f0f\:3067\:306f\:ff1a", "Text",ExpressionUUID->"d169b8dd-49f9-554c-8d63-3c4d0c85bec4"],
+
+Cell["\:91cd\:8981\:306a\:904e\:53bb\:306e\:8a2d\:8a08\:6c7a\:5b9a\:304c\:9593\
+\:5f15\:304b\:308c\:308b\:53ef\:80fd\:6027\:304c\:3042\:308b", "Item",Expressi\
+onUUID->"6de8bf37-bcab-624a-8d4d-6b3d2150ea9d"],
+
+Cell["\:30b5\:30de\:30ea\:30fc\:751f\:6210\:81ea\:4f53\:304c API \:30b3\:30fc\
+\:30eb\:3092\:6d88\:8cbb\:3059\:308b", "Item",ExpressionUUID->"a972b530-9059-\
+b541-84bf-26ee3d61d7d7"],
+
+Cell["\:30b5\:30de\:30ea\:30fc\:306e\:54c1\:8cea\:304c\:30b3\:30fc\:30c7\:30a3\
+\:30f3\:30b0\:80fd\:529b\:306b\:76f4\:7d50\:3059\:308b\:304c\:3001\:73fe\:5728\
+\:306f\:6c4e\:7528\:7684\:306a\:8981\:7d04\:306b\:3068\:3069\:307e\:308b", \
+"Item",ExpressionUUID->"e183cb26-3a78-4b40-8368-c5674cb4d829"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["\:6539\:5584\:6848", "Subsubsection",ExpressionUUID->"429ef199-26a3-6340-9559-35f00cec6d7e"],
+
+Cell["\<\
+\:91cd\:8981\:5ea6\:30d9\:30fc\:30b9\:306e\:4fdd\:6301: \:5358\:306a\:308b\
+\:6642\:7cfb\:5217\:30b5\:30f3\:30d7\:30ea\:30f3\:30b0\:3067\:306f\:306a\:304f\
+\:3001\:30a8\:30e9\:30fc\:4fee\:6b63\:30fb\:8a2d\:8a08\:5909\:66f4\:30fb\:30e6\
+\:30fc\:30b6\:30fc\:306e\:660e\:793a\:7684\:30d5\:30a3\:30fc\:30c9\:30d0\:30c3\
+\:30af\:3092\:542b\:3080\:30a8\:30f3\:30c8\:30ea\:3092 \:512a\:5148\:4fdd\
+\:6301 \:3059\:308b\:3002\:30a8\:30f3\:30c8\:30ea\:306e `type` \:30d5\:30a3\
+\:30fc\:30eb\:30c9\:3084\:5185\:5bb9\:306b\:57fa\:3065\:304f\:30b9\:30b3\:30a2\
+\:30ea\:30f3\:30b0\:3092\:5c0e\:5165\:3059\:308b\:3002\
+\>", "Item",ExpressionUUID->"3a9f7501-b321-0546-8dc9-f7785361f227"],
+
+Cell["\<\
+\:30b3\:30fc\:30c9\:5dee\:5206\:30b5\:30de\:30ea\:30fc: \:30b3\:30fc\:30c9\
+\:751f\:6210\:30a8\:30f3\:30c8\:30ea\:306b\:3064\:3044\:3066\:3001\:30b3\:30fc\
+\:30c9\:5168\:4f53\:3067\:306f\:306a\:304f\:300c\:4f55\:3092\:5909\:66f4\:3057\
+\:305f\:304b\:300d\:306e \:5dee\:5206\:8981\:7d04 \:3092\:4fdd\:6301\:3059\
+\:308b\:3002\:3053\:308c\:306b\:3088\:308a\:30c8\:30fc\:30af\:30f3\:6d88\:8cbb\
+\:3092\:6291\:3048\:3064\:3064\:3001\:5909\:66f4\:306e\:610f\:56f3\:3092\:6b8b\
+\:305b\:308b\:3002\
+\>", "Item",ExpressionUUID->"31c87fcb-abc4-3445-878b-60b427a559cb"],
+
+Cell["\<\
+\:30bb\:30de\:30f3\:30c6\:30a3\:30c3\:30af\:5727\:7e2e: \:73fe\:5728\:306e \
+`iMakeLocalSummary` \:3092\:3088\:308a\:69cb\:9020\:5316\:3057\:3001\:5404\
+\:30a8\:30f3\:30c8\:30ea\:304b\:3089 `{\:610f\:56f3, \:7d50\:679c, \:5b66\
+\:3093\:3060\:3053\:3068}` \:306e3\:30bf\:30d7\:30eb\:3092\:62bd\:51fa\:3057\
+\:3066\:4fdd\:6301\:3059\:308b\:3002\
+\>", "Item",ExpressionUUID->"5229450c-d329-de4d-b499-a5c22911fdc8"]
+}, Open  ]]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["3. \:5b9f\:884c\:30d5\:30a3\:30fc\:30c9\:30d0\:30c3\:30af\:30eb\:30fc\
+\:30d7\:306e\:81ea\:52d5\:5316", "Subsection",ExpressionUUID->"57c00f1c-c235-\
+9a44-9e31-49b4c9eb12bd"],
+
+Cell[CellGroupData[{
+
+Cell["\:73fe\:72b6\:306e\:554f\:984c", "Subsubsection",ExpressionUUID->"57cb3e15-63bc-ab4c-93ef-2a1dd2f129db"],
+
+Cell["\<\
+Claude \:30c1\:30e3\:30c3\:30c8\:3067\:306f\:3001\:30b3\:30fc\:30c9\:3092\
+\:751f\:6210 \[RightArrow] \:5b9f\:884c \[RightArrow] \
+\:30a8\:30e9\:30fc\:78ba\:8a8d \[RightArrow] \:4fee\:6b63\:306e\:30eb\:30fc\
+\:30d7\:304c \:4f1a\:8a71\:5185\:3067\:81ea\:7136\:306b \:884c\:308f\:308c\
+\:308b\:3002claudecode.wl \:3067\:306f\:ff1a\
+\>", "Text",ExpressionUUID->"1c879c28-e77a-244e-aa67-8c9c2957f8d7"],
+
+Cell["\<\
+`ClaudeEval` \:304c\:30b3\:30fc\:30c9\:3092\:751f\:6210\:30fb\:5b9f\:884c\
+\:3059\:308b\:304c\:3001\:30a8\:30e9\:30fc\:6642\:306e\:81ea\:52d5\:4fee\:5fa9\
+\:306f `ContinueEval` \:3092 \:624b\:52d5\:3067 \
+\:547c\:3076\:5fc5\:8981\:304c\:3042\:308b\
+\>", "Item",ExpressionUUID->"6211adca-0910-6e4b-b1cd-5ee5ec4f272d"],
+
+Cell["\<\
+`ContinueEval[]` \:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:30d7\:30ed\:30f3\:30d7\
+\:30c8\:306f\:300c\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\
+\:3055\:3044\:300d\:3060\:304c\:3001\:5b9f\:969b\:306e\:30a8\:30e9\:30fc\:5185\
+\:5bb9 \:306e\:53d6\:5f97\:304c `iCaptureRecentOutput` \:306b\:4f9d\:5b58\
+\:3057\:3001\:30bf\:30a4\:30df\:30f3\:30b0\:306b\:3088\:3063\:3066\:306f\:4e0d\
+\:5b8c\:5168\
+\>", "Item",ExpressionUUID->"63eaabb9-db4d-aa49-a571-99840a4123b7"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["\:6539\:5584\:6848", "Subsubsection",ExpressionUUID->"e5393fe4-012c-5445-9380-2c4a153f0824"],
+
+Cell[CellGroupData[{
+
+Cell["\<\
+\:81ea\:52d5\:30ea\:30c8\:30e9\:30a4\:30eb\:30fc\:30d7: `AutoEvaluate -> \
+True` \:6642\:306b\:5b9f\:884c\:30a8\:30e9\:30fc\:3092\:691c\:51fa\:3057\:305f\
+\:3089\:3001\:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8\:3092\:542b\:3081\
+\:3066 \:81ea\:52d5\:7684\:306b `ContinueEval` \:3092\:547c\:3076\:3002\:6700\
+\:5927\:30ea\:30c8\:30e9\:30a4\:56de\:6570\:ff08\:4f8b: `$ClaudeAutoRetryMax \
+= 3`\:ff09\:3092\:8a2d\:3051\:3066\:5236\:5fa1\:3059\:308b\:3002\
+\>", "Item",ExpressionUUID->"b228bcd9-52e7-834c-a3ef-54123ac47b47"],
+
+Cell[BoxData[
+ RowBox[{
+  RowBox[{"(*", " ", "\:6982\:5ff5\:7684\:306a\:5b9f\:88c5", " ", "*)"}], 
+  "\n", 
+  RowBox[{
+   RowBox[{"ClaudeEval", "[", 
+    RowBox[{"task", ",", " ", 
+     RowBox[{"AutoRetry", " ", "->", " ", "3"}]}], "]"}], "\n", 
+   RowBox[{"(*", " ", 
+    RowBox[{"\:5185\:90e8", ":", " ", 
+     RowBox[{
+     "\:751f\:6210", " ", "\[RightArrow]", " ", "\:5b9f\:884c", " ", "\[RightArrow]",
+       " ", "\:30a8\:30e9\:30fc\:691c\:51fa", " ", "\[RightArrow]", " ", 
+      "ContinueEval", " ", "\[RightArrow]", " ", 
+      RowBox[{"\:518d\:5b9f\:884c", " ", "\:3092\:6700\:59273\:56de"}]}]}], 
+    " ", "*)"}]}]}]], "Input",ExpressionUUID->"0724efee-16d0-6245-903c-\
+c2e173d4269e"]
+}, Open  ]],
+
+Cell["\<\
+\:30a8\:30e9\:30fc\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306e\:5145\:5b9f: \
+\:30ea\:30c8\:30e9\:30a4\:6642\:306b `$MessageList`\:3001\:30b9\:30bf\:30c3\
+\:30af\:30c8\:30ec\:30fc\:30b9\:3001\:95a2\:9023\:3059\:308b\:5909\:6570\:306e\
+\:578b\:60c5\:5831\:3092\:81ea\:52d5\:53ce\:96c6\:3057\:3066\:30d7\:30ed\:30f3\
+\:30d7\:30c8\:306b\:542b\:3081\:308b\:3002\
+\>", "Item",ExpressionUUID->"0dbe8b75-6709-5449-8d0f-81b74535c44a"]
+}, Open  ]]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["4. \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\
+\:30c8\:306e\:9078\:629e\:6027\:5411\:4e0a", "Subsection",ExpressionUUID->\
+"40bc8174-d325-6141-a1ba-725e98db56ce"],
+
+Cell[CellGroupData[{
+
+Cell["\:73fe\:72b6\:306e\:554f\:984c", "Subsubsection",ExpressionUUID->"a2915bd1-0f8c-4c42-ab96-1530916c72b3"],
+
+Cell["`iCaptureNotebookContext` \:306f\:524d\:56de\:306e\:30af\:30a8\:30ea\
+\:4ee5\:964d\:306e \:5168\:30bb\:30eb \:3092\:9001\:4fe1\:3059\:308b\:3002\
+\:9577\:3044\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3067\:306f\:ff1a", "Text",Ex\
+pressionUUID->"f783ef01-5559-0945-8235-b9324aed0085"],
+
+Cell["\:7121\:95a2\:4fc2\:306a\:30bb\:30eb\:304c\:30b3\:30f3\:30c6\:30ad\:30b9\
+\:30c8\:3092\:6c5a\:67d3\:3059\:308b", "Item",ExpressionUUID->"e9fda744-5977-\
+fe48-95c1-830ccb6bdac3"],
+
+Cell["\:30c8\:30fc\:30af\:30f3\:5236\:9650\:306b\:3059\:3050\:5230\:9054\:3059\
+\:308b", "Item",ExpressionUUID->"fb44e171-73ad-344e-bce3-482ffe330cd4"],
+
+Cell["Claude \:304c\:300c\:3069\:306e\:90e8\:5206\:304c\:8cea\:554f\:306b\
+\:95a2\:9023\:3059\:308b\:304b\:300d\:3092\:5224\:65ad\:3059\:308b\:8ca0\:8377\
+\:304c\:5897\:3048\:308b", "Item",ExpressionUUID->"bcd16218-574b-0743-8ef0-\
+4a917cdacbd2"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["\:6539\:5584\:6848", "Subsubsection",ExpressionUUID->"80001560-856d-2441-84ec-8f990d07bb71"],
+
+Cell["\<\
+\:95a2\:9023\:30bb\:30eb\:9078\:629e: \:30e6\:30fc\:30b6\:30fc\:306e\:8cea\
+\:554f\:6587\:3092\:89e3\:6790\:3057\:3001\:53c2\:7167\:3055\:308c\:3066\:3044\
+\:308b\:5909\:6570\:30fb\:95a2\:6570\:306b \:4f9d\:5b58\:3059\:308b\:30bb\
+\:30eb \:306e\:307f\:3092\:542b\:3081\:308b\:3002`NBBuildVarDependencies` \
+\:306e\:4f9d\:5b58\:30b0\:30e9\:30d5\:3092\:6d3b\:7528\:3057\:3066\:3001\:8cea\
+\:554f\:306b\:95a2\:9023\:3059\:308b\:30b5\:30d6\:30b0\:30e9\:30d5\:3060\:3051\
+\:3092\:62bd\:51fa\:3059\:308b\:3002\
+\>", "Item",ExpressionUUID->"b27c6bcf-0ec1-ad4b-a16c-bd63e13603cd"],
+
+Cell["\<\
+\:30bb\:30eb\:306e\:91cd\:307f\:4ed8\:3051: \:6700\:8fd1\:7de8\:96c6\:3055\
+\:308c\:305f\:30bb\:30eb\:3001\:30a8\:30e9\:30fc\:3092\:542b\:3080\:30bb\:30eb\
+\:3001\:30e6\:30fc\:30b6\:30fc\:304c\:9078\:629e\:3057\:3066\:3044\:308b\:30bb\
+\:30eb\:306b\:9ad8\:3044\:512a\:5148\:5ea6\:3092\:4e0e\:3048\:3001\:30b3\:30f3\
+\:30c6\:30ad\:30b9\:30c8\:7a93\:306b\:53ce\:307e\:308b\:3088\:3046\:52d5\:7684\
+\:306b\:30d5\:30a3\:30eb\:30bf\:30ea\:30f3\:30b0\:3059\:308b\:3002\
+\>", "Item",ExpressionUUID->"0f3d1d20-c5c5-f94c-b0f8-383e03b1da56"]
+}, Open  ]]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["5. \:30b7\:30b9\:30c6\:30e0\:30d7\:30ed\:30f3\:30d7\:30c8\:306e\:6700\
+\:9069\:5316", "Subsection",ExpressionUUID->"f419a3e5-fbe5-574d-8d68-\
+fe79dc6d9c30"],
+
+Cell[CellGroupData[{
+
+Cell["\:73fe\:72b6\:306e\:554f\:984c", "Subsubsection",ExpressionUUID->"41d916e1-ca41-304d-a8bb-f7cd8e74735c"],
+
+Cell["\:73fe\:5728\:306e\:30d7\:30ed\:30f3\:30d7\:30c8\:69cb\:9020\:306f\:ff1a\
+", "Text",ExpressionUUID->"4689a479-a118-9249-ba37-0b7d686b951c"],
+
+Cell["\<\
+[\:30b7\:30b9\:30c6\:30e0\:30d7\:30ec\:30d5\:30a3\:30c3\:30af\:30b9] + \
+[\:5c65\:6b74] + [\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:72b6\:614b] +
+[\:5b9a\:7fa9\:6e08\:307f\:30b7\:30f3\:30dc\:30eb] + \
+[\:30d5\:30a1\:30a4\:30eb\:30a2\:30af\:30bb\:30b9] + \
+[\:30d1\:30c3\:30b1\:30fc\:30b8docs] + [\:8cea\:554f]\
+\>", "Program",ExpressionUUID->"f89b8a82-fd9b-8446-8573-dbca9059f043"],
+
+Cell["\<\
+\:3053\:306e\:9806\:5e8f\:3060\:3068\:3001\:6700\:3082\:91cd\:8981\:306a\:8cea\
+\:554f\:304c\:672b\:5c3e\:306b\:3042\:308a\:3001\:4e2d\:9593\:306e\:5927\:91cf\
+\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:304c\:30e2\:30c7\:30eb\:306e\:6ce8\:610f\
+\:3092\:5206\:6563\:3055\:305b\:308b\:ff08\"lost in the middle\" \:554f\:984c\
+\:ff09\:3002\
+\>", "Text",ExpressionUUID->"f87567bc-a00b-bb40-ba71-013b518d1a2f"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["\:6539\:5584\:6848", "Subsubsection",ExpressionUUID->"0cfbbd01-b2ec-104d-9e91-1808af4f63ba"],
+
+Cell["\<\
+\:8cea\:554f\:306e\:524d\:65b9\:914d\:7f6e: \:8cea\:554f\:3092\:5192\:982d\
+\:8fd1\:304f\:306b\:914d\:7f6e\:3057\:3001\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\
+\:3092\:5f8c\:308d\:306b\:56de\:3059\:3002\:307e\:305f\:306f\:8cea\:554f\:3092\
+\:5192\:982d\:3068\:672b\:5c3e\:306e \:4e21\:65b9\:306b \:914d\:7f6e\:3059\
+\:308b\:ff08\:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020\:ff09\:3002\
+\>", "Item",ExpressionUUID->"b3361d97-8699-5f4d-b62a-4097709175f0"],
+
+Cell["\<\
+[\:30b7\:30b9\:30c6\:30e0\:30d7\:30ec\:30d5\:30a3\:30c3\:30af\:30b9] + \
+[\:8cea\:554f\:ff08\:6982\:8981\:ff09] +
+[\:95a2\:9023\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306e\:307f] + \
+[\:8cea\:554f\:ff08\:8a73\:7d30\:30fb\:518d\:63b2\:ff09]\
+\>", "Program",ExpressionUUID->"900455da-faab-a64e-99ca-59117d8770e6"],
+
+Cell["\<\
+\:52d5\:7684\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:6ce8\:5165: \:5168\:30b3\
+\:30f3\:30c6\:30ad\:30b9\:30c8\:3092\:5e38\:306b\:9001\:308b\:306e\:3067\:306f\
+\:306a\:304f\:3001\:8cea\:554f\:306e\:5185\:5bb9\:306b\:5fdc\:3058\:3066\:5fc5\
+\:8981\:306a\:30bb\:30af\:30b7\:30e7\:30f3\:3060\:3051\:3092\:9078\:629e\:7684\
+\:306b\:542b\:3081\:308b\:3002\:30d1\:30c3\:30b1\:30fc\:30b8\:95a2\:9023\:306e\
+\:8cea\:554f\:306a\:3089\:30d1\:30c3\:30b1\:30fc\:30b8 docs\:3001\:30c7\:30d0\
+\:30c3\:30b0\:306a\:3089\:6700\:8fd1\:306e\:30a8\:30e9\:30fc\:30bb\:30eb\:3001\
+\:306e\:3088\:3046\:306b\:3002\
+\>", "Item",ExpressionUUID->"dedfd197-544b-fc4f-b748-7566921f8d6b"]
+}, Open  ]]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["6. Extended Thinking \:306e\:6d3b\:7528", "Subsection",ExpressionUUID->"19f751fe-1637-074b-94e0-67cae1f47dc8"],
+
+Cell[CellGroupData[{
+
+Cell["\:73fe\:72b6\:306e\:554f\:984c", "Subsubsection",ExpressionUUID->"2c939330-f79a-5b4a-866b-d16342adedf9"],
+
+Cell["\<\
+Claude \:30c1\:30e3\:30c3\:30c8\:ff08\:7279\:306b Opus\:ff09\:306f extended \
+thinking \:306b\:3088\:308a\:8907\:96d1\:306a\:63a8\:8ad6\:3092\:6bb5\:968e\
+\:7684\:306b\:884c\:3048\:308b\:3002claudecode.wl \:306f `--print` \:307e\
+\:305f\:306f `stream-json` \:30e2\:30fc\:30c9\:3067\:6700\:7d42\:51fa\:529b\
+\:306e\:307f\:53d6\:5f97\:3057\:3066\:304a\:308a\:3001thinking \:30c8\:30fc\
+\:30af\:30f3\:3092\:6d3b\:7528\:3057\:3066\:3044\:306a\:3044\:3002\
+\>", "Text",ExpressionUUID->"e8b93acd-e9e5-bf4b-a331-facad99f47a8"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["\:6539\:5584\:6848", "Subsubsection",ExpressionUUID->"6b557357-1487-f24f-80ab-7b7a6670280a"],
+
+Cell["\<\
+Claude Code CLI \:306e `--thinking` \
+\:7cfb\:30aa\:30d7\:30b7\:30e7\:30f3\:ff08\:3082\:3057\:5229\:7528\:53ef\:80fd\
+\:306a\:3089\:ff09\:3092\:6709\:52b9\:306b\:3057\:3001\:8907\:96d1\:306a\:30b3\
+\:30fc\:30c7\:30a3\:30f3\:30b0\:30bf\:30b9\:30af\:3067\:306e\:63a8\:8ad6\:54c1\
+\:8cea\:3092\:5411\:4e0a\:3055\:305b\:308b\:3002\
+\>", "Item",ExpressionUUID->"d0779559-a307-9b4d-b515-fc116ef383ae"],
+
+Cell["\<\
+thinking \:306e\:5185\:5bb9\:3092\:30c7\:30d0\:30c3\:30b0\:60c5\:5831\:3068\
+\:3057\:3066\:30e6\:30fc\:30b6\:30fc\:306b\:8868\:793a\:3059\:308b\:30aa\:30d7\
+\:30b7\:30e7\:30f3\:ff08`ShowThinking -> True`\:ff09\:3092\:8ffd\:52a0\:3059\
+\:308b\:3002\
+\>", "Item",ExpressionUUID->"d75f6352-050b-9642-a8f4-39a6e1934af9"]
+}, Open  ]]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["7. \:30b3\:30fc\:30c9\:751f\:6210\:306e\:53cd\:5fa9\:7684\:6d17\:7df4", \
+"Subsection",ExpressionUUID->"3a4468a4-0f65-e44a-b992-ac65f5e24e12"],
+
+Cell[CellGroupData[{
+
+Cell["\:73fe\:72b6\:306e\:554f\:984c", "Subsubsection",ExpressionUUID->"dff3e44a-9758-8844-9be4-12d7010c0edf"],
+
+Cell["\<\
+Claude \:30c1\:30e3\:30c3\:30c8\:3067\:306f\:3001\:751f\:6210\:3057\:305f\
+\:30b3\:30fc\:30c9\:306b\:5bfe\:3057\:3066\:30e6\:30fc\:30b6\:30fc\:304c\:300c\
+\:3053\:3053\:3092\:76f4\:3057\:3066\:300d\:3068\:8a00\:3048\:3070\:3059\:3050\
+\:306b \:5dee\:5206\:4fee\:6b63 \:3067\:304d\:308b\:3002claudecode.wl \:3067\
+\:306f\:65b0\:3057\:3044 `ClaudeEval` \:547c\:3073\:51fa\:3057\:304c\:5fc5\
+\:8981\:3067\:3001\:524d\:56de\:306e\:751f\:6210\:30b3\:30fc\:30c9\:3068\:306e\
+\:95a2\:9023\:304c \:5c65\:6b74\:7d4c\:7531\:306e\:9593\:63a5\:53c2\:7167 \
+\:306b\:306a\:308b\:3002\
+\>", "Text",ExpressionUUID->"274d0d83-c4df-8c41-8e66-c66c413f16d6"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["\:6539\:5584\:6848", "Subsubsection",ExpressionUUID->"12ce22f8-8b70-af42-ac5d-b50161aa2117"],
+
+Cell[CellGroupData[{
+
+Cell["\<\
+\:5dee\:5206\:4fee\:6b63\:30e2\:30fc\:30c9: \:76f4\:524d\:306b\:751f\:6210\
+\:3055\:308c\:305f\:30b3\:30fc\:30c9\:30bb\:30eb\:3092\:81ea\:52d5\:7684\:306b\
+\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306b\:542b\:3081\:3001\:300c\:3053\:306e\
+\:30b3\:30fc\:30c9\:3092\:4fee\:6b63\:3057\:3066\:300d\:3068\:3044\:3046\:6307\
+\:793a\:306b\:5bfe\:3057\:3066 \:5dee\:5206 \:3067\:5fdc\:7b54\:3059\:308b\
+\:4ed5\:7d44\:307f\:3002\
+\>", "Item",ExpressionUUID->"ad186d7a-e495-cb4d-8df1-2c9b8393ef21"],
+
+Cell[BoxData[
+ RowBox[{
+  RowBox[{
+  "(*", " ", 
+   "\:76f4\:524d\:306e\:751f\:6210\:30b3\:30fc\:30c9\:306b\:5bfe\:3059\:308b\
+\:4fee\:6b63", " ", "*)"}], "\n", 
+  RowBox[{
+   RowBox[{
+   "ClaudeRefine", 
+    "[", "\"\<\:30a8\:30e9\:30fc\:30cf\:30f3\:30c9\:30ea\:30f3\:30b0\:3092\
+\:8ffd\:52a0\:3057\:3066\>\"", "]"}], "\n", 
+   RowBox[{"(*", " ", 
+    RowBox[{
+     RowBox[{
+     "\:5185\:90e8", ":", " ", 
+      "\:76f4\:524d\:306e\:751f\:6210\:30b3\:30fc\:30c9\:3092\:542b\:3081"}], 
+     "\:3001", "\:5dee\:5206\:306e\:307f\:8fd4\:3059"}], " ", 
+    "*)"}]}]}]], "Input",ExpressionUUID->"24b855d2-f718-7d44-a06c-\
+72136c0bb77b"]
+}, Open  ]]
+}, Open  ]]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["8. \:307e\:3068\:3081: \:512a\:5148\:5ea6\:9806\:306e\:6539\:5584\:30ed\
+\:30fc\:30c9\:30de\:30c3\:30d7", "Subsection",ExpressionUUID->"82446d0d-54fa-\
+ee46-b68a-6afc68e01a89"],
+
+Cell[CellGroupData[{
+
+Cell["\:9ad8\:512a\:5148\:5ea6\:ff08\:52b9\:679c\:5927\:30fb\:5b9f\:88c5\:53ef\
+\:80fd\:ff09", "Item",ExpressionUUID->"270da5b2-42f8-5446-854c-fd3460298c2a"],
+
+Cell["\:81ea\:52d5\:30ea\:30c8\:30e9\:30a4\:30eb\:30fc\:30d7\:ff08`AutoRetry` \
+\:30aa\:30d7\:30b7\:30e7\:30f3\:ff09", "Subitem",ExpressionUUID->"dde8c055-\
+0a5d-524d-9478-006f16afcd6f"],
+
+Cell["\:8cea\:554f\:306e\:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:914d\:7f6e\:ff08\
+\:30d7\:30ed\:30f3\:30d7\:30c8\:69cb\:9020\:6539\:5584\:ff09", "Subitem",Expre\
+ssionUUID->"72c07446-edce-5549-8611-a0121d96d5e3"],
+
+Cell["\:30a8\:30e9\:30fc\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306e\:81ea\:52d5\
+\:53ce\:96c6\:30fb\:5145\:5b9f", "Subitem",ExpressionUUID->"a37cc416-ba6a-\
+a849-85c2-89cb878e980c"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["\:4e2d\:512a\:5148\:5ea6\:ff08\:52b9\:679c\:5927\:30fb\:5b9f\:88c5\:3084\
+\:3084\:8907\:96d1\:ff09", "Item",ExpressionUUID->"d80110ce-5c9f-814e-8c06-\
+365b14c2ea1e"],
+
+Cell["\:95a2\:9023\:30bb\:30eb\:9078\:629e\:306b\:3088\:308b\:30b3\:30f3\:30c6\
+\:30ad\:30b9\:30c8\:30d5\:30a3\:30eb\:30bf\:30ea\:30f3\:30b0", "Subitem",Expre\
+ssionUUID->"b83e2898-ec29-ac4f-b7b9-0768811da8c4"],
+
+Cell["\:91cd\:8981\:5ea6\:30d9\:30fc\:30b9\:306e\:5c65\:6b74\:4fdd\:6301", \
+"Subitem",ExpressionUUID->"6b21587c-620f-ac43-b312-d455d1b3ae2d"],
+
+Cell["\:5dee\:5206\:4fee\:6b63\:30e2\:30fc\:30c9\:ff08`ClaudeRefine`\:ff09", \
+"Subitem",ExpressionUUID->"d3be8b6b-b52a-fe40-8a62-f08346a66a35"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["\:9577\:671f\:7684\:6539\:5584\:ff08\:52b9\:679c\:5927\:30fb\:30a2\:30fc\
+\:30ad\:30c6\:30af\:30c1\:30e3\:5909\:66f4\:8981\:ff09", "Item",ExpressionUUID\
+->"e050591f-3494-4041-b9b6-4df7c63a4f0c"],
+
+Cell["CLI \:30bb\:30c3\:30b7\:30e7\:30f3\:7d99\:7d9a\:306b\:3088\:308b proper \
+multi-turn \:5bfe\:8a71", "Subitem",ExpressionUUID->"c90cf06c-3974-0544-aabe-\
+8303369d33d2"],
+
+Cell["Extended Thinking \:306e\:6d3b\:7528", "Subitem",ExpressionUUID->"1f2e1604-96ee-6e4c-8b93-666496173f53"],
+
+Cell["\:30bb\:30de\:30f3\:30c6\:30a3\:30c3\:30af\:5727\:7e2e\:306e\:5c0e\:5165\
+", "Subitem",ExpressionUUID->"52ee9f24-bb05-8b48-a719-30360e1b8844"]
+}, Open  ]],
+
+Cell["\<\
+\:6839\:672c\:7684\:306b\:306f\:3001\:300c\:6bce\:56de\:65b0\:898f\:30d7\:30ed\
+\:30bb\:30b9\:3067\:30d5\:30e9\:30c3\:30c8\:30c6\:30ad\:30b9\:30c8\:3092\:9001\
+\:308b\:300d\:30a2\:30fc\:30ad\:30c6\:30af\:30c1\:30e3 \:304c\:6700\:5927\
+\:306e\:30dc\:30c8\:30eb\:30cd\:30c3\:30af\:3067\:3042\:308b\:3002Claude Code \
+CLI \:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:7d99\:7d9a\:6a5f\:80fd\:ff08`--\
+resume` \:3084 conversation \
+ID\:ff09\:3092\:6d3b\:7528\:3067\:304d\:308c\:3070\:3001\:30c1\:30e3\:30c3\
+\:30c8\:30a4\:30f3\:30bf\:30fc\:30d5\:30a7\:30fc\:30b9\:3068\:306e\:5dee\:306f\
+\:5927\:5e45\:306b\:7e2e\:307e\:308b\:3068\:8003\:3048\:3089\:308c\:308b\:3002\
+\>", "Text",ExpressionUUID->"24afd849-18ff-4049-a316-7e165c27acd7"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell["", "Section",ExpressionUUID->"7b4800c8-5e63-e545-ba13-5916161c582c"],
+
+Cell[BoxData[
+ RowBox[{"\:3000", 
+  RowBox[{"ClaudeUpdatePackage", "[", 
+   RowBox[{"\"\<claudecode\>\"", 
+    ",", "\"\<\:305d\:308c\:3067\:306f\:307e\:305a\:3001ClaudeQuery,\
+ClaudeEval,ClaudeUpdateDocumentation,ClaudeCreateDocumentation, \
+ClaudeCreatePackage, ClaudeUpdatePackage\:306b\:95a2\:3057\:3066\:3001\:8cea\
+\:554f\:306e\:914d\:7f6e\:3092\:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020\
+\:306b\:3057\:3066\:3001\:7684\:78ba\:306a\:56de\:7b54\:304c\:5f97\:3089\:308c\
+\:308b\:3088\:3046\:306b\:3057\:3066\:307b\:3057\:3044\:3002\n\n\:8cea\:554f\
+\:306e\:524d\:65b9\:914d\:7f6e: \:8cea\:554f\:3092\:5192\:982d\:8fd1\:304f\
+\:306b\:914d\:7f6e\:3057\:3001\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3092\:5f8c\
+\:308d\:306b\:56de\:3059\:3002\:307e\:305f\:306f\:8cea\:554f\:3092\:5192\:982d\
+\:3068\:672b\:5c3e\:306e \:4e21\:65b9\:306b \:914d\:7f6e\:3059\:308b\:ff08\
+\:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020\:ff09\:3002\n[\:30b7\:30b9\
+\:30c6\:30e0\:30d7\:30ec\:30d5\:30a3\:30c3\:30af\:30b9] + [\:8cea\:554f\:ff08\
+\:6982\:8981\:ff09] +\n\
+[\:95a2\:9023\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306e\:307f] + \
+[\:8cea\:554f\:ff08\:8a73\:7d30\:30fb\:518d\:63b2\:ff09]\>\""}], 
+   "]"}]}]], "Input",
+ CellChangeTimes->{{3.98338330255904*^9, 3.983383467081156*^9}, {
+  3.983383522731365*^9, 3.983383533328764*^9}},
+ CellLabel->"In[26]:=",ExpressionUUID->"0086741e-174e-a84b-b374-48a9f93486ab"]
+}, Open  ]]
+},
+WindowSize->{661.875, 445.125},
+WindowMargins->{{Automatic, 35.25}, {Automatic, 30.75}},
+WindowStatusArea->"",
+TaggingRules-><|
+ "claudecode" -> <|
+   "paletteModel" -> "opus", "paletteEffort" -> "max", "paletteFallback" -> 
+    False, "paletteUpdateApiMd" -> True|>, 
+  "history" -> <|
+   "header" -> <|
+     "type" -> "history_header", "name" -> "$default", "parent" -> None, 
+      "inherit" -> True, "created" -> 3.9834153107772759`17.35283057746132*^9,
+       "diffFields" -> {"fullPrompt", "response", "code"}|>, 
+    "entries" -> {<|
+      "step" -> 0, "time" -> 3.9834153109566159`17.352830577480873*^9, "type" -> 
+       "query", "instruction" -> 
+       "\:73fe\:72b6\:306eclaudecode.wl\:306e\:30b3\:30fc\:30c7\:30a3\:30f3\
+\:30b0\:80fd\:529b\:306f\:3001Claude\:30c1\:30e3\:30c3\:30c8\:3092\:30a2\:30d7\
+\:30ea\:3084\:30d6\:30e9\:30a6\:30b6\:3067\:4f7f\:3046\:3068\:304d\:306b\:6bd4\
+\:3079\:308b\:3068\:3001\:307e\:3060\:4f4e\:3044\:3088\:3046\:3067\:3042\:308b\
+\:3002\:3084\:306f\:308a\:30c1\:30e3\:30c3\:30c8\:306e\:5c65\:6b74\:7ba1\:7406\
+\:306a\:3069\:306b\:3088\:308a\:5de5\:592b\:304c\:3042\:308b\:3068\:601d\:308f\
+\:308c\:308b\:3002\:3053\:306e\:70b9\:306b\:95a2\:3057\:3066\:6539\:5584\:3067\
+\:304d\:308b\:70b9\:306b\:3064\:3044\:3066\:307e\:3068\:3081\:3066\:307b\:3057\
+\:3044\:3002", "fullPrompt" -> 
+       "1:eJzNfYt22ziS6H4KrjrnjD3jB0WJL91Jn0NJVLen4yRrO913jp2NaYm2OZFEjUTF9qTz\
+V/uBF4UCiAdBSU7Ss3t21q1IJFAv1AuFwv+5Kc7O/f/+j//4e7Em6TIjKfk4Lx6m2eQuS2+m9N+\
+rVb4q03l5ROgjS7LMVotivsrIQz6dkpuMfjGfZMtsQp8kq/KJvknG2XS6IvmcnKblfTZLy3yc/\
+mlF5kWZ3RTFx6Mrp+2eJedv37w+\
+T8j5xd9fJT34ajBN15PsP9fZ8okslsVkPc5WFJ5lPr6v3iXFulysSzp7eU/\
+K7LEk2eNims7pHBQqks4npFjA53RKxsUkIzfTYvxxxaY8JBf1F5YbMNi7z9JJPr9bHZC8zGb0PzDjP\
+h/s+vp6JvFTZ2Oj5pRIyxJHzR6z8bpk9DyZA/g4PkCbrsviMPuUTtcpfZgN/\
+dt9Nid0YLKmI9DX6YC3xZLcLdPFPYVhMS1K+p9P+WqdTvN/ISIHhD4xyWb0Y7kUX+\
+Xz8ZRSdBOk5X1akrtsntGXMph0RmelKJO3dJYD8oryHj+\
+dpvN8sZ7Spw5IVo4ZoKf5o4UHjDXqHLfLLJs+kbIg42UG06TkgeJ/SCFdj8s1UL5i76QYr2cZlTYY/\
+9f47CTuv0rI6/\
+j05PVPPUq8Dbgc0HEBdErkNTB0NS4oG3BKkKPz9c1qvMwXJdnLju6OSJlP6dMf2i55KX+\
+7xG8PSNt9v08e7kH2copCPs+OyM/FQ/YpWx6Q18mvyRmwh1z89oa8OSOnb84SZVYm/\
+CmZp7NMm6xDZ6P/OyCzpw+f0uUHeGD/iFzcZ3SocQoDLtKyzJbzQ4rf+\
+B4YkS2XxXJ1RN6xR2bZdJDSTyAQs/W0zA8X6bJkM616YpaLp0XWdh9xol/\
+T5Wv6KyPo6M3ZaXxxQWlJzt69Ss57KMkw9CxdfpwUD3MiZJ7s/UB+gP/9sA+sK5Z3VAL+\
+lZFVNmZ8PpLv3qyn06wkUyos9LVDtlj2QSDn69kNW1n8p/YR/w3AV9ifz+kXMyY/\
+bFjChs0pPeelfJuQQ7Ja38gR5tkKfmZrk4MzLMjrNxeMNRVGbOHR9+cF+f3w8PB3oDh+\
+BeuUip7UAFTtLLLl9ImP9uc/94vp5M9/BhFIp1PK/glFtqx0H0UhXywYAmSSr+giEG/\
+G9AG2NGbrVQmPPixzytg5PPm3dJFS0DP+\
+6AhYKUV6CquJitAK1zBg8iq9yP4feXF0dPQCwGV04nL14upqTnFJ/8slV1dUpBb3ORVn58UB/\
+LKYkX9+mL1ACZNrbFzMqRSXsPgzRmbKXkVTk5KKz4ryk2PEVBSHjVNmcHZycTKIX/VI/\
+OoVA17Cdfru/AIRTgVpEPJJNs1nlFcgzLiAgCZU/aYPHMNxMZtRnUhZxbE6oEjdLtMx/BfkPE+n+\
+2ABVjld9cUtDnykLMcX7JsXZG9SrEHbTorpNF1SAryZUw0ET3ANgSCBEOVzumYyhgTDLXlMZwsqHD0\
+UxN/O3oDmAQK+Sik5xhnJ/rlGVKlU2MmPrw7enJ0lg4vml5uYp8384gXS4HNFAvr4+ov8Jyn/y/\
+1C3xuzYcSA6xcvDCi+dhwY5uT1+ckw4VQDMr59RxUecm31NC/\
+TR1IAhfdgNSmytI96i85AVzJIG5qy2/WcKRG6AO+YuqeCDm+uKHHokryhYH7MSoMFFP63q/zy8aB8/\
+0JHi369R7/eNwj36+Wj/uSve4/4TPypyCcUSWr8Pn8B4fqUjT9/IfktWRR04VHJ+\
+b9cWEAUCFVuKLa/ZNkCEKCal1p1uo7GOX3qquc67S75BH4LFWH6xiPXzUyygEYzuowAQb70mKCd//\
+20/+YVOUtGyVnyepBQQF//mry+OHnzukf++tf5jz/C2gE/gGql2QK01C2FApQxNXSLbJzf5mNK/\
+dlNMSV7VHxy5mAo5N0XA4AjQR0wdZFX2uAjtTbZ9IicZmU6ScuUpDd0heFk2XxMVzBOsWJKkC5pqiq\
+p21KygTPwt24VII/ARj+\
+Bo5jOVw9gK9lAADQ8xKG9eWIWi5GBquukR84Laiorv7FU1RVIBOhydKUoBW9zsAsgseBA3aefqMRkV\
+LVmj8zdmVCHo5ixMejDTAmv6PMAAgXsSJgI6ldJJ4v+trqHibThgRwUoVt4jxobOjJ9riKMnA+\
+eO6D6DVwIqvnyEhCsGMK8ANXesaXCcH8bD36Jf0pI/FtMRSA5R4Nc+X//XFMDB8sElgi6q3QpjT+\
+md3zUCtE/vcWvGfVe8GeG+\
+ZLa6mL59CdmQeGnUU4BisfUsV6RARLnAKZEZpEb6lpQhnKp4zMJl4ybndU92FRdMunCST+l+\
+RQjhjlwIFvdo6N8civJ/EDjCCbAp2+GJ6O/S3QOqGG/o+CX3PvEUCChbjG6k/\
+jvdwtK6YyjygYXvKTrE+Bg7EknQG20LQKH2xzM/YQRhNP+\
+t6RPzpP4bPAzIzrEP0yUUqQOF9jfspvzLF1SL7AsCrpKNN+cLqmKRQ/FekqdA+pJ31L+\
+M8aM10tQe6p3Q/YoBPAd9SOZ1gOHmmKt0fiAxG9PpJyt0OHeR1+gDhQwIaXr/VMmMMtuqMSz3z/\
+lKacdZfckowDfrPNpeQjsg1cnRcbiMggVYM1OJnkVPIHPBbyky56CQZc0JSQGKPD/L1++tEkTod/\
+DzzUZ7JFB7+qKGoPl6uoqn6X5h6urIfW2borHqytFMR0W82y4pMjQb5+\
+EVF9dsdWyScbJXqezzw3GIRlQTUJ19DJG1yU9eqAqsu34kdela7MEmrqO6x87nWO3S9rdnuPti3fHj\
+F4QWLC3/KjtBF7tLY84Yc9xq7eSi7eD+\
+MN5DqaBwvNhPafqOZt8YGudze62vbZvjtN2SNvpdbrbxhFDBEENASciba/\
+nNYLCcQ8d39VfdY9dn7Q7vU4oX+WB6Fm2KKiHyF51w243NN+k9q4d9DrKpI/ZEqzhB5f+\
+33kxXTNnnk3ddp1ubeYO/djz/Or9WyrCHMkahvQJyiJPsug2v2HPhk63TtGAxm69tqQot9fsBS+\
+kBJcvAP2P220ggjL6HdU465vDm/QjeydyXTewzEL5342MlxCDTuTV36AYt6OeK6f5mbrZS2oN8/\
+EgxvfC0AlrE4XEdVUW5WTvLF1Qf2Safsy6F9T76Dh+ctUL4pF/1fO6Tgjf9Dvwd9iFv6MBG+\
+3Q6Ry67X02VeDX6Oa2GUcl3fJD6sFzllge7xDH6Tkd+TiXM/\
+pDfWTKa9epHqXhejo9meec4d2uUxOPkLRDVTyowphOOHl9+\
+kJkn6Qtyfu6j5qJs8R3ovo7TIg9SdvX3OdIHmmoxgIwjhRdPTWGOi6jgETrbTZfFqvsggXhDgpotz4\
+rcLTTczv299pcFDoWmWMveoH9RZzP86k4m+9F7D1JmrfUOgtjAxkeSP+\
+gqFNMoxovmGC4khdU4xZ3kAuImddwfp9lyMlO16txsu0BJzty8rMMEorFsk8N0YTP63fqDKUrDKRGr\
+rBVOr9JUcpc33FrzHRBk7qu8nxJrQD1ArjUuKFjE4B2z5Go/\
+Xo2oDGBSp93i2mRCjjbntfu2DB0VX5e9Xxn4NG1GHba9O8wgc99n67OIBrSb3y/6171Ii+\
+ia5QqChdRcrv1RdbuKEItrC5b2G34O2CLvN/GRc4+h8x3gI9JzB704G/\
+MHknYIyN8Keophk5Y7T3201AZL4K/XfZ5wD7H7NeEDZu05YADpnZC/Eun9r2+A5+\
+9gI3QleM4bQFin/2Gzw3YuAMElI046rP5EI1APp8EclZ/RGcKnAgI2UdROTl9++\
+bsIn5NAz6pCEcKBhElfuC14U23jTCy70M6X+RHfTEuQMp+\
+xZkSGvzkR7MJKlz6VBi3KbbhyGFve4wiIZvHGwF7YxeoEDhMKQ93xQie8UZtT7yLyr3jBCMBe3cEnw\
+PPDXXYK0jZ944LQufRz17An2Sz+LHghwqhlSrG8+\
+b4Kjnoo90EkPR9JxGvBZr4gMwjoHRddKWlUtGri56dfV5nAOC2/WALCfiy+UGVdZC+M+\
+FciyfQSQYfecv6QukgvxXT22U6I6/S+d0aIoxjLbpmCDOAwkh1wMngFYo+\
+w6IbsEED0APtUSyJjoI3SBTc2cRDX4IVjxjNY6R/\
+fAKsdIF9nVG3Rjk2atxR1r8jBXITskEfdEfQdXz5/HZFoAsS4BqGXAp8sUAoadqS/\
+3FXgW0kYeD6KzDlAsb0O0MHlgMuWVUKFM7/\
+QASx6F9GRFSMI7aCYdV2RxTF6vEfiLINdYnx7XtI8bQjl5yXS2pppbyQSmD8voiFBXQR52IYC456o+\
+EAKOp1gVdhwBYo/KVuvZQJZwAqrT0S6yocoReH+\
+CFm1yqMK8wVH3AA3l8TqcH6fYW1hq7xBj5omX7QFUsm8EF0PLc7FIxBsfTcqH+\
+sEDCS3GC8dRw6nN9GTnK1Ab6oP0wEvjb+aFh8ZrkIcjKji+ny6Ojo/QELLy8XdFXRz/\
+SbLwIzNsGQTZYgfmg1XEXgHfErjbk8xOCqNxo5TDg78L0zQDHrvx2OhEBEASMM1ensYS5plUkFrY80\
+8juxJ1jcHaH41xF8w3YiVz0lYD/8kVws1xnZqyuFYIhaFlRhOOqjahjBu+\
+BRRG2QnaHrVlSPmXfRSUZ8QqoPXfAuvCjaP4DXRlmJM47S6YpOGc/\
+Lexpx52OOEJ1wwMjR5pN4HVAw3igKxJBh3AdRbqOK4CqcCzQddXpDo/AKJ3gV/\
+J6IhjEUAvV3BsEBuchnGSQX6Tex2FQge8wvQr8NqBn2e0QTjZZctbj4URnyReazCX3BH50PdvPh+\
+yM2AtLb91vvrxsn/\
+9wiil1JpO7EVYD6ifEjArfFDyLVePot2IKDHdQvB3Up4NNqegesyGWZrj5alI5pYUzsdLXLpNUNwDf\
+qtH0JFCpf9D+SoVS7+A3S1g+E1ZKKyWKsFJWkY0EDqCUN6EG6L0XFQLMWrbSNoiCl/\
+WQensPUJNdL5NrcBkbNgOYRcZJGkvPcBedCh7xuLAz44+\
+nUjgJETc9AgCqh8GuAtol9k00wEPiUTpkYHUA9xOo9ynfTgogCL7HZHl2gmMkMmaGIOnVvJZDrIY4U\
+5RxuM0Qoqro5Qkd3OBRO7Ab7wVDl5gMz8aoRqRmOAaM3ei8qXUf9IX15lZUCVdNOMHeLEiJ03QGw2p\
+GyNRwF0s/GadCGNoFb2Wy20iV4NBBmbkEU/1FE4wJ8Qed9c/\
+OPbFySvbNskaXlybzMlpBw16GAYHWfwRckUntQD/j1ejrVjBxodJE/\
+lHauFlVocRIvh5HIoswwfdpOmOsxZNFzNEIfktqV8zJdlmBJYJLXxQPMEXkssIgGfRFee26HY03Zmn\
+FUTQI7UufDQH8h/\
+7lO52VePl12Dkjr52K9XFHbQOc0SMQmniN2CcZPYBWrZRmI8J7Gk11jomoKV5kCn7n+XP3YPhC/\
+HRDviyIgqAojN/DQwdpvtqr6asQ1j/QdOqa24ZYN3WQGcsKeiZnWiH2xTsBSY9Bot/\
+A1G2fxRA4YmG+X+ScuKexbiwVmS4Va/\
+6AzSpT1xUDdHhxVT6rBQ7VmIx8UQRg7amwM5rrOaoUpFcesHgNqopYQ9iDpbADAc8FpsfgL6utcJX0\
+xPIWCwjNfG6okn+MOI/uHovSfpVNA6Q+\
+jiP1tsJTX2vTKrFrk8U3moAaFbWZtOodR1x6fUAc9ASXpd1RKMyWNYqIoJnQJMV3D7cU3IMKSKhZEK\
+p1p6jL7YrasNJs44PbopcJ6M6Cz7aPKDYSh5zCBlIFdgjYONX83lIRDBdJ3TOLWEd4gPxzeliJCLcU\
+WhqMRWDI3doQMo9vRTYahtLBbZUXMsvh4B3VwdIE1TagvlC0poESnro9hIU96buW7RXO2ENB4kZ9OW\
+lJ7mhJSd/XOF9m4KWLYTVN67ZAZWZ6uq9xWPUpQw56kykxSboAHEg2rmKwpt2r4QQxsGl0B5JQp+\
+YyVARjumuqDqXxXZ9Xnc1zJPEx4D5T8tIqbdDgiJwhhhCgR8zal5jDcDp3RUOKjc2OY3azvLiHR+\
+GYJCYwDLOA8Xd1VPjjXKIoNBtLq2btNXrk/\
+4IF4W5AWExteh4GbYLaMpai5Q8KfaYwWzrJPefagQL0hXkCjiqQdsl8xByj1bRPcag4QIKawOI6eCg\
+uHoSeUuuoAGjsDUnKZEYVNlF0QHNyv5x+ziQ1PdZ+E+z+VJ7rL5KpdseHfRK+\
+NWcsdE7M1bAes5pnr90uoFKqSg/CgkqhkMcQoQquLf30szXqYVqE/\
+arUwCmERjryBukVArmuVGNfVyFtjEQ1qzSpd8lFfK8ArXs2mWeVWA1EGkQgRI2jXFx4afXR7B2peRH\
+HiBorPiMFv3aGuj4CuiEa+GkUM1vANLkuu2AjGrj/XH7MkU1v082Jy2+\
+Jx8bVksWb6miLYynxdpMu7rBzxMsNVLfJQraHXB+c9HPht65bT0GOYYPiESc/\
+QsUR5DQaS7KnbUImuNXSj7LiYB5UY9pWNDMEpWxpSl8zW7OntxzvwI6AU7gSKz6vZN7uLavJEEqFTZ\
+eu8CDQYQG3PSDbBYbPCdqe3ZQmf/7IpwDG0KGzc25Zog7/\
+5nKXhjWKWKet2dlEWAyykvSgoMNOsrMHSqCCSBqWA47Actu/K9I7Cls7Qss+\
+kDHZMGjjvSJ4YyvMXVnt7fECGav0f/TdCczK/LRDEoN/dunfN93w5ASmiArsm24aR03b+\
+eCNM1zBauN0YgmcfEx1KMmdHxf4zK/\
+54uqylUjFLus3sbYhiGn22Wo7MlsTcPdFqW4wCK1UMvz6w2AaxyORRF4M9gWGvWoeB2IBh+\
+OvvLQ5j6/BHqvTpCofFvyrT2aL6plok+M3vP1aLJV6tinHOxLKJvX06/\
+HrBMxUWpfBc7HcSSYNCBB2847fr6fR4mNG1w/fxlaQL0EfGEOSnZS6LFwyJaIpZdFQVDu8qul+\
+HnZ3/iLKSA9lhYC3QY8ok7IPljUMMaNpAwGpIXSU7bYWwOKMnN4prIBuaYos+\
+P83v4AQiEtiymvSMlpdU1S1MSu/xBSIw5PE51QJSCe5qhoZgN7lrX5kCskfHORr/\
+ixwT9mGS397uSw9aNxByA5wROmoPRjpR/KTdULJwvYEazxe3vvC+dKBELl1OWzl2w+\
+XT2Xqu7BnzjV0+\
+rc5SxCHW8dQxZB5ZBBgGMfcnlT1kWfoj5Xtfygab91nFJg2RkGZdL1uKWLWM7bHt6zeMwb4EQ+\
+61xbvBiDtHcs9Ii0EC3Wvdlj+BQN/\
+jY4I09iwx2LGC4wc4f3A8KcarYxkkycIOOTA6HduG22WkSp6qOisWI3z+\
+QvbOknh4mmh1dEqeT8UXi7x4cQmLbYKOm5B3Z68YbftiHz8YgGSJGjvdjtNAYpjNimp29i3ae1fSG3\
+eK2A6fUlsHrjfMRuzD5qvxNKWWdCnHpppyCKFOPADusHrC0GHygLkm1Dv1NHEgpYvRAisLEWfL1PFY\
+HNFnR+fk/GEfdsjDEeaxvuucr/JxBqf+\
+6VytFtv3ioPYHpr6ATk9gbp0LRTrdEaiGAeD5vqrtiA07ktA0IwnShoSvVlEVNS12gI4qxoQ4ZMho6\
+37slysesfHGR4EPRoXs9YXgwK26Agdwt11jVnsqFoevrQC9GKRaEzKueLfpRbX3ETVo+\
+FG27MDGi19MJmcr2fThctiSzQ9B5GNwPeesx3YV7J4TbUAoVFjqqZ9MdeKO06y/\
+hIWHwT0YYzzqpER32uqMrF1L4zOxfYQXG0vkM0ylGbGj8wkp5mQYafczGSMtpHuul11+/\
+v6cwvzJy2WDBJhpq8mMYy4Ua5SqhZOoXwNVgRKDdUMLVxrLSkH1uzhfm3dfdFUdV3BNug9Y2E2Zk0a\
+Fn/LSB+hO2JIm0yeGHSW1FMVgjDuaD7zT9mKbM7XxpNJ9exlyaYQx0kZg9+bpUaB+\
+quSpwXvG51WmZ60AdOcpuAhSlPGoG6uOW3I9cmcxpTTKd8FqWYTbisTc8311Bcxos1jC3LdGryK3w3\
+BT2hdW6pP5ILlqqMvPABcnlwAWg9Ypn2IHU6mrWttBVWhzaYMib4NsUsYsVtWhCfTTMYrvFbFQu7Sf\
+r8UW/C/hml2CkFmSIVJWQU7SzOpQEIoQ2lDTVDEfiar8YriimrbcgNWL0ByNXssG02+\
+dX8ttOoPsVcRVEcnfMetYBRbVAi1Kglyl4If0FBGqPsIRtZ4i4+gIylMP/Y9ERCbxq4W+\
+bCyWRo7ansqkmvHZLkGbXtMVh9zaA8gBo6YPaTuUiAt5Ca9ZdjY/0EPomHjWFDTSDI1Sz0TCHWn5d+\
+ZFDOPD4w2yT8bMuxazJ2UE0XNYAUfNzeadGr7iTup2fOn+\
+VhRIpN8aU1LqidkcK8WOS7SqdA7QHESmreLGxZvo4aChdyHJHM4cpStGqeNE3pOUB2dsx2pa5T4oAG\
+Qbc50hWdfYgsukXGWTHmnCYRQKSAQB5Hr89mgFEibMKiHyLZta3iKfQyUvyKHormIhpC0oFVB1azg6\
+gp6PcB/a7BqcaBSxWqvB2twAZm/zOHAWr7LFmzBt6otEl7iVyX9h8IB0EuhtteiNW0/i5hm0+\
+ZlPcOLFU6+C6zR45JrG1IcC6VsT8/jbqkJtCaZVRDU8w1Ctp9Lkg3g71zd+\
+D8K5cn8PlvmZZXBVaAOXFBsQTzo61B87fxWd7aillV2v72a0rZRh85uo7NiQMbXln13TrijfvKt4DQ\
+5tBwM7s6yt3aszxP+lL8jqVRP9nk+\
+LPoKBsHqVvO5xNq2I3TdPDsN1OPptKUd5NiiL9BODXW6bdumsnoQ98VDtQfzPeR4ly3e5rJJBRpDo9\
+ZSqN8ORuPU320VPWO/W+cK4n5epuV69f34Erh9qMpvdxWryM9AKKqSpWs1j36b/\
+8hm6cvR0PvmpalYXVjLe+KGBFO8kb/zLJscVMzvyZOtu0udRu15c3nDc1mv0ntX1g+K2SIdl/+\
+GNem73b7M/XC1o0R/uF3YtMVi+leR0wYKJR3RRMCd/\
+6X9F9zBt5dwYDls5HST5qBIDZxML8xGrg3M283i7U4AG/M4GOf5vzLpJKhVJlhI9k0nfnY/\
+9d735ALpx5UIxlihh2G9viiSebnMsxWuz/4T9b+K9ZyfGfwlnxbwFf8VV4tygtbFuMhR8a1+\
+NkuNXMf5pU+UkuhnSZ/fAYnyIt4Jo+1ZRvM6AdRk+kFtpZFnKKp6Nrss0/E9Htz/\
+Lkuz2gvGVEo4GLBthahSYs2w1tM8jU8a/Vs2xZdqi4hjpVVh8yIN/\
+JBHtOQMGhSaM1pULiej7O4A9Pz6k6LNmNs9wO/LQ+1MyeZS+\
+2AnTqru4nejkwplExw2aiGr2KaUra7x2y3T7l6DJX3dXMKowv3tvuT3BlLSOEuXGom/\
+m8HnsdTuLlmkuILobm0IPg2wv4O3/t3gNZR9wArHvT5ms+XBqIaMldIj9xKalVcyD/+\
+Qlfiyu456thCTWMrpefU5/\
+VSFiN7wlPjxG7z6QQexvochda2J2FDxIPjuiKW6imcGV9l4mZWQhicvdZRPZtAc87KFTxw9TlePNED\
+93OIp+9YXo3j+dTH/X0Yy5nlvIQ0mip1E+OIqWfmmjT2S10bmpZH8sAOMoP7aHUVVQl9/\
+kom741Yzqk8aZ3i78nNozK7D6Rvv+m6AbW18C/uX2Wo9LSnrTe6dZinkMoVwGLw+\
+TZcftcffNzu0phA/T1iva1NB++wt2mX3yUxGGgIkfCDwe47Vi1skeps7zEhbi+\
+zxonatcMaWoXo3n30liXcV+k3CfW2Zfmeyfx0AOvonKx11oUZYne7vaieFbeRgvZ+\
+2SdyGKibBQpv5vjbAfJZkmjVKKvrn41RbjdDn+\
+ZmpVDV9qjqeWjmAEmVJ7dqs1zb3JPyDjFWDdraskFq4oab91U0z24G47YvS2qKM9bGU/\
+cRqPnPVKOTyn6A3LGfXmxqfGQUpkj21/gXN2/O2sz1mezRmRh+ymw+\
+8lzp7W9nHlAxt7shpixZEP5TL9XJqPbIvl0dVfmyrpLgy+rVJSoRRyOiBp4NYpbTe/\
+aoygRuCAxVMs7dgoM+\
+tQ2Y7dqA2R2RlC1px6LYyIyMxkfjKKkcGY0Y01r5R1cZ98YBYvU3ZZR5aWQVv4uh3oUAEE66Cl9ySN\
+XQTeH51ELORDBpsl1+LZYymAAAH9LH1+\
+y5vlklMYwsEa25EuEvSbJd6luejClhiB26miu52Q7XWV3NjuYU9Mx/\
+G7lAYEMi8vuDRLgMGLncZ5kueonvd/ykr9R8onD3RAKypcVXYJ9TRL+GarKN/\
+rPBo3KgversitFih3neel283aKjtbqhLpJu42taWWlbVV3W5khZVA0Ckn9nvaVs2vlYDxA8g2mfE/\
+pJq9hqbYnHq1vyT+t6L77ADDewICGB83CyiKrPko4a6rlNQ8Mbkt5/\
+g3g9u2dunxARx4HYD6QkwZatA3fRMHTbViKh+xRYONMiEjSeoWmVDZ6MPs1E243vJV678+\
+AbC428WWmYVHLb91fctWRZTVWi9avpyNGzM2AE75XZ8JpZsdzzkLY3Px/\
+fZZD3NJtATT1pbbWbeKHnndmpNS7DuXtacQ61R8uZuNjgmHERQqaxDjttxZsmfnutkxYpf3fFmgLe2\
+XbaO+f1trS39koWe5HIaSW2pJb/\
+w4BR6oYkEXOkCXnMELS2sTAfnq2Yke8dXvLugqCML431R9zynSB0uSjDHsqUu+y0QnlAYB/\
+UexZW3ZJhvi7MtSIb7VWjC7aTR6t/ZbVZ37PYnpfKdFQMpbYwNOjb5+\
+saRqorr99l0Ye9XIZ9ZZMtZjoUvWx5VQN7y5OHhp2y5wh5eFqm8z8Yfz7NFirehqtX1atW6WtCrcKU\
+7qO4PkRqBncyKfFaz1onwrGsgeQiEwyJjW4KKnYHtw5E33+\
+1Wyr25fkgLv5qL7hW1VPOOUG30uX3b0BEDz0jrtxSom4um5pFF+\
+9fct7rIViWcBZpeK2RNFG9PVKWKgM4PcBpbAlZ9QnaP6ZHzp1WZzQbLTIa1mhi7biQ9d+\
+qOZdNp1fdTfVB19MWDySKfFnfH8PHtsoCP1V0wcFNXzBvdbB5IiMw1720JxNDvgWhq+C/fZWfY/\
+YFoadoRbdeUkwPDqrm5BoxW1Dvq81asFGxA6vI9xy2fU9N8fJ6V59mUkiabCDxZLkkdUI9qR/\
+2L9O6OavMzKMdng9Ev8AMSDyAfQDcfPJigDtXkqdfYVPkGnABVKC6Pq/osD+4PXf4+\
+4kHRFL1nj0dLGlwl88lF8TGbJ+zq5YwfbiOjhOiOZhMPn8UH7r+\
+iPxUOqnyM5AnZi9nViRfFsdj8zy4KDpX1yKqhv1ryBosGvWi+gEXMsB0K/y0L+Av34NHVbtWYo/\
+zRri911acrOkuroSZlheZlF2XFZMDinH5ll61KF2877lVHxobAhhYBevVTMGpCprEP59ZO6/xceXX+\
+q283d/K4mOYRaTex4CRIoqH8hqdgFVW6YZPMJjkWSdXk7O0SnmV2PC8be3wghniFBDNSP+Xlz+\
+sbIu31UN3/\
+ZLvK4MBFvnJ7RdVP66q6jAat7nN7sCit3DuQUsHuwfrWmx0qsSs7ULx9tadE4707PrlGlM8ydptmPJ\
+8gycCq6C5bs5Pc0F/b3AnTezg0llps4NxqzVR4lSBsC+gCP0kEnnreX9LOD1x2vAV7D5iHLnWKb2+\
+kurmHyeaQwuAEkiPezkWlk0kVcOwfkDcPczy+rLTyhasVVzlrV6P/0F+mc+ySrX6ZrjLLD+\
+apkw22SdmpUJYi99uYz8YXXAArGiM2aEKN1y1g/\
+0rYie3x09Uiknsl70ShdkFJPJpun3LEc1PXiJGR+0MRCJO4Lwm8ueCj7m/Wk/OG/\
+lLJQF4SrroOi8V6ddg99FvXFppx565GOij4sRPu3XyS3ebzbMJ35rR9HrM7uNeG/DbeuKSnoVX+\
+xspqNvE2e9xfG+3WYT1cG8VqW/a2qtJFAaUl26ctHcu51n5to8QWaSpNlyh/PrcWy+\
+JTPsmWcARgBiRnPSi+2M4XNz9O/7FeTulbNuar/KQy8Lk1na3K9SQv4LWCOm1pfny3KA+\
+L1erQdW7gW2gR0js+brvBkUP/r91ru52uGF6Xlioy2nWVaSIplDU2k6WohnWHDMOlMO4o6T0/\
+kmLDd++VTKlrXS7qOqUOgGdfUpjTiNk2NTBZ3cDUIdGuZWMs4hd+\
+SaWEZ9ltGSaDRxUVlUW6KubzrGxcpryRukp2aOp/B3eS2+\
+jedh1H6je2v8JEuK8VeFYdMpQc6273JWxAjrd8f0kix7Gh8lux/EjlpQrcdxUl6FMB8v+\
+3Ip9ffn7xczGTwT+VYq5v+eitL5Y9MZ5EGwbBVVUGL/n6/MMJmIBTL1Pa/\
+lbUxqOODjcE5AgF4Lg6JH5QfcXOih/Lf+\
+OZ8WOOSX13CWqZYkzKcl3S17SRxWIO30JE9SyTqUwykm1ueR5RbCgZjQqUjcd+\
+5fxr7Xy0jfG6LkWXlblXtVMM2LemugZLue2g3vS3ZisZAWAd8gBzWfyDHY6VvR+\
+sZGM7nvPye1POG1kop29IY6cPrcX9QLgitvhMbT8gnsYmdvRpIxyo9lPw145UdozmtVk72oWaVgkz9\
+il38jA+15J7X2yLWZaf67fHySWtd3fZZUnXE5iOm4tIgRvYAmIDeVW7IAbWAaMbohSwaFurG+\
+FmQcUA9qlEZ7Gv7etA1OyWcgA+dMnr/\
+rm5RywrmQZwmAcvecBb1kxrJtJrOvasuybjIka42uaf4pZ1eJsANDF861a5jYHVsdRIojb1ZBvgpnA\
+QU6vijThcuGvHuU0VYBDjpUX8qHkZMfUwXBaLm+IRPirX1x0W82xI/a7M7jSJqI6Z/\
+F2XwOdWKip4qI/2Imcvv6Ge/\
+BcozkVHDpw38OW81pcvohxh9129msfUdmOWVQrFHYTdUVf6UGxzXNTiYNuRTU7q1/\
+q0Uutpnaul1oscWCHKAqvy1Ey0dWJXsq/fX7B1V8jKORANjS21AOvLgepvtzQ/u8nNtorMsBg/y82+\
+4ldpseTsOXMliYXHomRFLQ7c1oW0V3WnlC3ylDXdXC1W97a3xMzB1mjBOuquYbGg6e5ON33jLCuXT8\
+Nsmmpu6kbX23e+ls5qYQs3SpHQl94IhN+\
+PYSlZ3fC6AKWPAD0c79sV9M63QC4vc9uABbMPO0DOLjcZ3KfL3YH32QUsQg1uKNcWhRv1/\
+lUmGqqYbgQa4ikK9TBb6N70RoA96dTweAwdCarnwJQm0JRX0XPGk5ua51cXv5v4DEdgXJOYJx8dWQC\
+pzsmUfFVy4V5VZxdY9oQzGE1Dt1bLy5ZsBGeD/X6fpbDDRMCid58zMy+R40KleCfyK0psKNcQ+\
+Q401b9kTw/FcnKaLlTyKydT7Sz46++//\
+8hfYBX7aFy2dU5G1zdWxAe9FfMi0sAPgBmdTq3eR78y3NKXfosIC39qMwyMhDzZpcdnglEYUuG2NF7\
+3usOFBUqTSTVjv7nk0jxDaji69uQZL8jbzg1belVNMA4iI0HYyBnHlRs+vJJA9G8abYMFr0rSD/\
+fYbVFNai9bszSfTm5a71nSTtG43Idj7hJ9BBvWdkTeLNBcTjzpHEtZMU7eKcvHegef/\
+STwsXpRoRLPb5iIIQ6ZWbMGVt2LwxZ+uMb1MOHrndi6oGFPPeq+VH5k8/\
+49v9cq0kcTC4M36Pd1LHQdhfGwBSp1D/\
+WZOOriybeB5AS2DYT9HoqCYn7ljWZN7cQ2HVttuuP0j5CYTfl79fB3nX/aORVrXt/\
+MjeyS6SfX6DdSvC1J9gPC/jV+gisAtW0t2XUUO5tReU/q/\
+DSpbF46bHESdiPmppLvxruKTSutb83ibnqHHZWIGw6yV6cULFc9NkjIsb2AQM9Ob0dXhbX5CuXIJdo\
+dyh3LIa4NNQKbLpxSr1lWSWG/b/\
+mrGAsJEO0lb4CcFpHPFlIik0fG3QCKIlYbCjfdBq0LBWtfat4PrZJswx3E+\
+q3RgJxrVtd7ymlXPIxjdIjZPNVn23Vg7BZqnK+\
+9bb7aHdUNIHBe22683SD6z1jPonjsj7wGm89UNVxHaSEvcuEuCPT2fMfBF/frS3/\
+ThXqSFvZ7e3dZ6N96IV8jxLWO8ya0Wt/17wLz5vqtxgveG1u36+e3jYb23wsd2SD/Smt7KZHct2X/\
+qm76e4IStUb6ddYYBTASBdu1QseW0p5n+h8yJGarXA2l1X1e/\
+XxDiI5abJaoaWfH0bnE7QdPrl7bvUGbTavSFrPyEOrdM5+Bt36V5PdrrdmMgjiPuYMz+Wz/\
+0Tz6ah5j4Cd89fOm5mkVPHkQxn0wDW2M+nipIa7FthpBccHxRgOPJc9D1ZAy/\
+HpbZ0UZat5Qq84Y1z3DbyTZDtFE/cQLpWq3ElyxlSn2n2ynne2njdX9HqR50HbZhTpRZCGi/\
+eSNdT7sC6Gnsiqx22vi7X6Vd0Y/KRCBR9wkyubNH5Itlot6jr+H+v2jb51S89D6VqjhbG2/\
+akhcr6PNYVgp5aKUP552UtJ3uzOLC5j95qwmdhjd+bftNkkCVDR8ok7W+\
+ugmOz46OhI1WgZtjyf0taP5jUlN46aZfwdJv/\
+aqMCm6eGGXKroormHs1LZGNoikgXxLVOPatA9b3WG7y/\
+akfFHbiwl3PaoSTTAMSltv8Pl3kPs5N6N9FxJrfmiVqhsRQ/KTTZKAh85Eob/\
+Ysg9GOO3WNWIjdsVelY0MsL+dvz3HPFJb/BoO+tKRc8HACS+FN59AJmNWY2SwunYr0x/\
+NYvs26Q6GWpTZJ+cX1y/wMwf+\
+52I6yZbXVd4es9VV4RDat4jfdtfZcCddZbqbb8RzbVu8UogwO9l0qcHmmRs3GMx+WCZEqjRp/\
+Lwme5uu+Ns/0J+PF+n4Pjt0jxwhFqCjNXH5Qyvlvy3EUQ6e4FIfIiVDSUn43nfAk/\
+VC9JnN7sFN2TLjZNDG8gDpRL18+\
+RKIP2DE97ojQr9AbmFXBTzgBghqWzMSZy1pqxR5jap2HJieF0dCcCdHXCbG3sLzzLiDVe84qO7H4Tr\
+BfSlfEVesS/aFvUDExcl3Xy1NBM3bx2xaYGycitM3uBB8h9XgsM/\
+83G2ojInbsK5G0go2xBFjlSbszDbRSoPESiP4St4QZ4cxvSFEsF6Ee4vaQawKF2wcIeIac29PrZsVp\
+5mYWfB4D0q5kL0OnFTyOF5GYaf6bkcUNCpN9DglEfK28r0S3Ipo6/8DrfNj6A==", "cellCount" -> 
+       0, "response" -> 
+       "claudecode.wl \:306e\:30bd\:30fc\:30b9\:3092\:7cbe\:67fb\:3057\:307e\
+\:3057\:305f\:3002\:4ee5\:4e0b\:306b\:3001Claude \:30c1\:30e3\:30c3\:30c8\
+\:ff08\:30a2\:30d7\:30ea/\:30d6\:30e9\:30a6\:30b6\:ff09\:3068\:306e\:4e3b\
+\:8981\:306a\:5dee\:7570\:3068\:6539\:5584\:63d0\:6848\:3092\:307e\:3068\:3081\
+\:307e\:3059\:3002\n\n---\n\n# claudecode.wl \:306e\:30b3\:30fc\:30c7\:30a3\
+\:30f3\:30b0\:80fd\:529b\:6539\:5584\:306b\:95a2\:3059\:308b\:5206\:6790\n\n\
+## 1. \:4f1a\:8a71\:69cb\:9020\:306e\:6839\:672c\:7684\:306a\:9055\:3044\n\n\
+### \:73fe\:72b6\:306e\:554f\:984c\n\nclaudecode.wl \:306f\:6bce\:56de Claude \
+Code CLI \:3092 **\:65b0\:898f\:30d7\:30ed\:30bb\:30b9** \:3068\:3057\:3066\
+\:8d77\:52d5\:3057\:3001\:5c65\:6b74\:30fb\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\
+\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:30fb\:8cea\:554f\:3092\:3059\:3079\:3066\
+ **1\:3064\:306e\:30c6\:30ad\:30b9\:30c8\:30d6\:30ed\:30d6** \:3068\:3057\
+\:3066 `stdin` \:306b\:6d41\:3057\:8fbc\:3093\:3067\:3044\:308b\:3002\:4e00\
+\:65b9\:3001Claude \:30c1\:30e3\:30c3\:30c8\:306f **Messages API** \:306e \
+`role: user / assistant` \:306e\:69cb\:9020\:5316\:3055\:308c\:305f\:30bf\
+\:30fc\:30f3\:3092\:7dad\:6301\:3057\:3001\:30e2\:30c7\:30eb\:304c\:300c\:8ab0\
+\:304c\:4f55\:3092\:8a00\:3063\:305f\:304b\:300d\:3092\:6b63\:78ba\:306b\:628a\
+\:63e1\:3067\:304d\:308b\:3002\n\n### \:6539\:5584\:6848\n\n- **\:69cb\:9020\
+\:5316\:5c65\:6b74\:306e\:5c0e\:5165**: \:73fe\:5728 `iSessionToContext` \
+\:304c\:5c65\:6b74\:3092\:30d5\:30e9\:30c3\:30c8\:306a\:30c6\:30ad\:30b9\:30c8\
+\:306b\:5909\:63db\:3057\:3066\:3044\:308b\:304c\:3001\:3053\:308c\:3092 \
+`--resume` \:30d5\:30e9\:30b0\:3084\:4f1a\:8a71 ID \:306e\:6c38\:7d9a\:5316\
+\:3067 **Claude Code CLI \:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:7d99\:7d9a\
+\:6a5f\:80fd** \:3092\:6d3b\:7528\:3059\:308b\:5f62\:306b\:5909\:66f4\:3059\
+\:308b\:3002CLI \:81ea\:4f53\:304c\:4f1a\:8a71\:30bf\:30fc\:30f3\:3092\:7ba1\
+\:7406\:3059\:308c\:3070\:3001\:30e2\:30c7\:30eb\:306f proper multi-turn \
+context \:3092\:5f97\:3089\:308c\:308b\:3002\n- \:3082\:3057 CLI \:306e\:30bb\
+\:30c3\:30b7\:30e7\:30f3\:7d99\:7d9a\:304c\:96e3\:3057\:3044\:5834\:5408\:3001\
+\:30d7\:30ed\:30f3\:30d7\:30c8\:5185\:3067 `[USER TURN 1]` / `[ASSISTANT TURN \
+1]` \:306e\:3088\:3046\:306a **\:660e\:793a\:7684\:306a\:30bf\:30fc\:30f3\
+\:533a\:5207\:308a\:30de\:30fc\:30ab\:30fc** \:3092\:5c0e\:5165\:3057\:3001\
+\:30e2\:30c7\:30eb\:304c\:4f1a\:8a71\:306e\:6d41\:308c\:3092\:8b58\:5225\:3057\
+\:3084\:3059\:304f\:3059\:308b\:3002\n\n## 2. \:30b3\:30f3\:30c6\:30ad\:30b9\
+\:30c8\:5727\:7e2e\:6226\:7565\:306e\:6539\:5584\n\n### \:73fe\:72b6\:306e\
+\:554f\:984c\n\n`iCompactHistory` \:306f $p$ \:30b9\:30c6\:30c3\:30d7\:9593\
+\:9694\:3067\:30b5\:30f3\:30d7\:30ea\:30f3\:30b0\:3057\:3001\:53e4\:3044\:5c65\
+\:6b74\:306e `fullPrompt/response/code` \:3092\:524a\:9664\:3057\:3066\:30b5\
+\:30de\:30ea\:30fc\:306b\:7f6e\:304d\:63db\:3048\:308b\:3002$p$ \:306f\:5727\
+\:7e2e\:3054\:3068\:306b\:500d\:5897\:ff08$p \\to 2p$\:ff09\:3059\:308b\:305f\
+\:3081\:3001\:53e4\:3044\:4f1a\:8a71\:306f\:307e\:3059\:307e\:3059\:7c97\:304f\
+\:306a\:308b\:3002\n\n\:3057\:304b\:3057\:3053\:306e\:65b9\:5f0f\:3067\:306f\
+\:ff1a\n- **\:91cd\:8981\:306a\:904e\:53bb\:306e\:8a2d\:8a08\:6c7a\:5b9a**\
+\:304c\:9593\:5f15\:304b\:308c\:308b\:53ef\:80fd\:6027\:304c\:3042\:308b\n- \
+\:30b5\:30de\:30ea\:30fc\:751f\:6210\:81ea\:4f53\:304c API \:30b3\:30fc\:30eb\
+\:3092\:6d88\:8cbb\:3059\:308b\n- \:30b5\:30de\:30ea\:30fc\:306e\:54c1\:8cea\
+\:304c\:30b3\:30fc\:30c7\:30a3\:30f3\:30b0\:80fd\:529b\:306b\:76f4\:7d50\:3059\
+\:308b\:304c\:3001\:73fe\:5728\:306f\:6c4e\:7528\:7684\:306a\:8981\:7d04\:306b\
+\:3068\:3069\:307e\:308b\n\n### \:6539\:5584\:6848\n\n- **\:91cd\:8981\:5ea6\
+\:30d9\:30fc\:30b9\:306e\:4fdd\:6301**: \:5358\:306a\:308b\:6642\:7cfb\:5217\
+\:30b5\:30f3\:30d7\:30ea\:30f3\:30b0\:3067\:306f\:306a\:304f\:3001\:30a8\:30e9\
+\:30fc\:4fee\:6b63\:30fb\:8a2d\:8a08\:5909\:66f4\:30fb\:30e6\:30fc\:30b6\:30fc\
+\:306e\:660e\:793a\:7684\:30d5\:30a3\:30fc\:30c9\:30d0\:30c3\:30af\:3092\:542b\
+\:3080\:30a8\:30f3\:30c8\:30ea\:3092 **\:512a\:5148\:4fdd\:6301** \
+\:3059\:308b\:3002\:30a8\:30f3\:30c8\:30ea\:306e `type` \:30d5\:30a3\:30fc\
+\:30eb\:30c9\:3084\:5185\:5bb9\:306b\:57fa\:3065\:304f\:30b9\:30b3\:30a2\:30ea\
+\:30f3\:30b0\:3092\:5c0e\:5165\:3059\:308b\:3002\n- \
+**\:30b3\:30fc\:30c9\:5dee\:5206\:30b5\:30de\:30ea\:30fc**: \
+\:30b3\:30fc\:30c9\:751f\:6210\:30a8\:30f3\:30c8\:30ea\:306b\:3064\:3044\:3066\
+\:3001\:30b3\:30fc\:30c9\:5168\:4f53\:3067\:306f\:306a\:304f\:300c\:4f55\:3092\
+\:5909\:66f4\:3057\:305f\:304b\:300d\:306e **\:5dee\:5206\:8981\:7d04** \
+\:3092\:4fdd\:6301\:3059\:308b\:3002\:3053\:308c\:306b\:3088\:308a\:30c8\:30fc\
+\:30af\:30f3\:6d88\:8cbb\:3092\:6291\:3048\:3064\:3064\:3001\:5909\:66f4\:306e\
+\:610f\:56f3\:3092\:6b8b\:305b\:308b\:3002\n- \
+**\:30bb\:30de\:30f3\:30c6\:30a3\:30c3\:30af\:5727\:7e2e**: \
+\:73fe\:5728\:306e `iMakeLocalSummary` \:3092\:3088\:308a\:69cb\:9020\:5316\
+\:3057\:3001\:5404\:30a8\:30f3\:30c8\:30ea\:304b\:3089 `{\:610f\:56f3, \:7d50\
+\:679c, \:5b66\:3093\:3060\:3053\:3068}` \
+\:306e3\:30bf\:30d7\:30eb\:3092\:62bd\:51fa\:3057\:3066\:4fdd\:6301\:3059\
+\:308b\:3002\n\n## 3. \:5b9f\:884c\:30d5\:30a3\:30fc\:30c9\:30d0\:30c3\:30af\
+\:30eb\:30fc\:30d7\:306e\:81ea\:52d5\:5316\n\n### \:73fe\:72b6\:306e\:554f\
+\:984c\n\nClaude \:30c1\:30e3\:30c3\:30c8\:3067\:306f\:3001\:30b3\:30fc\:30c9\
+\:3092\:751f\:6210 \[RightArrow] \:5b9f\:884c \[RightArrow] \
+\:30a8\:30e9\:30fc\:78ba\:8a8d \[RightArrow] \:4fee\:6b63\:306e\:30eb\:30fc\
+\:30d7\:304c **\:4f1a\:8a71\:5185\:3067\:81ea\:7136\:306b** \
+\:884c\:308f\:308c\:308b\:3002claudecode.wl \:3067\:306f\:ff1a\n- \
+`ClaudeEval` \:304c\:30b3\:30fc\:30c9\:3092\:751f\:6210\:30fb\:5b9f\:884c\
+\:3059\:308b\:304c\:3001\:30a8\:30e9\:30fc\:6642\:306e\:81ea\:52d5\:4fee\:5fa9\
+\:306f `ContinueEval` \:3092 **\:624b\:52d5\:3067** \:547c\:3076\:5fc5\:8981\
+\:304c\:3042\:308b\n- `ContinueEval[]` \:306e\:30c7\:30d5\:30a9\:30eb\:30c8\
+\:30d7\:30ed\:30f3\:30d7\:30c8\:306f\:300c\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\
+\:3057\:3066\:304f\:3060\:3055\:3044\:300d\:3060\:304c\:3001**\:5b9f\:969b\
+\:306e\:30a8\:30e9\:30fc\:5185\:5bb9** \:306e\:53d6\:5f97\:304c \
+`iCaptureRecentOutput` \:306b\:4f9d\:5b58\:3057\:3001\:30bf\:30a4\:30df\:30f3\
+\:30b0\:306b\:3088\:3063\:3066\:306f\:4e0d\:5b8c\:5168\n\n### \:6539\:5584\
+\:6848\n\n- **\:81ea\:52d5\:30ea\:30c8\:30e9\:30a4\:30eb\:30fc\:30d7**: \
+`AutoEvaluate -> True` \:6642\:306b\:5b9f\:884c\:30a8\:30e9\:30fc\:3092\:691c\
+\:51fa\:3057\:305f\:3089\:3001\:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8\
+\:3092\:542b\:3081\:3066 **\:81ea\:52d5\:7684\:306b** `ContinueEval` \:3092\
+\:547c\:3076\:3002\:6700\:5927\:30ea\:30c8\:30e9\:30a4\:56de\:6570\:ff08\:4f8b\
+: `$ClaudeAutoRetryMax = 3`\:ff09\:3092\:8a2d\:3051\:3066\:5236\:5fa1\:3059\
+\:308b\:3002\n\n```mathematica\n(* \:6982\:5ff5\:7684\:306a\:5b9f\:88c5 *)\n\
+ClaudeEval[task, AutoRetry -> 3]\n(* \:5185\:90e8: \:751f\:6210 \[RightArrow] \
+\:5b9f\:884c \[RightArrow] \:30a8\:30e9\:30fc\:691c\:51fa \[RightArrow] \
+ContinueEval \[RightArrow] \:518d\:5b9f\:884c \:3092\:6700\:59273\:56de *)\n\
+```\n\n- **\:30a8\:30e9\:30fc\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306e\:5145\
+\:5b9f**: \:30ea\:30c8\:30e9\:30a4\:6642\:306b `$MessageList`\:3001\:30b9\
+\:30bf\:30c3\:30af\:30c8\:30ec\:30fc\:30b9\:3001\:95a2\:9023\:3059\:308b\:5909\
+\:6570\:306e\:578b\:60c5\:5831\:3092\:81ea\:52d5\:53ce\:96c6\:3057\:3066\:30d7\
+\:30ed\:30f3\:30d7\:30c8\:306b\:542b\:3081\:308b\:3002\n\n## 4. \:30ce\:30fc\
+\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306e\:9078\:629e\
+\:6027\:5411\:4e0a\n\n### \:73fe\:72b6\:306e\:554f\:984c\n\n\
+`iCaptureNotebookContext` \:306f\:524d\:56de\:306e\:30af\:30a8\:30ea\:4ee5\
+\:964d\:306e **\:5168\:30bb\:30eb** \
+\:3092\:9001\:4fe1\:3059\:308b\:3002\:9577\:3044\:30ce\:30fc\:30c8\:30d6\:30c3\
+\:30af\:3067\:306f\:ff1a\n- \:7121\:95a2\:4fc2\:306a\:30bb\:30eb\:304c\:30b3\
+\:30f3\:30c6\:30ad\:30b9\:30c8\:3092\:6c5a\:67d3\:3059\:308b\n- \:30c8\:30fc\
+\:30af\:30f3\:5236\:9650\:306b\:3059\:3050\:5230\:9054\:3059\:308b\n- Claude \
+\:304c\:300c\:3069\:306e\:90e8\:5206\:304c\:8cea\:554f\:306b\:95a2\:9023\:3059\
+\:308b\:304b\:300d\:3092\:5224\:65ad\:3059\:308b\:8ca0\:8377\:304c\:5897\:3048\
+\:308b\n\n### \:6539\:5584\:6848\n\n- \
+**\:95a2\:9023\:30bb\:30eb\:9078\:629e**: \
+\:30e6\:30fc\:30b6\:30fc\:306e\:8cea\:554f\:6587\:3092\:89e3\:6790\:3057\:3001\
+\:53c2\:7167\:3055\:308c\:3066\:3044\:308b\:5909\:6570\:30fb\:95a2\:6570\:306b\
+ **\:4f9d\:5b58\:3059\:308b\:30bb\:30eb** \
+\:306e\:307f\:3092\:542b\:3081\:308b\:3002`NBBuildVarDependencies` \:306e\
+\:4f9d\:5b58\:30b0\:30e9\:30d5\:3092\:6d3b\:7528\:3057\:3066\:3001\:8cea\:554f\
+\:306b\:95a2\:9023\:3059\:308b\:30b5\:30d6\:30b0\:30e9\:30d5\:3060\:3051\:3092\
+\:62bd\:51fa\:3059\:308b\:3002\n- \
+**\:30bb\:30eb\:306e\:91cd\:307f\:4ed8\:3051**: \
+\:6700\:8fd1\:7de8\:96c6\:3055\:308c\:305f\:30bb\:30eb\:3001\:30a8\:30e9\:30fc\
+\:3092\:542b\:3080\:30bb\:30eb\:3001\:30e6\:30fc\:30b6\:30fc\:304c\:9078\:629e\
+\:3057\:3066\:3044\:308b\:30bb\:30eb\:306b\:9ad8\:3044\:512a\:5148\:5ea6\:3092\
+\:4e0e\:3048\:3001\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:7a93\:306b\:53ce\:307e\
+\:308b\:3088\:3046\:52d5\:7684\:306b\:30d5\:30a3\:30eb\:30bf\:30ea\:30f3\:30b0\
+\:3059\:308b\:3002\n\n## 5. \:30b7\:30b9\:30c6\:30e0\:30d7\:30ed\:30f3\:30d7\
+\:30c8\:306e\:6700\:9069\:5316\n\n### \:73fe\:72b6\:306e\:554f\:984c\n\n\
+\:73fe\:5728\:306e\:30d7\:30ed\:30f3\:30d7\:30c8\:69cb\:9020\:306f\:ff1a\n\n\
+```\n[\:30b7\:30b9\:30c6\:30e0\:30d7\:30ec\:30d5\:30a3\:30c3\:30af\:30b9] + [\
+\:5c65\:6b74] + [\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:72b6\:614b] +\n[\:5b9a\
+\:7fa9\:6e08\:307f\:30b7\:30f3\:30dc\:30eb] + [\:30d5\:30a1\:30a4\:30eb\:30a2\
+\:30af\:30bb\:30b9] + [\:30d1\:30c3\:30b1\:30fc\:30b8docs] + [\:8cea\:554f]\n\
+```\n\n\:3053\:306e\:9806\:5e8f\:3060\:3068\:3001**\:6700\:3082\:91cd\:8981\
+\:306a\:8cea\:554f\:304c\:672b\:5c3e**\:306b\:3042\:308a\:3001\:4e2d\:9593\
+\:306e\:5927\:91cf\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:304c\:30e2\:30c7\:30eb\
+\:306e\:6ce8\:610f\:3092\:5206\:6563\:3055\:305b\:308b\:ff08\"lost in the \
+middle\" \:554f\:984c\:ff09\:3002\n\n### \:6539\:5584\:6848\n\n- **\:8cea\
+\:554f\:306e\:524d\:65b9\:914d\:7f6e**: \:8cea\:554f\:3092\:5192\:982d\:8fd1\
+\:304f\:306b\:914d\:7f6e\:3057\:3001\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3092\
+\:5f8c\:308d\:306b\:56de\:3059\:3002\:307e\:305f\:306f\:8cea\:554f\:3092\:5192\
+\:982d\:3068\:672b\:5c3e\:306e **\:4e21\:65b9\:306b** \
+\:914d\:7f6e\:3059\:308b\:ff08\:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020\
+\:ff09\:3002\n\n```\n[\:30b7\:30b9\:30c6\:30e0\:30d7\:30ec\:30d5\:30a3\:30c3\
+\:30af\:30b9] + [\:8cea\:554f\:ff08\:6982\:8981\:ff09] +\n[\:95a2\:9023\:30b3\
+\:30f3\:30c6\:30ad\:30b9\:30c8\:306e\:307f] + [\:8cea\:554f\:ff08\:8a73\:7d30\
+\:30fb\:518d\:63b2\:ff09]\n```\n\n- **\:52d5\:7684\:30b3\:30f3\:30c6\:30ad\
+\:30b9\:30c8\:6ce8\:5165**: \:5168\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3092\
+\:5e38\:306b\:9001\:308b\:306e\:3067\:306f\:306a\:304f\:3001\:8cea\:554f\:306e\
+\:5185\:5bb9\:306b\:5fdc\:3058\:3066\:5fc5\:8981\:306a\:30bb\:30af\:30b7\:30e7\
+\:30f3\:3060\:3051\:3092\:9078\:629e\:7684\:306b\:542b\:3081\:308b\:3002\:30d1\
+\:30c3\:30b1\:30fc\:30b8\:95a2\:9023\:306e\:8cea\:554f\:306a\:3089\:30d1\:30c3\
+\:30b1\:30fc\:30b8 docs\:3001\:30c7\:30d0\:30c3\:30b0\:306a\:3089\:6700\:8fd1\
+\:306e\:30a8\:30e9\:30fc\:30bb\:30eb\:3001\:306e\:3088\:3046\:306b\:3002\n\n\
+## 6. Extended Thinking \:306e\:6d3b\:7528\n\n### \:73fe\:72b6\:306e\:554f\
+\:984c\n\nClaude \:30c1\:30e3\:30c3\:30c8\:ff08\:7279\:306b Opus\:ff09\:306f \
+**extended thinking** \:306b\:3088\:308a\:8907\:96d1\:306a\:63a8\:8ad6\:3092\
+\:6bb5\:968e\:7684\:306b\:884c\:3048\:308b\:3002claudecode.wl \:306f \
+`--print` \:307e\:305f\:306f `stream-json` \:30e2\:30fc\:30c9\:3067\:6700\
+\:7d42\:51fa\:529b\:306e\:307f\:53d6\:5f97\:3057\:3066\:304a\:308a\:3001\
+thinking \:30c8\:30fc\:30af\:30f3\:3092\:6d3b\:7528\:3057\:3066\:3044\:306a\
+\:3044\:3002\n\n### \:6539\:5584\:6848\n\n- Claude Code CLI \:306e \
+`--thinking` \:7cfb\:30aa\:30d7\:30b7\:30e7\:30f3\:ff08\:3082\:3057\:5229\
+\:7528\:53ef\:80fd\:306a\:3089\:ff09\:3092\:6709\:52b9\:306b\:3057\:3001\:8907\
+\:96d1\:306a\:30b3\:30fc\:30c7\:30a3\:30f3\:30b0\:30bf\:30b9\:30af\:3067\:306e\
+\:63a8\:8ad6\:54c1\:8cea\:3092\:5411\:4e0a\:3055\:305b\:308b\:3002\n- \
+thinking \:306e\:5185\:5bb9\:3092\:30c7\:30d0\:30c3\:30b0\:60c5\:5831\:3068\
+\:3057\:3066\:30e6\:30fc\:30b6\:30fc\:306b\:8868\:793a\:3059\:308b\:30aa\:30d7\
+\:30b7\:30e7\:30f3\:ff08`ShowThinking -> True`\:ff09\:3092\:8ffd\:52a0\:3059\
+\:308b\:3002\n\n## 7. \:30b3\:30fc\:30c9\:751f\:6210\:306e\:53cd\:5fa9\:7684\
+\:6d17\:7df4\n\n### \:73fe\:72b6\:306e\:554f\:984c\n\nClaude \:30c1\:30e3\
+\:30c3\:30c8\:3067\:306f\:3001\:751f\:6210\:3057\:305f\:30b3\:30fc\:30c9\:306b\
+\:5bfe\:3057\:3066\:30e6\:30fc\:30b6\:30fc\:304c\:300c\:3053\:3053\:3092\:76f4\
+\:3057\:3066\:300d\:3068\:8a00\:3048\:3070\:3059\:3050\:306b **\:5dee\:5206\
+\:4fee\:6b63** \:3067\:304d\:308b\:3002claudecode.wl \:3067\:306f\:65b0\:3057\
+\:3044 `ClaudeEval` \:547c\:3073\:51fa\:3057\:304c\:5fc5\:8981\:3067\:3001\
+\:524d\:56de\:306e\:751f\:6210\:30b3\:30fc\:30c9\:3068\:306e\:95a2\:9023\:304c\
+ **\:5c65\:6b74\:7d4c\:7531\:306e\:9593\:63a5\:53c2\:7167** \
+\:306b\:306a\:308b\:3002\n\n### \:6539\:5584\:6848\n\n- **\:5dee\:5206\:4fee\
+\:6b63\:30e2\:30fc\:30c9**: \:76f4\:524d\:306b\:751f\:6210\:3055\:308c\:305f\
+\:30b3\:30fc\:30c9\:30bb\:30eb\:3092\:81ea\:52d5\:7684\:306b\:30b3\:30f3\:30c6\
+\:30ad\:30b9\:30c8\:306b\:542b\:3081\:3001\:300c\:3053\:306e\:30b3\:30fc\:30c9\
+\:3092\:4fee\:6b63\:3057\:3066\:300d\:3068\:3044\:3046\:6307\:793a\:306b\:5bfe\
+\:3057\:3066 **\:5dee\:5206** \
+\:3067\:5fdc\:7b54\:3059\:308b\:4ed5\:7d44\:307f\:3002\n\n```mathematica\n(* \
+\:76f4\:524d\:306e\:751f\:6210\:30b3\:30fc\:30c9\:306b\:5bfe\:3059\:308b\:4fee\
+\:6b63 *)\nClaudeRefine[\"\:30a8\:30e9\:30fc\:30cf\:30f3\:30c9\:30ea\:30f3\
+\:30b0\:3092\:8ffd\:52a0\:3057\:3066\"]\n(* \:5185\:90e8: \:76f4\:524d\:306e\
+\:751f\:6210\:30b3\:30fc\:30c9\:3092\:542b\:3081\:3001\:5dee\:5206\:306e\:307f\
+\:8fd4\:3059 *)\n```\n\n## 8. \:307e\:3068\:3081: \:512a\:5148\:5ea6\:9806\
+\:306e\:6539\:5584\:30ed\:30fc\:30c9\:30de\:30c3\:30d7\n\n1. **\:9ad8\:512a\
+\:5148\:5ea6\:ff08\:52b9\:679c\:5927\:30fb\:5b9f\:88c5\:53ef\:80fd\:ff09**\n  \
+ - \:81ea\:52d5\:30ea\:30c8\:30e9\:30a4\:30eb\:30fc\:30d7\:ff08`AutoRetry` \
+\:30aa\:30d7\:30b7\:30e7\:30f3\:ff09\n   - \:8cea\:554f\:306e\:30b5\:30f3\
+\:30c9\:30a4\:30c3\:30c1\:914d\:7f6e\:ff08\:30d7\:30ed\:30f3\:30d7\:30c8\:69cb\
+\:9020\:6539\:5584\:ff09\n   - \:30a8\:30e9\:30fc\:30b3\:30f3\:30c6\:30ad\
+\:30b9\:30c8\:306e\:81ea\:52d5\:53ce\:96c6\:30fb\:5145\:5b9f\n\n2. **\:4e2d\
+\:512a\:5148\:5ea6\:ff08\:52b9\:679c\:5927\:30fb\:5b9f\:88c5\:3084\:3084\:8907\
+\:96d1\:ff09**\n   - \:95a2\:9023\:30bb\:30eb\:9078\:629e\:306b\:3088\:308b\
+\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:30d5\:30a3\:30eb\:30bf\:30ea\:30f3\:30b0\
+\n   - \:91cd\:8981\:5ea6\:30d9\:30fc\:30b9\:306e\:5c65\:6b74\:4fdd\:6301\n   \
+- \:5dee\:5206\:4fee\:6b63\:30e2\:30fc\:30c9\:ff08`ClaudeRefine`\:ff09\n\n3. \
+**\:9577\:671f\:7684\:6539\:5584\:ff08\:52b9\:679c\:5927\:30fb\:30a2\:30fc\
+\:30ad\:30c6\:30af\:30c1\:30e3\:5909\:66f4\:8981\:ff09**\n   - CLI \:30bb\
+\:30c3\:30b7\:30e7\:30f3\:7d99\:7d9a\:306b\:3088\:308b proper multi-turn \
+\:5bfe\:8a71\n   - Extended Thinking \:306e\:6d3b\:7528\n   - \:30bb\:30de\
+\:30f3\:30c6\:30a3\:30c3\:30af\:5727\:7e2e\:306e\:5c0e\:5165\n\n\:6839\:672c\
+\:7684\:306b\:306f\:3001**\:300c\:6bce\:56de\:65b0\:898f\:30d7\:30ed\:30bb\
+\:30b9\:3067\:30d5\:30e9\:30c3\:30c8\:30c6\:30ad\:30b9\:30c8\:3092\:9001\:308b\
+\:300d\:30a2\:30fc\:30ad\:30c6\:30af\:30c1\:30e3** \:304c\:6700\:5927\:306e\
+\:30dc\:30c8\:30eb\:30cd\:30c3\:30af\:3067\:3042\:308b\:3002Claude Code CLI \
+\:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:7d99\:7d9a\:6a5f\:80fd\:ff08`--resume` \
+\:3084 conversation ID\:ff09\:3092\:6d3b\:7528\:3067\:304d\:308c\:3070\:3001\
+\:30c1\:30e3\:30c3\:30c8\:30a4\:30f3\:30bf\:30fc\:30d5\:30a7\:30fc\:30b9\:3068\
+\:306e\:5dee\:306f\:5927\:5e45\:306b\:7e2e\:307e\:308b\:3068\:8003\:3048\:3089\
+\:308c\:308b\:3002", "code" -> "", "privacylevel" -> <|"AccessLevel" -> 0.5|>,
+        "cellCountAfter" -> 0|>}|>|>,
+FrontEndVersion->"14.3 for Microsoft Windows (64-bit) (2025\:5e747\:67088\
+\:65e5)",
+StyleDefinitions->"Normal use.nb",
+ExpressionUUID->"36acef09-09c0-6248-975b-84fa4b0b8c43"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[554, 20, 861, 12, 90, "Input",ExpressionUUID->"ad361b09-dc70-394b-9b42-327799a78658"],
+Cell[1418, 34, 397, 6, 55, "Text",ExpressionUUID->"31103b44-4ae9-264a-bdd1-4975e80f3f5d"],
+Cell[1818, 42, 197, 2, 54, "Subsection",ExpressionUUID->"e5e0e255-0722-ee4f-9536-53e2086f7285"],
+Cell[CellGroupData[{
+Cell[2040, 48, 148, 1, 38, "Subsection",ExpressionUUID->"0d924c93-f5aa-5b42-bf53-e31ba03a4fce"],
+Cell[CellGroupData[{
+Cell[2213, 53, 110, 0, 45, "Subsubsection",ExpressionUUID->"e600bb5c-989e-694c-97ec-ca45473354fc"],
+Cell[2326, 55, 837, 11, 119, "Text",ExpressionUUID->"cfda87f1-9c92-9b4f-9cd7-a06cd17a529a"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[3200, 71, 98, 0, 45, "Subsubsection",ExpressionUUID->"5b1aaa4e-9a67-9446-b9f2-86fde7cba6b2"],
+Cell[3301, 73, 741, 10, 89, "Item",ExpressionUUID->"be9695d0-9ae7-d74c-9173-91f223bbfb53"],
+Cell[4045, 85, 532, 7, 69, "Item",ExpressionUUID->"57c0e71a-9568-1945-8098-f7e41bf09c90"]
+}, Open  ]]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[4626, 98, 162, 2, 54, "Subsection",ExpressionUUID->"fb9ce211-f4ff-844d-8179-a524a1509847"],
+Cell[CellGroupData[{
+Cell[4813, 104, 110, 0, 45, "Subsubsection",ExpressionUUID->"077e871f-401f-db43-a563-2a4b57b67ddf"],
+Cell[4926, 106, 893, 17, 79, "Text",ExpressionUUID->"40be00ca-f624-5e4f-8b0e-57cc120f06be"],
+Cell[5822, 125, 131, 0, 33, "Text",ExpressionUUID->"d169b8dd-49f9-554c-8d63-3c4d0c85bec4"],
+Cell[5956, 127, 207, 2, 30, "Item",ExpressionUUID->"6de8bf37-bcab-624a-8d4d-6b3d2150ea9d"],
+Cell[6166, 131, 182, 2, 30, "Item",ExpressionUUID->"a972b530-9059-b541-84bf-26ee3d61d7d7"],
+Cell[6351, 135, 299, 3, 50, "Item",ExpressionUUID->"e183cb26-3a78-4b40-8368-c5674cb4d829"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[6687, 143, 98, 0, 45, "Subsubsection",ExpressionUUID->"429ef199-26a3-6340-9559-35f00cec6d7e"],
+Cell[6788, 145, 681, 9, 69, "Item",ExpressionUUID->"3a9f7501-b321-0546-8dc9-f7785361f227"],
+Cell[7472, 156, 569, 8, 69, "Item",ExpressionUUID->"31c87fcb-abc4-3445-878b-60b427a559cb"],
+Cell[8044, 166, 421, 6, 50, "Item",ExpressionUUID->"5229450c-d329-de4d-b499-a5c22911fdc8"]
+}, Open  ]]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[8514, 178, 180, 2, 54, "Subsection",ExpressionUUID->"57c00f1c-c235-9a44-9e31-49b4c9eb12bd"],
+Cell[CellGroupData[{
+Cell[8719, 184, 110, 0, 45, "Subsubsection",ExpressionUUID->"57cb3e15-63bc-ab4c-93ef-2a1dd2f129db"],
+Cell[8832, 186, 407, 6, 55, "Text",ExpressionUUID->"1c879c28-e77a-244e-aa67-8c9c2957f8d7"],
+Cell[9242, 194, 326, 5, 50, "Item",ExpressionUUID->"6211adca-0910-6e4b-b1cd-5ee5ec4f272d"],
+Cell[9571, 201, 485, 7, 69, "Item",ExpressionUUID->"63eaabb9-db4d-aa49-a571-99840a4123b7"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[10093, 213, 98, 0, 45, "Subsubsection",ExpressionUUID->"e5393fe4-012c-5445-9380-2c4a153f0824"],
+Cell[CellGroupData[{
+Cell[10216, 217, 536, 7, 69, "Item",ExpressionUUID->"b228bcd9-52e7-834c-a3ef-54123ac47b47"],
+Cell[10755, 226, 696, 16, 66, "Input",ExpressionUUID->"0724efee-16d0-6245-903c-c2e173d4269e"]
+}, Open  ]],
+Cell[11466, 245, 434, 6, 50, "Item",ExpressionUUID->"0dbe8b75-6709-5449-8d0f-81b74535c44a"]
+}, Open  ]]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[11949, 257, 192, 2, 54, "Subsection",ExpressionUUID->"40bc8174-d325-6141-a1ba-725e98db56ce"],
+Cell[CellGroupData[{
+Cell[12166, 263, 110, 0, 45, "Subsubsection",ExpressionUUID->"a2915bd1-0f8c-4c42-ab96-1530916c72b3"],
+Cell[12279, 265, 285, 3, 55, "Text",ExpressionUUID->"f783ef01-5559-0945-8235-b9324aed0085"],
+Cell[12567, 270, 183, 2, 30, "Item",ExpressionUUID->"e9fda744-5977-fe48-95c1-830ccb6bdac3"],
+Cell[12753, 274, 151, 1, 30, "Item",ExpressionUUID->"fb44e171-73ad-344e-bce3-482ffe330cd4"],
+Cell[12907, 277, 246, 3, 30, "Item",ExpressionUUID->"bcd16218-574b-0743-8ef0-4a917cdacbd2"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[13190, 285, 98, 0, 45, "Subsubsection",ExpressionUUID->"80001560-856d-2441-84ec-8f990d07bb71"],
+Cell[13291, 287, 582, 8, 69, "Item",ExpressionUUID->"b27c6bcf-0ec1-ad4b-a16c-bd63e13603cd"],
+Cell[13876, 297, 541, 7, 69, "Item",ExpressionUUID->"0f3d1d20-c5c5-f94c-b0f8-383e03b1da56"]
+}, Open  ]]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[14466, 310, 162, 2, 54, "Subsection",ExpressionUUID->"f419a3e5-fbe5-574d-8d68-fe79dc6d9c30"],
+Cell[CellGroupData[{
+Cell[14653, 316, 110, 0, 45, "Subsubsection",ExpressionUUID->"41d916e1-ca41-304d-a8bb-f7cd8e74735c"],
+Cell[14766, 318, 145, 1, 33, "Text",ExpressionUUID->"4689a479-a118-9249-ba37-0b7d686b951c"],
+Cell[14914, 321, 388, 6, 62, "Program",ExpressionUUID->"f89b8a82-fd9b-8446-8573-dbca9059f043"],
+Cell[15305, 329, 410, 6, 55, "Text",ExpressionUUID->"f87567bc-a00b-bb40-ba71-013b518d1a2f"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[15752, 340, 98, 0, 45, "Subsubsection",ExpressionUUID->"0cfbbd01-b2ec-104d-9e91-1808af4f63ba"],
+Cell[15853, 342, 463, 6, 50, "Item",ExpressionUUID->"b3361d97-8699-5f4d-b62a-4097709175f0"],
+Cell[16319, 350, 319, 5, 62, "Program",ExpressionUUID->"900455da-faab-a64e-99ca-59117d8770e6"],
+Cell[16641, 357, 664, 9, 69, "Item",ExpressionUUID->"dedfd197-544b-fc4f-b748-7566921f8d6b"]
+}, Open  ]]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[17354, 372, 116, 0, 54, "Subsection",ExpressionUUID->"19f751fe-1637-074b-94e0-67cae1f47dc8"],
+Cell[CellGroupData[{
+Cell[17495, 376, 110, 0, 45, "Subsubsection",ExpressionUUID->"2c939330-f79a-5b4a-866b-d16342adedf9"],
+Cell[17608, 378, 529, 7, 76, "Text",ExpressionUUID->"e8b93acd-e9e5-bf4b-a331-facad99f47a8"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[18174, 390, 98, 0, 45, "Subsubsection",ExpressionUUID->"6b557357-1487-f24f-80ab-7b7a6670280a"],
+Cell[18275, 392, 405, 6, 50, "Item",ExpressionUUID->"d0779559-a307-9b4d-b515-fc116ef383ae"],
+Cell[18683, 400, 326, 5, 50, "Item",ExpressionUUID->"d75f6352-050b-9642-a8f4-39a6e1934af9"]
+}, Open  ]]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[19058, 411, 148, 1, 54, "Subsection",ExpressionUUID->"3a4468a4-0f65-e44a-b992-ac65f5e24e12"],
+Cell[CellGroupData[{
+Cell[19231, 416, 110, 0, 45, "Subsubsection",ExpressionUUID->"dff3e44a-9758-8844-9be4-12d7010c0edf"],
+Cell[19344, 418, 648, 9, 76, "Text",ExpressionUUID->"274d0d83-c4df-8c41-8e66-c66c413f16d6"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[20029, 432, 98, 0, 45, "Subsubsection",ExpressionUUID->"12ce22f8-8b70-af42-ac5d-b50161aa2117"],
+Cell[CellGroupData[{
+Cell[20152, 436, 495, 7, 50, "Item",ExpressionUUID->"ad186d7a-e495-cb4d-8df1-2c9b8393ef21"],
+Cell[20650, 445, 632, 18, 68, "Input",ExpressionUUID->"24b855d2-f718-7d44-a06c-72136c0bb77b"]
+}, Open  ]]
+}, Open  ]]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[21343, 470, 182, 2, 54, "Subsection",ExpressionUUID->"82446d0d-54fa-ee46-b68a-6afc68e01a89"],
+Cell[CellGroupData[{
+Cell[21550, 476, 157, 1, 30, "Item",ExpressionUUID->"270da5b2-42f8-5446-854c-fd3460298c2a"],
+Cell[21710, 479, 186, 2, 25, "Subitem",ExpressionUUID->"dde8c055-0a5d-524d-9478-006f16afcd6f"],
+Cell[21899, 483, 210, 2, 25, "Subitem",ExpressionUUID->"72c07446-edce-5549-8611-a0121d96d5e3"],
+Cell[22112, 487, 180, 2, 25, "Subitem",ExpressionUUID->"a37cc416-ba6a-a849-85c2-89cb878e980c"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[22329, 494, 171, 2, 30, "Item",ExpressionUUID->"d80110ce-5c9f-814e-8c06-365b14c2ea1e"],
+Cell[22503, 498, 210, 2, 25, "Subitem",ExpressionUUID->"b83e2898-ec29-ac4f-b7b9-0768811da8c4"],
+Cell[22716, 502, 142, 1, 25, "Subitem",ExpressionUUID->"6b21587c-620f-ac43-b312-d455d1b3ae2d"],
+Cell[22861, 505, 144, 1, 25, "Subitem",ExpressionUUID->"d3be8b6b-b52a-fe40-8a62-f08346a66a35"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[23042, 511, 201, 2, 30, "Item",ExpressionUUID->"e050591f-3494-4041-b9b6-4df7c63a4f0c"],
+Cell[23246, 515, 173, 2, 25, "Subitem",ExpressionUUID->"c90cf06c-3974-0544-aabe-8303369d33d2"],
+Cell[23422, 519, 110, 0, 25, "Subitem",ExpressionUUID->"1f2e1604-96ee-6e4c-8b93-666496173f53"],
+Cell[23535, 521, 148, 1, 25, "Subitem",ExpressionUUID->"52ee9f24-bb05-8b48-a719-30360e1b8844"]
+}, Open  ]],
+Cell[23698, 525, 733, 10, 98, "Text",ExpressionUUID->"24afd849-18ff-4049-a316-7e165c27acd7"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[24468, 540, 74, 0, 68, "Section",ExpressionUUID->"7b4800c8-5e63-e545-ba13-5916161c582c"],
+Cell[24545, 542, 1399, 22, 204, "Input",ExpressionUUID->"0086741e-174e-a84b-b374-48a9f93486ab"]
+}, Open  ]]
+}
+]
+*)
+
