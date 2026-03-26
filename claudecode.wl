@@ -50,6 +50,16 @@ Quiet[Scan[
    "ClaudeWebSearch","ClaudeWebFetch","WebFetch","WebSearch",
    "ClaudeCommand","ClaudeCheckSeparation","ClaudeFixSeparation","ClaudeStatus","ClaudeAbort",
    "ClaudePrepareCommit",
+   "NotebookLLMGraph","NotebookLLMGraphPlot","NotebookLLMGraphBuild",
+   "NotebookLLMGraphNodes","NotebookLLMGraphValidate","NotebookLLMGraphFetchResponse",
+   "NotebookLLMGraphSubSteps",
+   "NotebookLLMGraphFetchL2","NotebookLLMGraphErrors",
+   "NotebookLLMGraphUpdateL2Status","NotebookLLMGraphPlotL2",
+   "NotebookLLMGraphRerun","NotebookLLMGraphInvalidateDownstream",
+   "NotebookLLMGraphSummary",
+   "LLMGraphExecute","LLMGraphExecuteStatus","LLMGraphExecuteCancel",
+   "NotebookLLMGraphExtractThread","NotebookLLMGraphApplyThread",
+   "NBFileTranslate","ClaudeProcessFile",
    "$ClaudeTimeout", "$ClaudeMDPath", "$ClaudeMDContent", "$ClaudeModel",
    "$ClaudeTestModel",
    "$ClaudeFallbackModels", "$ClaudeWorkingDirectory", "$ClaudeAccessibleDirs",
@@ -599,6 +609,100 @@ ClaudeFixSeparation::usage =
   "target \:304c\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:306e\:307f\:306e\:5834\:5408: ClaudeUpdatePackage \:3092\:547c\:3073\:51fa\:3059\:3002\n" <>
   "\:4e8b\:524d\:306b ClaudeCheckSeparation \:306e\:7d50\:679c\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:5229\:7528\:3059\:308b\:3002\n" <>
   "\:4f8b: ClaudeFixSeparation[\"claudecode\"]";
+
+(* ============================================================
+   Notebook LLMGraph: DAG-based LLM call tracking (Phase 1a)
+   ============================================================ *)
+NotebookLLMGraph::usage =
+  "NotebookLLMGraph[nb] \:306f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af nb \:306e LLMGraph \:3092\:8fd4\:3059\:3002\n" <>
+  "\:5b58\:5728\:3057\:306a\:3044\:5834\:5408\:306f\:65b0\:898f\:4f5c\:6210\:3059\:308b\:3002\n" <>
+  "\:4f8b: g = NotebookLLMGraph[EvaluationNotebook[]]";
+NotebookLLMGraphPlot::usage =
+  "NotebookLLMGraphPlot[nb] \:306f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e LLMGraph \:3092\:30c8\:30c3\:30d7\:30ec\:30d9\:30eb\:3067\:53ef\:8996\:5316\:3059\:308b\:3002\n" <>
+  "Orchestrator \:30ce\:30fc\:30c9\:306e\:307f\:3092\:8868\:793a\:3057\:3001\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:5225\:306b\:8272\:5206\:3051\:3059\:308b\:3002\n" <>
+  "\:4f8b: NotebookLLMGraphPlot[EvaluationNotebook[]]";
+NotebookLLMGraphBuild::usage =
+  "NotebookLLMGraphBuild[nb] \:306f\:65e2\:5b58\:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:304b\:3089 LLMGraph \:3092\:518d\:69cb\:7bc9\:3059\:308b\:3002\n" <>
+  "\:73fe\:5728\:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:30a8\:30f3\:30c8\:30ea\:3092\:30ce\:30fc\:30c9\:306b\:5909\:63db\:3057\:30b0\:30e9\:30d5\:3092\:751f\:6210\:3059\:308b\:3002\n" <>
+  "\:4f8b: NotebookLLMGraphBuild[EvaluationNotebook[]]";
+NotebookLLMGraphNodes::usage =
+  "NotebookLLMGraphNodes[nb] \:306f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e LLMGraph \:5168\:30ce\:30fc\:30c9\:3092 Association \:3067\:8fd4\:3059\:3002\n" <>
+  "\:4f8b: NotebookLLMGraphNodes[EvaluationNotebook[]]";
+NotebookLLMGraphValidate::usage =
+  "NotebookLLMGraphValidate[nb] \:306f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e LLMGraph \:306e\:6574\:5408\:6027\:3092\:691c\:8a3c\:3059\:308b\:3002\n" <>
+  "\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:306e\:30a8\:30f3\:30c8\:30ea\:6570\:3068\:30ce\:30fc\:30c9\:6570\:306e\:4e00\:81f4\:3001\:30a8\:30c3\:30b8\:306e\:6574\:5408\:6027\:7b49\:3092\:78ba\:8a8d\:3059\:308b\:3002\n" <>
+  "\:4f8b: NotebookLLMGraphValidate[EvaluationNotebook[]]";
+NotebookLLMGraphFetchResponse::usage =
+  "NotebookLLMGraphFetchResponse[nb, nodeID] \:306f\:6307\:5b9a\:30ce\:30fc\:30c9\:306e response \:5168\:6587\:3092\:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5\:304b\:3089\:53d6\:5f97\:3059\:308b\:3002\n" <>
+  "\:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:306a\:3044\:5834\:5408\:306f Missing[\"CacheExpired\"] \:3092\:8fd4\:3059\:3002\n" <>
+  "\:4f8b: NotebookLLMGraphFetchResponse[EvaluationNotebook[], \"history-3\"]";
+NotebookLLMGraphSubSteps::usage =
+  "NotebookLLMGraphSubSteps[nb, nodeID] \:306f\:6307\:5b9a\:30ce\:30fc\:30c9\:306e\:5185\:90e8\:30b5\:30d6\:30b9\:30c6\:30c3\:30d7\:5c65\:6b74\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
+  "ClaudeUpdatePackage \:306e\:5185\:90e8\:51e6\:7406 (read-source, llm-query, merge, validate, reload) \:304c\:8a18\:9332\:3055\:308c\:308b\:3002\n" <>
+  "\:4f8b: NotebookLLMGraphSubSteps[EvaluationNotebook[], \"history-5\"]";
+NotebookLLMGraphFetchL2::usage =
+  "NotebookLLMGraphFetchL2[nb, nodeID] \:306f\:6307\:5b9a\:306e L1 \:30ce\:30fc\:30c9\:304c\:751f\:6210\:3057\:305f\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:306e L2 \:30b0\:30e9\:30d5\:3092\:53d6\:5f97\:3059\:308b\:3002\n" <>
+  "L2 \:30b0\:30e9\:30d5\:306f\:5404\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:306e\:5b9f\:884c\:72b6\:614b\:30fb\:30a8\:30e9\:30fc\:30fb\:4f9d\:5b58\:95a2\:4fc2\:3092\:4fdd\:6301\:3059\:308b\:3002\n" <>
+  "\:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:306a\:3044\:5834\:5408\:306f Missing[\"CacheExpired\"] \:3092\:8fd4\:3059\:3002\n" <>
+  "\:4f8b: NotebookLLMGraphFetchL2[EvaluationNotebook[], \"history-5\"]";
+NotebookLLMGraphErrors::usage =
+  "NotebookLLMGraphErrors[nb] \:306f L2ErrorCount > 0 \:307e\:305f\:306f Status = \"Failed\" \:306e\:30ce\:30fc\:30c9\:4e00\:89a7\:3092 Dataset \:3067\:8fd4\:3059\:3002\n" <>
+  "L2 \:30b0\:30e9\:30d5\:3067\:30a8\:30e9\:30fc\:304c\:8d77\:304d\:305f L1 \:30ce\:30fc\:30c9\:306e\:7279\:5b9a\:3068\:30c7\:30d0\:30c3\:30b0\:306b\:4f7f\:7528\:3059\:308b\:3002\n" <>
+  "\:4f8b: NotebookLLMGraphErrors[EvaluationNotebook[]]";
+NotebookLLMGraphUpdateL2Status::usage =
+  "NotebookLLMGraphUpdateL2Status[nb, l1NodeID, l2NodeID, status, msg] \:306f L2 \:30ce\:30fc\:30c9\:306e\:30b9\:30c6\:30fc\:30bf\:30b9\:3092\:624b\:52d5\:3067\:66f4\:65b0\:3059\:308b\:3002\n" <>
+  "status: \"Completed\" | \"Failed\" | \"Pending\"\n" <>
+  "\:4f8b: NotebookLLMGraphUpdateL2Status[nb, \"history-5\", \"history-5_L2-2\", \"Failed\", \"Undefined symbol\"]";
+NotebookLLMGraphPlotL2::usage =
+  "NotebookLLMGraphPlotL2[nb, l1NodeID] \:306f\:6307\:5b9a\:306e L1 \:30ce\:30fc\:30c9\:304c\:751f\:6210\:3057\:305f\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:306e L2 \:8a08\:7b97\:30b0\:30e9\:30d5\:3092\:53ef\:8996\:5316\:3059\:308b\:3002\n" <>
+  "\:5404\:30ce\:30fc\:30c9\:306f Status \:306b\:5fdc\:3058\:3066\:8272\:5206\:3051\:3055\:308c\:308b\:3002\n" <>
+  "\:4f8b: NotebookLLMGraphPlotL2[EvaluationNotebook[], \"history-5\"]";
+NotebookLLMGraphRerun::usage =
+  "NotebookLLMGraphRerun[nb, nodeID] \:306f\:6307\:5b9a\:306e L1 \:30ce\:30fc\:30c9\:3092\:518d\:5b9f\:884c\:3057\:3001\:4e0b\:6d41\:306e\:30ce\:30fc\:30c9\:306b Invalidated \:30d5\:30e9\:30b0\:3092\:8a2d\:5b9a\:3059\:308b\:3002\n" <>
+  "Options: Model, CascadeInvalidate (True), DryRun (False)\n" <>
+  "\:4f8b: NotebookLLMGraphRerun[EvaluationNotebook[], \"history-5\"]";
+NotebookLLMGraphInvalidateDownstream::usage =
+  "NotebookLLMGraphInvalidateDownstream[nb, nodeID] \:306f\:6307\:5b9a\:30ce\:30fc\:30c9\:306e\:5168\:5b50\:5b6b\:30ce\:30fc\:30c9\:306b \"Invalidated\" \:30d5\:30e9\:30b0\:3092\:8a2d\:5b9a\:3059\:308b\:3002\n" <>
+  "\:518d\:5b9f\:884c\:524d\:306e\:4e0b\:6d41\:3092\:4e00\:62ec\:7121\:52b9\:5316\:3059\:308b\:306e\:306b\:4f7f\:7528\:3059\:308b\:3002\n" <>
+  "\:4f8b: NotebookLLMGraphInvalidateDownstream[EvaluationNotebook[], \"history-3\"]";
+NotebookLLMGraphSummary::usage =
+  "NotebookLLMGraphSummary[nb] \:306f\:30ce\:30fc\:30c9\:5c64\:306e\:8a73\:7d30\:30b5\:30de\:30ea\:3092 Dataset \:3067\:8fd4\:3059\:3002\n" <>
+  "Status \:5225\:30ce\:30fc\:30c9\:6570\:3001L2 \:30ce\:30fc\:30c9\:6570\:3001\:30a8\:30e9\:30fc\:6570\:3092\:4e00\:89a7\:8868\:793a\:3059\:308b\:3002\n" <>
+  "\:4f8b: NotebookLLMGraphSummary[EvaluationNotebook[]]";
+LLMGraphExecute::usage =
+  "LLMGraphExecute[job, opts] \:306f\:30b9\:30b1\:30b8\:30e5\:30fc\:30eb\:30b8\:30e7\:30d6\:306e\:5168\:30c1\:30e3\:30f3\:30af\:3092 LLM \:306b\:6295\:5165\:3057\:3001\:7d50\:679c\:3092\:7d71\:5408\:3059\:308b\:3002\n" <>
+  "Options: PromptTemplate, Model, \"Timeout\", \"Verbose\", \"WriteToNotebook\", \"OnJobDone\"\n" <>
+  "\:4f8b: LLMGraphExecute[iIScheduleJob[\"...\", \"TextChunks\"], PromptTemplate -> \"\:6b21\:306e\:30c6\:30ad\:30b9\:30c8\:3092\:8981\:7d04: `content`\"]";
+LLMGraphExecuteStatus::usage =
+  "LLMGraphExecuteStatus[jobID] \:306f\:5b9f\:884c\:4e2d\:30b8\:30e7\:30d6\:306e\:30ea\:30a2\:30eb\:30bf\:30a4\:30e0\:72b6\:614b\:3092\:8fd4\:3059\:3002\n" <>
+  "\:4f8b: LLMGraphExecuteStatus[\"job-20260325120000\"]";
+LLMGraphExecuteCancel::usage =
+  "LLMGraphExecuteCancel[jobID] \:306f\:5b9f\:884c\:4e2d\:30b8\:30e7\:30d6\:3092\:30ad\:30e3\:30f3\:30bb\:30eb\:3059\:308b\:3002\n" <>
+  "\:4f8b: LLMGraphExecuteCancel[\"job-20260325120000\"]";
+NotebookLLMGraphExtractThread::usage =
+  "NotebookLLMGraphExtractThread[nb, nodeID] \:306f\:6307\:5b9a\:30ce\:30fc\:30c9\:306b\:81f3\:308b\:7956\:5148\:30ce\:30fc\:30c9\:30c1\:30a7\:30fc\:30f3\:3092 Thread \:30aa\:30d6\:30b8\:30a7\:30af\:30c8\:3068\:3057\:3066\:62bd\:51fa\:3059\:308b\:3002\n" <>
+  "Thread \:306b\:306f\:5b9f\:884c\:6307\:793a\:30fb\:30b3\:30fc\:30c9\:30fb\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:304c\:542b\:307e\:308c\:3001\:5225\:30d5\:30a1\:30a4\:30eb\:3078\:5fa9\:5143\:9069\:7528\:3067\:304d\:308b\:3002\n" <>
+  "\:4f8b: thread = NotebookLLMGraphExtractThread[nb, \"history-5\"]";
+NotebookLLMGraphApplyThread::usage =
+  "NotebookLLMGraphApplyThread[thread, newTarget, nb, opts] \:306f\:62bd\:51fa\:3057\:305f Thread \:3092\:5225\:306e\:5bfe\:8c61\:30d5\:30a1\:30a4\:30eb\:306b\:9069\:7528\:3059\:308b\:3002\n" <>
+  "newTarget \:306f\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:307e\:305f\:306f\:4efb\:610f\:30c6\:30ad\:30b9\:30c8\:3002DryRun->True \:3067\:5b9f\:884c\:8a08\:753b\:306e\:307f\:8fd4\:3059\:3002\n" <>
+  "\:4f8b: NotebookLLMGraphApplyThread[thread, \"other.nb\"]";
+NBFileTranslate::usage =
+  "NBFileTranslate[inputPath, outputPath, targetLang, opts] \:306f .nb \:30d5\:30a1\:30a4\:30eb\:306e\:30bb\:30eb\:3092\n" <>
+  "\:516c\:958b\:30bb\:30eb\:306f ClaudeCode\:3001\:79d8\:5bc6\:30bb\:30eb\:306f $ClaudePrivateModel \:3067\:7ffb\:8a33\:3057\:3001\n" <>
+  "\:30de\:30fc\:30af\:30fb\:5c5e\:6027\:3092\:4fdd\:6301\:3057\:3066\:5225\:540d\:4fdd\:5b58\:3059\:308b\:3002\n" <>
+  "Options: \"TargetLang\" (default \"English\"), \"Verbose\" (default True)\n" <>
+  "\:4f8b: NBFileTranslate[\"/path/a.nb\", \"/path/a-translated.nb\", \"English\"]";
+ClaudeProcessFile::usage =
+  "ClaudeProcessFile[prompt, inputPath, outputPath, opts] \:306f .nb \:30d5\:30a1\:30a4\:30eb\:306e\:30bb\:30eb\:3092\n" <>
+  "PrivacyLevel \:306b\:5fdc\:3058\:3066 2\:30ce\:30fc\:30c9\:306b\:5206\:914d\:3057\:3066\:4e26\:5217\:51e6\:7406\:3059\:308b\:6c4e\:7528\:95a2\:6570\:3002\n" <>
+  "  0 <= PrivacyLevel <= 0.5  \:2192  $ClaudeModel    (ClaudeCode/API)\n" <>
+  "  0.5 < PrivacyLevel <= 1.0 \:2192  $ClaudePrivateModel (LM Studio \:7b49)\n" <>
+  "\:4e21\:30ce\:30fc\:30c9\:306e\:51fa\:529b\:3092\:5143\:306e\:30bb\:30eb\:9806\:306b\:30de\:30fc\:30b8\:3057\:3066 outputPath \:306b\:4fdd\:5b58\:3059\:308b\:3002\n" <>
+  "LLMGraph \:306b\:30ce\:30fc\:30c9A (\:30d7\:30e9\:30a4\:30d9\:30fc\:30c8) \:3068\:30ce\:30fc\:30c9B (\:30af\:30e9\:30a6\:30c9) \:306e 2 \:30ce\:30fc\:30c9\:3092\:767b\:9332\:3059\:308b\:3002\n" <>
+  "Options: \"Verbose\" (default True), \"SessionTag\" (default Automatic)\n" <>
+  "\:4f8b: ClaudeProcessFile[\"Translate to English\", \"a.nb\", \"a-out.nb\"]";
+
     Begin["`Private`"];(* ============================================================
    \:8a2d\:5b9a\:ff1a\:5fc5\:8981\:306b\:5fdc\:3058\:3066\:624b\:52d5\:3067\:4e0a\:66f8\:304d\:53ef\:80fd
    ============================================================ *)
@@ -611,6 +715,7 @@ If[!AssociationQ[$ClaudePackageKeywordMap], $ClaudePackageKeywordMap = <||>];
 (* ClaudeUpdatePackage 自動リトライ: リロード後のエラーを検出し自動修正 *)
 If[!ValueQ[$ClaudeUpdateAutoRetryMax], $ClaudeUpdateAutoRetryMax = 2];
 $iUpdateRetryCount = 0;
+$iRetryTargetNotebook = None;  (* 自動リトライ時のノートブック参照 *)
 
 (* モデルID定数: 新モデルリリース時はここだけ更新すればよい *)
 $iModelOpus = "claude-opus-4-6";
@@ -759,6 +864,128 @@ iNeedsFileList[_] := False;
      - Read 許可済み → 常に含める
      - Read 未許可 → iNeedsFileList[userPrompt] が True のときだけ含める
    $packageDirectory のパッケージ一覧は常に含める。 *)
+(* ============================================================
+   ObjectSpec ベースの .nb ファイル並列処理アーキテクチャ
+   ============================================================
+   .nb ファイルが検出されたとき、Claude Code に
+   ClaudeProcessFile の呼び出し1行だけを出力させる。
+   実際のPrivacyLevel分岐・LLMGraph登録・マージはClaudeProcessFile内部で行う。
+   ============================================================ *)
+
+(* .nb ファイルタスクを ClaudeProcessFile 呼び出しに変換する指令を生成 *)
+iNBFileCellContext[path_String, confResults_Association: <||>] :=
+  Module[{nb2, allCells, nTotal = 0, nConf = 0, nPublic = 0, outputHint},
+
+    If[!FileExistsQ[path], Return[""]];
+
+    (* セル統計だけ取得（内容は渡さない） *)
+    nb2 = Quiet @ NBAccess`NBFileOpen[path];
+    If[Head[nb2] === NotebookObject,
+      Module[{cells = Quiet @ NBAccess`NBFileReadAllCells[nb2]},
+        Quiet @ NBAccess`NBFileClose[nb2];
+        If[ListQ[cells],
+          nTotal  = Length[cells];
+          nConf   = Count[cells, _?(TrueQ[#["IsConfidential"]] &)];
+          nPublic = nTotal - nConf]]];
+
+    (* 出力ファイル名のヒント: inputのディレクトリ + ファイル名ベース *)
+    outputHint = FileNameJoin[{
+      DirectoryName[path],
+      FileBaseName[path] <> "-processed" <> "." <> FileExtension[path]}];
+
+    "=== NOTEBOOK FILE TASK — MANDATORY INSTRUCTION ===\n" <>
+    "File: " <> path <> "\n" <>
+    "Cells: " <> ToString[nTotal] <> " total (" <>
+      ToString[nPublic] <> " public, " <>
+      ToString[nConf] <> " confidential)\n" <>
+    "\n" <>
+    "You MUST output EXACTLY ONE line of code and nothing else:\n" <>
+    "\n" <>
+    "  ClaudeProcessFile[\"<task>\", \"" <> path <> "\", \"<outputPath>\"]\n" <>
+    "\n" <>
+    "Rules:\n" <>
+    "- Replace <task> with the user's task as a concise English instruction string.\n" <>
+    "- Replace <outputPath> with the output file path (same directory, " <>
+      "suggested: \"" <> outputHint <> "\").\n" <>
+    "- DO NOT write Module[...], NBFileOpen, NBFileReadCells, TextTranslation,\n" <>
+    "  URLRead, Import, Get, or any other code.\n" <>
+    "- ClaudeProcessFile handles PrivacyLevel routing internally:\n" <>
+    "    PrivacyLevel <= 0.5 → $ClaudeModel  (cloud, " <> ToString[nPublic] <> " cells)\n" <>
+    "    PrivacyLevel >  0.5 → $ClaudePrivateModel (local, " <> ToString[nConf] <> " cells)\n" <>
+    "- Output ONLY the single ClaudeProcessFile[...] call, no explanation.\n" <>
+    "==================================================="
+  ];
+
+(* 秘匿セル処理ノード (LLMGraph ノードA): $ClaudePrivateModel に同期送信 *)
+iNBFileRunPrivateNode[nb_NotebookObject, tag_String,
+                       path_String, task_String, step_Integer] :=
+  Module[{nb2, confCells, confPrompt, provider, model, customURL,
+          apiKey, prepared, proc, startT, rawResp, parsed},
+    If[!ListQ[$ClaudePrivateModel] || Length[$ClaudePrivateModel] < 2,
+      Return[<||>]];
+    nb2 = Quiet @ NBAccess`NBFileOpen[path];
+    If[Head[nb2] =!= NotebookObject, Return[<||>]];
+    confCells = Quiet @ NBAccess`NBFileReadCellsInRange[nb2, 0.9, 1.0];
+    Quiet @ NBAccess`NBFileClose[nb2];
+    If[!ListQ[confCells] || Length[confCells] === 0, Return[<||>]];
+    confPrompt =
+      "You are the private local model processing CONFIDENTIAL cells.\n" <>
+      "Task: " <> task <> "\n\n" <>
+      "Confidential cells:\n" <>
+      StringJoin[Map[Function[c,
+        "  [" <> ToString[c["CellIdx"]] <> "] (" <> c["Style"] <> "): " <>
+        c["Text"] <> "\n"], confCells]] <>
+      "\nReturn ONLY a JSON object: {\"cellIdx\": \"result\", ...}";
+    iSessionAppend[nb, tag, <|
+      "step"        -> step,   "time"      -> AbsoluteTime[],
+      "instruction" -> "[PrivateNode] " <> iSanitizeInstructionForHistory[task],
+      "fullPrompt"  -> iCompressForHistory[confPrompt],
+      "cellCount"   -> NBAccess`NBCellCount[nb],
+      "response"    -> "(\:79d8\:5bc6\:30ce\:30fc\:30c9\:51e6\:7406\:4e2d)",
+      "code" -> "", "type" -> "eval", "accessLevel" -> 1.0|>];
+    provider  = $ClaudePrivateModel[[1]];
+    model     = $ClaudePrivateModel[[2]];
+    customURL = If[Length[$ClaudePrivateModel] >= 3, $ClaudePrivateModel[[3]], ""];
+    apiKey = If[ToLowerCase[provider] === "lmstudio", "lm-studio",
+      Quiet[NBAccess`NBGetAPIKey[provider, PrivacySpec -> <|"AccessLevel"->1.0|>]]];
+    If[!StringQ[apiKey],
+      iSessionUpdateLast[nb, tag, <|"response"->"ERROR: No API key"|>];
+      Return[<||>]];
+    prepared = iPrepareAnthropicPS1[apiKey, model, confPrompt,
+      Which[ToLowerCase[provider]==="lmstudio",
+          iEnsureChatCompletionsPath[If[customURL=!="",customURL,"http://localhost:1234"]],
+        customURL=!="", customURL, True, "https://api.anthropic.com/v1/messages"],
+      If[ToLowerCase[provider]==="lmstudio","openai",provider], $ClaudeTimeout];
+    If[prepared === $Failed,
+      iSessionUpdateLast[nb, tag, <|"response"->"ERROR: prepare failed"|>];
+      Return[<||>]];
+    proc = StartProcess[{prepared["psExe"], "-NoProfile", "-ExecutionPolicy",
+      "Bypass", "-File", prepared["ps1File"], prepared["promptFile"],
+      prepared["outFile"], prepared["errFile"], apiKey, prepared["url"], model}];
+    startT = AbsoluteTime[];
+    While[Quiet[ProcessStatus[proc]]=!="Finished" &&
+        AbsoluteTime[]-startT<$ClaudeTimeout, Pause[0.5]];
+    If[Quiet[ProcessStatus[proc]]=!="Finished",
+      Quiet@KillProcess[proc];
+      iSessionUpdateLast[nb,tag,<|"response"->"ERROR: timeout"|>]; Return[<||>]];
+    rawResp = If[FileExistsQ[prepared["outFile"]],
+      cleanOutput[stripANSI[Import[prepared["outFile"],"Text"]]], ""];
+    iSessionUpdateLast[nb, tag, <|"response"->rawResp, "code"->""|>];
+    parsed = Quiet @ Check[
+      Association @ KeyValueMap[
+        Function[{k,v}, ToExpression[k]->If[StringQ[v],v,ToString[v]]],
+        ImportString[First[StringCases[rawResp,
+          RegularExpression["\\{[^{}]+\\}"],1],rawResp],"RawJSON"]],
+      <||>];
+    If[!AssociationQ[parsed], <||>, parsed]
+  ];
+
+(* 互換シム: 旧 API は新実装へ委譲 *)
+iNotebookFileContext[task_String] := "";
+iNotebookFileContext[task_String, _] := "";
+iNotebookFileContext[task_String, _, _] := "";
+iSanitizeTaskForNBFile[task_String] := task;
+
 iFileAccessContext[userPrompt_String:""] := Module[
   {nbDir, workDir, lines = {}, attachments, nbFiles, pkgDir, wlFiles, pacletDirs, pkgNames,
    nbDirReadable = False, includeFileList = False, fileCount = 0},
@@ -1812,18 +2039,37 @@ iReadSessionHeader[nb_NotebookObject, tag_String] :=
   NBAccess`NBHistoryReadHeader[nb, tag];
 
 (* 1エントリを追記 (差分圧縮 + privacylevel 付与)
-   コンパクションは iSessionUpdateLast に移動済み（レスポンス受信後に実行） *)
-iSessionAppend[nb_NotebookObject, tag_String, entry_Association] :=
+   コンパクションは iSessionUpdateLast に移動済み（レスポンス受信後に実行）
+   Phase 2b: LLMGraph にもノードを追加する *)
+iSessionAppend[nb_NotebookObject, tag_String, entry_Association] := (
   NBAccess`NBHistoryAppend[nb, tag, entry];
+  (* LLMGraph へのリアルタイムノード追加 *)
+  Quiet @ iLLMGraphOnAppend[nb, tag, entry]);
 
 (* 全エントリを返す (復元済み) *)
 iSessionHistory[nb_NotebookObject, tag_String] :=
   NBAccess`NBHistoryEntries[nb, tag];
 
-(* 最後のエントリを更新 + レスポンス受信後にコンパクションチェック *)
+(* 最後のエントリを更新 + レスポンス受信後にコンパクションチェック
+   Phase 2b: LLMGraph ノードも更新する *)
 iSessionUpdateLast[nb_NotebookObject, tag_String, updates_Association] := (
   NBAccess`NBHistoryUpdateLast[nb, tag, updates];
-  Quiet @ iCheckHistoryCompaction[nb, tag]);
+  Quiet @ iCheckHistoryCompaction[nb, tag];
+  (* LLMGraph ノードのステータス・サマリー更新 *)
+  Quiet @ iLLMGraphOnUpdate[nb, tag, updates]);
+
+(* step 番号を指定してエントリを更新 (ClaudeProcessFile の並列ノード用) *)
+iSessionUpdateByStep[nb_NotebookObject, tag_String,
+                      targetStep_Integer, updates_Association] :=
+  Module[{entries, idx},
+    entries = NBAccess`NBHistoryEntries[nb, tag];
+    idx = FirstPosition[entries, _?(Lookup[#, "step", -1] === targetStep &)];
+    If[MissingQ[idx], Return[]];
+    idx = First[idx];
+    entries[[idx]] = Join[entries[[idx]], updates];
+    NBAccess`NBHistoryReplaceEntries[nb, tag, entries];
+    (* LLMGraph ノードも更新 *)
+    Quiet @ iLLMGraphOnUpdate[nb, tag, updates]];
 
 (* 継承を含む全履歴を取得（親セッションの履歴 + 自分の履歴） *)
 iSessionHistoryWithInherit[nb_NotebookObject, tag_String] :=
@@ -2066,22 +2312,45 @@ $iDeferredWork = <||>;
    $iAllowReadTool が True の場合は Grep も追加し、内容検索を許可する。
    $iAllowWebSearch が True の場合は WebSearch も追加し、Claude Code の Web 検索を許可する。
    Glob はファイルカタログ取得のみで低リスクなため常に有効とする。 *)
-iCLIPermissionFlags[] := Module[{tools = {"Read", "Glob"}},
-  If[TrueQ[$iAllowReadTool], AppendTo[tools, "Grep"]];
-  If[TrueQ[$iAllowWebSearch], AppendTo[tools, "WebSearch"]];
-  " --allowedTools \"" <> StringRiffle[tools, ","] <> "\""];
+iCLIPermissionFlags[excludeRead_:False] :=
+  Module[{tools = {"Glob"}},
+    (* .nb ファイルタスク以外では Read を許可 *)
+    If[!TrueQ[excludeRead], AppendTo[tools, "Read"]];
+    If[TrueQ[$iAllowReadTool], AppendTo[tools, "Grep"]];
+    If[TrueQ[$iAllowWebSearch], AppendTo[tools, "WebSearch"]];
+    " --allowedTools \"" <> StringRiffle[tools, ","] <> "\""];
 
-iMakeBat[promptFile_String, outFile_String, imageDirs_List:{}] :=
-  Module[{batFile, bc, strm, addDirFlags, permFlags, workDir, allDirs},
+iMakeBat[promptFile_String, outFile_String, imageDirs_List:{},
+         excludeRead_:False, excludeDirs_List:{}] :=
+  Module[{batFile, bc, strm, addDirFlags, permFlags, workDir, allDirs,
+          promptText, detectedNBPath, autoExcludeRead, autoExcludeDirs},
     batFile = FileNameJoin[{$TemporaryDirectory,
       "claude_run_" <> ToString[UnixTime[]] <> "_" <>
       ToString[RandomInteger[99999]] <> ".bat"}];
     workDir = iPrepareClaudeProjectDirectory[];
+    promptText = Quiet @ If[FileExistsQ[promptFile],
+      Import[promptFile, "Text", CharacterEncoding -> "UTF-8"], ""];
+    detectedNBPath = If[StringQ[promptText],
+      iLLMGraphDetectFilePath[promptText], None];
+    autoExcludeRead = excludeRead || (
+      StringQ[detectedNBPath] &&
+      !iIsSafeDefaultDir[DirectoryName[detectedNBPath]] &&
+      !MemberQ[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}],
+        DirectoryName[detectedNBPath]]);
+    autoExcludeDirs = DeleteDuplicates @ Join[
+      excludeDirs,
+      If[autoExcludeRead && StringQ[detectedNBPath] && detectedNBPath =!= None,
+        {DirectoryName[detectedNBPath]}, {}]];
     allDirs = DeleteDuplicates[Join[imageDirs, iCollectAccessibleDirs[]]];
+    If[Length[autoExcludeDirs] > 0,
+      allDirs = Select[allDirs,
+        Function[d, !AnyTrue[autoExcludeDirs,
+          StringStartsQ[StringReplace[d, "\\"->"/" ],
+            StringReplace[#, "\\"->"/"]] &]]]];
     addDirFlags = StringJoin[Map[
       Function[d, " --add-dir \"" <> d <> "\""],
       allDirs]];
-    permFlags = iCLIPermissionFlags[];
+    permFlags = iCLIPermissionFlags[autoExcludeRead];
     bc = "@echo off\r\n" <>
          "chcp 65001 > nul\r\n" <>
          iClaudeEnvResetBatchLines[] <>
@@ -2098,17 +2367,39 @@ iMakeBat[promptFile_String, outFile_String, imageDirs_List:{}] :=
     Close[strm];
     batFile
   ];
-iMakeBatStreamJson[promptFile_String, outFile_String, imageDirs_List:{}] :=
-  Module[{batFile, bc, strm, addDirFlags, permFlags, workDir, allDirs},
+iMakeBatStreamJson[promptFile_String, outFile_String, imageDirs_List:{},
+                   excludeRead_:False, excludeDirs_List:{}] :=
+  Module[{batFile, bc, strm, addDirFlags, permFlags, workDir, allDirs,
+          promptText, detectedNBPath, autoExcludeRead, autoExcludeDirs},
     batFile = FileNameJoin[{$TemporaryDirectory,
       "claude_run_" <> ToString[UnixTime[]] <> "_" <>
       ToString[RandomInteger[99999]] <> ".bat"}];
     workDir = iPrepareClaudeProjectDirectory[];
+    (* プロンプト内の .nb パスを自動検出して Read を制限 *)
+    promptText = Quiet @ If[FileExistsQ[promptFile],
+      Import[promptFile, "Text", CharacterEncoding -> "UTF-8"], ""];
+    detectedNBPath = If[StringQ[promptText],
+      iLLMGraphDetectFilePath[promptText], None];
+    (* 検出したパスが $ClaudeAccessibleDirs / $packageDirectory 外なら自動除外 *)
+    autoExcludeRead = excludeRead || (
+      StringQ[detectedNBPath] &&
+      !iIsSafeDefaultDir[DirectoryName[detectedNBPath]] &&
+      !MemberQ[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}],
+        DirectoryName[detectedNBPath]]);
+    autoExcludeDirs = DeleteDuplicates @ Join[
+      excludeDirs,
+      If[autoExcludeRead && StringQ[detectedNBPath] && detectedNBPath =!= None,
+        {DirectoryName[detectedNBPath]}, {}]];
     allDirs = DeleteDuplicates[Join[imageDirs, iCollectAccessibleDirs[]]];
+    If[Length[autoExcludeDirs] > 0,
+      allDirs = Select[allDirs,
+        Function[d, !AnyTrue[autoExcludeDirs,
+          StringStartsQ[StringReplace[d, "\\"->"/" ],
+            StringReplace[#, "\\"->"/"]] &]]]];
     addDirFlags = StringJoin[Map[
       Function[d, " --add-dir \"" <> d <> "\""],
       allDirs]];
-    permFlags = iCLIPermissionFlags[];
+    permFlags = iCLIPermissionFlags[autoExcludeRead];
     bc = "@echo off\r\n" <>
          "chcp 65001 > nul\r\n" <>
          iClaudeEnvResetBatchLines[] <>
@@ -2305,7 +2596,8 @@ iEndJobCleanSlot[jid_String] := (
 
 (* \:30d7\:30ed\:30b0\:30ec\:30b9\:8868\:793a\:4ed8\:304d\:975e\:540c\:671f\:5b9f\:884c (Job \:30b7\:30b9\:30c6\:30e0\:5bfe\:5fdc) — stream-json \:7248 *)
 iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
-    extraImageDirs_List:{}, jobId_String:"", fallbackModels_List:{}] :=
+    extraImageDirs_List:{}, jobId_String:"", fallbackModels_List:{},
+    excludeRead_:False, excludeDirs_List:{}] :=
   Module[{ts, outFile, promptFile, batFile, proc, startTime, progTag, norm,
           useFallback = TrueQ[$currentUseFallback], useJob},
     useJob = (jobId =!= "");
@@ -2323,7 +2615,8 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
       Close[strm]
     ];
 
-    batFile   = iMakeBatStreamJson[promptFile, outFile, Join[norm["imageDirs"], extraImageDirs]];
+    batFile   = iMakeBatStreamJson[promptFile, outFile,
+      Join[norm["imageDirs"], extraImageDirs], excludeRead, excludeDirs];
     proc      = StartProcess[{"cmd", "/c", batFile}];
     startTime = AbsoluteTime[];
 
@@ -2569,68 +2862,6 @@ If[!DirectoryQ[FileNameJoin[{$BaseDir, "node_modules", "node-pty"}]],
 ];
 
 (* \:30ed\:30fc\:30c9\:6642\:30d8\:30eb\:30d7\:8868\:793a *)
-Print[Style["ClaudeCode \:30d1\:30c3\:30b1\:30fc\:30b8 \[LongDash] \:4f7f\:3044\:65b9", Bold]];
-Print[
-  "  \:4f9d\:5b58: NBAccess \:30d1\:30c3\:30b1\:30fc\:30b8 (PrivacySpec \:30d9\:30fc\:30b9\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:8aad\:307f\:66f8\:304d)\n" <>
-  "  $NBPrivacySpec \:3067\:30c7\:30a3\:30d5\:30a9\:30eb\:30c8\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:3092\:8a2d\:5b9a\:53ef\:80fd\n" <>
-  "  ClaudeQuery[prompt]              \[RightArrow] Claude \:306b\:81ea\:7531\:306b\:554f\:3044\:5408\:308f\:305b\:308b\:ff08\:540c\:671f\:30fb\:5c65\:6b74\:4fdd\:5b58\:ff09\n" <>
-  "  ClaudeQuery[session, prompt]       \[RightArrow] \:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:30fb\:76f4\:524d\:51fa\:529b\:3092\:8003\:616e\:3057\:305f\:554f\:3044\:5408\:308f\:305b\n" <>
-  "  ClaudeEval[task]                 \[RightArrow] \:975e\:540c\:671f\:30b3\:30fc\:30c9\:751f\:6210\:ff08\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:ff09\n" <>
-  "  ClaudeEval[{text, data, ...}]   \[RightArrow] Dataset/Image/\:5f0f\:3092\:542b\:3080\:30b3\:30fc\:30c9\:751f\:6210\n" <>
-  "  ClaudeEval[session, task]        \[RightArrow] \:975e\:540c\:671f\:30b3\:30fc\:30c9\:751f\:6210\:ff08\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:ff09\n" <>
-  "    Options: Fallback, AutoEvaluate, StartTime\:ff08\:4f8b: StartTime -> Now + Quantity[3,\"Hours\"]\:ff09\n" <>
-  "    WebSearch->True(\:30c7\:30d5\:30a9\:30eb\:30c8): Claude Code \:306e Web \:691c\:7d22\:30c4\:30fc\:30eb\:3092\:8a31\:53ef(\:7121\:6599)\n" <>
-  "    WebFetch->False/True/Automatic: API \:7d4c\:7531 Web \:691c\:7d22(\:8ab2\:91d1\:3042\:308a\:3001Fallback->True \:6642\:306e\:307f\:6709\:52b9)\n" <>
-  "  ContinueEval[\"\:6307\:793a\"]              \[RightArrow] \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:3067\:7d99\:7d9a\n" <>
-  "  ContinueEval[session, \"\:6307\:793a\"]    \[RightArrow] \:30bb\:30c3\:30b7\:30e7\:30f3\:7d99\:7d9a\:30fb\:30a8\:30e9\:30fc\:4fee\:6b63\:30fb\:6539\:826f\n" <>
-  "  ContinueEval[]                   \[RightArrow] \"\:30a8\:30e9\:30fc\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\" \:3067\:7d99\:7d9a\n" <>
-  "    Options: Fallback, AutoEvaluate, StartTime\n" <>
-  "  CreateClaudeSession[\"name\"]      \[RightArrow] \:540d\:524d\:4ed8\:304d\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:4f5c\:6210\n" <>
-  "  ClaudeRestoreSession[\"name\"]    \[RightArrow] \:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:30ea\:30b9\:30c8\:30a2\n" <>
-  "  ClaudeListSessions[]             \[RightArrow] \:5168\:30bb\:30c3\:30b7\:30e7\:30f3\:4e00\:89a7\n" <>
-  "  ClaudeDeleteSession[\"name\"]     \[RightArrow] \:30bb\:30c3\:30b7\:30e7\:30f3\:524a\:9664\n" <>
-  "  ClaudeShowHistory[]              \[RightArrow] \:30c7\:30d5\:30a9\:30eb\:30c8\:5c65\:6b74\:8868\:793a\n" <>
-  "  ClaudeShowHistory[session]       \[RightArrow] \:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\:8868\:793a\n" <>
-  "  ClaudeDebug[code, errMsg]        \[RightArrow] \:30c7\:30d0\:30c3\:30b0\:4f9d\:983c\:ff08\:975e\:540c\:671f\:ff09\n" <>
-  "  ClaudeReview[code]               \[RightArrow] \:30b3\:30fc\:30c9\:30ec\:30d3\:30e5\:30fc\:ff08\:975e\:540c\:671f\:ff09\n" <>
-  "  ClaudeCreatePackage[name, prompt]  \[RightArrow] \:65b0\:898f\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:751f\:6210 (Fallback)\n" <>
-  "  ClaudeUpdatePackage[name, prompt]  \[RightArrow] \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:4ed8\:304d\:66f4\:65b0 (Fallback, TargetFunctions, StartTime)\n" <>
-  "  ContinueUpdate[]                 \[RightArrow] \:76f4\:524d\:306e ClaudeUpdatePackage \:3092\:30d0\:30b0\:4fee\:6b63\:3067\:7d99\:7d9a\n" <>
-  "  ContinueUpdate[\"\:6307\:793a\"]             \[RightArrow] \:8ffd\:52a0\:6307\:793a\:4ed8\:304d\:3067\:7d99\:7d9a\n" <>
-  "  ContinueUpdate[\"pkg\", \"\:6307\:793a\"]    \[RightArrow] \:6307\:5b9a\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:66f4\:65b0\:3092\:7d99\:7d9a\n" <>
-  "  ClaudeRestorePackage[name]       \[RightArrow] \:76f4\:524d\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306b\:623b\:3059\n" <>
-  "  ClaudeUpdatePackageHistory[]     \[RightArrow] \:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:66f4\:65b0\:5c65\:6b74\:3092\:8868\:793a\n" <>
-  "  ClaudeBackupDataset[name]        \[RightArrow] \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:3092 Review/Pull/Delete \:30dc\:30bf\:30f3\:4ed8\:304d Grid \:3067\:8868\:793a\n" <>
-  "  ClaudeMigrateBackupHistory[name] \[RightArrow] \:751f .wl \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:5dee\:5206\:5f62\:5f0f\:306b\:5909\:63db\:3057\:5bb9\:91cf\:524a\:6e1b\n" <>
-  "  ClaudeConvertToPaclet[name]     \[RightArrow] .wl \:3092 Paclet \:5f62\:5f0f\:306b\:5909\:63db\n" <>
-  "  ClaudeCreateDocumentation[name] \[RightArrow] \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:81ea\:52d5\:751f\:6210 (Fallback)\n" <>
-  "  ClaudeUpdateDocumentation[name]       \[RightArrow] \:524d\:56de\:4ee5\:964d\:306e\:5909\:66f4\:3092\:81ea\:52d5\:691c\:51fa\:3057\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\n" <>
-  "  ClaudeUpdateDocumentation[name, spec] \[RightArrow] \:6307\:793a\:4ed8\:304d\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0 (Fallback)\n" <>
-  "  ClaudeAddDirective[target, desc] \[RightArrow] \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:6574\:5f62\:30fb\:8ffd\:52a0\:30fb\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\n" <>
-  "  ClaudeRestoreDirective[target]   \[RightArrow] \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:304b\:3089\:5fa9\:5143\n" <>
-  "  ClaudeListDirectives[]           \[RightArrow] \:5168\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:4e00\:89a7\n" <>
-  "  ClaudeUpdateDirective[]          \[RightArrow] \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:5168\:30b3\:30d4\:30fc\n" <>
-  "  ClaudeUpdateDirective[text]      \[RightArrow] \:6307\:793a\:3067\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092\:66f4\:65b0\:30fb\:30b3\:30d4\:30fc\n" <>
-  "  ClaudeDirectiveBackupDataset[]   \[RightArrow] \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:66f4\:65b0\:5c65\:6b74\:3092 Review/Pull/Delete \:4ed8\:304d Grid \:3067\:8868\:793a\n" <>
-  "  ClaudeSyncDirectives[dir]        \[RightArrow] dir \:304b\:3089 Claude Directives \:3078\:66f4\:65b0\:30d5\:30a1\:30a4\:30eb\:3092\:540c\:671f\n" <>
-  "  ClaudeSessionStatus[]            \[RightArrow] \:30bb\:30c3\:30b7\:30e7\:30f3\:72b6\:614b\:30fb\:30a2\:30af\:30bb\:30b9\:53ef\:80fd\:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\n" <>
-  "  ClaudeStatus[]                   \[RightArrow] \:5b9f\:884c\:4e2d\:30bf\:30b9\:30af\:306e\:30ea\:30a2\:30eb\:30bf\:30a4\:30e0\:72b6\:614b\:8868\:793a\n" <>
-  "  ClaudeAbort[]                    \[RightArrow] \:5b9f\:884c\:4e2d\:306e\:5168 Claude \:30bf\:30b9\:30af\:3092\:505c\:6b62\n" <>
-  "  ClaudeCompactHistory[]           \[RightArrow] \:5c65\:6b74\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3 (\:901a\:5e38\:81ea\:52d5)\n" <>
-  "  ClaudeWebSearch[query]           \[RightArrow] Web \:691c\:7d22 (Anthropic API, \:8ab2\:91d1\:3042\:308a)\n" <>
-  "  ClaudeWebFetch[url]              \[RightArrow] URL \:5185\:5bb9\:53d6\:5f97\:30fb\:8981\:7d04 (Anthropic API, \:8ab2\:91d1\:3042\:308a)\n" <>
-  "  \:2192 WebSearch->True(\:30c7\:30d5\:30a9\:30eb\:30c8): Claude Code \:306e\:7d44\:307f\:8fbc\:307f Web \:691c\:7d22(\:7121\:6599)\n" <>
-  "  \:2192 WebFetch->True/False/Automatic: API \:7d4c\:7531 Web \:691c\:7d22(\:8ab2\:91d1\:3042\:308a\:3001Fallback->True \:5fc5\:9808)\n" <>
-  "  ClaudeCommand[\"/cmd\"]           \[RightArrow] Claude Code CLI \:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9\:5b9f\:884c\n" <>
-  "  ClaudeCheckSeparation[target]   \[RightArrow] NBAccess \:5206\:96e2\:539f\:5247\:306e\:9055\:53cd\:691c\:67fb\n" <>
-  "  ClaudeFixSeparation[target]     \[RightArrow] \:5206\:96e2\:9055\:53cd\:306e\:81ea\:52d5\:4fee\:6b63\n" <>
-  "\n$ClaudeModel : " <> If[$ClaudeModel === "", iL["(Claude Code \:30c7\:30d5\:30a9\:30eb\:30c8)", "(Claude Code default)"], $ClaudeModel] <> "\n" <>
-  "$NBPrivacySpec (AccessLevel) : " <>
-    ToString[Lookup[NBAccess`NBGetPrivacySpec[], "AccessLevel", 0.5]] <> "\n" <>
-  "$packageDirectory : ./" <> FileNameTake[StringTrim[Global`$packageDirectory, "\\" | "/"]] <> "/\n" <>
-  "$ClaudeAccessibleDirs : " <> ToString[Length[$ClaudeAccessibleDirs]] <> " dir(s)\n" <>
-  "\:5c65\:6b74\:4fdd\:5b58: NBAccess \:6c4e\:7528\:5c65\:6b74DB \:2192 TaggingRules (Diff\:5dee\:5206\:5727\:7e2e)"
-];
 
 (* $packageDirectory \\:786e\\:5b9a\\:5f8c\:306b CLAUDE.md \\:3092\\:518d\\:691c\\:7d22 *)
 If[$ClaudeMDContent === "", iLoadClaudeMD[]];
@@ -5217,7 +5448,7 @@ iExtractAllCodeBlocks[response_String] := Module[{raw},
 ];
 
 (* \uXXXX / \xNN 形式の Unicode エスケープを実文字に変換。
-   Claude が日本語を \x4e00\x81f4 や \u30d1\u30c3 のように出力する問題への対策。
+   Claude が日本語を \x4e00\x81f4 や \:30d1\:30c3 のように出力する問題への対策。
    Mathematica は \:XXXX 形式なので \uXXXX / \xNN はリテラルとして残ってしまう。 *)
 iFixUnicodeEscapes[code_String] :=
   Module[{result},
@@ -5409,6 +5640,16 @@ Column[{\n\
   \"2. \\:30d5\\:30a3\\:30dc\\:30ca\\:30c3\\:30c1\\:6570\\:5217\"\n\
 }, Spacings -> 1]\n\
 ```\n\n\
+PACKAGE USE vs UPDATE (CRITICAL \:2014 ABSOLUTE RULE):\n\
+When a package name appears in the task, FIRST check api.md for existing functions.\n\
+- If the task is to COMPUTE, DISPLAY, ANALYZE, USE, or EXECUTE something with the package: \
+generate code that CALLS the package's existing functions. NEVER generate ClaudeUpdatePackage.\n\
+- If the task is to ADD, MODIFY, FIX, CHANGE, or REMOVE functionality IN the package: \
+generate ClaudeUpdatePackage.\n\
+- WRONG: Task='\\:500d\\:6570\\:8a08\\:7b97\\:3067\\:ff13\\:500d\\:3059\\:308b\\:8a08\\:7b97\\:3092' \:2192 ClaudeUpdatePackage[...] (this USES the package, does NOT modify it)\n\
+- CORRECT: Task='\\:500d\\:6570\\:8a08\\:7b97\\:3067\\:ff13\\:500d\\:3059\\:308b\\:8a08\\:7b97\\:3092' \:2192 \\:4e09\\:500d\\:8a08\\:7b97[10] (call the existing function)\n\
+- CORRECT: Task='\\:500d\\:6570\\:8a08\\:7b97\\:306b\\:ff13\\:500d\\:3059\\:308b\\:95a2\\:6570\\:3092\\:8ffd\\:52a0\\:3057\\:3066' \:2192 ClaudeUpdatePackage[\"\\:500d\\:6570\\:8a08\\:7b97\", \"...\"]\n\
+The KEY distinction: '\\:3067...\\:3092' (use the package to do X) vs '\\:306b...\\:3092' (add X to the package).\n\n\
 Use idiomatic Wolfram Language style. \
 VARIABLE NAMING: A single underscore creates a Subscript \
 (e.g. q_m = Subscript[q, m]) which is fine and encouraged for mathematical notation. \
@@ -5458,7 +5699,7 @@ When writing Mathematica string literals that contain Japanese or other non-ASCI
 ALWAYS write the actual characters directly as UTF-8. \
 NEVER use any escape sequence for Japanese characters:\n\
 - NEVER \\xNN\\xNN (e.g. \\x4e00\\x81f4) \:2014 this is the most common mistake\n\
-- NEVER \\uXXXX (e.g. \\uff08)\n\
+- NEVER \\uXXXX (e.g. \\:ff08)\n\
 - NEVER \\:XXXX (e.g. \\:4e00) in notebook code (only allowed in .wl package files)\n\
 Simply write: \"\:4e00\:81f4\" not \"\\x4e00\\x81f4\", \"\:30d1\:30c3\:30b1\:30fc\:30b8\" not \"\\x30d1\\x30c3\\x30b1\\x30fc\\x30b8\".\n\
 This applies to ALL strings: Style text, Grid headers, error messages, comments, etc.\n\n\
@@ -5634,6 +5875,7 @@ ToString[$ClaudeEvalMaxDepth] <> ").\n" <>
 iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     autoEvaluate_:True, modelSpec_:Automatic, privSpec_:Automatic, autoPrivate_:False,
     timeout_:Automatic, mediaFiles_List:{}] :=
+  Catch[  (* .nb ファイル検出時の早期リターンを Throw で実現 *)
   Module[{step, entry, jobId, history, contextPrompt, evalCallback,
           accessLevel, availModels, useClaudeCode,
           lastEntry, cellCountAfter, notebookCtx},
@@ -5660,6 +5902,92 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     notebookCtx    = With[{r = Quiet[iCaptureNotebookContext[nb, cellCountAfter, accessLevel]]},
                        If[StringQ[r], r, ""]];
 
+    (* ── .nb ファイル検出: Claude Code をバイパスして直接 ClaudeProcessFile を実行 ── *)
+    Module[{nbFilePath, nbOutputPath, taskPrompt, nbCallCode},
+
+    nbFilePath = iLLMGraphDetectFilePath[task];
+    If[StringQ[nbFilePath] && FileExistsQ[nbFilePath],
+
+      (* 出力パスを task から抽出するか、デフォルトを生成 *)
+      nbOutputPath = Module[{m, dir, base, ext, normInput},
+        (* タスク内の "xxx.nb" 形式を検索 *)
+        m = StringCases[task,
+          RegularExpression["([\\w\\s\\-\\.\\p{L}]+\\.nb)"] :> "$1",
+          IgnoreCase -> True];
+        normInput = StringReplace[FileNameTake[nbFilePath], "\\" -> "/"];
+        m = Select[m,
+          StringReplace[#, "\\" -> "/"] =!= normInput &&
+          StringReplace[#, "\\" -> "/"] =!=
+            StringReplace[nbFilePath, "\\" -> "/"] &];
+        If[Length[m] > 0,
+          (* タスクに出力ファイル名が含まれていた *)
+          FileNameJoin[{DirectoryName[nbFilePath], First[m]}],
+          (* デフォルト: 入力と同じディレクトリに -processed suffix *)
+          dir  = DirectoryName[nbFilePath];
+          base = FileBaseName[nbFilePath];
+          ext  = FileExtension[nbFilePath];
+          FileNameJoin[{dir, base <> "-processed." <> ext}]]];
+
+      (* task から .nb パスを除いた部分をプロンプトとして使用 *)
+      taskPrompt = StringTrim @ StringReplace[task,
+        {nbFilePath -> "",
+         RegularExpression["notebookfile\\s*=\\s*\"[^\"]*\"\\s*\\n?"] -> "",
+         RegularExpression["\\n+"] -> " "}];
+      If[taskPrompt === "", taskPrompt = task];
+
+      (* ClaudeProcessFile 呼び出しコードを生成 *)
+      nbCallCode =
+        "ClaudeProcessFile[\n  \"" <> taskPrompt <> "\",\n  \"" <>
+        StringReplace[nbFilePath,    "\\" -> "\\\\"] <> "\",\n  \"" <>
+        StringReplace[nbOutputPath, "\\" -> "\\\\"] <> "\"\n]";
+
+      (* セッションエントリ登録 *)
+      iSessionAppend[nb, tag, <|
+        "step"        -> step,
+        "time"        -> AbsoluteTime[],
+        "instruction" -> iSanitizeInstructionForHistory[task],
+        "fullPrompt"  -> iCompressForHistory[
+          "[ClaudeProcessFile auto-dispatch] " <> task],
+        "cellCount"   -> NBAccess`NBCellCount[nb],
+        "response"    -> nbCallCode,
+        "code"        -> nbCallCode,
+        "type"        -> "eval",
+        "accessLevel" -> 0.5
+      |>];
+
+      (* Job スロット確保 *)
+      Module[{jid = NBAccess`NBBeginJobAtEvalCell[nb]},
+        NBAccess`NBJobMoveToAnchor[jid];
+
+        (* 説明テキストを出力 *)
+        NBAccess`NBWriteCell[nb, Cell[
+          "\:26a1 ClaudeProcessFile \:3092\:81ea\:52d5\:8d77\:52d5: " <>
+          FileNameTake[nbFilePath] <> " \:2192 " <>
+          FileNameTake[nbOutputPath],
+          "Text",
+          FontColor -> RGBColor[0, 0.5, 0],
+          FontSize  -> 10]];
+
+        (* Input セルとして表示用に書き込み *)
+        Quiet @ NotebookWrite[nb,
+          Cell[nbCallCode, "Input",
+            CellLabel -> "ClaudeProcessFile (auto)"],
+          After];
+
+        $iJobActiveNb = None;
+        NBAccess`NBEndJob[jid];
+
+        (* 直接評価 *)
+        If[TrueQ[autoEvaluate],
+          ToExpression[nbCallCode, InputForm]]];
+
+      $iClaudeEvalCurrentDepth = Max[0, $iClaudeEvalCurrentDepth - 1];
+      Throw[Null, "iClaudeEvalNBFileEarlyReturn"]
+    ]]; (* End nbFilePath interception *)
+
+    (* .nb ファイルでない通常タスク: 以下の通常フローへ *)
+    Module[{nbFileCtxDummy = ""},  (* 旧 nbFileCtx 互換 *)
+
     contextPrompt = If[Length[history] > 0,
       iClaudeSysPrompt[] <>
       iTaskOverviewBlock[task] <>
@@ -5676,6 +6004,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
         " (remaining: " <> ToString[$ClaudeEvalMaxDepth - $iClaudeEvalCurrentDepth] <>
         "). Do NOT generate further ClaudeEval calls if remaining is 0. ===\n", ""] <>
       iAutoPrivatePrompt[autoPrivate] <>
+      iPackageUseGuard[task] <>
       iTaskDetailBlock["\:65b0\:3057\:3044\:6307\:793a", "Task: " <> iExpandSymbolRefs[task]],
       iClaudeSysPrompt[] <>
       iTaskOverviewBlock[task] <>
@@ -5690,6 +6019,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
         " (remaining: " <> ToString[$ClaudeEvalMaxDepth - $iClaudeEvalCurrentDepth] <>
         "). Do NOT generate further ClaudeEval calls if remaining is 0. ===\n", ""] <>
       iAutoPrivatePrompt[autoPrivate] <>
+      iPackageUseGuard[task] <>
       iTaskDetailBlock["Task", iExpandSymbolRefs[task]]
     ];
 
@@ -5704,6 +6034,8 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     |>;
     iSessionAppend[nb, tag, entry];
 
+    ]; (* End normal task Module *)
+
     (* Job \:30b7\:30b9\:30c6\:30e0\:3067\:8a55\:4fa1\:30bb\:30eb\:76f4\:5f8c\:306b\:30b9\:30ed\:30c3\:30c8\:3092\:4e88\:7d04 *)
     jobId = NBAccess`NBBeginJobAtEvalCell[nb];
 
@@ -5712,6 +6044,20 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
       NBAccess`NBGetAvailableFallbackModels[accessLevel],
       {}];
     useClaudeCode = NBAccess`NBProviderCanAccess["claudecode", accessLevel];
+
+    (* .nb ファイルタスク: Read ツール禁止 + そのディレクトリを --add-dir から除外
+       ObjectSpec のルートが "local" または "cloud"+"local" の場合は
+       ClaudeCode が読む必要がないため Read を禁止する *)
+    Module[{nbPath2, nbSpec2, nbRoutes2, nbExcludeRead, nbExcludeDirs},
+      nbPath2       = iLLMGraphDetectFilePath[task];
+      nbSpec2       = If[StringQ[nbPath2] && FileExistsQ[nbPath2],
+        Quiet @ NBAccess`NBFileSpec[nbPath2], None];
+      nbRoutes2     = If[AssociationQ[nbSpec2],
+        NBAccess`NBPrivacyLevelToRoutes[nbSpec2["PrivacyLevel"]],
+        {"cloud"}];
+      (* .nb ファイルがある場合は常に Read 禁止 (cell data はプロンプトに注入済み) *)
+      nbExcludeRead = StringQ[nbPath2] && nbPath2 =!= None;
+      nbExcludeDirs = If[nbExcludeRead, {DirectoryName[nbPath2]}, {}];
 
     (* コールバックを書き込みキュー方式に変換:
        各セル書き込みを個別のサンク(引数なし関数)としてキューに積み、
@@ -5830,13 +6176,14 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     ];
 
     If[modelSpec =!= Automatic && ListQ[modelSpec] && Length[modelSpec] >= 2,
-      (* Model \:6307\:5b9a\:3042\:308a: API \:7d4c\:7531\:3067\:6307\:5b9a\:30e2\:30c7\:30eb\:3092\:76f4\:63a5\:547c\:3073\:51fa\:3057 *)
+      (* Model 指定あり: API 経由で指定モデルを直接呼び出し *)
       iStartFallbackAsync[contextPrompt, nb, evalCallback,
         {modelSpec}, 1, jobId, timeout, mediaFiles],
       (* アクセスレベルに基づくルーティング *)
       If[useClaudeCode,
         iClaudeQueryAsyncWithProgress[
-          contextPrompt, evalCallback, nb, imageDirs, jobId, availModels],
+          contextPrompt, evalCallback, nb, imageDirs, jobId, availModels,
+          nbExcludeRead, nbExcludeDirs],
         If[Length[availModels] > 0,
           iStartFallbackAsync[contextPrompt, nb, evalCallback,
             availModels, 1, jobId, timeout, mediaFiles],
@@ -5856,6 +6203,9 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
         ]
       ]
     ]
+    ] (* End nbExcludeRead Module *)
+  ]  (* End Module *)
+  , "iClaudeEvalNBFileEarlyReturn"  (* Catch タグ *)
   ];
 
 (* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:7248 ClaudeEval\:ff08\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:8fd4\:3055\:306a\:3044\:ff09 *)
@@ -6096,10 +6446,16 @@ ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := (
   ]);
 
 iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :=
-  Module[{step, entry, jobId, history, contextPrompt},
+  Module[{step, entry, jobId, history, contextPrompt,
+          nbFilePath, nbFileCtx = ""},
     $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
     history = iSessionHistoryWithInherit[nb, tag];
     step    = Length[iSessionHistory[nb, tag]];
+
+    (* .nb ファイル検出 *)
+    nbFilePath = iLLMGraphDetectFilePath[task];
+    If[StringQ[nbFilePath] && FileExistsQ[nbFilePath],
+      nbFileCtx = iNBFileCellContext[nbFilePath]];
 
     contextPrompt = If[Length[history] > 0,
       If[$ClaudeMDContent =!= "",
@@ -6109,11 +6465,13 @@ iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :
       "\:4ee5\:4e0b\:306f Mathematica \:3067\:306e\:4f5c\:696d\:5c65\:6b74\:3067\:3059\:3002\n\n" <>
       iSessionToContext[history] <>
       iFileAccessContext[task] <>
+      If[nbFileCtx =!= "", nbFileCtx <> "\n", ""] <>
       "=== \:65b0\:3057\:3044\:6307\:793a ===\nTask: " <> iExpandSymbolRefs[task],
       If[$ClaudeMDContent =!= "",
         "## Project guidelines (CLAUDE.md)\n\n" <> $ClaudeMDContent <> "\n\n---\n\n",
         ""] <>
       $claudeSpecPrefix <> iFileAccessContext[task] <>
+      If[nbFileCtx =!= "", nbFileCtx <> "\n", ""] <>
       "Task: " <> iExpandSymbolRefs[task]
     ];
 
@@ -6201,6 +6559,11 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
       {}];
     useClaudeCode = NBAccess`NBProviderCanAccess["claudecode", accessLevel];
 
+    Module[{nbFilePath3, nbFileCtx3 = ""},
+    nbFilePath3 = iLLMGraphDetectFilePath[instruction];
+    If[StringQ[nbFilePath3] && FileExistsQ[nbFilePath3],
+      nbFileCtx3 = iNBFileCellContext[nbFilePath3]];
+
     contextPrompt =
       iClaudeSysPrompt[] <>
       "\:4ee5\:4e0b\:306f Mathematica \:30b3\:30fc\:30c9\:958b\:767a\:306e\:4f5c\:696d\:5c65\:6b74\:3067\:3059\:3002\n\n" <>
@@ -6209,6 +6572,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
         "=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:73fe\:5728\:306e\:72b6\:614b ===\n" <> notebookCtx, ""] <>
       iNotebookDefinedSymbolsContext[nb] <>
       iFileAccessContext[instruction] <>
+      If[nbFileCtx3 =!= "", nbFileCtx3 <> "\n", ""] <>
       iAutoPrivatePrompt[autoPrivate] <>
       "=== \:65b0\:3057\:3044\:6307\:793a ===\n" <> iExpandSymbolRefs[instruction] <> "\n\n" <>
       "\:76f4\:524d\:306e\:30b3\:30fc\:30c9\:3068\:5c65\:6b74\:3092\:8e0f\:307e\:3048\:3066\:3001\:4fee\:6b63\:30fb\:6539\:826f\:3057\:305f\:30b3\:30fc\:30c9\:3092\:63d0\:793a\:3057\:3066\:304f\:3060\:3055\:3044\:3002";
@@ -6223,6 +6587,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
       "code"        -> ""
     |>;
     iSessionAppend[nb, tag, entry];
+    ]; (* End nbFilePath3 Module *)
 
     anchorTag = "claude-anchor-" <> ToString[UnixTime[]] <> "-" <>
                 ToString[RandomInteger[99999]];
@@ -6419,7 +6784,10 @@ Options[ContinueUpdate] = {Fallback -> False, StartTime -> Now, "UpdateApiMd" ->
 ContinueUpdate[packageName_String, instruction_String, opts:OptionsPattern[]] :=
   Module[{info, nb, origPrompt, response, nbOutput, newPrompt},
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
-    nb = EvaluationNotebook[];
+    nb = Replace[EvaluationNotebook[],
+      Except[_NotebookObject] :>
+        Replace[$iRetryTargetNotebook,
+          Except[_NotebookObject] :> InputNotebook[]]];
     (* ContinueUpdate \:30dc\:30bf\:30f3\:306e\:30bb\:30eb\:306e\:76f4\:5f8c\:306b\:30ab\:30fc\:30bd\:30eb\:3092\:79fb\:52d5\:3057\:3001\:305d\:306e\:30bb\:30eb\:3078\:306e\:51fa\:529b\:3092\:9632\:6b62 *)
     Quiet[SelectionMove[EvaluationCell[], After, Cell]];
     (* $iLastUpdateInfo \:304c\:540c\:3058\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:6307\:3057\:3066\:3044\:308c\:3070\:305d\:3053\:304b\:3089\:53d6\:5f97 *)
@@ -8135,7 +8503,10 @@ ClaudeUpdatePackage[packageName_String, updatePrompt_, opts:OptionsPattern[]] :=
   st]]);
 
 iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, updateApiMd_:True] :=
-  With[{nb = EvaluationNotebook[]},
+  With[{nb = Replace[EvaluationNotebook[],
+    Except[_NotebookObject] :>
+      Replace[$iRetryTargetNotebook,
+        Except[_NotebookObject] :> InputNotebook[]]]},
   Module[{srcFile, currentCode, prompt,
           beginMark, endMark, timestamp, sessionDir, bdir,
           allBlocks, allNames, targets, targetCode,
@@ -8149,6 +8520,9 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
 
   (* \:6392\:4ed6\:30ed\:30c3\:30af: \:540c\:4e00\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:4e26\:5217\:66f4\:65b0\:3092\:9632\:6b62 *)
   If[!iAcquirePackageLock[packageName, nb], Return[$Failed]];
+
+  (* Phase 3: サブグラフ記録開始 *)
+  Quiet @ iLLMGraphBeginSubgraph[nb, iSessionTag[], packageName];
 
   (* references \:30d5\:30a9\:30eb\:30c0\:3092\:53c2\:7167\:53ef\:80fd\:306b\:3059\:308b *)
   iEnsureReferencesAccessible[packageName];
@@ -8174,6 +8548,8 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
   updatePromptNorm = iNormalizePrompt[updatePrompt];
   imgDirs = updatePromptNorm["imageDirs"];
   currentCode = Import[srcFile, "Text"];
+  Quiet @ iLLMGraphLogSubStep["read-source", "Local",
+    ToString[StringLength[currentCode]] <> " chars"];
   timestamp   = DateString[Now, {"Year","Month","Day","_","Hour24","Minute","Second"}] <>
     If[TrueQ[$iContinueUpdateFlag], "_continue", ""];
   bdir        = backupDir[packageName];
@@ -8184,7 +8560,8 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
     CreateDirectory[preDir, CreateIntermediateDirectories -> True];
     iSaveBackupWl[preDir, srcFile, packageName, True];
     preBackupFile = FileNameJoin[{preDir, packageName <> ".wl"}];
-    nbPrint[nb, iL["\:4e8b\:524d\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Pre-backup: "] <> preDir]
+    nbPrint[nb, iL["\:4e8b\:524d\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Pre-backup: "] <> preDir];
+    Quiet @ iLLMGraphLogSubStep["pre-backup", "Local", preDir]
   ];
 
   sessionDir = FileNameJoin[{bdir, timestamp}];
@@ -8211,8 +8588,11 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
 
   If[Length[targets] === 0,
     nbPrint[nb, "\:5bfe\:8c61\:95a2\:6570\:3092\:81ea\:52d5\:5224\:5b9a\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002\:30d5\:30a1\:30a4\:30eb\:5168\:4f53\:3092\:9001\:4fe1\:3057\:307e\:3059\:3002"];
+    Quiet @ iLLMGraphLogSubStep["target-detection", "Local", "full file"];
     targetCode = currentCode,
     nbPrint[nb, "\:5bfe\:8c61\:95a2\:6570: " <> StringRiffle[targets, ", "]];
+    Quiet @ iLLMGraphLogSubStep["target-detection", "Local",
+      StringRiffle[targets, ", "]];
     targetCode = ToString[StringJoin[Lookup[allBlocks, #, ""] & /@ targets]]
   ];
 
@@ -8255,6 +8635,10 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
 
   iSaveSessionMedia[sessionDir, prompt, imgDirs];
 
+  Quiet @ iLLMGraphLogSubStep["build-prompt", "Local",
+    ToString[StringLength[prompt]] <> " chars"];
+  Quiet @ iLLMGraphLogSubStepStart["llm-query", "ClaudeCode", packageName];
+
   iClaudeQueryAsyncWithProgress[prompt,
     With[{nb2=nb, sd=sessionDir, pn=packageName, sf=srcFile,
           blks=allBlocks, tgts=targets, jp=jsPlaceholder, jb=jsBlock,
@@ -8275,6 +8659,9 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
           Internal`WithLocalSettings[Null,
 
           Export[FileNameJoin[{sd, "response.txt"}], response, "Text"];
+          (* Phase 3: LLM応答到着 *)
+          Quiet @ iLLMGraphLogSubStepEnd["Completed",
+            ToString[StringLength[response]] <> " chars"];
           (* ContinueUpdate 用: レスポンスとセッションDirを記録 *)
           If[AssociationQ[$iLastUpdateInfo] && Lookup[$iLastUpdateInfo, "packageName", ""] === pn,
             AssociateTo[$iLastUpdateInfo, {
@@ -8307,6 +8694,11 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
             ]
           ];
           newFuncs = First[newFuncs];
+
+          (* Phase 3: コード抽出完了 *)
+          Quiet @ iLLMGraphLogSubStep["extract-code", "Local",
+            ToString[StringLength[newFuncs]] <> " chars extracted"];
+          Quiet @ iLLMGraphLogSubStepStart["merge", "Local", packageName];
 
           (* --- マージロジック (targets の有無にかかわらず常にマージを試みる) --- *)
           newCode = Module[{code = origCode, updBlks, mergedCount = 0,
@@ -8364,6 +8756,10 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
             code
           ];
 
+          (* Phase 3: マージ完了 *)
+          Quiet @ iLLMGraphLogSubStepEnd["Completed",
+            ToString[StringLength[newCode]] <> " chars"];
+
           (* \:5b89\:5168\:6027\:691c\:8a3c *)
           Module[{newSz, oldSz, origFuncCount, newFuncCount,
                   hasBegin, hasEnd, origHasBegin},
@@ -8389,6 +8785,12 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
             If[origHasBegin && !hasEnd,
               AppendTo[validationErrors, "EndPackage[] \:304c\:6b20\:843d"]];
           ];
+
+          (* Phase 3: 検証完了 *)
+          Quiet @ iLLMGraphLogSubStep["validate", "Local",
+            If[Length[validationErrors] > 0,
+              "FAILED: " <> StringRiffle[validationErrors, "; "],
+              "Passed"]];
 
           newWlFile = FileNameJoin[{sd, pn <> ".wl"}];
           (* UTF-8 \:30d0\:30a4\:30ca\:30ea\:66f8\:304d\:8fbc\:307f\:ff08ShiftJIS \:74b0\:5883\:5bfe\:7b56\:ff09 *)
@@ -8421,12 +8823,14 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
 
           If[Quiet @ Check[(CopyFile[newWlFile, sf, OverwriteTarget -> True]; True),
                 False] && FileExistsQ[sf],
+            Quiet @ iLLMGraphLogSubStep["write-file", "Local", sf];
             nbPrint[nb2, iL["\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:66f4\:65b0\:3057\:307e\:3057\:305f: ", "Package updated: "] <> sf];
             (* iGetWithErrorCapture でリロードし、エラーを検出 *)
             Module[{loadResult},
               loadResult = iGetWithErrorCapture[nb2, sf];
               If[loadResult["hasErrors"],
                 (* リロードエラー検出: 自動リトライ可能か判定 *)
+                Quiet @ iLLMGraphLogSubStep["reload", "Local", "Failed: reload errors"];
                 nbPrint[nb2, Style[
                   iL["\:26a0 \:30ea\:30ed\:30fc\:30c9\:6642\:306b\:30a8\:30e9\:30fc\:304c\:691c\:51fa\:3055\:308c\:307e\:3057\:305f\:3002",
                     "\:26a0 Errors detected during reload."],
@@ -8444,6 +8848,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
                   iWriteUpdateCompletionMessage[nb2, pn, doUpdateApi]],
                 (* リロード成功 *)
                 nbPrint[nb2, iL["\:518d\:30ed\:30fc\:30c9\:3057\:307e\:3057\:305f\:3002", "Reloaded."]];
+                Quiet @ iLLMGraphLogSubStep["reload", "Local", "Success"];
                 $iUpdateRetryCount = 0; (* リトライカウンタをリセット *)
                 With[{afterEnd2 = StringTrim[Last[StringSplit[response, em, 2], ""]]},
                   If[afterEnd2 =!= "", nbPrint[nb2, afterEnd2]]];
@@ -8460,7 +8865,11 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
           $iContinueUpdateFlag = False;
           $iJobActiveNb = None;
           If[jid =!= None, NBAccess`NBEndJob[jid]];
-          iReleasePackageLock[pn]]
+          (* ロック解放を最優先 — 後続の処理が失敗してもロックは必ず解放 *)
+          iReleasePackageLock[pn];
+          (* Phase 3: サブグラフ記録終了 (ロック解放後に実行) *)
+          Quiet @ iLLMGraphEndSubgraph[
+            If[Length[validationErrors] > 0, "Failed", "Completed"]]]
         ]
       ]
     ],
@@ -8494,7 +8903,7 @@ iGetWithErrorCapture[nb_NotebookObject, file_String] :=
 iScheduleUpdateAutoRetry[nb_NotebookObject, packageName_String,
     origInstruction_String, response_String, errorMsgs_List,
     retryCount_Integer, backupFile_String, destFile_String] :=
-  Module[{errorContext, retryPrompt, taskObj},
+  Module[{errorContext, retryPrompt},
     (* バックアップから元ファイルを復元 *)
     If[FileExistsQ[backupFile],
       Quiet[CopyFile[backupFile, destFile, OverwriteTarget -> True]];
@@ -8521,11 +8930,16 @@ iScheduleUpdateAutoRetry[nb_NotebookObject, packageName_String,
     (* リトライカウントを更新 *)
     $iUpdateRetryCount = retryCount + 1;
     $iContinueUpdateFlag = True;
-    (* ScheduledTask で遅延実行: ロック解放後に ContinueUpdate を呼ぶ *)
-    taskObj = RunScheduledTask[
-      (ContinueUpdate[packageName, retryPrompt];
-       Quiet[RemoveScheduledTask[taskObj]]),
-      1]
+    (* ScheduledTask で遅延実行: ロック解放後に ContinueUpdate を呼ぶ。
+       SessionSubmit + ScheduledTask で1回限りの遅延実行にする。
+       RunScheduledTask は周期実行のため使わない。 *)
+    $iRetryTargetNotebook = nb;
+    With[{nb2 = nb, pn2 = packageName, rp2 = retryPrompt},
+      SessionSubmit[ScheduledTask[
+        (SetSelectedNotebook[nb2];
+         ContinueUpdate[pn2, rp2];
+         $iRetryTargetNotebook = None),
+        {2}]]]
   ];
 
 ClaudeRestorePackage[packageName_String] :=
@@ -13250,7 +13664,3074 @@ iDeferOutputDeclassify[nb_NotebookObject, cellIdx_Integer, wasDependent_] :=
     ]
   ];
 
+(* ================================================================
+   パッケージ「使用」vs「更新」ガード
+   ClaudeEval のプロンプトに挿入し、パッケージ名が含まれるタスクで
+   「使う」意図のときに ClaudeUpdatePackage を生成させない。
+   ================================================================ *)
+iPackageUseGuard[task_String] :=
+  Module[{pkgDir, allNames, mentioned, hasUpdateVerb, hasUseVerb, guard = ""},
+    pkgDir = Global`$packageDirectory;
+    If[!StringQ[pkgDir] || !DirectoryQ[pkgDir], Return[""]];
+    (* パッケージ名検出 *)
+    allNames = Join[
+      FileBaseName /@ FileNames["*.wl", pkgDir],
+      FileNameTake /@ Select[FileNames["*", pkgDir],
+        DirectoryQ[#] && FileExistsQ[FileNameJoin[{#, "PacletInfo.wl"}]] &]];
+    mentioned = Select[allNames,
+      StringContainsQ[task, #, IgnoreCase -> True] &];
+    If[Length[mentioned] === 0, Return[""]];
+    (* 変更系動詞の検出 *)
+    hasUpdateVerb = StringContainsQ[task,
+      "\:8ffd\:52a0" | "\:4fee\:6b63" | "\:5909\:66f4" | "\:524a\:9664" | "\:66f4\:65b0" |
+      "\:30d0\:30b0" | "\:76f4\:3057\:3066" | "\:76f4\:3059" | "\:6539\:5584" |
+      "add" | "modify" | "fix" | "change" | "remove" | "update" | "refactor",
+      IgnoreCase -> True];
+    (* 利用系動詞の検出 *)
+    hasUseVerb = StringContainsQ[task,
+      "\:8a08\:7b97" | "\:5b9f\:884c" | "\:8868\:793a" | "\:4f7f\:3063\:3066" | "\:4f7f\:3046" |
+      "\:3057\:3066" | "\:3092\:3057\:3066" | "\:3067\:304d\:308b" |
+      "\:691c\:7d22" | "\:53d6\:5f97" | "\:5206\:6790" | "\:30d7\:30ed\:30c3\:30c8" |
+      "compute" | "calculate" | "run" | "show" | "display" | "use" | "plot" | "search",
+      IgnoreCase -> True];
+    (* 明確に「使う」意図で「更新する」意図ではない場合にガード挿入 *)
+    If[hasUseVerb && !hasUpdateVerb,
+      guard = "\n=== CRITICAL PACKAGE-USE GUARD ===\n" <>
+        "The task mentions package(s): " <> StringRiffle[mentioned, ", "] <> ".\n" <>
+        "This task asks you to USE the package (compute/display/analyze), NOT to modify it.\n" <>
+        "ABSOLUTELY DO NOT generate ClaudeUpdatePackage or ClaudeCreatePackage.\n" <>
+        "Instead, call the existing functions shown in the api.md above.\n" <>
+        "If the needed function does not exist in api.md, inform the user that " <>
+        "ClaudeUpdatePackage is needed, but DO NOT call it yourself.\n" <>
+        "=================================\n"];
+    guard
+  ];
+
+(* ================================================================
+   Phase 3: サブグラフ記録
+   ClaudeUpdatePackage 等の内部ステップをサブステップとして記録。
+   親ノードの "SubSteps" キーに軽量イベントリストを格納。
+
+   サブステップ構造 (1ステップあたり ~100B):
+     <|"Name"       -> "read-source",
+       "Time"       -> AbsoluteTime[],
+       "Status"     -> "Completed",  (* Processing/Completed/Failed *)
+       "AccessLevel"-> "Local",
+       "Detail"     -> "Read 12345 chars"  (* 最大100文字 *)
+     |>
+   ================================================================ *)
+
+(* アクティブなサブグラフ記録セッション *)
+$iLLMGraphSubSteps = {};
+$iLLMGraphSubGraphActive = False;
+$iLLMGraphSubGraphParentNB = None;
+$iLLMGraphSubGraphParentTag = None;
+$iLLMGraphSubGraphPackage = "";
+
+(* サブグラフ記録開始 *)
+iLLMGraphBeginSubgraph[nb_NotebookObject, tag_String, packageName_String] := (
+  $iLLMGraphSubSteps = {};
+  $iLLMGraphSubGraphActive = True;
+  $iLLMGraphSubGraphParentNB = nb;
+  $iLLMGraphSubGraphParentTag = tag;
+  $iLLMGraphSubGraphPackage = packageName;
+  iLLMGraphLogSubStep["start", "Local",
+    "UpdatePackage: " <> packageName]);
+
+(* サブステップ記録 *)
+iLLMGraphLogSubStep[name_String, accessLevel_String, detail_String:""] :=
+  If[TrueQ[$iLLMGraphSubGraphActive],
+    AppendTo[$iLLMGraphSubSteps, <|
+      "Name"        -> name,
+      "Time"        -> AbsoluteTime[],
+      "Status"      -> "Completed",
+      "AccessLevel" -> accessLevel,
+      "Detail"      -> StringTake[detail, UpTo[100]]
+    |>]];
+
+(* 進行中マーク (LLM呼び出し開始時) *)
+iLLMGraphLogSubStepStart[name_String, accessLevel_String, detail_String:""] :=
+  If[TrueQ[$iLLMGraphSubGraphActive],
+    AppendTo[$iLLMGraphSubSteps, <|
+      "Name"        -> name,
+      "Time"        -> AbsoluteTime[],
+      "Status"      -> "Processing",
+      "AccessLevel" -> accessLevel,
+      "Detail"      -> StringTake[detail, UpTo[100]]
+    |>]];
+
+(* 最新サブステップの完了マーク *)
+iLLMGraphLogSubStepEnd[status_String:"Completed", detail_String:""] :=
+  If[TrueQ[$iLLMGraphSubGraphActive] && Length[$iLLMGraphSubSteps] > 0,
+    Module[{last = Last[$iLLMGraphSubSteps]},
+      last["Status"] = status;
+      If[detail =!= "", last["Detail"] = StringTake[detail, UpTo[100]]];
+      $iLLMGraphSubSteps[[-1]] = last]];
+
+(* サブグラフ記録終了: 最新ノードに SubSteps を格納 *)
+iLLMGraphEndSubgraph[finalStatus_String:"Completed"] := Module[
+  {nb, tag, graph, nodes, nodeIDs, latestID},
+  If[!TrueQ[$iLLMGraphSubGraphActive], Return[]];
+
+  iLLMGraphLogSubStep["end", "Local", finalStatus];
+
+  nb = $iLLMGraphSubGraphParentNB;
+  tag = $iLLMGraphSubGraphParentTag;
+  If[nb === None || !StringQ[tag], 
+    $iLLMGraphSubGraphActive = False; Return[]];
+
+  graph = iLLMGraphGetCached[nb];
+  If[!AssociationQ[graph],
+    $iLLMGraphSubGraphActive = False; Return[]];
+
+  nodes = Lookup[graph, "Nodes", <||>];
+  (* このセッションタグに属する最新ノードを探す *)
+  nodeIDs = Select[Keys[nodes], StringStartsQ[#, tag <> "-"] &];
+  If[Length[nodeIDs] > 0,
+    latestID = Last @ SortBy[nodeIDs,
+      Replace[Quiet @ ToExpression @ Last @ StringSplit[#, "-"],
+        Except[_Integer] -> 0] &];
+    If[KeyExistsQ[nodes, latestID],
+      nodes[latestID, "SubSteps"] = $iLLMGraphSubSteps;
+      nodes[latestID, "NodeType"] = "Orchestrator";
+      graph["Nodes"] = nodes;
+      $iLLMGraphCache = graph;
+      iLLMGraphFlush[nb]]];
+
+  (* クリーンアップ *)
+  $iLLMGraphSubSteps = {};
+  $iLLMGraphSubGraphActive = False;
+  $iLLMGraphSubGraphParentNB = None;
+  $iLLMGraphSubGraphParentTag = None;
+  $iLLMGraphSubGraphPackage = "";
+];
+
 (* iDeferOutputUnmark は後方互換のため iDeferOutputDeclassify に委譲 *)
+
+(* ================================================================
+   Notebook LLMGraph — Phase 1a (revised): 軽量グラフ + 外部キャッシュ
+   ================================================================
+   設計原則:
+     TaggingRules には再計算プラン（グラフ構造）のみ保存。
+     fullPrompt/response/code は外部キャッシュに分離。
+     ノードあたり ~1KB 以下を目標とする。
+
+   ノード分類:
+     "Orchestrator"  — ClaudeQuery/ClaudeEval 等の高レベル関数
+     "Continuation"  — ContinueEval による前セッション引き継ぎ
+
+   エッジ分類:
+     "ContextInheritance" — セッション履歴コンパクション要約の伝播
+     "DataFlow"           — ノード出力→次ノード入力
+     "Fallback"           — メインモデル失敗時の代替モデル遷移
+
+   アクセスレベル:
+     "Local"      — ローカル WL 評価 (API 不要)
+     "ClaudeCode" — Claude Code CLI 経由
+     "ClaudeAPI"  — Anthropic API 直接
+     "LMStudio"   — ローカル LLM サーバー
+     "WolframLLM" — Wolfram LLMFunction/LLMSynthesize
+
+   ストレージ設計:
+     TaggingRules (ノードあたり ~1KB):
+       NodeID, NodeType, AccessLevel, Status
+       Instruction (先頭500文字)
+       ResponseSummary (300文字以内)
+       Timestamps (Created のみ)
+       InEdges, OutEdges
+     外部キャッシュ ($packageDirectory/llmgraph_cache/):
+       {NodeID}.wxf — fullPrompt, response, code の完全データ
+       最近N件を保持、古いものは自動削除
+   ================================================================ *)
+
+(* ────────────────────────────────────────────────────────
+   定数
+   ──────────────────────────────────────────────────────── *)
+$iLLMGraphMaxInstructionChars = 500;
+$iLLMGraphMaxSummaryChars     = 300;
+$iLLMGraphCacheMaxEntries     = 100; (* 外部キャッシュに保持する最大エントリ数 L1+L2 合計 *)
+
+(* ────────────────────────────────────────────────────────
+   アクセスレベル色定義 (可視化用)
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphAccessColor["ClaudeCode"] := RGBColor[0.20, 0.50, 0.90];
+iLLMGraphAccessColor["ClaudeAPI"]  := RGBColor[0.35, 0.35, 0.95];
+iLLMGraphAccessColor["LMStudio"]   := RGBColor[0.10, 0.80, 0.30];
+iLLMGraphAccessColor["WolframLLM"] := RGBColor[0.90, 0.50, 0.10];
+iLLMGraphAccessColor["Local"]      := GrayLevel[0.65];
+iLLMGraphAccessColor[_]            := GrayLevel[0.40];
+
+(* ────────────────────────────────────────────────────────
+   アクセスレベル推定
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphInferAccessLevel["query"]   := "ClaudeCode";
+iLLMGraphInferAccessLevel["eval"]    := "ClaudeCode";
+iLLMGraphInferAccessLevel["spec"]    := "ClaudeCode";
+iLLMGraphInferAccessLevel["review"]  := "ClaudeCode";
+iLLMGraphInferAccessLevel["update"]  := "ClaudeCode";
+iLLMGraphInferAccessLevel["doc"]     := "ClaudeCode";
+iLLMGraphInferAccessLevel["debug"]   := "ClaudeCode";
+iLLMGraphInferAccessLevel[_]         := "ClaudeCode";
+
+(* entry Association からの AccessLevel 推定:
+   "accessLevel" キーがあればそれを PrivacySpec 数値 → 名前に変換。
+   なければ "type" から推定。 *)
+iLLMGraphInferAccessLevelFromEntry[entry_Association] :=
+  Module[{al = Quiet @ Lookup[entry, "accessLevel", None]},
+    Which[
+      al === 1.0 || al === 1,  "LMStudio",
+      al === 0.75,             "WolframLLM",
+      al === 0.5 || al === 0,  "ClaudeCode",
+      NumericQ[al] && al >= 0.9, "LMStudio",
+      NumericQ[al] && al >= 0.6, "WolframLLM",
+      True, iLLMGraphInferAccessLevel[Quiet @ Lookup[entry, "type", "query"]]
+    ]
+  ];
+iLLMGraphInferAccessLevelFromEntry[_] := "ClaudeCode";
+
+(* ────────────────────────────────────────────────────────
+   ノードタイプ推定
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphInferNodeType[entry_Association] :=
+  Module[{t = Lookup[entry, "type", "query"],
+          inst = Lookup[entry, "instruction", ""]},
+    If[t === "continue" || StringStartsQ[ToString[inst], "ContinueEval"],
+      "Continuation", "Orchestrator"]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   レスポンスサマリー生成 (API 不要、ローカルのみ)
+   既存の iMakeLocalSummary を活用しつつ、サイズを厳格に制限
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphMakeSummary[entry_Association] :=
+  Module[{resp, code, summary},
+    resp = Lookup[entry, "response", ""];
+    code = Lookup[entry, "code", ""];
+    (* 既にサマリーがあればそれを使う (コンパクション済みエントリ) *)
+    If[KeyExistsQ[entry, "summary"] && StringQ[entry["summary"]] &&
+       entry["summary"] =!= "",
+      Return[StringTake[entry["summary"], UpTo[$iLLMGraphMaxSummaryChars]]]];
+    (* response の先頭を要約として使用 *)
+    summary = If[StringQ[resp] && resp =!= "" &&
+                 resp =!= "(\:51e6\:7406\:4e2d)" && resp =!= "\:ff08\:51e6\:7406\:4e2d\:ff09",
+      StringTake[resp, UpTo[$iLLMGraphMaxSummaryChars]],
+      If[StringQ[code] && code =!= "",
+        "[code] " <> StringTake[code, UpTo[200]],
+        ""]];
+    summary
+  ];
+
+(* ────────────────────────────────────────────────────────
+   外部キャッシュ: ディレクトリ管理
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphCacheDir[] :=
+  Module[{dir},
+    (* $packageDirectory は ClaudeCode が読めるため秘匿データを置けない。
+       $UserBaseDirectory/ClaudeCode/ は FrontEnd のみがアクセスする領域。 *)
+    dir = FileNameJoin[{$UserBaseDirectory, "ClaudeCode", "llmgraph_cache"}];
+    If[!DirectoryQ[dir], Quiet @ CreateDirectory[dir, CreateIntermediateDirectories -> True]];
+    dir
+  ];
+
+(* キャッシュ書き込み: 重い data を外部に退避 *)
+iLLMGraphCacheWrite[nodeID_String, data_Association] :=
+  Module[{path},
+    path = FileNameJoin[{iLLMGraphCacheDir[],
+      StringReplace[nodeID, "/" -> "_"] <> ".wxf"}];
+    Quiet @ Export[path, data, "WXF"];
+    path
+  ];
+
+(* キャッシュ読み込み *)
+iLLMGraphCacheRead[nodeID_String] :=
+  Module[{path, data},
+    path = FileNameJoin[{iLLMGraphCacheDir[],
+      StringReplace[nodeID, "/" -> "_"] <> ".wxf"}];
+    If[!FileExistsQ[path], Return[Missing["CacheExpired"]]];
+    data = Quiet @ Import[path, "WXF"];
+    If[AssociationQ[data], data, Missing["CacheCorrupted"]]
+  ];
+
+(* キャッシュ自動クリーンアップ: 古いファイルを削除 *)
+iLLMGraphCacheCleanup[] :=
+  Module[{dir, files, toDelete},
+    dir = iLLMGraphCacheDir[];
+    files = FileNames["*.wxf", dir];
+    If[Length[files] <= $iLLMGraphCacheMaxEntries, Return[]];
+    (* 更新日時が古い順にソートし、超過分を削除 *)
+    files = SortBy[files, FileDate[#, "Modification"] &];
+    toDelete = Take[files, Length[files] - $iLLMGraphCacheMaxEntries];
+    Quiet @ Scan[DeleteFile, toDelete];
+  ];
+
+(* ================================================================
+   Phase 4a: L2 Computation Graph
+   各 L1 ノード (ClaudeEval 応答) が生成したコードブロック群を
+   L2 計算グラフとして追跡する。
+
+   L2 ノード構造 (1 ノードあたり ~300B):
+     "NodeID"       -> "history-5_L2-1"   (* L1ID_L2-ブロック番号 *)
+     "BlockIdx"     -> 1
+     "Code"         -> "data = Import[...]"
+     "Status"       -> "Pending"           (* Pending | Completed | Failed *)
+     "ErrorMessage" -> None
+     "Time"         -> AbsoluteTime[]
+     "InEdges"      -> {}                  (* 前ブロックへの Sequential 依存 *)
+     "OutEdges"     -> {}
+
+   L2 グラフ構造 (外部キャッシュ {l1NodeID}_L2.wxf に保存):
+     "L1NodeID"   -> "history-5"
+     "CreatedAt"  -> AbsoluteTime[]
+     "BlockCount" -> 3
+     "Nodes"      -> <| "history-5_L2-1" -> node1, ... |>
+
+   L1 ノードへの追加フィールド:
+     "L2Ref"        -> "history-5_L2"  (* または None *)
+     "L2NodeCount"  -> 3
+     "L2ErrorCount" -> 0
+   ================================================================ *)
+
+(* ────────────────────────────────────────────────────────
+   L2 外部キャッシュ: 読み書き
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphCacheWriteL2[nodeID_String, l2Graph_Association] :=
+  Module[{path},
+    path = FileNameJoin[{iLLMGraphCacheDir[],
+      StringReplace[nodeID, "/" -> "_"] <> "_L2.wxf"}];
+    Quiet @ Export[path, l2Graph, "WXF"];
+    path
+  ];
+
+iLLMGraphCacheReadL2[nodeID_String] :=
+  Module[{path, data},
+    path = FileNameJoin[{iLLMGraphCacheDir[],
+      StringReplace[nodeID, "/" -> "_"] <> "_L2.wxf"}];
+    If[!FileExistsQ[path], Return[Missing["CacheExpired"]]];
+    data = Quiet @ Import[path, "WXF"];
+    If[AssociationQ[data], data, Missing["CacheCorrupted"]]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   L2 ノードコンストラクタ
+   ──────────────────────────────────────────────────────── *)
+iNewL2Node[l1NodeID_String, blockIdx_Integer, code_String] :=
+  <|
+    "NodeID"       -> l1NodeID <> "_L2-" <> ToString[blockIdx],
+    "BlockIdx"     -> blockIdx,
+    "Code"         -> code,
+    "Status"       -> "Pending",
+    "ErrorMessage" -> None,
+    "Time"         -> AbsoluteTime[],
+    "InEdges"      -> If[blockIdx > 1,
+      {<|"From" -> l1NodeID <> "_L2-" <> ToString[blockIdx - 1],
+         "Type" -> "Sequential"|>},
+      {}],
+    "OutEdges"     -> {}
+  |>;
+
+(* ────────────────────────────────────────────────────────
+   レスポンス文字列からコードブロックを抽出
+   iClaudeEvalImpl と同じ処理を踏襲
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphExtractCodeBlocks[response_String] :=
+  Module[{rawBlocks},
+    rawBlocks = StringCases[response,
+      RegularExpression["```(?:mathematica|wolfram)?\\n([\\s\\S]*?)```"] :> "$1"];
+    rawBlocks = iFixUnicodeEscapes[StringTrim[#]] & /@ rawBlocks;
+    rawBlocks = Select[rawBlocks, StringQ[#] && StringTrim[#] =!= "" &];
+    If[Length[rawBlocks] === 0, Return[{}]];
+    iMergeDependentBlocks[rawBlocks]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   L2 グラフ構築: response → L2 グラフ
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphBuildL2[l1NodeID_String, response_String] :=
+  Module[{blocks, nodes = <||>, i, node, prevID},
+    blocks = Quiet @ iLLMGraphExtractCodeBlocks[response];
+    If[!ListQ[blocks] || blocks === {}, Return[None]];
+
+    Do[
+      node = iNewL2Node[l1NodeID, i, blocks[[i]]];
+      (* 前ノードに OutEdge を設定 *)
+      If[i > 1,
+        prevID = l1NodeID <> "_L2-" <> ToString[i - 1];
+        If[KeyExistsQ[nodes, prevID],
+          nodes[prevID, "OutEdges"] = {<|
+            "To"   -> node["NodeID"],
+            "Type" -> "Sequential"|>}]];
+      nodes[node["NodeID"]] = node,
+    {i, Length[blocks]}];
+
+    <|
+      "L1NodeID"   -> l1NodeID,
+      "CreatedAt"  -> AbsoluteTime[],
+      "BlockCount" -> Length[blocks],
+      "Nodes"      -> nodes
+    |>
+  ];
+
+(* ────────────────────────────────────────────────────────
+   iLLMGraphBuildAndCacheL2:
+   L2 グラフを構築してキャッシュし、L1 ノードを更新する。
+   iLLMGraphOnUpdate の完了フックから呼ばれる。
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphBuildAndCacheL2[l1NodeID_String, response_String] :=
+  Module[{l2Graph, blockCount, graph, nodes, node},
+    l2Graph = Quiet @ iLLMGraphBuildL2[l1NodeID, response];
+    If[!AssociationQ[l2Graph] ||
+       Lookup[l2Graph, "BlockCount", 0] === 0, Return[]];
+    blockCount = l2Graph["BlockCount"];
+    (* L2 キャッシュに書き出し *)
+    Quiet @ iLLMGraphCacheWriteL2[l1NodeID, l2Graph];
+    (* L1 ノードの L2 参照フィールドをインメモリキャッシュ経由で更新 *)
+    graph = $iLLMGraphCache;
+    If[!AssociationQ[graph], Return[]];
+    nodes = Lookup[graph, "Nodes", <||>];
+    node  = Lookup[nodes, l1NodeID, None];
+    If[!AssociationQ[node], Return[]];
+    node["L2Ref"]        = l1NodeID <> "_L2";
+    node["L2NodeCount"]  = blockCount;
+    node["L2ErrorCount"] = 0;
+    nodes[l1NodeID] = node;
+    graph["Nodes"]   = nodes;
+    $iLLMGraphCache  = graph;
+  ];
+
+(* ────────────────────────────────────────────────────────
+   Phase 4b: L2 ステータス手動更新
+   NBEvaluatePreviousCell の完了コールバックから将来呼び出せるよう
+   public API として用意する。
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphUpdateL2NodeStatus[l1NodeID_String, l2NodeID_String,
+                             status_String, msg_:None] :=
+  Module[{l2Graph, nodes, node},
+    l2Graph = iLLMGraphCacheReadL2[l1NodeID];
+    If[!AssociationQ[l2Graph], Return[]];
+    nodes = Lookup[l2Graph, "Nodes", <||>];
+    node  = Lookup[nodes, l2NodeID, None];
+    If[!AssociationQ[node], Return[]];
+    node["Status"] = status;
+    If[msg =!= None, node["ErrorMessage"] = msg];
+    nodes[l2NodeID] = node;
+    l2Graph["Nodes"] = nodes;
+    Quiet @ iLLMGraphCacheWriteL2[l1NodeID, l2Graph];
+    (* L1 ノードの L2ErrorCount を更新 *)
+    Module[{graph, l1Nodes, l1Node, errCount},
+      graph = $iLLMGraphCache;
+      If[!AssociationQ[graph], Return[]];
+      l1Nodes = Lookup[graph, "Nodes", <||>];
+      l1Node  = Lookup[l1Nodes, l1NodeID, None];
+      If[!AssociationQ[l1Node], Return[]];
+      errCount = Length @ Select[
+        Values @ Lookup[l2Graph, "Nodes", <||>],
+        Lookup[#, "Status", ""] === "Failed" &];
+      l1Node["L2ErrorCount"] = errCount;
+      l1Nodes[l1NodeID] = l1Node;
+      graph["Nodes"] = l1Nodes;
+      $iLLMGraphCache = graph];
+  ];
+
+(* ────────────────────────────────────────────────────────
+   軽量ノードコンストラクタ
+   TaggingRules に保存するのはこの構造のみ
+   ──────────────────────────────────────────────────────── *)
+iNewLLMNode[nodeID_String, nodeType_String, accessLevel_String,
+            fields_Association : <||>] :=
+  Join[<|
+    "NodeID"          -> nodeID,
+    "NodeType"        -> nodeType,
+    "AccessLevel"     -> accessLevel,
+    "InEdges"         -> {},
+    "OutEdges"        -> {},
+    "Status"          -> "Completed",
+    "Instruction"     -> "",
+    "ResponseSummary" -> "",
+    "Step"            -> 0,
+    "Time"            -> None,
+    "Type"            -> "query",
+    "L2Ref"           -> None,
+    "L2NodeCount"     -> 0,
+    "L2ErrorCount"    -> 0
+  |>, fields];
+
+(* ────────────────────────────────────────────────────────
+   セッション履歴エントリ → 軽量ノード変換
+   重いデータ (fullPrompt, response, code) は外部キャッシュへ
+   ──────────────────────────────────────────────────────── *)
+iHistoryEntryToNode[entry_Association, sessionTag_String,
+                    idx_Integer, cacheHeavyData_:True] :=
+  Module[{nodeID, nodeType, accessLevel, inEdges, inst, summary},
+    nodeID = sessionTag <> "-" <> ToString[idx];
+    nodeType = iLLMGraphInferNodeType[entry];
+    accessLevel = iLLMGraphInferAccessLevelFromEntry[entry];
+
+    (* 先行ノードからのエッジ: parentStep 指定があればそれを使用 (Fork/Join 用) *)
+    inEdges = Module[{ps = Quiet @ Lookup[entry, "parentStep", None],
+                       et = Quiet @ Lookup[entry, "edgeType", "ContextInheritance"]},
+      If[!StringQ[et], et = "ContextInheritance"];
+      If[IntegerQ[ps] && ps >= 1,
+        {<|"From" -> sessionTag <> "-" <> ToString[ps], "Type" -> et|>},
+        If[idx > 1,
+          {<|"From" -> sessionTag <> "-" <> ToString[idx - 1],
+             "Type" -> "ContextInheritance"|>},
+          {}]]];
+
+    (* instruction を切り詰め *)
+    inst = Lookup[entry, "instruction", ""];
+    If[StringQ[inst],
+      inst = StringTake[inst, UpTo[$iLLMGraphMaxInstructionChars]],
+      inst = StringTake[ToString[inst], UpTo[$iLLMGraphMaxInstructionChars]]];
+
+    (* レスポンスサマリー生成 *)
+    summary = iLLMGraphMakeSummary[entry];
+
+    (* 重いデータを外部キャッシュに書き出し *)
+    If[TrueQ[cacheHeavyData],
+      Module[{heavyData = <||>},
+        If[KeyExistsQ[entry, "fullPrompt"],
+          heavyData["fullPrompt"] = entry["fullPrompt"]];
+        If[KeyExistsQ[entry, "response"] && StringQ[entry["response"]] &&
+           entry["response"] =!= "(\:51e6\:7406\:4e2d)" &&
+           entry["response"] =!= "\:ff08\:51e6\:7406\:4e2d\:ff09",
+          heavyData["response"] = entry["response"]];
+        If[KeyExistsQ[entry, "code"] && StringQ[entry["code"]] &&
+           entry["code"] =!= "",
+          heavyData["code"] = entry["code"]];
+        If[Length[heavyData] > 0,
+          Quiet @ iLLMGraphCacheWrite[nodeID, heavyData]]]];
+
+    (* 軽量ノードを返す *)
+    <|
+      "NodeID"          -> nodeID,
+      "NodeType"        -> nodeType,
+      "AccessLevel"     -> accessLevel,
+      "InEdges"         -> inEdges,
+      "OutEdges"        -> {},
+      "Step"            -> Lookup[entry, "step", idx],
+      "Time"            -> Lookup[entry, "time", None],
+      "Type"            -> Lookup[entry, "type", "query"],
+      "Instruction"     -> inst,
+      "ResponseSummary" -> summary,
+      "Status"          -> If[
+        Lookup[entry, "response", ""] === "(\:51e6\:7406\:4e2d)" ||
+        Lookup[entry, "response", ""] === "\:ff08\:51e6\:7406\:4e2d\:ff09",
+        "Processing", "Completed"],
+      "BackupRef"       -> None,
+      "L2Ref"           -> None,
+      "L2NodeCount"     -> 0,
+      "L2ErrorCount"    -> 0
+    |>
+  ];
+
+(* ────────────────────────────────────────────────────────
+   バックアップディレクトリ名 → AbsoluteTime 変換
+   "20260325_143022" → AbsoluteTime[{2026,3,25,14,30,22}]
+   ──────────────────────────────────────────────────────── *)
+iBackupDirNameToAbsoluteTime[dirName_String] :=
+  Module[{ts, m},
+    ts = iBackupTimestampPart[dirName];
+    m = StringCases[ts,
+      RegularExpression["(\\d{4})(\\d{2})(\\d{2})_(\\d{2})(\\d{2})(\\d{2})"] :>
+        {ToExpression["$1"], ToExpression["$2"], ToExpression["$3"],
+         ToExpression["$4"], ToExpression["$5"], ToExpression["$6"]}];
+    If[Length[m] > 0,
+      Quiet @ AbsoluteTime[First[m]],
+      (* YYYYMMDDHHMM 形式 *)
+      m = StringCases[ts,
+        RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
+          {ToExpression["$1"], ToExpression["$2"], ToExpression["$3"],
+           ToExpression["$4"], ToExpression["$5"], 0}];
+      If[Length[m] > 0,
+        Quiet @ AbsoluteTime[First[m]],
+        None]]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   全パッケージのバックアップタイムスタンプ一覧を収集
+   戻り値: {<|"DirName"->..., "AbsTime"->..., "Package"->...|>, ...}
+   ──────────────────────────────────────────────────────── *)
+iCollectBackupTimestamps[] :=
+  Module[{allInfoDirs, pkgNames, result = {}},
+    If[!StringQ[Global`$packageDirectory] ||
+       Global`$packageDirectory === "",
+      Return[{}]];
+    allInfoDirs = Quiet @
+      Select[FileNames["*_info", Global`$packageDirectory], DirectoryQ];
+    pkgNames = StringReplace[FileNameTake[#, -1],
+      RegularExpression["_info$"] -> ""] & /@ allInfoDirs;
+    Do[
+      Module[{bdir, dirs},
+        bdir = backupDir[pkg];
+        If[DirectoryQ[bdir],
+          dirs = Select[FileNames["*", bdir], DirectoryQ];
+          Do[
+            Module[{dirName = FileNameTake[d, -1], absTime},
+              absTime = iBackupDirNameToAbsoluteTime[dirName];
+              If[NumericQ[absTime],
+                AppendTo[result, <|
+                  "DirName"  -> dirName,
+                  "AbsTime"  -> absTime,
+                  "Package"  -> pkg,
+                  "FullPath" -> d
+                |>]]],
+          {d, dirs}]]],
+    {pkg, pkgNames}];
+    result
+  ];
+
+(* ────────────────────────────────────────────────────────
+   バックアップエントリとの結合 (タイムスタンプ±30秒照合)
+   backupEntries: iCollectBackupTimestamps[] の戻り値
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphEnrichWithBackup[node_Association, backupEntries_List] :=
+  Module[{nodeTime, matching},
+    nodeTime = Lookup[node, "Time", None];
+    If[!NumericQ[nodeTime], Return[node]];
+    matching = Select[backupEntries,
+      (NumericQ[Lookup[#, "AbsTime", None]] &&
+       Abs[#["AbsTime"] - nodeTime] < 30.0) &];
+    If[matching === {},
+      node,
+      (* 最も近いものを選択 *)
+      matching = SortBy[matching, Abs[#["AbsTime"] - nodeTime] &];
+      Append[node,
+        "BackupRef" -> First[matching]["DirName"]]]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   空のノートブック LLMGraph を生成
+   ──────────────────────────────────────────────────────── *)
+iNewNotebookLLMGraph[nb_] :=
+  Module[{nbPath},
+    nbPath = Quiet @ Replace[
+      NotebookFileName[nb],
+      {s_String :> s, _ -> "untitled"}];
+    <|
+      "NotebookID"   -> "nb-" <> DateString[Now, {"Year","Month","Day"}],
+      "NotebookPath" -> nbPath,
+      "CreatedAt"    -> AbsoluteTime[],
+      "LastModified" -> AbsoluteTime[],
+      "SessionTags"  -> {},
+      "Nodes"        -> <||>
+    |>
+  ];
+iNewNotebookLLMGraph[] := iNewNotebookLLMGraph[None];
+
+(* ────────────────────────────────────────────────────────
+   既存セッション履歴からグラフを構築
+   ──────────────────────────────────────────────────────── *)
+iBuildGraphFromHistory[nb_NotebookObject, tag_String] :=
+  Module[{entries, graph, nodes, i, node, prevNodeID},
+    entries = Quiet @ iSessionHistory[nb, tag];
+    If[!ListQ[entries] || entries === {},
+      Return[iNewNotebookLLMGraph[nb]]];
+
+    graph = iNewNotebookLLMGraph[nb];
+    graph["SessionTags"] = {tag};
+    nodes = <||>;
+
+    Do[
+      node = iHistoryEntryToNode[entries[[i]], tag, i];
+      (* OutEdges を前のノードに設定 *)
+      If[i > 1,
+        prevNodeID = tag <> "-" <> ToString[i - 1];
+        If[KeyExistsQ[nodes, prevNodeID],
+          nodes[prevNodeID, "OutEdges"] = {<|
+            "To"   -> node["NodeID"],
+            "Type" -> "ContextInheritance"|>}]];
+      nodes[node["NodeID"]] = node,
+    {i, Length[entries]}];
+
+    graph["Nodes"] = nodes;
+    graph["LastModified"] = AbsoluteTime[];
+    (* 構築後にキャッシュクリーンアップ *)
+    Quiet @ iLLMGraphCacheCleanup[];
+    graph
+  ];
+
+(* 複数セッションタグからの構築 *)
+iBuildGraphFromAllSessions[nb_NotebookObject] :=
+  Module[{tags, graph, subGraph, allNodes = <||>, backupTs},
+    tags = Quiet @ Replace[
+      iAllSessionTags[nb],
+      Except[_List] -> {iSessionTag[]}];
+    tags = DeleteDuplicates @ Prepend[tags, iSessionTag[]];
+
+    graph = iNewNotebookLLMGraph[nb];
+    graph["SessionTags"] = tags;
+
+    Do[
+      subGraph = iBuildGraphFromHistory[nb, t];
+      allNodes = Join[allNodes, Lookup[subGraph, "Nodes", <||>]],
+    {t, tags}];
+
+    (* Phase 1b: バックアップ履歴との結合 *)
+    backupTs = Quiet @ iCollectBackupTimestamps[];
+    If[ListQ[backupTs] && Length[backupTs] > 0,
+      allNodes = Association @ KeyValueMap[
+        Function[{nid, node},
+          nid -> iLLMGraphEnrichWithBackup[node, backupTs]],
+        allNodes]];
+
+    graph["Nodes"] = allNodes;
+    graph["LastModified"] = AbsoluteTime[];
+    graph
+  ];
+
+(* ────────────────────────────────────────────────────────
+   TaggingRules への保存/読み込み
+   保存するのは軽量グラフのみ。Compress でさらに圧縮。
+   ──────────────────────────────────────────────────────── *)
+iSaveNotebookLLMGraph[nb_NotebookObject, llmGraph_Association] := (
+  Quiet[CurrentValue[nb,
+    {TaggingRules, "claudecode", "LLMGraph"}] =
+      Compress[llmGraph]];
+  llmGraph);
+
+iLoadNotebookLLMGraph[nb_NotebookObject] :=
+  Module[{raw, graph},
+    raw = Quiet @ CurrentValue[nb,
+      {TaggingRules, "claudecode", "LLMGraph"}];
+    graph = If[raw === Inherited || raw === {} || !StringQ[raw],
+      iBuildGraphFromAllSessions[nb],
+      Replace[Quiet @ Uncompress[raw],
+        Except[_Association] :> iBuildGraphFromAllSessions[nb]]];
+    (* キャッシュにも保持 *)
+    $iLLMGraphCache = graph;
+    $iLLMGraphCacheNB = nb;
+    graph
+  ];
+
+(* ================================================================
+   Phase 2b: リアルタイムノード追加フック
+   iSessionAppend / iSessionUpdateLast から呼ばれる。
+   メモリキャッシュを使い、完了時にTaggingRulesへフラッシュする。
+   ================================================================ *)
+
+(* ────────────────────────────────────────────────────────
+   メモリキャッシュ
+   Compress/Uncompress を毎回実行するのを避ける。
+   ノートブック単位でキャッシュし、完了時にフラッシュ。
+   ──────────────────────────────────────────────────────── *)
+$iLLMGraphCache = None;
+$iLLMGraphCacheNB = None;
+
+iLLMGraphGetCached[nb_NotebookObject] :=
+  If[$iLLMGraphCacheNB === nb && AssociationQ[$iLLMGraphCache],
+    $iLLMGraphCache,
+    (* キャッシュミス: iLoadNotebookLLMGraph がキャッシュも設定する *)
+    iLoadNotebookLLMGraph[nb]];
+
+iLLMGraphFlush[nb_NotebookObject] :=
+  If[AssociationQ[$iLLMGraphCache] && $iLLMGraphCacheNB === nb,
+    iSaveNotebookLLMGraph[nb, $iLLMGraphCache];
+    $iLLMGraphCache];
+
+iLLMGraphInvalidateCache[] := (
+  $iLLMGraphCache = None;
+  $iLLMGraphCacheNB = None);
+
+(* ────────────────────────────────────────────────────────
+   iLLMGraphOnAppend: iSessionAppend から呼ばれるフック
+   新しいエントリのノードをグラフに追加する。
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphOnAppend[nb_NotebookObject, tag_String, entry_Association] :=
+  Module[{graph, step, nodeID, node, nodes, prevNodeID, prevStep,
+          parentStep, edgeType},
+    graph = iLLMGraphGetCached[nb];
+    If[!AssociationQ[graph], Return[]];
+
+    step = Quiet @ Lookup[entry, "step", 0];
+    If[!IntegerQ[step], step = 0];
+    nodeID = tag <> "-" <> ToString[step + 1];
+    nodes = Lookup[graph, "Nodes", <||>];
+    If[KeyExistsQ[nodes, nodeID], Return[]];
+
+    node = iHistoryEntryToNode[entry, tag, step + 1, False];
+
+    (* parentStep: 明示指定があればそれを使う (Fork/Join 用) *)
+    parentStep = Quiet @ Lookup[entry, "parentStep", step];
+    If[!IntegerQ[parentStep], parentStep = step];
+    edgeType = Quiet @ Lookup[entry, "edgeType", "ContextInheritance"];
+    If[!StringQ[edgeType], edgeType = "ContextInheritance"];
+    prevNodeID = tag <> "-" <> ToString[parentStep];
+
+    (* InEdges をオーバーライド *)
+    If[parentStep >= 1 && KeyExistsQ[nodes, prevNodeID],
+      node["InEdges"] = {<|"From" -> prevNodeID, "Type" -> edgeType|>};
+      (* 親ノードの OutEdges に追加 (既存を保持して追加) *)
+      nodes[prevNodeID, "OutEdges"] =
+        DeleteDuplicatesBy[
+          Append[Lookup[nodes[prevNodeID], "OutEdges", {}],
+            <|"To" -> nodeID, "Type" -> edgeType|>],
+          #["To"] &],
+      (* parentStep=0 or 親が存在しない場合 *)
+      If[parentStep >= 1,
+        node["InEdges"] = {<|"From" -> prevNodeID, "Type" -> edgeType|>}]];
+
+    nodes[nodeID] = node;
+    graph["Nodes"] = nodes;
+    graph["LastModified"] = AbsoluteTime[];
+
+    If[!MemberQ[Lookup[graph, "SessionTags", {}], tag],
+      graph["SessionTags"] =
+        DeleteDuplicates @ Append[Lookup[graph, "SessionTags", {}], tag]];
+
+    $iLLMGraphCache = graph;
+  ];
+
+(* ────────────────────────────────────────────────────────
+   iLLMGraphOnUpdate: iSessionUpdateLast から呼ばれるフック
+   最新ノードのステータス・サマリーを更新し、
+   完了時にTaggingRulesへフラッシュ + 外部キャッシュへ書き出し。
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphOnUpdate[nb_NotebookObject, tag_String, updates_Association] :=
+  Module[{graph, nodes, nodeIDs, latestNodeID, node,
+          resp, code, summary, isCompleted},
+    graph = iLLMGraphGetCached[nb];
+    If[!AssociationQ[graph], Return[]];
+
+    nodes = Lookup[graph, "Nodes", <||>];
+    (* このセッションタグに属する最新ノードを探す *)
+    nodeIDs = Select[Keys[nodes],
+      StringStartsQ[#, tag <> "-"] &];
+    If[Length[nodeIDs] === 0, Return[]];
+    latestNodeID = Last @ SortBy[nodeIDs,
+      Replace[
+        Quiet @ ToExpression @ Last @ StringSplit[#, "-"],
+        Except[_Integer] -> 0] &];
+
+    node = nodes[latestNodeID];
+    If[!AssociationQ[node], Return[]];
+
+    (* レスポンスからサマリーを生成 *)
+    resp = Lookup[updates, "response", None];
+    code = Lookup[updates, "code", None];
+    If[StringQ[resp] &&
+       resp =!= "(\:51e6\:7406\:4e2d)" && resp =!= "\:ff08\:51e6\:7406\:4e2d\:ff09",
+      summary = StringTake[resp, UpTo[$iLLMGraphMaxSummaryChars]];
+      node["ResponseSummary"] = summary;
+      node["Status"] = "Completed";
+      isCompleted = True,
+      isCompleted = False];
+
+    nodes[latestNodeID] = node;
+    graph["Nodes"] = nodes;
+    graph["LastModified"] = AbsoluteTime[];
+    $iLLMGraphCache = graph;
+
+    (* 完了時: 外部キャッシュへ書き出し + L2グラフ構築 + TaggingRules フラッシュ *)
+    If[TrueQ[isCompleted],
+      Module[{heavyData = <||>},
+        If[StringQ[resp] && StringLength[resp] > 0,
+          heavyData["response"] = resp];
+        If[StringQ[code] && code =!= "",
+          heavyData["code"] = code];
+        If[Length[heavyData] > 0,
+          Quiet @ iLLMGraphCacheWrite[latestNodeID, heavyData]]];
+      (* Phase 4a: L2グラフをレスポンスから構築してキャッシュに書き出す。
+         resp が有効な文字列で、かつ ```mathematica ブロックを含む場合のみ実行。
+         iLLMGraphBuildAndCacheL2 は $iLLMGraphCache を直接更新するため
+         必ず iLLMGraphFlush より前に呼ぶ。 *)
+      If[StringQ[resp] && StringLength[resp] > 0,
+        Quiet @ iLLMGraphBuildAndCacheL2[latestNodeID, resp]];
+      (* TaggingRules にフラッシュ *)
+      iLLMGraphFlush[nb]];
+  ];
+
+(* ────────────────────────────────────────────────────────
+   可視化ヘルパー
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphExtractEdges[llmGraph_Association] :=
+  Module[{nodes, edges = {}},
+    nodes = Lookup[llmGraph, "Nodes", <||>];
+    KeyValueMap[
+      Function[{nid, node},
+        Scan[Function[edge,
+          AppendTo[edges,
+            DirectedEdge[nid, edge["To"], edge["Type"]]]],
+          Lookup[node, "OutEdges", {}]]],
+      nodes];
+    edges
+  ];
+
+iLLMGraphNodeLabels[llmGraph_Association] :=
+  Module[{nodes},
+    nodes = Lookup[llmGraph, "Nodes", <||>];
+    KeyValueMap[
+      Function[{nid, node},
+        nid -> Placed[
+          Column[{
+            Style[StringTake[
+              Lookup[node, "Instruction", nid], UpTo[30]], Bold, 9],
+            Style[Lookup[node, "Type", "?"] <> " | " <>
+              Lookup[node, "AccessLevel", "?"], Gray, 8],
+            Style["Step " <> ToString[Lookup[node, "Step", "?"]], Gray, 7]
+          }, Alignment -> Center],
+          Tooltip]],
+      nodes]
+  ];
+
+iLLMGraphNodeStyles[llmGraph_Association] :=
+  Module[{nodes},
+    nodes = Lookup[llmGraph, "Nodes", <||>];
+    KeyValueMap[
+      Function[{nid, node},
+        nid -> Directive[
+          EdgeForm[{Thin, GrayLevel[0.3]}],
+          iLLMGraphAccessColor[Lookup[node, "AccessLevel", ""]]]],
+      nodes]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   検証
+   ──────────────────────────────────────────────────────── *)
+iValidateNotebookLLMGraph[llmGraph_Association, nb_NotebookObject] :=
+  Module[{results = <||>, nodes, tags, totalHistoryEntries = 0,
+          nodeCount, allNodeIDs, danglingEdges,
+          graphSize = 0, avgNodeSize = 0},
+    nodes = Lookup[llmGraph, "Nodes", <||>];
+    nodeCount = Length[nodes];
+    allNodeIDs = Keys[nodes];
+
+    (* 1. セッション履歴エントリ数との一致 *)
+    tags = Lookup[llmGraph, "SessionTags", {}];
+    Do[
+      totalHistoryEntries += Length[
+        Quiet @ Replace[iSessionHistory[nb, t],
+          Except[_List] -> {}]],
+    {t, tags}];
+    results["NodeCountMatch"] = <|
+      "Pass"     -> (nodeCount == totalHistoryEntries),
+      "Expected" -> totalHistoryEntries,
+      "Actual"   -> nodeCount
+    |>;
+
+    (* 2. エッジ参照整合性 *)
+    danglingEdges = {};
+    KeyValueMap[
+      Function[{nid, node},
+        Scan[Function[edge,
+          If[!MemberQ[allNodeIDs, edge["To"]],
+            AppendTo[danglingEdges, nid -> edge["To"]]]],
+          Lookup[node, "OutEdges", {}]];
+        Scan[Function[edge,
+          If[!MemberQ[allNodeIDs, edge["From"]],
+            AppendTo[danglingEdges, edge["From"] -> nid]]],
+          Lookup[node, "InEdges", {}]]],
+      nodes];
+    results["EdgeIntegrity"] = <|
+      "Pass"          -> (danglingEdges === {}),
+      "DanglingEdges" -> danglingEdges
+    |>;
+
+    (* 3. DAG 性 *)
+    results["IsDAG"] = <|
+      "Pass" -> Replace[
+        Quiet @ AcyclicGraphQ[
+          Graph[iLLMGraphExtractEdges[llmGraph]]],
+        {True -> True, _ -> (nodeCount <= 1)}]
+    |>;
+
+    (* 4. ノードID 一意性 *)
+    results["UniqueNodeIDs"] = <|
+      "Pass"       -> (Length[allNodeIDs] == Length[DeleteDuplicates[allNodeIDs]]),
+      "Duplicates" -> Select[Tally[allNodeIDs], #[[2]] > 1 &]
+    |>;
+
+    (* 5. サイズ検証: Compress 後のサイズ (実際に TaggingRules に保存される形) *)
+    Module[{compressed, compressedSize, avgCompressed},
+      compressed = Quiet @ Compress[llmGraph];
+      compressedSize = If[StringQ[compressed], StringLength[compressed], 0];
+      graphSize = Quiet @ Check[ByteCount[llmGraph], 0];
+      avgNodeSize = If[nodeCount > 0, N[graphSize / nodeCount], 0];
+      avgCompressed = If[nodeCount > 0, N[compressedSize / nodeCount], 0];
+      results["SizeCheck"] = <|
+        "Pass"                -> (avgCompressed < 2000),  (* ~2KB/ノード(圧縮後)以下 *)
+        "TotalBytesRaw"       -> graphSize,
+        "TotalBytesCompressed"-> compressedSize,
+        "AvgBytesPerNode"     -> Round[avgNodeSize],
+        "AvgCompressedPerNode"-> Round[avgCompressed],
+        "NodeCount"           -> nodeCount
+      |>];
+
+    (* 全体判定 *)
+    results["AllPass"] = And @@
+      (Lookup[#, "Pass", False] & /@ Values[results]);
+    results
+  ];
+
+(* ────────────────────────────────────────────────────────
+   公開 API ラッパー
+   ──────────────────────────────────────────────────────── *)
+
+NotebookLLMGraph[nb_NotebookObject] :=
+  iLLMGraphGetCached[nb];
+NotebookLLMGraph[] :=
+  NotebookLLMGraph[EvaluationNotebook[]];
+
+NotebookLLMGraphBuild[nb_NotebookObject] :=
+  Module[{graph},
+    iLLMGraphInvalidateCache[];
+    graph = iBuildGraphFromAllSessions[nb];
+    iSaveNotebookLLMGraph[nb, graph];
+    (* キャッシュにも保持 *)
+    $iLLMGraphCache = graph;
+    $iLLMGraphCacheNB = nb;
+    graph
+  ];
+NotebookLLMGraphBuild[] :=
+  NotebookLLMGraphBuild[EvaluationNotebook[]];
+
+NotebookLLMGraphNodes[nb_NotebookObject] :=
+  Lookup[iLLMGraphGetCached[nb], "Nodes", <||>];
+NotebookLLMGraphNodes[] :=
+  NotebookLLMGraphNodes[EvaluationNotebook[]];
+
+NotebookLLMGraphPlot[nb_NotebookObject] :=
+  Module[{llmGraph, nodes, nodeCount, edges, labels, colors},
+    llmGraph = iLLMGraphGetCached[nb];
+    nodes = Lookup[llmGraph, "Nodes", <||>];
+    nodeCount = Length[nodes];
+    If[nodeCount == 0,
+      Return @ Style["\:30ce\:30fc\:30c9\:306a\:3057 (\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:304c\:7a7a)", Gray, 14]];
+
+    (* Rule 形式のエッジリスト *)
+    edges = Flatten @ KeyValueMap[
+      Function[{nid, node},
+        Function[edge, nid -> edge["To"]] /@
+          Lookup[node, "OutEdges", {}]],
+      nodes];
+
+    (* VertexLabels: instruction 先頭25文字 + サブステップ/バックアップ/L2情報 *)
+    labels = KeyValueMap[
+      Function[{nid, node},
+        nid -> (StringTake[Lookup[node, "Instruction", nid], UpTo[25]] <>
+          If[ListQ[Lookup[node, "SubSteps", None]] &&
+             Length[node["SubSteps"]] > 0,
+            " [S" <> ToString[Length[node["SubSteps"]]] <> "]", ""] <>
+          If[StringQ[Lookup[node, "BackupRef", None]],
+            " [B]", ""] <>
+          (* L2 情報: ノード数とエラー数 *)
+          Module[{l2n = Lookup[node, "L2NodeCount", 0],
+                  l2e = Lookup[node, "L2ErrorCount", 0]},
+            If[IntegerQ[l2n] && l2n > 0,
+              " [L2:" <> ToString[l2n] <>
+                If[l2e > 0, " \:26a0\:fe0f" <> ToString[l2e], ""] <> "]",
+              ""]])],
+      nodes];
+
+    (* VertexStyle: アクセスレベル別色、L2エラーありは赤縁取り *)
+    colors = KeyValueMap[
+      Function[{nid, node},
+        nid -> If[Lookup[node, "L2ErrorCount", 0] > 0,
+          Directive[
+            EdgeForm[{Thickness[0.007], RGBColor[0.85, 0.1, 0.1]}],
+            iLLMGraphAccessColor[Lookup[node, "AccessLevel", ""]]],
+          Directive[
+            EdgeForm[{Thin, GrayLevel[0.3]}],
+            iLLMGraphAccessColor[Lookup[node, "AccessLevel", ""]]]]],
+      nodes];
+
+    If[edges === {},
+      (* エッジなし: 孤立ノード *)
+      Graph[Keys[nodes],
+        VertexLabels -> labels,
+        VertexStyle  -> colors,
+        VertexSize   -> 0.5,
+        ImageSize    -> 200,
+        PlotLabel    -> "Notebook LLMGraph (1 node)"],
+      Graph[edges,
+        VertexLabels   -> labels,
+        VertexStyle    -> colors,
+        VertexSize     -> 0.5,
+        GraphLayout    -> "LayeredDigraphEmbedding",
+        ImageSize      -> {Automatic, Max[250, 70 * nodeCount]},
+        PlotLabel      -> "Notebook LLMGraph (" <>
+          ToString[nodeCount] <> " nodes)",
+        EdgeStyle      -> Directive[GrayLevel[0.5], Arrowheads[0.04]]
+      ]]
+  ];
+NotebookLLMGraphPlot[] :=
+  NotebookLLMGraphPlot[EvaluationNotebook[]];
+
+NotebookLLMGraphValidate[nb_NotebookObject] :=
+  Module[{llmGraph, result},
+    llmGraph = iLLMGraphGetCached[nb];
+    result = iValidateNotebookLLMGraph[llmGraph, nb];
+    If[TrueQ[result["AllPass"]],
+      Print[Style["\:2705 LLMGraph \:691c\:8a3c OK (" <>
+        ToString[result["SizeCheck"]["NodeCount"]] <> " nodes, " <>
+        ToString[Round[result["SizeCheck"]["TotalBytesCompressed"] / 1024.0, 0.1]] <>
+        " KB compressed, " <>
+        ToString[result["SizeCheck"]["AvgCompressedPerNode"]] <>
+        " chars/node)", Darker[Green]]],
+      Print[Style["\:274c LLMGraph \:691c\:8a3c\:5931\:6557", Red]];
+      Scan[
+        Function[{key},
+          If[!TrueQ[result[key]["Pass"]],
+            Print["  ", key, ": ", result[key]]]],
+        DeleteCases[Keys[result], "AllPass"]]
+    ];
+    result
+  ];
+NotebookLLMGraphValidate[] :=
+  NotebookLLMGraphValidate[EvaluationNotebook[]];
+
+(* 外部キャッシュからの response 取得 *)
+NotebookLLMGraphFetchResponse[nb_NotebookObject, nodeID_String] :=
+  iLLMGraphCacheRead[nodeID];
+NotebookLLMGraphFetchResponse[nodeID_String] :=
+  NotebookLLMGraphFetchResponse[EvaluationNotebook[], nodeID];
+
+(* サブステップ履歴の表示 *)
+NotebookLLMGraphSubSteps[nb_NotebookObject, nodeID_String] :=
+  Module[{graph, node, subSteps, ds},
+    graph = iLLMGraphGetCached[nb];
+    If[!AssociationQ[graph], Return[Missing["NoGraph"]]];
+    node = Lookup[Lookup[graph, "Nodes", <||>], nodeID, None];
+    If[!AssociationQ[node], Return[Missing["NodeNotFound"]]];
+    subSteps = Lookup[node, "SubSteps", {}];
+    If[!ListQ[subSteps] || Length[subSteps] === 0,
+      Return[Missing["NoSubSteps"]]];
+    (* Dataset 形式で表示 *)
+    ds = Dataset[subSteps][All, <|
+      "Step"    -> "Name",
+      "Status"  -> "Status",
+      "Access"  -> "AccessLevel",
+      "Time"    -> Function[row,
+        DateString[row["Time"],
+          {"Hour24",":","Minute",":","Second"}]],
+      "Detail"  -> "Detail"
+    |>];
+    Print[Style["SubSteps for " <> nodeID <> ":", Bold]];
+    ds
+  ];
+NotebookLLMGraphSubSteps[nodeID_String] :=
+  NotebookLLMGraphSubSteps[EvaluationNotebook[], nodeID];
+NotebookLLMGraphSubSteps[nb_NotebookObject] :=
+  Module[{graph, nodesWithSubs},
+    graph = iLLMGraphGetCached[nb];
+    nodesWithSubs = Select[
+      Lookup[graph, "Nodes", <||>],
+      KeyExistsQ[#, "SubSteps"] && Length[Lookup[#, "SubSteps", {}]] > 0 &];
+    If[Length[nodesWithSubs] === 0,
+      Print["SubSteps を持つノードはありません。"];
+      Return[{}]];
+    Print[Style["SubSteps 付きノード:", Bold]];
+    KeyValueMap[
+      Function[{nid, node},
+        Print["  ", nid, ": ",
+          Length[node["SubSteps"]], " steps (",
+          StringTake[Lookup[node, "Instruction", ""], UpTo[40]], ")"]],
+      nodesWithSubs];
+    Keys[nodesWithSubs]
+  ];
+NotebookLLMGraphSubSteps[] :=
+  NotebookLLMGraphSubSteps[EvaluationNotebook[]];
+
+(* ════════════════════════════════════════════════════════
+   Phase 4a: L2 グラフ取得 公開 API
+   ════════════════════════════════════════════════════════ *)
+
+(* L2 グラフを外部キャッシュから取得する *)
+NotebookLLMGraphFetchL2[nb_NotebookObject, nodeID_String] :=
+  Module[{l2Graph},
+    l2Graph = iLLMGraphCacheReadL2[nodeID];
+    If[!AssociationQ[l2Graph], Return[l2Graph]];  (* Missing[] をそのまま返す *)
+    l2Graph
+  ];
+NotebookLLMGraphFetchL2[nodeID_String] :=
+  NotebookLLMGraphFetchL2[EvaluationNotebook[], nodeID];
+
+(* ════════════════════════════════════════════════════════
+   Phase 4b: エラーノード一覧 公開 API
+   ════════════════════════════════════════════════════════ *)
+
+(* L2ErrorCount > 0 または Status = "Failed" の L1 ノードを Dataset で返す *)
+NotebookLLMGraphErrors[nb_NotebookObject] :=
+  Module[{graph, nodes, errNodes, rows},
+    graph = iLLMGraphGetCached[nb];
+    If[!AssociationQ[graph], Return[Missing["NoGraph"]]];
+    nodes = Lookup[graph, "Nodes", <||>];
+    errNodes = Select[nodes,
+      (Lookup[#, "L2ErrorCount", 0] > 0 ||
+       Lookup[#, "Status", ""] === "Failed") &];
+    If[Length[errNodes] === 0,
+      Print[Style["\:2705 L2 \:30a8\:30e9\:30fc\:306a\:3057", Darker[Green]]];
+      Return[Dataset[{}]]];
+    rows = KeyValueMap[
+      Function[{nid, node},
+        <|
+          "NodeID"       -> nid,
+          "Status"       -> Lookup[node, "Status", ""],
+          "L2NodeCount"  -> Lookup[node, "L2NodeCount", 0],
+          "L2ErrorCount" -> Lookup[node, "L2ErrorCount", 0],
+          "Instruction"  -> StringTake[
+            Lookup[node, "Instruction", ""], UpTo[60]]
+        |>],
+      errNodes];
+    Print[Style[ToString[Length[rows]] <>
+      " \:30ce\:30fc\:30c9\:306b L2 \:30a8\:30e9\:30fc\:304c\:3042\:308a\:307e\:3059:", Bold, Orange]];
+    Dataset[rows]
+  ];
+NotebookLLMGraphErrors[] :=
+  NotebookLLMGraphErrors[EvaluationNotebook[]];
+
+(* ════════════════════════════════════════════════════════
+   Phase 4b: L2 ノードステータス手動更新 公開 API
+   ════════════════════════════════════════════════════════ *)
+
+(* L2 ノードのステータスを更新し、L1 の L2ErrorCount に反映する *)
+NotebookLLMGraphUpdateL2Status[nb_NotebookObject,
+    l1NodeID_String, l2NodeID_String,
+    status_String, msg_:None] :=
+  Module[{},
+    iLLMGraphUpdateL2NodeStatus[l1NodeID, l2NodeID, status, msg];
+    (* 更新後は TaggingRules にフラッシュ *)
+    iLLMGraphFlush[nb];
+  ];
+NotebookLLMGraphUpdateL2Status[l1NodeID_String, l2NodeID_String,
+    status_String, msg_:None] :=
+  NotebookLLMGraphUpdateL2Status[EvaluationNotebook[],
+    l1NodeID, l2NodeID, status, msg];
+
+(* ════════════════════════════════════════════════════════
+   Phase 4a: L2 グラフ可視化ヘルパー
+   ════════════════════════════════════════════════════════ *)
+
+(* L2 グラフを Wolfram Graph として可視化する *)
+NotebookLLMGraphPlotL2[nb_NotebookObject, l1NodeID_String] :=
+  Module[{l2Graph, nodes, nodeCount, edges, labels, colors},
+    l2Graph = iLLMGraphCacheReadL2[l1NodeID];
+    If[!AssociationQ[l2Graph],
+      Return @ Style["L2 \:30ad\:30e3\:30c3\:30b7\:30e5\:306a\:3057: " <> l1NodeID, Gray, 12]];
+    nodes = Lookup[l2Graph, "Nodes", <||>];
+    nodeCount = Length[nodes];
+    If[nodeCount == 0,
+      Return @ Style["L2 \:30ce\:30fc\:30c9\:306a\:3057", Gray, 12]];
+
+    edges = Flatten @ KeyValueMap[
+      Function[{nid, node},
+        Function[edge, nid -> edge["To"]] /@
+          Lookup[node, "OutEdges", {}]],
+      nodes];
+
+    labels = KeyValueMap[
+      Function[{nid, node},
+        nid -> Placed[
+          Column[{
+            Style["L2-" <> ToString[Lookup[node, "BlockIdx", "?"]], Bold, 9],
+            Style[StringTake[Lookup[node, "Code", ""], UpTo[30]], Darker[Gray], 7],
+            Style[Lookup[node, "Status", "?"],
+              Switch[Lookup[node, "Status", ""],
+                "Failed", Red, "Completed", Darker[Green], _, Orange], 7]
+          }, Alignment -> Left],
+          Tooltip]],
+      nodes];
+
+    colors = KeyValueMap[
+      Function[{nid, node},
+        nid -> Switch[Lookup[node, "Status", "Pending"],
+          "Completed", Lighter[Darker[Green], 0.4],
+          "Failed",    Lighter[Red, 0.3],
+          _,           GrayLevel[0.75]]],
+      nodes];
+
+    If[edges === {},
+      Graph[Keys[nodes],
+        VertexLabels -> labels, VertexStyle -> colors,
+        VertexSize   -> 0.5,   ImageSize   -> 200,
+        PlotLabel    -> "L2 Graph: " <> l1NodeID],
+      Graph[edges,
+        VertexLabels -> labels,         VertexStyle -> colors,
+        VertexSize   -> 0.5,            GraphLayout -> "LayeredDigraphEmbedding",
+        ImageSize    -> {Automatic, Max[200, 70 * nodeCount]},
+        PlotLabel    -> "L2 Graph: " <> l1NodeID <>
+          " (" <> ToString[nodeCount] <> " blocks)",
+        EdgeStyle    -> Directive[GrayLevel[0.5], Arrowheads[0.04]]
+      ]]
+  ];
+NotebookLLMGraphPlotL2[l1NodeID_String] :=
+  NotebookLLMGraphPlotL2[EvaluationNotebook[], l1NodeID];
+
+
+(* ════════════════════════════════════════════════════════
+   Phase 4c: L1 再実行エンジン
+   ════════════════════════════════════════════════════════
+
+   設計原則:
+     - 下流ノードの無効化 (Invalidate) と再実行 (Rerun) を分離する
+     - 再実行は既存の iClaudeEvalImpl/iSessionAppend 経路を再利用する
+     - セッション履歴への書き直しはしない（履歴は不変）
+       再実行エントリは通常通り末尾に追記されるだけ
+     - DryRun: 実際の LLM 呼び出しなしで計画だけ返す
+
+   ノード無効化:
+     L1 ノードの Status を "Invalidated" に設定し
+     関連する L2 キャッシュを削除する。
+     再実行後に新しい L2 グラフで上書きされる。
+   ════════════════════════════════════════════════════════ *)
+
+(* ────────────────────────────────────────────────────────
+   有向グラフ上の全子孫ノード ID を収集する
+   BFS で OutEdges を辿る
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphDescendants[nodes_Association, startID_String] :=
+  Module[{queue = {startID}, visited = {}, nid, outs},
+    While[Length[queue] > 0,
+      nid   = First[queue];
+      queue = Rest[queue];
+      If[MemberQ[visited, nid], Continue[]];
+      AppendTo[visited, nid];
+      outs = Flatten[
+        Function[e, Lookup[e, "To", Nothing]] /@
+          Lookup[Lookup[nodes, nid, <||>], "OutEdges", {}]];
+      queue = Join[queue, Complement[outs, visited]]];
+    (* startID 自身は除いて返す *)
+    Complement[visited, {startID}]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   指定ノードの下流を "Invalidated" にマークし
+   対応する L2 キャッシュを削除する（内部）
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphInvalidateDownstream[nb_NotebookObject, nodeID_String] :=
+  Module[{graph, nodes, descIDs, cacheDir},
+    graph = iLLMGraphGetCached[nb];
+    If[!AssociationQ[graph], Return[{}]];
+    nodes    = Lookup[graph, "Nodes", <||>];
+    descIDs  = iLLMGraphDescendants[nodes, nodeID];
+    cacheDir = iLLMGraphCacheDir[];
+    Scan[
+      Function[did,
+        If[KeyExistsQ[nodes, did],
+          (* L1 ノードを Invalidated に *)
+          nodes[did, "Status"] = "Invalidated";
+          nodes[did, "L2Ref"]  = None;
+          nodes[did, "L2NodeCount"] = 0;
+          nodes[did, "L2ErrorCount"] = 0;
+          (* L2 キャッシュ削除 *)
+          Quiet @ DeleteFile[FileNameJoin[{cacheDir,
+            StringReplace[did, "/" -> "_"] <> "_L2.wxf"}]]]],
+      descIDs];
+    graph["Nodes"]   = nodes;
+    graph["LastModified"] = AbsoluteTime[];
+    $iLLMGraphCache  = graph;
+    iLLMGraphFlush[nb];
+    descIDs   (* 無効化したノード ID リストを返す *)
+  ];
+
+(* ────────────────────────────────────────────────────────
+   再実行計画の構築: 再実行すべきノード順を返す
+   指定ノード自身 + Invalidated な下流ノード（トポロジカル順）
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphBuildRerunPlan[graph_Association, nodeID_String] :=
+  Module[{nodes, allIDs, invalidIDs, plan, orderedIDs},
+    nodes      = Lookup[graph, "Nodes", <||>];
+    allIDs     = Keys[nodes];
+    (* 指定ノード + Invalidated ノードを対象に *)
+    invalidIDs = Select[allIDs,
+      Lookup[nodes[#], "Status", ""] === "Invalidated" &];
+    plan = Prepend[invalidIDs, nodeID];
+    plan = DeleteDuplicates[plan];
+    (* Step 番号でソートしてトポロジカル順にする *)
+    orderedIDs = SortBy[plan,
+      Lookup[Lookup[nodes, #, <||>], "Step", 0] &];
+    orderedIDs
+  ];
+
+(* ────────────────────────────────────────────────────────
+   iRerunL1Node: 指定 L1 ノードのプロンプトを再実行する
+   セッション履歴から対応するエントリを読み出し、
+   instruction を使って ClaudeEval を再構成する。
+   ──────────────────────────────────────────────────────── *)
+Options[iRerunL1Node] = {
+  "Model"     -> Automatic,
+  "DryRun"    -> False,
+  "Verbose"   -> True
+};
+
+iRerunL1Node[nb_NotebookObject, nodeID_String,
+             opts:OptionsPattern[iRerunL1Node]] :=
+  Module[{graph, nodes, node, tag, instruction,
+          dryRun, verbose, mdl},
+    dryRun  = TrueQ[OptionValue[iRerunL1Node, {opts}, "DryRun"]];
+    verbose = TrueQ[OptionValue[iRerunL1Node, {opts}, "Verbose"]];
+    mdl     = OptionValue[iRerunL1Node, {opts}, "Model"];
+
+    graph = iLLMGraphGetCached[nb];
+    If[!AssociationQ[graph],
+      Message[NotebookLLMGraphRerun::noGraph]; Return[$Failed]];
+    nodes = Lookup[graph, "Nodes", <||>];
+    node  = Lookup[nodes, nodeID, None];
+    If[!AssociationQ[node],
+      If[verbose, Print["\:26a0\:fe0f \:30ce\:30fc\:30c9\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: ", nodeID]];
+      Return[$Failed]];
+
+    (* L1 ノードの instruction を取得 *)
+    instruction = Lookup[node, "Instruction", ""];
+    If[!StringQ[instruction] || StringTrim[instruction] === "",
+      If[verbose, Print["\:26a0\:fe0f Instruction \:304c\:7a7a\:3067\:3059: ", nodeID]];
+      Return[$Failed]];
+
+    (* セッションタグを節点 ID から推定 "history-N" → "history" *)
+    tag = StringJoin @ Most @ StringSplit[nodeID, "-"];
+    If[!StringQ[tag] || tag === "",
+      tag = iSessionTag[]];
+
+    If[verbose,
+      Print[Style["\:27a4 \:518d\:5b9f\:884c: ", Bold], nodeID];
+      Print["  instruction: ", StringTake[instruction, UpTo[60]], "..."];
+      If[dryRun, Print[Style["  [DryRun: LLM \:547c\:3073\:51fa\:3057\:306a\:3057]", Italic, Gray]]]];
+
+    If[TrueQ[dryRun],
+      Return[<|"NodeID" -> nodeID, "Instruction" -> instruction,
+               "Tag" -> tag, "DryRun" -> True|>]];
+
+    (* 実際に再実行: ClaudeEval と同じ経路 *)
+    If[mdl === Automatic,
+      iClaudeEvalImpl[nb, tag, instruction],
+      iClaudeEvalImpl[nb, tag, instruction,
+        {}, True, mdl, Automatic, False, Automatic]]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   NotebookLLMGraphRerun 公開 API
+   ──────────────────────────────────────────────────────── *)
+NotebookLLMGraphRerun::noGraph =
+  "LLMGraph \:304c\:5b58\:5728\:3057\:307e\:305b\:3093\:3002NotebookLLMGraphBuild[] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002";
+NotebookLLMGraphRerun::notFound =
+  "LLMGraph \:30ce\:30fc\:30c9 '`1`' \:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002";
+
+Options[NotebookLLMGraphRerun] = {
+  Model              -> Automatic,
+  "CascadeInvalidate" -> True,
+  "DryRun"           -> False,
+  "Verbose"          -> True
+};
+
+NotebookLLMGraphRerun[nb_NotebookObject, nodeID_String,
+                      opts:OptionsPattern[]] :=
+  Module[{cascade, dryRun, verbose, mdl, invalidated, plan},
+    cascade  = TrueQ[OptionValue["CascadeInvalidate"]];
+    dryRun   = TrueQ[OptionValue["DryRun"]];
+    verbose  = TrueQ[OptionValue["Verbose"]];
+    mdl      = OptionValue[Model];
+
+    (* Step 1: 下流を無効化 *)
+    invalidated = {};
+    If[TrueQ[cascade],
+      invalidated = iLLMGraphInvalidateDownstream[nb, nodeID];
+      If[verbose && Length[invalidated] > 0,
+        Print[Style["\:2193 \:4e0b\:6d41\:7121\:52b9\:5316: ", Bold, Orange],
+          Length[invalidated], " \:30ce\:30fc\:30c9 → Invalidated"];
+        Scan[Print["  ", #] &, invalidated]]];
+
+    (* Step 2: 再実行計画 *)
+    plan = iLLMGraphBuildRerunPlan[
+      iLLMGraphGetCached[nb], nodeID];
+    If[verbose,
+      Print[Style["\:25b6 \:518d\:5b9f\:884c\:8a08\:753b (", Bold],
+        Length[plan], " \:30ce\:30fc\:30c9):"];
+      Scan[Print["  [", If[# === nodeID, "TARGET", "cascade"], "] ", #] &,
+        plan]];
+
+    If[TrueQ[dryRun],
+      Return[<|"NodeID" -> nodeID, "Plan" -> plan,
+               "Invalidated" -> invalidated, "DryRun" -> True|>]];
+
+    (* Step 3: 指定ノードだけ再実行（非同期）
+       カスケード再実行は下流が依存するため一括では行わず、
+       ユーザーが ClaudeEval 完了後に順次呼び出すか ContinueEval に委ねる。
+       将来の Phase 5b で並列スケジューラが担当する。 *)
+    iRerunL1Node[nb, nodeID,
+      "Model"   -> mdl,
+      "DryRun"  -> False,
+      "Verbose" -> verbose]
+  ];
+
+NotebookLLMGraphRerun[nodeID_String, opts:OptionsPattern[]] :=
+  NotebookLLMGraphRerun[EvaluationNotebook[], nodeID, opts];
+
+(* ────────────────────────────────────────────────────────
+   NotebookLLMGraphInvalidateDownstream 公開 API
+   ──────────────────────────────────────────────────────── *)
+NotebookLLMGraphInvalidateDownstream[nb_NotebookObject,
+                                      nodeID_String] :=
+  Module[{invalidated},
+    invalidated = iLLMGraphInvalidateDownstream[nb, nodeID];
+    Print[Style["\:2193 \:4e0b\:6d41\:7121\:52b9\:5316\:5b8c\:4e86: ",
+      Bold, Orange], Length[invalidated], " \:30ce\:30fc\:30c9"];
+    invalidated
+  ];
+NotebookLLMGraphInvalidateDownstream[nodeID_String] :=
+  NotebookLLMGraphInvalidateDownstream[EvaluationNotebook[], nodeID];
+
+
+(* ════════════════════════════════════════════════════════
+   Phase 5a: L0 スケジューラ基盤 — ISplittable プロトコル
+   ════════════════════════════════════════════════════════
+
+   WOOC'92/93 の Split-Process-Merge パターンを
+   Mathematica の Association ベースで実装する。
+
+   ISplittable プロトコル:
+     各型について以下を登録する
+       splitFn   : obj → {chunk1, chunk2, ...}
+       mergeFn   : {result1, result2, ...} → mergedResult
+       homoTestFn: {chunk1, chunk2} → True/False (均質性判定)
+
+   スケジューラが行うこと (Phase 5b で拡張):
+     1. input を splitFn で分割
+     2. 各チャンクを routeMap に従ってプロバイダ/セッションに割り当て
+     3. 独立チャンクは並列、依存チャンクは逐次に実行
+     4. 結果を mergeFn で統合
+   ════════════════════════════════════════════════════════ *)
+
+(* ────────────────────────────────────────────────────────
+   ISplittable レジストリ
+   型名 → <|splitFn, mergeFn, homoTestFn|> の Association
+   ──────────────────────────────────────────────────────── *)
+$iSplittableRegistry = <||>;
+
+iRegisterSplittable[typeName_String,
+                    splitFn_,
+                    mergeFn_,
+                    homoTestFn_: (True &)] :=
+  ($iSplittableRegistry[typeName] = <|
+    "splitFn"    -> splitFn,
+    "mergeFn"    -> mergeFn,
+    "homoTestFn" -> homoTestFn
+  |>);
+
+iGetSplittable[typeName_String] :=
+  Lookup[$iSplittableRegistry, typeName, Missing["UnknownType"]];
+
+(* ────────────────────────────────────────────────────────
+   チャンク型コンストラクタ
+   各チャンクにメタデータを付与する
+   ──────────────────────────────────────────────────────── *)
+iNewChunk[chunkID_String, content_, typeName_String,
+          chunkIdx_Integer, totalChunks_Integer,
+          meta_Association: <||>] :=
+  Join[<|
+    "ChunkID"     -> chunkID,
+    "Type"        -> typeName,
+    "Content"     -> content,
+    "ChunkIdx"    -> chunkIdx,
+    "TotalChunks" -> totalChunks,
+    "Status"      -> "Pending",   (* Pending | Running | Done | Failed *)
+    "Result"      -> None,
+    "ErrorMsg"    -> None,
+    "CreatedAt"   -> AbsoluteTime[]
+  |>, meta];
+
+(* ────────────────────────────────────────────────────────
+   iISplit: 入力を分割してチャンクリストを返す
+   ──────────────────────────────────────────────────────── *)
+iISplit[input_, typeName_String, opts_Association: <||>] :=
+  Module[{rec, splitFn, rawChunks, n},
+    rec = iGetSplittable[typeName];
+    If[!AssociationQ[rec], Return[Missing["UnknownType", typeName]]];
+    splitFn   = rec["splitFn"];
+    rawChunks = splitFn[input, opts];
+    If[!ListQ[rawChunks], rawChunks = {rawChunks}];
+    n = Length[rawChunks];
+    MapIndexed[
+      Function[{content, idx},
+        iNewChunk[
+          typeName <> "-" <> ToString[First[idx]],
+          content, typeName,
+          First[idx], n]],
+      rawChunks]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   iIMerge: チャンクリストの Result を統合する
+   ──────────────────────────────────────────────────────── *)
+iIMerge[chunks_List, typeName_String, opts_Association: <||>] :=
+  Module[{rec, mergeFn, results},
+    rec = iGetSplittable[typeName];
+    If[!AssociationQ[rec], Return[Missing["UnknownType", typeName]]];
+    mergeFn = rec["mergeFn"];
+    (* Results を安全に抽出:
+       chunks が正しいリストでない場合でも List を保証する *)
+    results = If[ListQ[chunks],
+      Lookup[#, "Result", None] & /@ chunks,
+      {}];
+    If[!ListQ[results], results = {}];
+    Quiet[mergeFn[results, opts]]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   スケジュールジョブ構造
+   ChunkID → <|Provider, Priority, DependsOn, Status|>
+   ──────────────────────────────────────────────────────── *)
+iNewScheduleJob[chunks_List, routeMap_Association: <||>] :=
+  Module[{n = Length[chunks], jobID},
+    jobID = "job-" <> DateString[Now, {"Year","Month","Day","Hour","Minute","Second"}];
+    <|
+      "JobID"      -> jobID,
+      "CreatedAt"  -> AbsoluteTime[],
+      "Status"     -> "Pending",   (* Pending | Running | Done | Failed *)
+      "Chunks"     -> Association @ Map[
+        Function[chunk,
+          chunk["ChunkID"] -> <|
+            chunk,
+            "Provider" -> Lookup[routeMap, chunk["ChunkID"],
+              Lookup[routeMap, "default", "ClaudeCode"]],
+            "DependsOn" -> {}   (* Phase 5b で依存解析を実装 *)
+          |>],
+        chunks],
+      "RouteMap"   -> routeMap,
+      "ResultOrder" -> Lookup[#, "ChunkID", ""] & /@ chunks
+    |>
+  ];
+
+(* ────────────────────────────────────────────────────────
+   iIScheduleJob: チャンクをスケジュールジョブに変換する
+   ──────────────────────────────────────────────────────── *)
+iIScheduleJob[input_, typeName_String,
+              routeMap_Association: <||>,
+              splitOpts_Association: <||>] :=
+  Module[{chunks},
+    chunks = iISplit[input, typeName, splitOpts];
+    If[!ListQ[chunks], Return[chunks]];
+    iNewScheduleJob[chunks, routeMap]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   NotebookCells 型の ISplittable 実装
+   セルを PrivacySpec タグ（Confidential/Public）で分割する。
+   同一タグが連続するブロックをひとつのチャンクにまとめる。
+   ──────────────────────────────────────────────────────── *)
+iRegisterSplittable[
+  "NotebookCells",
+  (* splitFn: ノートブックオブジェクト → チャンクリスト *)
+  Function[{nb, opts},
+    Module[{cells, groups, currentTag, currentGroup, cellIdx, tag},
+      cells = Quiet @ Cells[nb];
+      If[!ListQ[cells] || Length[cells] === 0, Return[{}]];
+      groups       = {};
+      currentTag   = "Public";
+      currentGroup = {};
+      Do[
+        cellIdx = c;
+        tag = Replace[
+          Quiet @ CurrentValue[cellIdx,
+            {TaggingRules, "claudecode", "confidential"}],
+          {True -> "Confidential", _ -> "Public"}];
+        If[tag === currentTag,
+          AppendTo[currentGroup, cellIdx],
+          (* タグ変化: 現グループを確定 *)
+          If[currentGroup =!= {},
+            AppendTo[groups, <|"Tag" -> currentTag,
+              "Cells" -> currentGroup|>]];
+          currentTag   = tag;
+          currentGroup = {cellIdx}],
+        {c, cells}];
+      If[currentGroup =!= {},
+        AppendTo[groups, <|"Tag" -> currentTag,
+          "Cells" -> currentGroup|>]];
+      groups]],
+  (* mergeFn: 処理済みチャンクリスト → まとめた結果 *)
+  Function[{results, opts},
+    StringJoin @ Riffle[
+      Select[results, StringQ] , "\n\n"]],
+  (* homoTestFn: 同じタグを持つか *)
+  Function[{c1, c2},
+    Lookup[c1, "Tag", ""] === Lookup[c2, "Tag", ""]]
+];
+
+(* ────────────────────────────────────────────────────────
+   TextChunks 型の ISplittable 実装 (Phase 6 先行登録)
+   テキストを段落または文字数で分割する。
+   ──────────────────────────────────────────────────────── *)
+iRegisterSplittable[
+  "TextChunks",
+  (* splitFn: テキスト文字列 → 段落チャンクリスト *)
+  Function[{text, opts},
+    Module[{maxChars, paragraphs, current = "", chunks = {}},
+      maxChars   = Lookup[opts, "MaxChars", 2000];
+      paragraphs = StringSplit[text, "\n\n" ..];
+      Do[
+        If[StringLength[current] + StringLength[p] > maxChars &&
+           current =!= "",
+          AppendTo[chunks, current];
+          current = p,
+          current = If[current === "", p, current <> "\n\n" <> p]],
+        {p, paragraphs}];
+      If[current =!= "", AppendTo[chunks, current]];
+      If[chunks === {}, {text}, chunks]]],
+  (* mergeFn *)
+  Function[{results, opts},
+    StringJoin @ Riffle[Select[results, StringQ], "\n\n"]],
+  (* homoTestFn: 常に均質 *)
+  (True &)
+];
+
+(* ────────────────────────────────────────────────────────
+   NotebookLLMGraphSummary 公開 API
+   Phase 4c と 5a 双方の状態を一覧表示する
+   ──────────────────────────────────────────────────────── *)
+NotebookLLMGraphSummary[nb_NotebookObject] :=
+  Module[{graph, nodes, rows, statusCounts, totalL2, totalErrors,
+          invalidatedCount},
+    graph = iLLMGraphGetCached[nb];
+    If[!AssociationQ[graph],
+      Print["LLMGraph \:306a\:3057"]; Return[Missing["NoGraph"]]];
+    nodes = Lookup[graph, "Nodes", <||>];
+
+    (* ステータス集計 *)
+    statusCounts = Counts[Lookup[#, "Status", "Unknown"] & /@ Values[nodes]];
+    totalL2      = Total[Lookup[#, "L2NodeCount", 0] & /@ Values[nodes]];
+    totalErrors  = Total[Lookup[#, "L2ErrorCount", 0] & /@ Values[nodes]];
+    invalidatedCount = Lookup[statusCounts, "Invalidated", 0];
+
+    Print[Style["\:2022 L1 \:30ce\:30fc\:30c9\:6570 : ", Bold], Length[nodes]];
+    Print[Style["\:2022 Status \:5185\:8a33 : ", Bold],
+      StringRiffle[
+        KeyValueMap[ToString[#1] <> "=" <> ToString[#2] &, statusCounts],
+        ", "]];
+    Print[Style["\:2022 L2 \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:5408\:8a08 : ", Bold], totalL2];
+    Print[Style["\:2022 L2 \:30a8\:30e9\:30fc\:5408\:8a08 : ", Bold],
+      If[totalErrors > 0, Style[totalErrors, Red, Bold], totalErrors]];
+    If[invalidatedCount > 0,
+      Print[Style["\:26a0\:fe0f Invalidated \:30ce\:30fc\:30c9: " <>
+        ToString[invalidatedCount] <> " \:4ef6 \:2014 NotebookLLMGraphRerun \:3067\:518d\:5b9f\:884c\:53ef\:80fd",
+        Orange]]];
+
+    (* 詳細 Dataset *)
+    rows = KeyValueMap[
+      Function[{nid, node},
+        <|
+          "NodeID"        -> nid,
+          "Step"          -> Lookup[node, "Step", 0],
+          "Status"        -> Lookup[node, "Status", ""],
+          "L2Nodes"       -> Lookup[node, "L2NodeCount", 0],
+          "L2Errors"      -> Lookup[node, "L2ErrorCount", 0],
+          "HasL2"         -> (Lookup[node, "L2Ref", None] =!= None),
+          "Instruction"   -> StringTake[
+            Lookup[node, "Instruction", ""], UpTo[50]]
+        |>],
+      nodes];
+    Dataset[SortBy[rows, Lookup[#, "Step", 0] &]]
+  ];
+NotebookLLMGraphSummary[] :=
+  NotebookLLMGraphSummary[EvaluationNotebook[]];
+
+
+(* ════════════════════════════════════════════════════════
+   Phase 5b: 並列 LLM 投入エンジン
+   ════════════════════════════════════════════════════════
+
+   設計原則:
+     - 独立チャンクは StartProcess で同時並行起動
+     - DependsOn を持つチャンクは「波」単位で逐次実行
+     - 1秒ごとの ScheduledTask で全プロセスをポーリング
+     - プロバイダ別キュー: ClaudeCode = bat, API/LMStudio = PS1
+
+   実行フロー:
+     LLMGraphExecute[job, opts]
+       → iIBuildWaves[job]          # 依存解析 → 並列波リスト
+       → iILaunchWave[...]          # 波内の全チャンクを同時起動
+       → ScheduledTask ポーリング   # iIJobTick[] が毎秒呼ばれる
+       → iICollectChunkResult[...]  # 完了チェック + 結果回収
+       → 次の波を起動 or 全完了
+       → iIFinishJob[...]           # Phase 5c: Merge + 任意書き戻し
+   ════════════════════════════════════════════════════════ *)
+
+(* ────────────────────────────────────────────────────────
+   グローバル実行状態レジストリ
+   jobID → <|job, waves, waveIdx, opts, nb, ...|>
+   ──────────────────────────────────────────────────────── *)
+$iIRunningJobs = <||>;
+
+(* ────────────────────────────────────────────────────────
+   依存解析: ジョブのチャンクをトポロジカル波に分解する
+   戻り値: {{ "TextChunks-1", "TextChunks-3" }, { "TextChunks-2" }, ...}
+   ──────────────────────────────────────────────────────── *)
+iIBuildWaves[job_Association] :=
+  Module[{chunks, done = {}, waves = {}, remaining, wave},
+    chunks    = Lookup[job, "Chunks", <||>];
+    remaining = Keys[chunks];
+    While[Length[remaining] > 0,
+      (* この波: DependsOn が全て done に含まれているチャンク *)
+      wave = Select[remaining,
+        SubsetQ[done, Lookup[Lookup[chunks, #, <||>], "DependsOn", {}]] &];
+      (* 循環依存や依存なし → 残り全部を1波 *)
+      If[wave === {}, wave = remaining];
+      AppendTo[waves, wave];
+      done      = Join[done, wave];
+      remaining = Complement[remaining, wave]];
+    waves
+  ];
+
+(* ────────────────────────────────────────────────────────
+   プロンプト構築: チャンク内容をテンプレートに展開
+   テンプレートプレースホルダ:
+     `content`      — チャンクの Content を文字列化
+     `chunkIdx`     — 何番目のチャンクか
+     `totalChunks`  — 全チャンク数
+     `chunkID`      — ChunkID
+   ──────────────────────────────────────────────────────── *)
+iIBuildChunkPrompt[chunk_Association, template_String] :=
+  StringReplace[template, {
+    "`content`"     -> ToString[Lookup[chunk, "Content", ""]],
+    "`chunkIdx`"    -> ToString[Lookup[chunk, "ChunkIdx", 1]],
+    "`totalChunks`" -> ToString[Lookup[chunk, "TotalChunks", 1]],
+    "`chunkID`"     -> Lookup[chunk, "ChunkID", ""]
+  }];
+
+(* ────────────────────────────────────────────────────────
+   チャンクの非同期プロセス起動
+   戻り値: RunState Association | $Failed
+   RunState: <|"proc"->..., "outFile"->..., "provider"->...,
+               "startTime"->..., (batFile/promptFile for cleanup)|>
+   ──────────────────────────────────────────────────────── *)
+iILaunchChunkAsync[chunk_Association, prompt_String,
+                   provider_String: "claudecode",
+                   modelSpec_: Automatic,
+                   timeout_: Automatic] :=
+  Module[{ts, outFile, promptFile, batFile, proc, prepared,
+          mdl = Replace[modelSpec, Automatic -> $iModelSonnet]},
+    ts = ToString[UnixTime[]] <> "p" <>
+         StringReplace[Lookup[chunk, "ChunkID", "x"], {"-"->"", "_"->""}];
+    outFile    = FileNameJoin[{$TemporaryDirectory, "iip_out_"  <> ts <> ".txt"}];
+    promptFile = FileNameJoin[{$TemporaryDirectory, "iip_pmt_"  <> ts <> ".txt"}];
+    (* プロンプトを UTF-8 で書き出し *)
+    Quiet @ Block[{strm},
+      strm = OpenWrite[promptFile, BinaryFormat -> True];
+      BinaryWrite[strm, ToCharacterCode[prompt, "UTF-8"], "Byte"];
+      Close[strm]];
+    Which[
+      (* ── ClaudeCode: bat 経由 ── *)
+      provider === "claudecode",
+        batFile = iMakeBat[promptFile, outFile, {}];
+        proc    = Quiet @ StartProcess[{"cmd", "/c", batFile}];
+        If[Head[proc] === ProcessObject,
+          <|"proc"->proc, "outFile"->outFile, "promptFile"->promptFile,
+            "batFile"->batFile, "provider"->provider,
+            "startTime"->AbsoluteTime[]|>,
+          $Failed],
+      (* ── Anthropic API / LMStudio / OpenAI: PS1 経由 ── *)
+      MemberQ[{"anthropic","lmstudio","openai"}, ToLowerCase[provider]],
+        Module[{apiKey, apiURL},
+          apiKey = If[ToLowerCase[provider] === "lmstudio",
+            "lm-studio",
+            Quiet[NBAccess`NBGetAPIKey[provider,
+              PrivacySpec -> <|"AccessLevel" -> 1.0|>]]];
+          If[!StringQ[apiKey], Return[$Failed]];
+          apiURL = Which[
+            ToLowerCase[provider] === "lmstudio",
+              iEnsureChatCompletionsPath["http://localhost:1234"],
+            True,
+              "https://api.anthropic.com/v1/messages"];
+          prepared = iPrepareAnthropicPS1[apiKey, mdl, prompt, apiURL,
+            If[ToLowerCase[provider] === "lmstudio", "openai", provider],
+            Replace[timeout, Automatic -> $iFallbackTimeout]];
+          If[prepared === $Failed, Return[$Failed]];
+          proc = Quiet @ StartProcess[{
+            prepared["psExe"], "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", prepared["ps1File"],
+            prepared["promptFile"], prepared["outFile"],
+            prepared["errFile"], apiKey, prepared["url"], mdl}];
+          If[Head[proc] === ProcessObject,
+            <|"proc"->proc, "outFile"->prepared["outFile"],
+              "promptFile"->prepared["promptFile"],
+              "provider"->provider, "startTime"->AbsoluteTime[]|>,
+            $Failed]],
+      True, $Failed]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   1チャンクのプロセス完了確認と結果回収
+   戻り値: <|"status"->"Running"|"Done"|"Failed",
+             "result"->..., "error"->...|>
+   ──────────────────────────────────────────────────────── *)
+iICollectChunkResult[runState_Association, timeout_: Automatic] :=
+  Module[{proc, outFile, elapsed, resolvedTimeout, raw, result},
+    proc    = Lookup[runState, "proc", None];
+    outFile = Lookup[runState, "outFile", ""];
+    resolvedTimeout = Replace[timeout, Automatic -> $ClaudeTimeout];
+    elapsed = AbsoluteTime[] - Lookup[runState, "startTime", AbsoluteTime[]];
+    Which[
+      (* タイムアウト *)
+      elapsed > resolvedTimeout,
+        Quiet @ KillProcess[proc];
+        Quiet @ DeleteFile[Lookup[runState, "batFile", ""]];
+        Quiet @ DeleteFile[Lookup[runState, "promptFile", ""]];
+        <|"status"->"Failed", "result"->None,
+          "error"->"Timeout (" <> ToString[Round[elapsed]] <> "s)"|>,
+      (* プロセス完了 *)
+      Quiet[ProcessStatus[proc]] === "Finished",
+        Quiet @ DeleteFile[Lookup[runState, "batFile", ""]];
+        Quiet @ DeleteFile[Lookup[runState, "promptFile", ""]];
+        If[FileExistsQ[outFile],
+          raw    = Quiet @ Import[outFile, "Text"];
+          Quiet @ DeleteFile[outFile];
+          result = If[StringQ[raw], cleanOutput[stripANSI[raw]], ""];
+          If[iIsAPIErrorResponse[result],
+            <|"status"->"Failed", "result"->None, "error"->result|>,
+            <|"status"->"Done", "result"->result, "error"->None|>],
+          <|"status"->"Failed", "result"->None,
+            "error"->"Output file not found"|>],
+      (* まだ実行中 *)
+      True,
+        <|"status"->"Running", "result"->None, "error"->None|>]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   波の起動: 波内の全チャンクを同時 StartProcess する
+   ──────────────────────────────────────────────────────── *)
+iILaunchWave[jobID_String, waveIdx_Integer,
+             waves_List, opts_Association] :=
+  Module[{state, job, chunks, waveIDs, template, verbose,
+          timeout, chunk, provider, prompt, runState},
+    state    = $iIRunningJobs[jobID];
+    If[!AssociationQ[state], Return[]];
+    job      = state["job"];
+    chunks   = job["Chunks"];
+    waveIDs  = If[waveIdx <= Length[waves], waves[[waveIdx]], {}];
+    template = Lookup[opts, "PromptTemplate", "`content`"];
+    verbose  = TrueQ[Lookup[opts, "Verbose", True]];
+    timeout  = Lookup[opts, "Timeout", Automatic];
+    If[verbose && Length[waveIDs] > 0,
+      Print[Style["\:25b6 Wave " <> ToString[waveIdx] <> "/" <>
+        ToString[Length[waves]] <> " \:8d77\:52d5: " <>
+        ToString[Length[waveIDs]] <> " \:30c1\:30e3\:30f3\:30af\:4e26\:5217\:5b9f\:884c", Bold, Blue]]];
+    Do[
+      chunk    = chunks[cid];
+      If[!AssociationQ[chunk], Continue[]];
+      provider = Lookup[chunk, "Provider", "claudecode"];
+      prompt   = iIBuildChunkPrompt[chunk,
+        (* チャンク固有テンプレートがあればそれを優先 *)
+        Lookup[chunk, "PromptTemplate", template]];
+      runState = iILaunchChunkAsync[chunk, prompt, provider,
+        Lookup[opts, Model, Automatic], timeout];
+      If[AssociationQ[runState],
+        chunk["Status"]    = "Running";
+        chunk["RunState"]  = runState;
+        chunk["StartedAt"] = AbsoluteTime[];
+        If[verbose, Print["  \:21aa ", cid, " (", provider, ") \:8d77\:52d5"]],
+        (* 起動失敗 *)
+        chunk["Status"]   = "Failed";
+        chunk["ErrorMsg"] = "Launch failed";
+        If[verbose, Print[Style["  \:26a0\:fe0f " <> cid <> " \:8d77\:52d5\:5931\:6557", Red]]]];
+      chunks[cid] = chunk,
+    {cid, waveIDs}];
+    job["Chunks"] = chunks;
+    state["job"]  = job;
+    $iIRunningJobs[jobID] = state;
+  ];
+
+(* ────────────────────────────────────────────────────────
+   1秒ポーリングティック
+   ──────────────────────────────────────────────────────── *)
+iIJobTick[jobID_String, taskSym_Symbol] :=
+  Module[{state, job, waveIdx, waves, currentWaveIDs,
+          chunks, opts, allDone, cid, chunk, runState, collected},
+    state = Quiet @ $iIRunningJobs[jobID];
+    If[!AssociationQ[state],
+      Quiet @ StopScheduledTask[taskSym];
+      Quiet @ RemoveScheduledTask[taskSym];
+      Return[]];
+    job           = state["job"];
+    waveIdx       = state["waveIdx"];
+    waves         = state["waves"];
+    opts          = state["opts"];
+    chunks        = job["Chunks"];
+    If[waveIdx > Length[waves],
+      (* 全波完了済み — FinishJob から呼ばれるはずだが念のため *)
+      Quiet @ StopScheduledTask[taskSym];
+      Quiet @ RemoveScheduledTask[taskSym];
+      $iIRunningJobs = KeyDrop[$iIRunningJobs, jobID];
+      Return[]];
+    currentWaveIDs = waves[[waveIdx]];
+    (* Running チャンクをポーリング *)
+    Do[
+      chunk = Lookup[chunks, cid, None];
+      If[!AssociationQ[chunk] ||
+         Lookup[chunk, "Status", ""] =!= "Running", Continue[]];
+      runState  = Lookup[chunk, "RunState", <||>];
+      collected = iICollectChunkResult[runState,
+        Lookup[opts, "Timeout", Automatic]];
+      If[collected["status"] =!= "Running",
+        chunk["Status"]   = collected["status"];
+        chunk["Result"]   = collected["result"];
+        chunk["ErrorMsg"] = collected["error"];
+        chunk["DoneAt"]   = AbsoluteTime[];
+        chunk["RunState"] = <||>;  (* 完了後は RunState を消去してサイズ節約 *)
+        chunks[cid]       = chunk;
+        If[TrueQ[state["verbose"]],
+          Print[
+            Style[If[collected["status"] === "Done",
+              "  \[Checkmark] ", "  \[Times] "],
+              If[collected["status"] === "Done",
+                Darker[Green], Red]],
+            cid,
+            If[collected["status"] === "Done",
+              " \:5b8c\:4e86 (" <>
+                ToString[Round[chunk["DoneAt"] -
+                  Lookup[chunk, "StartedAt", chunk["DoneAt"]], 0.1]] <> "s)",
+              " \:5931\:6557: " <> ToString[collected["error"]]]]];
+        (* OnChunkDone コールバック *)
+        Quiet @ state["onChunkDone"][cid, collected]];,
+    {cid, currentWaveIDs}];
+    job["Chunks"] = chunks;
+    state["job"]  = job;
+    $iIRunningJobs[jobID] = state;
+    (* 波が全て完了したか確認 *)
+    allDone = AllTrue[currentWaveIDs,
+      MemberQ[{"Done","Failed"},
+        Lookup[Lookup[chunks, #, <||>], "Status", ""]] &];
+    If[allDone,
+      Module[{nextWaveIdx = waveIdx + 1},
+        state["waveIdx"] = nextWaveIdx;
+        $iIRunningJobs[jobID] = state;
+        If[nextWaveIdx <= Length[waves],
+          iILaunchWave[jobID, nextWaveIdx, waves, opts],
+          (* 全波完了 → Finish *)
+          iIFinishJob[jobID, job, opts,
+            state["nb"], taskSym]]]]
+  ];
+
+(* ════════════════════════════════════════════════════════
+   Phase 5c: Merge と出力再合成
+   ════════════════════════════════════════════════════════ *)
+
+(* ────────────────────────────────────────────────────────
+   iIFinishJob: 全波完了後の後処理
+     1. チャンク結果を iIMerge で統合
+     2. 任意でノートブックへ書き戻し
+     3. OnJobDone コールバック呼び出し
+     4. ScheduledTask 停止・クリーンアップ
+   ──────────────────────────────────────────────────────── *)
+iIFinishJob[jobID_String, job_Association, opts_Association,
+            nb_NotebookObject, taskSym_Symbol] :=
+  Module[{chunks, typeName, resultOrder, orderedChunks,
+          mergedResult, writeToNb, verbose, onJobDone,
+          doneCount, failCount, elapsed},
+    Quiet @ StopScheduledTask[taskSym];
+    Quiet @ RemoveScheduledTask[taskSym];
+    chunks = Lookup[job, "Chunks", <||>];
+
+    (* typeName: Values が空のときは "" → フォールバック用に安全に取得 *)
+    typeName = Module[{vals = If[AssociationQ[chunks], Values[chunks], {}]},
+      If[Length[vals] > 0 && AssociationQ[First[vals]],
+        Lookup[First[vals], "Type", ""],
+        ""]];
+
+    resultOrder = Lookup[job, "ResultOrder",
+      If[AssociationQ[chunks], Keys[chunks], {}]];
+    writeToNb   = TrueQ[Lookup[opts, "WriteToNotebook", False]];
+    verbose     = TrueQ[Lookup[opts, "Verbose", True]];
+    onJobDone   = Lookup[opts, "OnJobDone", (Nothing &)];
+
+    (* 完了順序を ResultOrder に揃える:
+       Association でない要素は除外して常に List[Association...] を保証 *)
+    orderedChunks = If[AssociationQ[chunks] && ListQ[resultOrder],
+      Select[Map[Lookup[chunks, #, None] &, resultOrder], AssociationQ],
+      {}];
+
+    (* 統計 *)
+    doneCount  = Count[If[AssociationQ[chunks], Values[chunks], {}],
+      _?(Lookup[#, "Status",""] === "Done" &)];
+    failCount  = Count[If[AssociationQ[chunks], Values[chunks], {}],
+      _?(Lookup[#, "Status",""] === "Failed" &)];
+    elapsed    = Round[AbsoluteTime[] -
+      Lookup[Quiet @ $iIRunningJobs[jobID], "startTime", AbsoluteTime[]], 0.1];
+
+    If[verbose,
+      Print[Style["\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014", Gray]];
+      Print[Style["\:2705 \:30b8\:30e7\:30d6\:5b8c\:4e86: " <> jobID, Bold, Darker[Green]]];
+      Print["  Done: ", doneCount, " / Failed: ",
+        Style[failCount, If[failCount > 0, Red, Black]],
+        " / \:7d4c\:904e\:6642\:9593: ", elapsed, "s"]];
+
+    (* Merge: 両パスとも Quiet でメッセージを抑制 *)
+    mergedResult = Quiet[
+      If[typeName =!= "" && Length[orderedChunks] > 0,
+        (* 登録済み型: iIMerge 経由でマージ *)
+        iIMerge[orderedChunks, typeName,
+          Lookup[opts, "MergeOpts", <||>]],
+        (* フォールバック: Done チャンクの文字列 Result を連結 *)
+        Module[{rawResults = Lookup[#, "Result", None] & /@ orderedChunks},
+          StringJoin @ Riffle[
+            Select[If[ListQ[rawResults], rawResults, {}], StringQ],
+            "\n\n"]]]];
+
+    (* mergedResult が非文字列でも安全に処理 *)
+    If[!StringQ[mergedResult], mergedResult = ""];
+
+    If[verbose && mergedResult =!= "",
+      Print["  \:7d71\:5408\:7d50\:679c: ", StringTake[mergedResult, UpTo[100]], "..."]];
+
+    (* ノートブック書き戻し *)
+    If[TrueQ[writeToNb] && nb =!= None && mergedResult =!= "",
+      NBAccess`NBWriteCell[nb,
+        Cell[mergedResult, "Text",
+          Background -> LightYellow]];
+      If[verbose,
+        Print[Style["  \:2192 \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:66f8\:304d\:623b\:3057\:5b8c\:4e86", Darker[Green]]]]];
+
+    (* OnJobDone コールバック *)
+    Quiet @ onJobDone[<|
+      "JobID"        -> jobID,
+      "Result"       -> mergedResult,
+      "DoneCount"    -> doneCount,
+      "FailCount"    -> failCount,
+      "ElapsedSecs"  -> elapsed,
+      "Chunks"       -> chunks
+    |>];
+    (* クリーンアップ *)
+    $iIRunningJobs = KeyDrop[$iIRunningJobs, jobID];
+  ];
+
+(* ────────────────────────────────────────────────────────
+   LLMGraphExecute 公開 API (Phase 5b + 5c 統合エントリポイント)
+
+   第一形式: LLMGraphExecute[job, opts]
+     job — iIScheduleJob[] で生成したジョブ Association
+
+   第二形式: LLMGraphExecute[input, typeName, opts]
+     input    — テキスト文字列、ノートブック等
+     typeName — "TextChunks" | "NotebookCells" | 独自登録型
+
+   Options:
+     PromptTemplate  — プロンプトテンプレート文字列 (デフォルト: "`content`")
+     Model           — モデル指定 (デフォルト: Automatic = claude-sonnet-4-6)
+     "Timeout"       — タイムアウト秒数
+     "Verbose"       — 進捗表示 (デフォルト: True)
+     "WriteToNotebook" — 統合結果をノートブックに書き戻す (デフォルト: False)
+     "OnChunkDone"   — チャンク完了コールバック Function[{chunkID, result}, ...]
+     "OnJobDone"     — ジョブ完了コールバック Function[{resultAssoc}, ...]
+
+   戻り値: jobID 文字列 (非同期; LLMGraphExecuteStatus で状態確認)
+   ──────────────────────────────────────────────────────── *)
+Options[LLMGraphExecute] = {
+  PromptTemplate  -> "`content`",
+  Model           -> Automatic,
+  "Timeout"       -> Automatic,
+  "Verbose"       -> True,
+  "WriteToNotebook" -> False,
+  "OnChunkDone"   -> (Nothing &),
+  "OnJobDone"     -> (Nothing &)
+};
+
+LLMGraphExecute[job_Association, opts:OptionsPattern[]] :=
+  Module[{nb, waves, jobID, optsA, taskSym, taskExpr},
+    nb = EvaluationNotebook[];
+    optsA = <|
+      "PromptTemplate"  -> OptionValue[PromptTemplate],
+      Model             -> OptionValue[Model],
+      "Timeout"         -> OptionValue["Timeout"],
+      "Verbose"         -> OptionValue["Verbose"],
+      "WriteToNotebook" -> OptionValue["WriteToNotebook"],
+      "OnChunkDone"     -> OptionValue["OnChunkDone"],
+      "OnJobDone"       -> OptionValue["OnJobDone"]
+    |>;
+    jobID = Lookup[job, "JobID", "job-" <>
+      DateString[Now, {"Year","Month","Day","Hour","Minute","Second"}]];
+    waves = iIBuildWaves[job];
+    If[TrueQ[optsA["Verbose"]],
+      Print[Style["\:25b6 LLMGraphExecute: " <> jobID, Bold]];
+      Print["  \:30c1\:30e3\:30f3\:30af\:6570: ", Length[job["Chunks"]],
+        " / \:6ce2\:6570: ", Length[waves]]];
+    (* グローバル状態に登録 *)
+    $iIRunningJobs[jobID] = <|
+      "job"          -> job,
+      "waves"        -> waves,
+      "waveIdx"      -> 1,
+      "opts"         -> optsA,
+      "nb"           -> nb,
+      "startTime"    -> AbsoluteTime[],
+      "verbose"      -> TrueQ[optsA["Verbose"]],
+      "onChunkDone"  -> optsA["OnChunkDone"],
+      "onJobDone"    -> optsA["OnJobDone"]
+    |>;
+    (* 第1波を起動 *)
+    If[Length[waves] > 0,
+      iILaunchWave[jobID, 1, waves, optsA]];
+    (* ポーリング ScheduledTask: 1秒ごとに iIJobTick を呼ぶ *)
+    taskSym = Unique["iIJobTask"];
+    taskExpr = With[{jid = jobID, ts = taskSym},
+      SessionSubmit[ScheduledTask[
+        iIJobTick[jid, ts],
+        1]]];
+    If[TrueQ[optsA["Verbose"]],
+      Print[Style["  \:23f1 \:30dd\:30fc\:30ea\:30f3\:30b0\:958b\:59cb (1s\:9593\:9694)", Gray]]];
+    jobID  (* 非同期: JobID を即座に返す *)
+  ];
+
+(* 第二形式: 入力 + typeName から直接起動 *)
+LLMGraphExecute[input_, typeName_String, opts:OptionsPattern[]] :=
+  Module[{job},
+    job = iIScheduleJob[input, typeName,
+      <|"default" -> "claudecode"|>,
+      <||>];
+    If[!AssociationQ[job], Return[Missing["SplitFailed", typeName]]];
+    LLMGraphExecute[job, opts]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   LLMGraphExecuteStatus: 実行中ジョブの状態照会
+   ──────────────────────────────────────────────────────── *)
+LLMGraphExecuteStatus[jobID_String] :=
+  Module[{state, job, chunks, summary},
+    state = Quiet @ $iIRunningJobs[jobID];
+    If[!AssociationQ[state],
+      Return[Missing["JobNotFound", jobID]]];
+    job    = state["job"];
+    chunks = Lookup[job, "Chunks", <||>];
+    summary = <|
+      "JobID"       -> jobID,
+      "WaveIdx"     -> state["waveIdx"],
+      "TotalWaves"  -> Length[state["waves"]],
+      "TotalChunks" -> Length[chunks],
+      "Pending"     -> Count[Values[chunks],
+        _?(Lookup[#,"Status",""] === "Pending" &)],
+      "Running"     -> Count[Values[chunks],
+        _?(Lookup[#,"Status",""] === "Running" &)],
+      "Done"        -> Count[Values[chunks],
+        _?(Lookup[#,"Status",""] === "Done" &)],
+      "Failed"      -> Count[Values[chunks],
+        _?(Lookup[#,"Status",""] === "Failed" &)],
+      "ElapsedSecs" -> Round[AbsoluteTime[] -
+        Lookup[state, "startTime", AbsoluteTime[]], 0.1]
+    |>;
+    summary
+  ];
+
+(* ────────────────────────────────────────────────────────
+   LLMGraphExecuteCancel: 実行中ジョブのキャンセル
+   ──────────────────────────────────────────────────────── *)
+LLMGraphExecuteCancel[jobID_String] :=
+  Module[{state, job, chunks},
+    state = Quiet @ $iIRunningJobs[jobID];
+    If[!AssociationQ[state],
+      Print["\:26a0\:fe0f JobID \:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: ", jobID];
+      Return[$Failed]];
+    job    = state["job"];
+    chunks = Lookup[job, "Chunks", <||>];
+    (* 実行中プロセスを全て強制終了 *)
+    KeyValueMap[
+      Function[{cid, chunk},
+        If[Lookup[chunk, "Status", ""] === "Running",
+          Quiet @ KillProcess[
+            Lookup[Lookup[chunk, "RunState", <||>], "proc", None]]]],
+      chunks];
+    $iIRunningJobs = KeyDrop[$iIRunningJobs, jobID];
+    Print[Style["\:23f9 \:30ad\:30e3\:30f3\:30bb\:30eb\:5b8c\:4e86: ", Bold, Orange], jobID];
+    jobID
+  ];
+
+
+(* ════════════════════════════════════════════════════════
+   Phase 3C: スレッド抽出・再適用
+   ════════════════════════════════════════════════════════
+
+   「ある LLM セッションで行った作業」をオブジェクト化し、
+   同じ手順を別のファイルや別のデータに繰り返す仕組み。
+
+   コンビネータとしての Thread オブジェクト:
+     Thread を f とすると f[newTarget] が再実行になる。
+     複数 Thread を合成することもできる:
+       ApplyThread[thread1 |> thread2, ...]   (将来拡張)
+
+   Thread 構造:
+     <|
+       "ThreadID"      -> "thread-history-5-20260325",
+       "CreatedAt"     -> AbsoluteTime[],
+       "SourceNB"      -> "path/to/original.nb",
+       "SourceFile"    -> "path/to/file.nb",    (* 操作対象だったファイル *)
+       "NodeChain"     -> {"history-1", ...},   (* 祖先→対象ノードの順 *)
+       "Instructions"  -> {"instruction1", ...}, (* テンプレート化済み *)
+       "PrivacySpecs"  -> {0.5, 1.0, ...},      (* ノード別 AccessLevel *)
+       "AccessLevels"  -> {"ClaudeCode", ...},
+       "L2Codes"       -> {"code1\n\ncode2", ...}, (* 実際に実行されたコード *)
+       "TargetSlot"    -> "`targetFile`",        (* 差し替えスロット名 *)
+       "SlotPattern"   -> "path/to/original.nb" (* 元のスロット値 *)
+     |>
+
+   再適用:
+     ApplyThread[thread, newTarget, nb]
+       → instruction の SlotPattern を newTarget に置換
+       → NodeChain 順に iClaudeEvalImpl で逐次実行
+   ════════════════════════════════════════════════════════ *)
+
+(* ────────────────────────────────────────────────────────
+   BFS で指定ノードへの全祖先を収集 (InEdges を逆辿り)
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphAncestors[nodes_Association, targetID_String] :=
+  Module[{queue = {targetID}, visited = {}, nid, preds},
+    While[Length[queue] > 0,
+      nid   = First[queue];
+      queue = Rest[queue];
+      If[MemberQ[visited, nid], Continue[]];
+      AppendTo[visited, nid];
+      (* InEdges から親ノードを取得 *)
+      preds = Flatten[
+        Function[e, Lookup[e, "From", Nothing]] /@
+          Lookup[Lookup[nodes, nid, <||>], "InEdges", {}]];
+      queue = Join[queue, Complement[preds, visited]]];
+    (* targetID は含む; Step 順にソート *)
+    SortBy[visited,
+      Lookup[Lookup[nodes, #, <||>], "Step", 0] &]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   instruction 中のファイルパス候補を検出する
+   "C:\...\file.nb" や ".../file.nb" などを抽出する。
+   変数代入形式 (notebookfile = "...") にも対応。
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphDetectFilePath[instruction_String] :=
+  Module[{m},
+    (* 変数代入形式を最優先: notebookfile = "path.nb" *)
+    m = StringCases[instruction,
+      RegularExpression[
+        "(?i)(?:notebookfile|file|path|nb|notebook)\\s*=\\s*\"([^\"]+\\.(?:nb|wl|txt|csv|json|pdf|wls))\""] :> "$1"];
+    If[m =!= {}, Return[First[m]]];
+    (* Windows パス クォート内: "C:\..." — スペースを含むパスも対応 *)
+    m = StringCases[instruction,
+      RegularExpression["\"([A-Za-z]:[/\\\\][^\"]+\\.(?:nb|wl|txt|csv|json|pdf|wls))\""] :> "$1"];
+    If[m =!= {}, Return[First[m]]];
+    (* Windows パス クォートなし: スペース可、末尾に拡張子 — 行頭または改行後のみ *)
+    m = StringCases[instruction,
+      RegularExpression["(?:^|\\n)([A-Za-z]:[/\\\\][^\\n\"'`]{5,}\\.(?:nb|wl|txt|csv|json|pdf|wls))"]
+        :> "$1"];
+    If[m =!= {}, Return[StringTrim @ First[m]]];
+    (* Unix/Mac パス クォート内 *)
+    m = StringCases[instruction,
+      RegularExpression["\"((?:/|~)[^\"]+\\.(?:nb|wl|txt|csv|json|pdf|wls))\""] :> "$1"];
+    If[m =!= {}, Return[First[m]]];
+    None
+  ];
+
+(* ────────────────────────────────────────────────────────
+   L2 コードを外部キャッシュから回収する
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphGetL2Code[nodeID_String] :=
+  Module[{l2 = iLLMGraphCacheReadL2[nodeID]},
+    If[!AssociationQ[l2], Return[""]];
+    StringJoin @ Riffle[
+      Select[Lookup[#, "Code", ""] & /@ Values[l2["Nodes"]], StringQ],
+      "\n\n"]
+  ];
+
+(* ────────────────────────────────────────────────────────
+   AccessLevel → PrivacySpec 数値変換
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphAccessLevelToPrivacySpec["ClaudeCode"]  := 0.5;
+iLLMGraphAccessLevelToPrivacySpec["ClaudeAPI"]   := 0.5;
+iLLMGraphAccessLevelToPrivacySpec["LMStudio"]    := 1.0;
+iLLMGraphAccessLevelToPrivacySpec["WolframLLM"]  := 0.75;
+iLLMGraphAccessLevelToPrivacySpec["Local"]       := 1.0;
+iLLMGraphAccessLevelToPrivacySpec[_]             := 0.5;
+
+(* ────────────────────────────────────────────────────────
+   Thread 構築
+   ──────────────────────────────────────────────────────── *)
+iLLMGraphBuildThread[graph_Association, nodeIDs_List,
+                     sourceNBPath_String] :=
+  Module[{nodes, nodeChain, instructions, privacySpecs,
+          accessLevels, l2Codes, slotPattern, targetSlot = "`targetFile`"},
+    nodes = Lookup[graph, "Nodes", <||>];
+    nodeChain = nodeIDs;
+    instructions = Map[
+      Function[nid,
+        Lookup[Lookup[nodes, nid, <||>], "Instruction", ""]],
+      nodeChain];
+    accessLevels = Map[
+      Function[nid,
+        Lookup[Lookup[nodes, nid, <||>], "AccessLevel", "ClaudeCode"]],
+      nodeChain];
+    privacySpecs = iLLMGraphAccessLevelToPrivacySpec /@ accessLevels;
+    l2Codes = iLLMGraphGetL2Code /@ nodeChain;
+    (* 各 instruction から個別にファイルパスを検出 (連結すると誤検出する) *)
+    slotPattern = Module[{fp = None},
+      Scan[Function[instr,
+        If[fp === None && StringQ[instr],
+          With[{p = iLLMGraphDetectFilePath[instr]},
+            If[StringQ[p] && p =!= "", fp = p]]]],
+        instructions];
+      fp];
+    (* instruction 内のパスをスロット記法に置換 (パスが検出できた場合のみ) *)
+    If[StringQ[slotPattern] && slotPattern =!= "",
+      instructions = StringReplace[#, slotPattern -> targetSlot] & /@
+        instructions];
+    <|
+      "ThreadID"     -> "thread-" <> Last[nodeChain] <> "-" <>
+        DateString[Now, {"Year","Month","Day"}],
+      "CreatedAt"    -> AbsoluteTime[],
+      "SourceNB"     -> sourceNBPath,
+      "SourceFile"   -> If[StringQ[slotPattern], slotPattern, sourceNBPath],
+      "NodeChain"    -> nodeChain,
+      "Instructions" -> instructions,
+      "PrivacySpecs" -> privacySpecs,
+      "AccessLevels" -> accessLevels,
+      "L2Codes"      -> l2Codes,
+      "TargetSlot"   -> targetSlot,
+      "SlotPattern"  -> If[StringQ[slotPattern], slotPattern, None]
+    |>
+  ];
+
+(* ────────────────────────────────────────────────────────
+   NotebookLLMGraphExtractThread 公開 API
+   ──────────────────────────────────────────────────────── *)
+NotebookLLMGraphExtractThread[nb_NotebookObject, nodeID_String] :=
+  Module[{graph, nodes, chain, nbPath, thread},
+    graph  = iLLMGraphGetCached[nb];
+    If[!AssociationQ[graph],
+      Print["\:26a0\:fe0f LLMGraph \:304c\:3042\:308a\:307e\:305b\:3093\:3002NotebookLLMGraphBuild[] \:3092\:5148\:306b\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
+      Return[$Failed]];
+    nodes = Lookup[graph, "Nodes", <||>];
+    If[!KeyExistsQ[nodes, nodeID],
+      Print["\:26a0\:fe0f \:30ce\:30fc\:30c9\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: ", nodeID];
+      Return[$Failed]];
+    chain  = iLLMGraphAncestors[nodes, nodeID];
+    nbPath = Lookup[graph, "NotebookPath", ""];
+    thread = iLLMGraphBuildThread[graph, chain, nbPath];
+    Print[Style["\:2714 Thread \:62bd\:51fa\:5b8c\:4e86: " <> thread["ThreadID"], Bold, Darker[Green]]];
+    Print["  \:30ce\:30fc\:30c9\:9023\:9396: ", Length[chain], " \:30ce\:30fc\:30c9 (",
+      StringRiffle[chain, " \:2192 "], ")"];
+    Print["  \:30b9\:30ed\:30c3\:30c8\:30d1\:30bf\:30fc\:30f3: \"",
+      Lookup[thread, "SlotPattern", "(none)"], "\""];
+    thread
+  ];
+NotebookLLMGraphExtractThread[nodeID_String] :=
+  NotebookLLMGraphExtractThread[EvaluationNotebook[], nodeID];
+
+(* ────────────────────────────────────────────────────────
+   NotebookLLMGraphApplyThread 公開 API
+
+   Thread の NodeChain を新しい対象に対して順次再実行する。
+   各ノードの instruction の `targetFile` スロットを
+   newTarget で置換してから ClaudeEval を呼ぶ。
+
+   Options:
+     "DryRun"       -> False   実行せず計画だけ返す
+     "StepByStep"   -> False   True なら各ステップ前に確認プロンプト
+     "SessionTag"   -> Automatic  履歴を書く先のセッションタグ
+     "Verbose"      -> True
+   ──────────────────────────────────────────────────────── *)
+Options[NotebookLLMGraphApplyThread] = {
+  "DryRun"     -> False,
+  "StepByStep" -> False,
+  "SessionTag" -> Automatic,
+  "Verbose"    -> True
+};
+
+NotebookLLMGraphApplyThread[thread_Association, newTarget_String,
+    nb_NotebookObject, opts:OptionsPattern[]] :=
+  Module[{dryRun, verbose, stepByStep, tag,
+          chain, instructions, privacySpecs,
+          targetSlot, plan, i, instr, ps, mdl},
+    dryRun    = TrueQ[OptionValue["DryRun"]];
+    verbose   = TrueQ[OptionValue["Verbose"]];
+    stepByStep = TrueQ[OptionValue["StepByStep"]];
+    tag       = Replace[OptionValue["SessionTag"],
+      Automatic -> iSessionTag[]];
+    chain        = Lookup[thread, "NodeChain", {}];
+    instructions = Lookup[thread, "Instructions", {}];
+    privacySpecs = Lookup[thread, "PrivacySpecs", {}];
+    targetSlot   = Lookup[thread, "TargetSlot", "`targetFile`"];
+
+    (* newTarget でスロットを置換 *)
+    instructions = StringReplace[#, targetSlot -> newTarget] & /@
+      instructions;
+
+    (* 実行計画を表示 *)
+    If[verbose,
+      Print[Style["\:25b6 Thread \:9069\:7528: " <> Lookup[thread, "ThreadID", "?"],
+        Bold]];
+      Print["  \:5bfe\:8c61: ", newTarget];
+      Print["  \:30b9\:30c6\:30c3\:30d7\:6570: ", Length[chain]]];
+
+    plan = MapThread[
+      Function[{nid, instr2, ps2},
+        <|"NodeID"->nid, "Instruction"->instr2,
+          "PrivacySpec"->ps2|>],
+      {chain,
+       PadRight[instructions, Length[chain], ""],
+       PadRight[privacySpecs,  Length[chain], 0.5]}];
+
+    If[TrueQ[dryRun],
+      Print[Style["  [DryRun \:30e2\:30fc\:30c9 \:2014 \:5b9f\:884c\:306a\:3057]", Italic, Gray]];
+      Scan[
+        Function[step,
+          Print["  [", step["NodeID"], "] ",
+            StringTake[step["Instruction"], UpTo[80]],
+            " (ps=", step["PrivacySpec"], ")"]],
+        plan];
+      Return[plan]];
+
+    (* 逐次実行: 各ステップを iClaudeEvalImpl 経由で実行 *)
+    Do[
+      Module[{step = plan[[i]]},
+        instr = step["Instruction"];
+        ps    = step["PrivacySpec"];
+        (* PrivacySpec から Model を決定 *)
+        mdl = Which[
+          ps >= 0.9,
+            If[ListQ[$ClaudePrivateModel] && Length[$ClaudePrivateModel] > 0,
+              $ClaudePrivateModel, Automatic],
+          True, Automatic];
+        If[verbose,
+          Print[Style["  \:27a4 Step " <> ToString[i] <> "/" <>
+            ToString[Length[plan]], Bold],
+            " [", step["NodeID"], "] ps=", ps];
+          Print["    ", StringTake[instr, UpTo[80]]]];
+        If[TrueQ[stepByStep] && i > 1,
+          (* ユーザー確認 *)
+          If[!TrueQ[ChoiceDialog[
+              "Step " <> ToString[i] <> " \:3092\:5b9f\:884c\:3057\:307e\:3059\:304b\:ff1f\n" <>
+              StringTake[instr, UpTo[120]],
+              {"Yes" -> True, "Skip" -> False}]],
+            If[verbose, Print["  \:23ed Skip"]];
+            Continue[]]];
+        iClaudeEvalImpl[nb, tag, instr,
+          {}, True, mdl,
+          <|"AccessLevel" -> ps|>,
+          False, Automatic]],
+    {i, Length[plan]}];
+
+    If[verbose,
+      Print[Style["\:2714 Thread \:9069\:7528\:5b8c\:4e86: " <>
+        ToString[Length[plan]] <> " \:30b9\:30c6\:30c3\:30d7\:5b9f\:884c", Bold, Darker[Green]]]];
+    plan
+  ];
+
+NotebookLLMGraphApplyThread[thread_Association, newTarget_String,
+    opts:OptionsPattern[]] :=
+  NotebookLLMGraphApplyThread[thread, newTarget,
+    EvaluationNotebook[], opts];
+
+
+(* ════════════════════════════════════════════════════════
+   NBFileTranslate: 秘匿分離翻訳
+   ════════════════════════════════════════════════════════
+   設計:
+     1. NBFileReadAllCells で全セルを取得 (PrivacyLevel 付き)
+     2. 公開セル → ClaudeCode (iClaudeQueryRaw) で翻訳
+     3. 秘匿セル → $ClaudePrivateModel (iStartFallbackAsync 同期版) で翻訳
+     4. NBFileWriteAllCells で置き換え
+     5. NBFileSave で別名保存
+
+   注意:
+     - [CONFIDENTIAL] のままにしておく選択肢もある
+       (PrivateModel 未設定時や "SkipConfidential"->True 時)
+     - CellEpilog/TaggingRules は NBFileWriteCell が保持する
+   ════════════════════════════════════════════════════════ *)
+
+Options[ClaudeProcessFile] = {
+  "Threshold"  -> 0.5
+};
+
+If[!AssociationQ[$iCPFState], $iCPFState = <||>];
+
+iNBParseJSONResult[raw_String] :=
+  Module[{jsonStr, parsed, tmpFile},
+    (* Step 1: JSON 部分を抽出 *)
+    jsonStr = First[
+      StringCases[raw,
+        RegularExpression["```(?:json)?\\s*([\\s\\S]*?)```"] :> "$1", 1],
+      None];
+    If[jsonStr === None,
+      Module[{first, last},
+        first = StringPosition[raw, "{"];
+        last  = StringPosition[raw, "}"];
+        jsonStr = If[Length[first] > 0 && Length[last] > 0,
+          StringTake[raw, {First[first][[1]], Last[last][[2]]}],
+          raw]]];
+    jsonStr = StringTrim[jsonStr];
+
+    (* Step 2: パース (複数の方法を試す) *)
+    (* 方法A: Developer`ReadRawJSONString (Mathematica 内部文字列を直接パース) *)
+    parsed = Quiet @ Check[Developer`ReadRawJSONString[jsonStr], $Failed];
+
+    (* 方法B: UTF-8 一時ファイル経由 (ImportString は Windows で非ASCII が壊れる) *)
+    If[!AssociationQ[parsed],
+      tmpFile = FileNameJoin[{$TemporaryDirectory,
+        "cpf_json_" <> ToString[RandomInteger[99999]] <> ".json"}];
+      Quiet[Export[tmpFile, jsonStr, "Text", CharacterEncoding -> "UTF-8"]];
+      parsed = Quiet @ Check[Import[tmpFile, "RawJSON"], $Failed];
+      Quiet @ DeleteFile[tmpFile]];
+
+    (* 方法C: ImportString (ASCII のみの JSON で動作) *)
+    If[!AssociationQ[parsed],
+      parsed = Quiet @ Check[ImportString[jsonStr, "RawJSON"], $Failed]];
+
+    If[!AssociationQ[parsed], Return[<||>]];
+    Association @ KeyValueMap[
+      Function[{k, v},
+        Module[{intK = Quiet @ Check[ToExpression[k], None]},
+          If[IntegerQ[intK], intK, k] ->
+            If[StringQ[v], v, ToString[v]]]],
+      parsed]
+  ];
+
+iNBBuildCellPrompt[promptTask_String, cells_List] :=
+  promptTask <> "\n\n" <>
+  "Apply this task to each cell below.\n" <>
+  "Return ONLY a JSON object mapping cellIdx to result text: {\"cellIdx\": \"result text\", ...}\n" <>
+  "IMPORTANT: Output only the JSON object. No explanation, no markdown fences, no extra text.\n\n" <>
+  "Cells:\n" <>
+  StringJoin[Map[Function[c,
+    "  [" <> ToString[c["CellIdx"]] <> "] (" <> c["Style"] <> "): " <>
+    c["Text"] <> "\n"], cells]];
+
+iClaudeProcessFileLaunchNodeB[prompt_String] :=
+  Module[{norm, outFile, promptFile, batFile, proc, ts, strm},
+    ts = ToString[UnixTime[]] <> "_" <> ToString[RandomInteger[99999]];
+    norm       = iNormalizePrompt[prompt];
+    outFile    = FileNameJoin[{$TemporaryDirectory, "cpf_B_out_" <> ts <> ".txt"}];
+    promptFile = FileNameJoin[{$TemporaryDirectory, "cpf_B_prm_" <> ts <> ".txt"}];
+    If[FileExistsQ[outFile], DeleteFile[outFile]];
+    strm = OpenWrite[promptFile, BinaryFormat -> True];
+    BinaryWrite[strm, ExportString[norm["text"], "Text", CharacterEncoding -> "UTF-8"]];
+    Close[strm];
+    batFile = iMakeBat[promptFile, outFile, norm["imageDirs"]];
+    proc = StartProcess[{"cmd", "/c", batFile}];
+    <|"proc" -> proc, "outFile" -> outFile, "batFile" -> batFile,
+      "promptFile" -> promptFile|>
+  ];
+
+iClaudeProcessFileLaunchNodeA[prompt_String, provider_String,
+                               model_String, customURL_String] :=
+  Module[{apiKey, url, prepared, proc},
+    apiKey = If[ToLowerCase[provider] === "lmstudio", "lm-studio",
+      Quiet[NBAccess`NBGetAPIKey[provider,
+        PrivacySpec -> <|"AccessLevel" -> 1.0|>]]];
+    If[!StringQ[apiKey], Return[None]];
+    url = Which[
+      ToLowerCase[provider] === "lmstudio",
+        iEnsureChatCompletionsPath[If[customURL =!= "", customURL, "http://localhost:1234"]],
+      customURL =!= "", customURL,
+      True, "https://api.anthropic.com/v1/messages"];
+    prepared = iPrepareAnthropicPS1[apiKey, model, prompt, url,
+      If[ToLowerCase[provider] === "lmstudio", "openai", provider],
+      If[IntegerQ[$ClaudeTimeout], $ClaudeTimeout, 300]];
+    If[prepared === $Failed, Return[None]];
+    proc = StartProcess[{
+      prepared["psExe"], "-NoProfile", "-ExecutionPolicy", "Bypass",
+      "-File", prepared["ps1File"],
+      prepared["promptFile"], prepared["outFile"],
+      prepared["errFile"], apiKey, prepared["url"], model}];
+    <|"proc" -> proc, "outFile" -> prepared["outFile"],
+      "errFile" -> prepared["errFile"], "tmpDir" -> prepared["tmpDir"]|>
+  ];
+
+iClaudeProcessFileTick[stateKey_String] :=
+  Module[{st, elapsed, bDone, aDone, nodeB, nodeA, nb0,
+          pubRaw, pubResults, privRaw, privResults,
+          inputPath, outputPath, tag, result,
+          stepB, stepA},
+    st = Lookup[$iCPFState, stateKey, None];
+    If[!AssociationQ[st], Return[]];
+    elapsed = Round[AbsoluteTime[] - st["startT"]];
+    nb0     = st["nb"];
+    nodeB   = st["nodeB"];
+    nodeA   = st["nodeA"];
+    bDone   = st["bDone"];
+    aDone   = st["aDone"];
+    stepB   = st["stepB"];
+    stepA   = st["stepA"];
+
+    If[!bDone && AssociationQ[nodeB],
+      If[Quiet[ProcessStatus[nodeB["proc"]]] === "Finished",
+        bDone = True; $iCPFState[stateKey]["bDone"] = True]];
+    If[!aDone && AssociationQ[nodeA],
+      If[Quiet[ProcessStatus[nodeA["proc"]]] === "Finished",
+        aDone = True; $iCPFState[stateKey]["aDone"] = True]];
+
+    Quiet[CurrentValue[nb0, WindowStatusArea] =
+      "ClaudeProcessFile: " <> ToString[elapsed] <> "s" <>
+      If[!bDone, " | NodeB running", " | NodeB done"] <>
+      If[!aDone, " | NodeA running", If[nodeA =!= None, " | NodeA done", ""]]];
+
+    If[elapsed > st["timeout"],
+      If[!bDone && AssociationQ[nodeB], Quiet @ KillProcess[nodeB["proc"]]];
+      If[!aDone && AssociationQ[nodeA], Quiet @ KillProcess[nodeA["proc"]]];
+      bDone = True; aDone = True;
+      $iCPFState[stateKey]["bDone"] = True;
+      $iCPFState[stateKey]["aDone"] = True];
+
+    If[!bDone || !aDone, Return[]];
+
+    tag        = st["tag"];
+    inputPath  = st["inputPath"];
+    outputPath = st["outputPath"];
+    pubResults  = <||>;
+    privResults = <||>;
+
+    (* NodeB \:7d50\:679c\:56de\:53ce: stepB \:6307\:5b9a\:3067\:66f4\:65b0 *)
+    If[AssociationQ[nodeB],
+      pubRaw = If[FileExistsQ[nodeB["outFile"]],
+        cleanOutput[stripANSI[Quiet @ Import[nodeB["outFile"], "Text",
+          CharacterEncoding -> "UTF-8"]]],
+        "ERROR: no output file"];
+      Quiet[DeleteFile /@ Select[{nodeB["batFile"], nodeB["promptFile"], nodeB["outFile"]}, FileExistsQ]];
+      If[IntegerQ[stepB],
+        iSessionUpdateByStep[nb0, tag, stepB,
+          <|"response" -> If[StringQ[pubRaw], StringTake[pubRaw, UpTo[2000]], "ERROR"],
+            "code" -> ""|>]];
+      If[StringQ[pubRaw] && !iIsAPIErrorResponse[pubRaw],
+        pubResults = iNBParseJSONResult[pubRaw],
+        Global`$iCPFDiagB = <|"raw" -> StringTake[ToString[pubRaw], UpTo[200]],
+          "isErr" -> iIsAPIErrorResponse[pubRaw], "isStr" -> StringQ[pubRaw]|>]];
+
+    (* NodeA \:7d50\:679c\:56de\:53ce: stepA \:6307\:5b9a\:3067\:66f4\:65b0 *)
+    If[AssociationQ[nodeA],
+      privRaw = If[FileExistsQ[nodeA["outFile"]],
+        iReadAnthropicResult[nodeA["outFile"], nodeA["errFile"]],
+        "ERROR: no output file"];
+      Quiet[DeleteDirectory[nodeA["tmpDir"], DeleteContents -> True]];
+      If[IntegerQ[stepA],
+        iSessionUpdateByStep[nb0, tag, stepA,
+          <|"response" -> If[StringQ[privRaw], StringTake[privRaw, UpTo[2000]], "ERROR"],
+            "code" -> ""|>]];
+      If[StringQ[privRaw] && !StringStartsQ[privRaw, "ERROR"],
+        privResults = iNBParseJSONResult[privRaw],
+        Global`$iCPFDiagA = <|"raw" -> StringTake[ToString[privRaw], UpTo[200]],
+          "startErr" -> StringStartsQ[ToString[privRaw], "ERROR"], "isStr" -> StringQ[privRaw]|>]];
+
+    (* Merge + Save *)
+    (* DEBUG: 診断用にグローバルに保存 *)
+    Global`$iCPFLastPubResults = pubResults;
+    Global`$iCPFLastPrivResults = privResults;
+    Global`$iCPFLastPubRaw = If[StringQ[pubRaw], StringTake[pubRaw, UpTo[500]], None];
+    Global`$iCPFLastPrivRaw = If[StringQ[privRaw], StringTake[privRaw, UpTo[500]], None];
+    result = NBAccess`NBMergeNotebookCells[
+      inputPath, outputPath, pubResults, privResults];
+
+    (* Merge \:30ce\:30fc\:30c9\:3092\:5c65\:6b74\:306b\:8ffd\:52a0 (NodeB/NodeA \:304b\:3089\:306e DataFlow Join) *)
+    Module[{mergeStep = Length[iSessionHistory[nb0, tag]],
+            parentSteps},
+      parentSteps = Select[{stepB, stepA}, IntegerQ];
+      iSessionAppend[nb0, tag, <|
+        "step"        -> mergeStep,
+        "time"        -> AbsoluteTime[],
+        "instruction" -> "[ClaudeProcessFile Merge] " <> outputPath,
+        "fullPrompt"  -> "",
+        "cellCount"   -> NBAccess`NBCellCount[nb0],
+        "response"    -> If[result === $Failed, "ERROR: merge failed",
+          "pub=" <> ToString[Length[pubResults]] <> " priv=" <>
+          ToString[Length[privResults]] <>
+          If[Length[pubResults] === 0 && AssociationQ[nodeB],
+            " | diagB=" <> ToString[Quiet @ Global`$iCPFDiagB], ""] <>
+          If[Length[privResults] === 0 && AssociationQ[nodeA],
+            " | diagA=" <> ToString[Quiet @ Global`$iCPFDiagA], ""]],
+        "code" -> "", "type" -> "eval",
+        "accessLevel" -> 0.5,
+        (* Merge \:30ce\:30fc\:30c9\:306f\:6700\:521d\:306e\:89aa\:306e\:307f InEdge \:3067\:8a2d\:5b9a\:3002
+           2\:3064\:76ee\:306e\:89aa\:306f iLLMGraphOnAppend \:5185\:3067\:8ffd\:52a0\:3055\:308c\:308b *)
+        "parentStep"  -> If[Length[parentSteps] > 0, First[parentSteps] + 1, mergeStep],
+        "edgeType"    -> "DataFlow"|>];
+      (* 2\:3064\:76ee\:306e\:89aa\:304b\:3089\:306e\:30a8\:30c3\:30b8\:3092\:76f4\:63a5\:8ffd\:52a0 *)
+      If[Length[parentSteps] >= 2,
+        Module[{graph = iLLMGraphGetCached[nb0], mergeNodeID, parent2NodeID, nodes},
+          If[AssociationQ[graph],
+            nodes = Lookup[graph, "Nodes", <||>];
+            mergeNodeID = tag <> "-" <> ToString[mergeStep + 1];
+            parent2NodeID = tag <> "-" <> ToString[parentSteps[[2]] + 1];
+            If[KeyExistsQ[nodes, mergeNodeID] && KeyExistsQ[nodes, parent2NodeID],
+              nodes[mergeNodeID, "InEdges"] =
+                DeleteDuplicatesBy[
+                  Append[nodes[mergeNodeID]["InEdges"],
+                    <|"From" -> parent2NodeID, "Type" -> "DataFlow"|>],
+                  #["From"] &];
+              nodes[parent2NodeID, "OutEdges"] =
+                DeleteDuplicatesBy[
+                  Append[Lookup[nodes[parent2NodeID], "OutEdges", {}],
+                    <|"To" -> mergeNodeID, "Type" -> "DataFlow"|>],
+                  #["To"] &];
+              graph["Nodes"] = nodes;
+              $iLLMGraphCache = graph;
+              iLLMGraphFlush[nb0]]]]]];
+
+    Quiet[CurrentValue[nb0, WindowStatusArea] = ""];
+    Module[{sym = st["taskSym"]},
+      Quiet[StopScheduledTask[sym]];
+      Quiet[RemoveScheduledTask[sym]]];
+    $iCPFState = KeyDrop[$iCPFState, stateKey];
+  ];
+
+(* Splitter: raw prompt からセル単位の処理指示を抽出する *)
+iClaudeProcessFileSplitPrompt[rawPrompt_String, srcPath_String, dstPath_String] :=
+  Module[{splitPrompt, result},
+    splitPrompt =
+      "You are preprocessing a user instruction for a notebook cell processor.\n" <>
+      "The user said: \"" <> rawPrompt <> "\"\n" <>
+      "The source file is: " <> srcPath <> "\n" <>
+      "The output file will be saved as: " <> dstPath <> "\n\n" <>
+      "Extract ONLY the cell-level transformation instruction.\n" <>
+      "Remove any file paths, save instructions, file names, and file management commands.\n" <>
+      "The instruction must be applicable to each cell independently.\n" <>
+      "Output ONLY the extracted instruction in the same language as the user's input, nothing else.\n\n" <>
+      "Examples:\n" <>
+      "  Input: \"Translate this file to English and save as out.nb\" -> \"Translate to English\"\n" <>
+      "  Input: \"Convert to formal style and save as formal.nb\" -> \"Convert to formal style\"\n" <>
+      "  Input: \"Fix grammar errors in sample.nb\" -> \"Fix grammar errors\"\n";
+    result = Quiet @ iClaudeQueryRaw[splitPrompt];
+    If[StringQ[result] && !iIsAPIErrorResponse[result] &&
+       StringLength[StringTrim[result]] > 3,
+      StringTrim[result],
+      (* Fallback: remove file paths/names heuristically *)
+      StringTrim @ StringReplace[rawPrompt,
+        {srcPath -> "", dstPath -> "",
+         FileNameTake[srcPath] -> "", FileNameTake[dstPath] -> "",
+         RegularExpression["\\s*(?:として)?\\s*保存\\s*(?:して|する|せよ|してほしい|してください)[。、]?\\s*"] -> "",
+         RegularExpression["\\s*(?:and\\s+)?save\\s+(?:as|to)\\s+\\S+\\.nb[,.]?\\s*"] -> "",
+         RegularExpression["^\\s*このファイルを\\s*"] -> "",
+         RegularExpression["[,、。]+\\s*$"] -> ""}]]
+  ];
+
+ClaudeProcessFile[prompt_String, inputPath_String, outputPath_String,
+                   opts:OptionsPattern[]] :=
+  Module[{threshold, nb0, tag,
+          publicCells, privateCells,
+          pubPrompt, privPrompt, cellPrompt,
+          nodeB = None, nodeA = None,
+          resolvedTimeout, stateKey, taskSym,
+          dispatchStep, splitterStep, stepB = None, stepA = None},
+
+    threshold = OptionValue["Threshold"];
+    nb0       = EvaluationNotebook[];
+    tag       = iSessionTag[];
+    resolvedTimeout = If[IntegerQ[$ClaudeTimeout], $ClaudeTimeout, 300];
+
+    If[!FileExistsQ[inputPath], Return[$Failed]];
+
+    (* Step 1: Split cells (NBAccess) *)
+    {publicCells, privateCells} =
+      NBAccess`NBSplitNotebookCells[inputPath, threshold];
+
+    (* auto-dispatch node step *)
+    dispatchStep = Length[iSessionHistory[nb0, tag]];
+
+    (* Step 2: Splitter — extract cell-level instruction from raw prompt *)
+    Quiet[CurrentValue[nb0, WindowStatusArea] =
+      "ClaudeProcessFile: Splitter running..."];
+    cellPrompt = iClaudeProcessFileSplitPrompt[prompt, inputPath, outputPath];
+
+    splitterStep = Length[iSessionHistory[nb0, tag]];
+    iSessionAppend[nb0, tag, <|
+      "step"        -> splitterStep,
+      "time"        -> AbsoluteTime[],
+      "instruction" -> "[ClaudeProcessFile Splitter] " <>
+        iSanitizeInstructionForHistory[prompt],
+      "fullPrompt"  -> iCompressForHistory[prompt],
+      "cellCount"   -> NBAccess`NBCellCount[nb0],
+      "response"    -> cellPrompt,
+      "code" -> "", "type" -> "eval", "accessLevel" -> 0.5,
+      "parentStep"  -> dispatchStep,
+      "edgeType"    -> "ContextInheritance"|>];
+
+    (* Step 3: Launch NodeB + NodeA in parallel with split prompt *)
+    If[Length[publicCells] > 0,
+      pubPrompt = iNBBuildCellPrompt[cellPrompt, publicCells];
+      stepB = Length[iSessionHistory[nb0, tag]];
+      iSessionAppend[nb0, tag, <|
+        "step"        -> stepB,
+        "time"        -> AbsoluteTime[],
+        "instruction" -> "[ClaudeProcessFile NodeB] " <>
+          StringTake[cellPrompt, UpTo[200]],
+        "fullPrompt"  -> iCompressForHistory[pubPrompt],
+        "cellCount"   -> NBAccess`NBCellCount[nb0],
+        "response"    -> "(Node B processing)",
+        "code" -> "", "type" -> "eval", "accessLevel" -> 0.5,
+        "parentStep"  -> splitterStep + 1,
+        "edgeType"    -> "DataFlow"|>];
+      nodeB = iClaudeProcessFileLaunchNodeB[pubPrompt]];
+
+    If[Length[privateCells] > 0 &&
+       ListQ[$ClaudePrivateModel] && Length[$ClaudePrivateModel] >= 2,
+      privPrompt = iNBBuildCellPrompt[cellPrompt, privateCells];
+      stepA = Length[iSessionHistory[nb0, tag]];
+      iSessionAppend[nb0, tag, <|
+        "step"        -> stepA,
+        "time"        -> AbsoluteTime[],
+        "instruction" -> "[ClaudeProcessFile NodeA] " <>
+          StringTake[cellPrompt, UpTo[200]],
+        "fullPrompt"  -> iCompressForHistory[privPrompt],
+        "cellCount"   -> NBAccess`NBCellCount[nb0],
+        "response"    -> "(Node A processing)",
+        "code" -> "", "type" -> "eval", "accessLevel" -> 1.0,
+        "parentStep"  -> splitterStep + 1,
+        "edgeType"    -> "DataFlow"|>];
+      nodeA = iClaudeProcessFileLaunchNodeA[privPrompt,
+        $ClaudePrivateModel[[1]], $ClaudePrivateModel[[2]],
+        If[Length[$ClaudePrivateModel] >= 3, $ClaudePrivateModel[[3]], ""]]];
+
+    If[nodeB === None && nodeA === None, Return[$Failed]];
+
+    (* Step 4: ScheduledTask for async polling *)
+    stateKey = "cpf_" <> ToString[UnixTime[]] <> "_" <> ToString[RandomInteger[99999]];
+    $iCPFState[stateKey] = <|
+      "nb"         -> nb0,
+      "tag"        -> tag,
+      "inputPath"  -> inputPath,
+      "outputPath" -> outputPath,
+      "nodeB"      -> nodeB,
+      "nodeA"      -> nodeA,
+      "stepB"      -> stepB,
+      "stepA"      -> stepA,
+      "bDone"      -> (nodeB === None),
+      "aDone"      -> (nodeA === None),
+      "startT"     -> AbsoluteTime[],
+      "timeout"    -> resolvedTimeout,
+      "taskSym"    -> None
+    |>;
+
+    With[{sk = stateKey},
+    taskSym = CreateScheduledTask[iClaudeProcessFileTick[sk], 1];
+    $iCPFState[sk]["taskSym"] = taskSym;
+    StartScheduledTask[taskSym]];
+
+    Quiet[CurrentValue[nb0, WindowStatusArea] =
+      "ClaudeProcessFile: 0s" <>
+      If[nodeB =!= None, " | NodeB running", ""] <>
+      If[nodeA =!= None, " | NodeA running", ""]];
+    stateKey
+  ];
+
+
+Options[NBFileTranslate] = {
+  "TargetLang"         -> "English",
+  "SkipConfidential"   -> False,   (* True: 秘匿セルは翻訳せず保持 *)
+  "Verbose"            -> True
+};
+
+NBFileTranslate[inputPath_String, outputPath_String,
+    opts:OptionsPattern[]] :=
+  Module[{targetLang, skipConf, verbose, nb2, cells, publicCells,
+          confCells, replacements = <||>, translated, err,
+          totalDone = 0, totalFail = 0},
+    targetLang = OptionValue["TargetLang"];
+    skipConf   = TrueQ[OptionValue["SkipConfidential"]];
+    verbose    = TrueQ[OptionValue["Verbose"]];
+
+    If[!FileExistsQ[inputPath],
+      Print["ERROR: File not found: ", inputPath]; Return[$Failed]];
+
+    (* 1. 全セルを読む *)
+    nb2 = NBAccess`NBFileOpen[inputPath];
+    If[nb2 === $Failed, Return[$Failed]];
+    cells = NBAccess`NBFileReadAllCells[nb2];
+    If[!ListQ[cells] || Length[cells] === 0,
+      NBAccess`NBFileClose[nb2]; Return[$Failed]];
+
+    publicCells = Select[cells, !TrueQ[#["IsConfidential"]] &];
+    confCells   = Select[cells, TrueQ[#["IsConfidential"]] &];
+
+    If[verbose,
+      Print[Style["NBFileTranslate: ", Bold], inputPath];
+      Print["  \:516c\:958b\:30bb\:30eb: ", Length[publicCells],
+        " / \:79d8\:5bc6\:30bb\:30eb: ", Length[confCells]];
+      Print["  \:7ffb\:8a33\:5148: ", targetLang]];
+
+    (* 2. 公開セルを ClaudeCode で翻訳 *)
+    If[verbose, Print[Style["  \:2460 \:516c\:958b\:30bb\:30eb \:2192 ClaudeCode\:3067\:7ffb\:8a33", Bold]]];
+    Scan[
+      Function[c,
+        Module[{prompt, resp},
+          If[StringTrim[c["Text"]] === "", Return[]];
+          prompt = "Translate the following " <>
+            c["Style"] <> " cell text to " <> targetLang <>
+            ". Return ONLY the translated text, no explanations, no quotes.\n\n" <>
+            c["Text"];
+          resp = Quiet @ iClaudeQueryRaw[prompt];
+          If[StringQ[resp] && !iIsAPIErrorResponse[resp],
+            replacements[c["CellIdx"]] = StringTrim[resp];
+            totalDone++,
+            If[verbose,
+              Print[Style["    \:26a0\:fe0f \:5931\:6557 [", Orange],
+                c["CellIdx"], "]: ", StringTake[ToString[resp], UpTo[60]]]];
+            totalFail++]]],
+      publicCells];
+
+    (* 3. 秘匿セルを $ClaudePrivateModel で翻訳 *)
+    If[!skipConf && Length[confCells] > 0,
+      If[!ListQ[$ClaudePrivateModel] || Length[$ClaudePrivateModel] === 0,
+        If[verbose,
+          Print[Style["  \:26a0\:fe0f $ClaudePrivateModel \:672a\:8a2d\:5b9a\:3002\:79d8\:5bc6\:30bb\:30eb\:306f\:7ffb\:8a33\:3057\:307e\:305b\:3093\:3002",
+            Orange]]],
+        If[verbose,
+          Print[Style["  \:2461 \:79d8\:5bc6\:30bb\:30eb \:2192 $ClaudePrivateModel\:3067\:7ffb\:8a33", Bold]]];
+        Scan[
+          Function[c,
+            Module[{prompt, provider, model, customURL, apiKey, resp},
+              If[StringTrim[c["Text"]] === "", Return[]];
+              prompt = "Translate the following " <>
+                c["Style"] <> " cell text to " <> targetLang <>
+                ". Return ONLY the translated text, no explanations, no quotes.\n\n" <>
+                c["Text"];
+              (* $ClaudePrivateModel = {provider, model, url} *)
+              provider  = $ClaudePrivateModel[[1]];
+              model     = $ClaudePrivateModel[[2]];
+              customURL = If[Length[$ClaudePrivateModel] >= 3,
+                $ClaudePrivateModel[[3]], ""];
+              apiKey = If[ToLowerCase[provider] === "lmstudio",
+                "lm-studio",
+                Quiet[NBAccess`NBGetAPIKey[provider,
+                  PrivacySpec -> <|"AccessLevel"->1.0|>]]];
+              If[!StringQ[apiKey],
+                If[verbose, Print["    \:26a0\:fe0f API\:30ad\:30fc\:53d6\:5f97\:5931\:6557"]];
+                totalFail++; Return[]];
+              (* 同期呼び出し: PS1 経由 *)
+              resp = Quiet @ Module[{prepared, proc, outF, startT},
+                prepared = iPrepareAnthropicPS1[apiKey, model, prompt,
+                  Which[
+                    ToLowerCase[provider] === "lmstudio",
+                      iEnsureChatCompletionsPath[
+                        If[customURL =!= "", customURL, "http://localhost:1234"]],
+                    customURL =!= "", customURL,
+                    True, "https://api.anthropic.com/v1/messages"],
+                  If[ToLowerCase[provider] === "lmstudio", "openai", provider],
+                  $ClaudeTimeout];
+                If[prepared === $Failed, Return[$Failed]];
+                proc   = StartProcess[{prepared["psExe"], "-NoProfile",
+                  "-ExecutionPolicy", "Bypass", "-File", prepared["ps1File"],
+                  prepared["promptFile"], prepared["outFile"],
+                  prepared["errFile"], apiKey, prepared["url"], model}];
+                startT = AbsoluteTime[];
+                While[Quiet[ProcessStatus[proc]] =!= "Finished" &&
+                    AbsoluteTime[] - startT < $ClaudeTimeout,
+                  Pause[0.5]];
+                If[Quiet[ProcessStatus[proc]] =!= "Finished",
+                  Quiet @ KillProcess[proc]; Return["TIMEOUT"]];
+                If[FileExistsQ[prepared["outFile"]],
+                  cleanOutput[stripANSI[Import[prepared["outFile"],"Text"]]],
+                  $Failed]];
+              If[StringQ[resp] && !iIsAPIErrorResponse[resp],
+                replacements[c["CellIdx"]] = StringTrim[resp];
+                totalDone++;
+                If[verbose,
+                  Print["    \:2714 [", c["CellIdx"], "] \:79d8\:5bc6: ",
+                    StringTake[StringTrim[resp], UpTo[50]]]],
+                totalFail++;
+                If[verbose,
+                  Print[Style["    \:26a0\:fe0f \:5931\:6557 [", Orange],
+                    c["CellIdx"], "]"]]]]],
+          confCells]]];
+
+    (* 4. 書き戻し + 保存 *)
+    If[Length[replacements] > 0,
+      NBAccess`NBFileWriteAllCells[nb2, replacements]];
+    NBAccess`NBFileSave[nb2, outputPath];
+    NBAccess`NBFileClose[nb2];
+
+    If[verbose,
+      Print[Style["\:2714 NBFileTranslate \:5b8c\:4e86", Bold, Darker[Green]]];
+      Print["  Done: ", totalDone, " / Failed: ",
+        Style[totalFail, If[totalFail > 0, Red, Black]]];
+      Print["  \:51fa\:529b: ", outputPath]];
+    outputPath
+  ];
 
 
 End[];

@@ -6,6 +6,12 @@
 
 ## 必須ルール
 
+0. **「使う」と「更新する」の区別（最重要）**: パッケージ名がプロンプトに含まれていても、**パッケージの関数を呼び出して計算・処理を行う指示**には `ClaudeUpdatePackage` を生成してはならない。
+   - 「倍数計算で3倍する計算を」→ ✅ パッケージの関数を呼ぶコード（例: `三倍計算[10]`）
+   - 「倍数計算に3倍する関数を追加して」→ ✅ `ClaudeUpdatePackage["倍数計算", "3倍する関数を追加"]`
+   - **判定基準**: 指示の動詞が「計算する」「表示する」「使う」「実行する」「取得する」「分析する」等の**利用系**であれば、既存関数を使うコードを生成する。「追加する」「修正する」「変更する」「修正して」「バグを直して」「機能を追加して」等の**変更系**であれば `ClaudeUpdatePackage` を使う。
+   - **api.md を確認してから判断する**: パッケージの api.md に必要な関数が既に存在する場合、その関数を使うコードを生成する。api.md に該当する関数がない場合のみ、更新が必要か検討する。
+
 1. **パッケージ名の認識**: プロンプト中にパッケージ名（`maildb`, `github`, `claudecode` 等）が含まれている場合、`$packageDirectory` 内の該当パッケージの存在を前提とする。File Access Context の `Packages in $packageDirectory` リストで確認できる。
 
 2. **GitHub 操作は自分のリポジトリを優先**: 「GitHub から xxx をダウンロード/インストール/更新して」等の指示を受けた場合、**Web 検索をせず**、まず `$packageDirectory` に該当パッケージが存在するか確認し、GitHubREST パッケージの関数（`GitHubUpdatePackage`, `GitHubInstallPackage`）を使用する。claudecode.wl は github.wl と連携して動作する前提である。
@@ -35,7 +41,9 @@
 
 6. **Paclet 変換**: `ClaudeConvertToPaclet["パッケージ名"]` を使用する。
 
-7. **ClaudeEval による再帰的パッケージ操作（推奨）**: ClaudeEval がさらに ClaudeEval/ClaudeUpdatePackage/ClaudeCreatePackage を生成するパターンは積極的に利用すべきである。
+7. **ClaudeEval による再帰的パッケージ操作（条件付き推奨）**: ClaudeEval がさらに ClaudeEval/ClaudeUpdatePackage/ClaudeCreatePackage を生成するパターンは、**パッケージの変更が明示的に要求されている場合のみ**利用すべきである。
+   - ✅ 「maildbに検索機能を追加して」→ `ClaudeUpdatePackage["maildb", "検索機能を追加"]`
+   - ❌ 「maildbでメールを検索して」→ パッケージの既存関数を使うコードを生成する。`ClaudeUpdatePackage` を生成してはならない。
    - 複合タスク（複数の独立した変更）は、個別の `ClaudeUpdatePackage` 呼び出しに分解して順次実行する
    - 各呼び出しは独自のバックアップを作成するため、安全にロールバック可能
    - 分解により各ステップの `iGuessTargetFunctions` が適切な関数のみを選択し、LLM の品質が向上する

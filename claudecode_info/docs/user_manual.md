@@ -15,6 +15,8 @@ ClaudeCode は以下の設計原則に基づいています。
 - **スマートドキュメント管理**: ドキュメント生成・更新時のモード制御（新規作成・既存更新）、部分更新対象の指定、差分検出による効率的な更新処理を提供します。
 - **分離原則検証**: NBAccess パッケージとの適切な分離を維持するため、コード内の分離原則違反を自動検出・修正する機能を備えています。
 - **パッケージキーワード自動注入**: 各パッケージが独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。
+- **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG（有向非巡回グラフ）として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。
+- **[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージする機能を提供します。
 
 内部的には、[NBAccess](https://github.com/transreal/NBAccess) パッケージにノートブックのセル操作・プライバシー管理・履歴 DB を委譲し、[GitHubREST](https://github.com/transreal/github) パッケージと連携して GitHub 上のパッケージ管理を行います。
 
@@ -175,6 +177,14 @@ ClaudePrepareCommit["MyPackage"]
 | | `ClaudeSpeech` | OpenAI TTS API で音声生成 |
 | **Web** | `ClaudeWebSearch` | Web 検索（Claude Code 組み込み） |
 | | `ClaudeWebFetch` | URL 内容取得・要約（Anthropic API） |
+| **[実験的] LLMGraph** | `NotebookLLMGraphPlot` | DAG 可視化 |
+| | `NotebookLLMGraphNodes` | 全ノード取得 |
+| | `NotebookLLMGraphSummary` | Status/L2 統計 Dataset |
+| | `NotebookLLMGraphValidate` | 整合性検証 |
+| | `NotebookLLMGraphExtractThread` | 実行スレッド抽出 |
+| | `NotebookLLMGraphApplyThread` | Thread を別対象に再適用 |
+| | `NotebookLLMGraphRerun` | ノード再実行 |
+| **[実験的] ファイル処理** | `ClaudeProcessFile` | プライバシー分割並列処理 |
 | **分離検証** | `ClaudeCheckSeparation` | NBAccess 分離原則の違反検査 |
 | | `ClaudeFixSeparation` | 違反の自動修正 |
 | **Git 連携** | `ClaudePrepareCommit` | 変更履歴収集・コミット準備 |
@@ -478,6 +488,146 @@ ClaudeUpdateDocumentation["MyPackage", "全体的な改善",
 | `References` | `{}` | 参考文献リスト（README.md に反映） |
 | `Demos` | `{}` | デモ動画・使用例 URL（README.md に反映） |
 | `Disclaimer` | `{}` | 免責事項（README.md に反映） |
+
+### [実験的] LLM 適用グラフ (LLMGraph)
+
+`ClaudeEval` や `ClaudeQuery` などの LLM 呼び出しを実行すると、各呼び出しがノードとしてノートブック固有の DAG（有向非巡回グラフ）に自動記録されます。このグラフ構造は Mathematica 14.2 で導入された `LLMGraph` と類似の設計を採用しています（将来的には `LLMGraph` そのものとの統合を目指しますが、現状では独自実装）。
+
+この実装は、`claudecode_info/design/` にある 1992-WOOC'92.pdf および 1993-WOOC'93「信号処理に向いたオブジェクトモデルの提案と応用」で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。
+
+#### アーキテクチャ
+
+グラフデータはノートブックの TaggingRules に圧縮保存され、フルレスポンスやコードは外部キャッシュ（`$UserBaseDirectory/ClaudeCode/llmgraph_cache/`）に WXF 形式で保存されます。インメモリキャッシュにより、頻繁なアクセスでも Compress/Uncompress のオーバーヘッドを回避します。
+
+各ノード（L1）は命令テキスト（先頭 500 文字）、応答サマリー（先頭 300 文字）、アクセスレベル（ClaudeCode / ClaudeAPI / LMStudio / WolframLLM / Local）、ステータス（Processing / Completed / Failed / Invalidated）などを保持します。ノード間の関係はエッジタイプ（ContextInheritance: セッション内連続、DataFlow: 出力→入力依存、Sequential: L2 コードブロック間）として記録されます。
+
+L2 グラフはコードブロック単位の追跡を提供し、L1 ノードに紐づいた詳細な実行状態を記録します。
+
+#### 基本的な使い方
+
+```mathematica
+(* LLMGraph の DAG 可視化 *)
+NotebookLLMGraphPlot[]
+
+(* 全ノードの統計表示 *)
+NotebookLLMGraphSummary[]
+
+(* グラフの整合性検証 *)
+NotebookLLMGraphValidate[]
+
+(* 特定ノードのフルレスポンス取得 *)
+NotebookLLMGraphFetchResponse["history-3"]
+
+(* L2 グラフ（コードブロック単位）の取得・可視化 *)
+NotebookLLMGraphFetchL2[EvaluationNotebook[], "history-3"]
+NotebookLLMGraphPlotL2[EvaluationNotebook[], "history-3"]
+
+(* エラーのある L1 ノード一覧 *)
+NotebookLLMGraphErrors[]
+```
+
+#### 再実行・無効化
+
+```mathematica
+(* 特定ノードの再実行（下流ノードが自動的に Invalidated にマークされる） *)
+NotebookLLMGraphRerun[EvaluationNotebook[], "history-3"]
+
+(* 下流ノードのみ無効化 *)
+NotebookLLMGraphInvalidateDownstream[EvaluationNotebook[], "history-3"]
+```
+
+#### スレッド抽出・再適用
+
+特定のノードに至る実行パス（祖先チェーン）を Thread オブジェクトとして抽出し、別のファイルに対して同じ処理を再適用できます。
+
+```mathematica
+(* 実行スレッドを抽出 *)
+thread = NotebookLLMGraphExtractThread["history-5"]
+
+(* 別のファイルに同じ処理を適用 *)
+NotebookLLMGraphApplyThread[thread, "C:\\...\\another_notebook.nb"]
+
+(* DryRun で実行計画を確認 *)
+NotebookLLMGraphApplyThread[thread, "another.nb", "DryRun" -> True]
+```
+
+Thread オブジェクトには各ノードの PrivacySpec が保持されており、`PrivacySpec >= 0.9` のノードは自動的に `$ClaudePrivateModel`（LM Studio 等）で実行されます。
+
+#### 公開 API 一覧
+
+| 関数 | 説明 |
+|------|------|
+| `NotebookLLMGraph[nb]` | グラフ全体を取得（キャッシュ優先） |
+| `NotebookLLMGraphBuild[nb]` | セッション履歴から強制再構築 |
+| `NotebookLLMGraphNodes[nb]` | 全ノードの Association |
+| `NotebookLLMGraphPlot[nb]` | DAG 可視化 |
+| `NotebookLLMGraphValidate[nb]` | 整合性検証 |
+| `NotebookLLMGraphFetchResponse[nb, nodeID]` | フルレスポンス取得 |
+| `NotebookLLMGraphSubSteps[nb, nodeID]` | 内部ステップ履歴 |
+| `NotebookLLMGraphSummary[nb]` | Status / L2 統計 Dataset |
+| `NotebookLLMGraphFetchL2[nb, nodeID]` | L2 グラフ取得 |
+| `NotebookLLMGraphPlotL2[nb, nodeID]` | L2 グラフ可視化 |
+| `NotebookLLMGraphErrors[nb]` | L2 エラーノード一覧 |
+| `NotebookLLMGraphUpdateL2Status[nb, l1ID, l2ID, status, msg]` | L2 ステータス手動更新 |
+| `NotebookLLMGraphRerun[nb, nodeID]` | ノード再実行 |
+| `NotebookLLMGraphInvalidateDownstream[nb, nodeID]` | 下流無効化 |
+| `NotebookLLMGraphExtractThread[nb, nodeID]` | スレッド抽出 |
+| `NotebookLLMGraphApplyThread[thread, target]` | スレッド再適用 |
+
+### [実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)
+
+`ClaudeProcessFile` は LLMGraph の応用として、ノートブックファイル（.nb）のセルをプライバシーレベルに基づいて自動分割し、公開セルはクラウド LLM（Claude Code CLI）、秘匿セルはプライベート LLM（`$ClaudePrivateModel` で指定した LM Studio 等）で並列処理してマージします。
+
+#### 動作フロー
+
+`ClaudeEval` でノートブックファイルパスを含む指示を与えると自動検出（auto-dispatch）され、以下のフローが非同期で実行されます。
+
+1. **auto-dispatch**: `.nb` パスを検出し、`ClaudeProcessFile` を自動起動
+2. **Splitter**: Claude Code CLI（`--print` モード）で生プロンプトからファイルパス・保存指示を除去し、セル単位の変換指示を抽出
+3. **NodeB** (公開セル): Claude Code CLI でクラウド LLM に公開セルを送信
+4. **NodeA** (秘匿セル): `$ClaudePrivateModel` のローカル LLM に秘匿セルを送信（NodeB と並列実行）
+5. **Merger**: 両ノードの結果を回収し、`NBMergeNotebookCells` で元のセル構造にマージして出力ファイルを保存
+
+処理過程は LLMGraph 上に Fork/Join トポロジ（ContextInheritance + DataFlow エッジ）として記録されます。
+
+#### 使い方
+
+```mathematica
+(* $ClaudePrivateModel の設定 *)
+$ClaudePrivateModel = {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.103:1234"};
+
+(* ノートブックファイルの翻訳（auto-dispatch 経由） *)
+ClaudeEval["C:\\...\\sample.nb
+このファイルを英語に翻訳して、sample-translated.nb として保存してほしい。"]
+
+(* 常体文変換 *)
+ClaudeEval["C:\\...\\sample.nb
+このファイルをである調の常体文に変換して、sample-dearu.nb として保存してほしい。"]
+
+(* 処理完了後、LLMGraph で確認 *)
+NotebookLLMGraphPlot[]
+NotebookLLMGraphSummary[]
+```
+
+処理は非同期で実行され、`WindowStatusArea` にリアルタイム進捗が表示されます。カーネルはロックされないため、処理中もノートブックの操作が可能です。
+
+#### LLMGraph 上のトポロジ
+
+```
+history-N: auto-dispatch (ContextInheritance)
+  └──CI──→ history-N+1: Splitter (ClaudeCode)
+                ├──DataFlow──→ history-N+2: NodeB (ClaudeCode, 公開セル)
+                └──DataFlow──→ history-N+3: NodeA (LMStudio, 秘匿セル)
+                                    │                    │
+                                    └──DataFlow──→ history-N+4: Merger
+                                                 ←──DataFlow──┘
+```
+
+#### 前提条件
+
+- `$ClaudePrivateModel` が設定されていること（秘匿セルの処理先）
+- 処理対象の .nb ファイルに NBAccess の Confidential タグ付きセルが含まれていること
+- セルのプライバシーレベルは NBAccess の `iNBFileCellPrivacyLevel` により 3 段階（0.0: 公開、0.75: 依存、1.0: 秘匿）で判定されます
 
 ### NBAccess 分離原則検証
 

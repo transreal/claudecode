@@ -77,7 +77,11 @@
 
 ### ClaudeEval の再帰呼び出しと複合タスクの分解
 
-- **ClaudeEval が ClaudeEval/ClaudeUpdatePackage/ClaudeCreatePackage を生成することは推奨される。** 複雑なタスクを小さなステップに分解し、各ステップを個別の呼び出しとして列挙すべきである。
+- **「使う」と「更新する」の区別（最重要）**: パッケージ名がプロンプトに含まれていても、パッケージの関数を呼び出して**計算・処理・分析・表示**を行う指示には `ClaudeUpdatePackage` を生成してはならない。api.md を確認し、既存の関数で実現できるなら、その関数を呼ぶコードを生成する。
+  - ✅ `ClaudeEval["倍数計算で3倍する計算を"]` → 既存の3倍関数を呼ぶコード
+  - ✅ `ClaudeEval["maildbでメールを検索して"]` → `searchFromMails[...]` を呼ぶコード
+  - ❌ 上記のような利用指示に対して `ClaudeUpdatePackage` を生成する → **禁止**
+- **ClaudeEval が ClaudeUpdatePackage を生成してよいのは、パッケージの変更が明示的に要求されている場合のみ。** 「追加して」「修正して」「変更して」「バグを直して」等の変更系動詞がある場合に限る。
 - **再帰深さの上限**: `$ClaudeEvalMaxDepth`（デフォルト 5）で制御される。この上限を超える再帰呼び出しは自動的にブロックされる。
 - **複合タスクの分解**: 1つのプロンプトに複数の独立した変更指示が含まれる場合、ClaudeEval は複数の `ClaudeUpdatePackage` 呼び出しに分解して生成すべきである。
   - 例: 「markSize を動的にし、配色を改善し、exportSVG を追加して」→ 3回の `ClaudeUpdatePackage` に分解

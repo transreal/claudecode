@@ -26,6 +26,10 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImageGenerate`）と OpenAI TTS API による音声合成（`ClaudeSpeech`）を統合しています。ClaudeQuery のリッチレスポンスモードでは、ユーザーの要求に応じて自動的にこれらの API を呼び出すコードや、安全な可視化コード（Plot、Graphics 等）を自動評価します。
 
+**[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を記録・可視化するためのグラフ構造を導入しています。Mathematica 14.2 で導入された `LLMGraph` と類似の DAG（有向非巡回グラフ）構造を採用しており（将来的には `LLMGraph` そのものとの統合を目指しますが、現状では独自実装）、`ClaudeEval` / `ClaudeQuery` などを実行すると、自動的にノートブック固有の LLMGraph が生成されます。各ノードは LLM 呼び出しの命令・応答サマリー・アクセスレベル・ステータスなどを保持し、ノード間の関係（コンテキスト継承・データフロー）がエッジとして記録されます。`NotebookLLMGraphPlot[]` による DAG 可視化、`NotebookLLMGraphSummary[]` による統計表示、`NotebookLLMGraphExtractThread[]` による実行スレッドの抽出と再適用など、豊富な分析 API を備えています。この実装は、`claudecode_info/design/` にある 1992-WOOC'92.pdf および 1993-WOOC'93「信号処理に向いたオブジェクトモデルの提案と応用」で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。
+
+**[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイル（.nb）のセルをプライバシーレベルに基づいて自動分割し、公開セルはクラウド LLM（Claude Code CLI）、秘匿セルはプライベート LLM（LM Studio 等）で並列処理してマージする `ClaudeProcessFile` を搭載しています。`ClaudeEval` でノートブックファイルパスを含む指示を与えると自動的に検出・起動され、Splitter → 並列 LLM 処理 → Merger の一連のフローが非同期で実行されます。処理過程は LLMGraph 上に Fork/Join トポロジとして記録されます。
+
 外部ファイルのアタッチメント機構や Web 検索・取得機能により、ノートブック外の情報源も活用できます。ディレクティブ管理機能を通じて、Claude Code の振る舞いを制御する CLAUDE.md やルール・スキルファイルの追加・更新・整合性チェックをノートブック内から行えます。`ClaudeUpdateDirective[]` はソースコードの公開 API とディレクティブファイルの整合性を自動検査・修正することで、ドキュメントとコードの乖離を防ぎます。`ClaudeUpdateDirective[text]` ではテキストの内容を Claude で解釈し、CLAUDE.md / rules / skills の適切なファイルに反映できます。ディレクティブの変更履歴は自動バックアップされ、`ClaudeDirectiveBackupDataset[]` で閲覧・復元が可能です。
 
 多言語対応として、`$Language` に基づいてプロンプト内の言語指定を動的に生成します。`$Language` が `"Japanese"` の場合は日本語で応答するよう指示し、それ以外（英語環境など）の場合は英語に切り替わります。日本語の励まし表現（「死ぬ気で考えろ」「よく考えて」等）を自動検出し、Claude の thinking budget を適切に設定する Think トリガー自動挿入機能も搭載しています。
@@ -239,6 +243,23 @@ ShowClaudePalette[]
 **Web 検索・取得**
 - `ClaudeWebSearch[query]` — Web 検索を実行し結果をテキストで返す
 - `ClaudeWebFetch[url]` — URL の内容を取得・要約
+
+**[実験的] LLMGraph — LLM 適用グラフ**
+- `NotebookLLMGraph[nb]` — ノートブックの LLMGraph 全体を取得（キャッシュ優先）
+- `NotebookLLMGraphBuild[nb]` — セッション履歴からグラフを強制再構築
+- `NotebookLLMGraphNodes[nb]` — 全ノードの Association を取得
+- `NotebookLLMGraphPlot[nb]` — DAG 可視化（`"LayeredDigraphEmbedding"` レイアウト、L2 情報付きラベル・エラーノード赤縁）
+- `NotebookLLMGraphValidate[nb]` — 5 項目の整合性検証（ノード数一致・エッジ整合・DAG 性・ID 一意・サイズ）
+- `NotebookLLMGraphFetchResponse[nb, nodeID]` — 外部キャッシュからフルレスポンス・コードを取得
+- `NotebookLLMGraphSubSteps[nb, nodeID]` — ClaudeUpdatePackage 内部ステップ履歴を Dataset で取得
+- `NotebookLLMGraphSummary[nb]` — 全ノードの Status / L2 統計を Dataset で表示
+- `NotebookLLMGraphErrors[nb]` — L2 エラーのある L1 ノード一覧
+- `NotebookLLMGraphRerun[nb, nodeID]` — L1 ノードの再実行（下流自動無効化）
+- `NotebookLLMGraphExtractThread[nb, nodeID]` — 祖先チェーンを Thread オブジェクトとして抽出
+- `NotebookLLMGraphApplyThread[thread, newTarget]` — Thread を別ファイルに適用（`DryRun -> True` で実行計画確認）
+
+**[実験的] ClaudeProcessFile — プライバシー分割ファイル処理**
+- `ClaudeProcessFile[prompt, srcPath, dstPath]` — .nb ファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージ。非同期実行（stateKey を返す）
 
 **分離検証**
 - `ClaudeCheckSeparation[target]` — NBAccess の分離原則への違反箇所を検出（静的パターン走査 + LLM 判定の二段階検査）
