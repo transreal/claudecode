@@ -1,3 +1,5 @@
+(* ::Package:: *)
+
 If[StringQ[$InputFileName] && $InputFileName =!= "",
   $packageDirectory = DirectoryName[$InputFileName],
   If[!ValueQ[$packageDirectory] || $packageDirectory === "",
@@ -6,8 +8,9 @@ If[StringQ[$InputFileName] && $InputFileName =!= "",
 ];
 BeginPackage["ClaudeCode`"];
 
-(* パッケージリロード時に古い内部関数定義が残らないよう、
-   変更された主要内部関数をクリアする *)
+(* \:30d1\:30c3\:30b1\:30fc\:30b8\:30ea\:30ed\:30fc\:30c9\:6642\:306b\:53e4\:3044\:5185\:90e8\:95a2\:6570\:5b9a\:7fa9\:304c\:6b8b\:3089\:306a\:3044\:3088\:3046\:3001
+   \:5909\:66f4\:3055\:308c\:305f\:4e3b\:8981\:5185\:90e8\:95a2\:6570\:3092\:30af\:30ea\:30a2\:3059\:308b *)
+   
 Quiet[ClearAll[
   iEnsureDefaultSession, iResolveNotebookFiles, iCollectAccessibleDirs,
   iCLIPermissionFlags, iFileAccessContext, iNeedsFileList, iSafeReadStreamFile,
@@ -22,11 +25,11 @@ Quiet[ClearAll[
 ]];
 
 (* NBAccess \:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:30ed\:30fc\:30c9 (\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:8aad\:307f\:66f8\:304d\:30fb\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:7ba1\:7406) *)
-(* NBAccess パッケージをロード (ShiftJIS 環境でも UTF-8 で読み込む) *)
+(* NBAccess \:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:30ed\:30fc\:30c9 (ShiftJIS \:74b0\:5883\:3067\:3082 UTF-8 \:3067\:8aad\:307f\:8fbc\:3080) *)
 Block[{$CharacterEncoding = "UTF-8"},
   Needs["NBAccess`","NBAccess.wl"]];
 
-(* GitHubREST パッケージをロード (GitHubPackageURL 等を利用) *)
+(* GitHubREST \:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:30ed\:30fc\:30c9 (GitHubPackageURL \:7b49\:3092\:5229\:7528) *)
 Block[{$CharacterEncoding = "UTF-8"},
   Quiet @ Needs["GitHubREST`", "github.wl"]];
 
@@ -34,7 +37,7 @@ Quiet[Scan[
   Function[name,
     If[MemberQ[Names["Global`" <> name], "Global`" <> name],
       Quiet[Remove["Global`" <> name], Remove::ssym]]],
-  {"ClaudeQuery","ClaudeMath","ClaudeExtractCode","ClaudeExtractAllCode",
+  {"ClaudeQuery","ClaudeQuerySync","ClaudeQueryAsync","ClaudeWriteResponse","ClaudeMath","ClaudeExtractCode","ClaudeExtractAllCode",
    "ClaudeEval","ContinueEval","ContinueUpdate","ClaudeSpec","ClaudeDebug","ClaudeReview","ClaudeReviewChunked",
    "ClaudeUpdatePackage","ClaudeRestorePackage","ClaudeUpdatePackageHistory","ClaudeBackupDataset",
    "ClaudeConvertToPaclet","ClaudeCreateDocumentation","ClaudeUpdateDocumentation",
@@ -101,8 +104,8 @@ $ClaudeTimeout::usage =
   "$ClaudeTimeout \:306f ClaudeQuery\:30fbClaudeEval \:7b49\:306e\:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:79d2\:6570\:3002\:30c7\:30d5\:30a9\:30eb\:30c8 1200\:3002\n" <>
   "\:4f8b: $ClaudeTimeout = 900";
 $ClaudeWorkingDirectory::usage =
-  "$ClaudeWorkingDirectory は Claude Code を起動する作業ディレクトリ。デフォルトは FileNameJoin[{$HomeDirectory, \"Claude Working\"}]。\n" <>
-  "このディレクトリ配下の .claude/CLAUDE.md, .claude/rules/, .claude/skills/ を Claude Code に読ませる。";
+  "$ClaudeWorkingDirectory \:306f Claude Code \:3092\:8d77\:52d5\:3059\:308b\:4f5c\:696d\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3002\:30c7\:30d5\:30a9\:30eb\:30c8\:306f FileNameJoin[{$HomeDirectory, \"Claude Working\"}]\:3002\n" <>
+  "\:3053\:306e\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:914d\:4e0b\:306e .claude/CLAUDE.md, .claude/rules/, .claude/skills/ \:3092 Claude Code \:306b\:8aad\:307e\:305b\:308b\:3002";
 
 $ClaudeMDPath::usage =
   "$ClaudeMDPath \\:306f\\:8aad\\:307f\\:8fbc\:307e\:308c\\:308b CLAUDE.md \\:306e\\:30d1\\:30b9\\:3002\n" <>
@@ -127,30 +130,30 @@ $ClaudeAccessibleDirs::usage =
 If[!ListQ[$ClaudeAccessibleDirs],
   $ClaudeAccessibleDirs = Select[{Global`$packageDirectory},
     StringQ[#] && StringLength[#] > 0 &],
-  (* 既にリストの場合でも $packageDirectory がロード後に設定されていれば追加 *)
+  (* \:65e2\:306b\:30ea\:30b9\:30c8\:306e\:5834\:5408\:3067\:3082 $packageDirectory \:304c\:30ed\:30fc\:30c9\:5f8c\:306b\:8a2d\:5b9a\:3055\:308c\:3066\:3044\:308c\:3070\:8ffd\:52a0 *)
   If[StringQ[Global`$packageDirectory] && StringLength[Global`$packageDirectory] > 0 &&
      !MemberQ[$ClaudeAccessibleDirs, Global`$packageDirectory],
     AppendTo[$ClaudeAccessibleDirs, Global`$packageDirectory]]];
 
 (* ============================================================
-   ディレクトリアクセス許可システム
-   NotebookDirectory が $packageDirectory や $ClaudeWorkingDirectory と
-   異なる場合、ユーザーに許可を求めるダイアログを表示する。
-   許可結果はノートブックの TaggingRules に永続化される。
+   \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:30a2\:30af\:30bb\:30b9\:8a31\:53ef\:30b7\:30b9\:30c6\:30e0
+   NotebookDirectory \:304c $packageDirectory \:3084 $ClaudeWorkingDirectory \:3068
+   \:7570\:306a\:308b\:5834\:5408\:3001\:30e6\:30fc\:30b6\:30fc\:306b\:8a31\:53ef\:3092\:6c42\:3081\:308b\:30c0\:30a4\:30a2\:30ed\:30b0\:3092\:8868\:793a\:3059\:308b\:3002
+   \:8a31\:53ef\:7d50\:679c\:306f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e TaggingRules \:306b\:6c38\:7d9a\:5316\:3055\:308c\:308b\:3002
    ============================================================ *)
 
-(* セッション内キャッシュ: 同じディレクトリについて再度ダイアログを出さない *)
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:5185\:30ad\:30e3\:30c3\:30b7\:30e5: \:540c\:3058\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306b\:3064\:3044\:3066\:518d\:5ea6\:30c0\:30a4\:30a2\:30ed\:30b0\:3092\:51fa\:3055\:306a\:3044 *)
 $iDirPermissionCache = <||>;
 
-(* パッケージ別ドキュメントオプション状態。
-   キー: packageName, 値: <|"References"->..., "Demos"->..., ...|
-   非同期ドキュメント生成中にグローバル変数がリセットされる問題を防ぐ。 *)
+(* \:30d1\:30c3\:30b1\:30fc\:30b8\:5225\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30aa\:30d7\:30b7\:30e7\:30f3\:72b6\:614b\:3002
+   \:30ad\:30fc: packageName, \:5024: <|"References"->..., "Demos"->..., ...|
+   \:975e\:540c\:671f\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:4e2d\:306b\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:304c\:30ea\:30bb\:30c3\:30c8\:3055\:308c\:308b\:554f\:984c\:3092\:9632\:3050\:3002 *)
 $iDocState = <||>;
 $iDocMediaFiles = {};
 
-(* 安全なデフォルトディレクトリか判定。
-   $packageDirectory またはその親、
-   $ClaudeWorkingDirectory またはその親に含まれるなら安全。 *)
+(* \:5b89\:5168\:306a\:30c7\:30d5\:30a9\:30eb\:30c8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304b\:5224\:5b9a\:3002
+   $packageDirectory \:307e\:305f\:306f\:305d\:306e\:89aa\:3001
+   $ClaudeWorkingDirectory \:307e\:305f\:306f\:305d\:306e\:89aa\:306b\:542b\:307e\:308c\:308b\:306a\:3089\:5b89\:5168\:3002 *)
 iIsSafeDefaultDir[dir_String] := Module[{normDir, safeDirs},
   normDir = StringReplace[dir, "\\" -> "/"];
   safeDirs = Select[{
@@ -163,16 +166,16 @@ iIsSafeDefaultDir[dir_String] := Module[{normDir, safeDirs},
     StringStartsQ[normDir, #] || StringStartsQ[#, normDir] &]
 ];
 
-(* TaggingRules からディレクトリ許可設定を取得。
-   戻り値: "read" | "denied" | None
-   後方互換: 旧バージョンで保存された "readwrite" も "read" と同等に扱う *)
+(* TaggingRules \:304b\:3089\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:8a31\:53ef\:8a2d\:5b9a\:3092\:53d6\:5f97\:3002
+   \:623b\:308a\:5024: "read" | "denied" | None
+   \:5f8c\:65b9\:4e92\:63db: \:65e7\:30d0\:30fc\:30b8\:30e7\:30f3\:3067\:4fdd\:5b58\:3055\:308c\:305f "readwrite" \:3082 "read" \:3068\:540c\:7b49\:306b\:6271\:3046 *)
 iGetDirPermission[nb_NotebookObject, dir_String] :=
   Module[{perms},
     perms = Quiet @ NBAccess`NBGetTaggingRule[nb, "claudeDirPermissions"];
     If[AssociationQ[perms], Lookup[perms, dir, None], None]
   ];
 
-(* TaggingRules にディレクトリ許可設定を保存 *)
+(* TaggingRules \:306b\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:8a31\:53ef\:8a2d\:5b9a\:3092\:4fdd\:5b58 *)
 iSetDirPermission[nb_NotebookObject, dir_String, perm_String] :=
   Module[{perms},
     perms = Quiet @ NBAccess`NBGetTaggingRule[nb, "claudeDirPermissions"];
@@ -181,14 +184,14 @@ iSetDirPermission[nb_NotebookObject, dir_String, perm_String] :=
     Quiet @ NBAccess`NBSetTaggingRule[nb, "claudeDirPermissions", perms]
   ];
 
-(* ユーザーに許可を求めるダイアログ。
-   戻り値: "read" | "denied"
-   注: Claude Code CLI の --print モードでは Write ツールは使用不可のため、
-   Read 許可と不許可の2択のみ提示する。 *)
+(* \:30e6\:30fc\:30b6\:30fc\:306b\:8a31\:53ef\:3092\:6c42\:3081\:308b\:30c0\:30a4\:30a2\:30ed\:30b0\:3002
+   \:623b\:308a\:5024: "read" | "denied"
+   \:6ce8: Claude Code CLI \:306e --print \:30e2\:30fc\:30c9\:3067\:306f Write \:30c4\:30fc\:30eb\:306f\:4f7f\:7528\:4e0d\:53ef\:306e\:305f\:3081\:3001
+   Read \:8a31\:53ef\:3068\:4e0d\:8a31\:53ef\:306e2\:629e\:306e\:307f\:63d0\:793a\:3059\:308b\:3002 *)
 iAskDirPermission[nb_NotebookObject, dir_String] :=
   Module[{shortDir, dialog},
     shortDir = If[StringLength[dir] > 50,
-      "\:2026" <> StringTake[dir, -45], dir];
+      "\[Ellipsis]" <> StringTake[dir, -45], dir];
     dialog = DialogInput[
       Pane[
         Column[{
@@ -212,17 +215,17 @@ iAskDirPermission[nb_NotebookObject, dir_String] :=
     If[StringQ[dialog], dialog, "denied"]
   ];
 
-(* ディレクトリの許可を確認し、必要ならダイアログを表示。
-   戻り値: True（アクセス許可）/ False（不許可）
-   副作用: 許可された場合 $ClaudeAccessibleDirs に追加し TaggingRules に保存 *)
+(* \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306e\:8a31\:53ef\:3092\:78ba\:8a8d\:3057\:3001\:5fc5\:8981\:306a\:3089\:30c0\:30a4\:30a2\:30ed\:30b0\:3092\:8868\:793a\:3002
+   \:623b\:308a\:5024: True\:ff08\:30a2\:30af\:30bb\:30b9\:8a31\:53ef\:ff09/ False\:ff08\:4e0d\:8a31\:53ef\:ff09
+   \:526f\:4f5c\:7528: \:8a31\:53ef\:3055\:308c\:305f\:5834\:5408 $ClaudeAccessibleDirs \:306b\:8ffd\:52a0\:3057 TaggingRules \:306b\:4fdd\:5b58 *)
 iEnsureDirPermission[nb_NotebookObject, dir_String] :=
   Module[{perm},
-    (* 安全なデフォルトディレクトリならダイアログ不要 *)
+    (* \:5b89\:5168\:306a\:30c7\:30d5\:30a9\:30eb\:30c8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306a\:3089\:30c0\:30a4\:30a2\:30ed\:30b0\:4e0d\:8981 *)
     If[iIsSafeDefaultDir[dir], Return[True]];
-    (* セッション内キャッシュをチェック *)
+    (* \:30bb\:30c3\:30b7\:30e7\:30f3\:5185\:30ad\:30e3\:30c3\:30b7\:30e5\:3092\:30c1\:30a7\:30c3\:30af *)
     If[KeyExistsQ[$iDirPermissionCache, dir],
       Return[$iDirPermissionCache[dir] =!= "denied"]];
-    (* TaggingRules に保存済みの許可を確認 *)
+    (* TaggingRules \:306b\:4fdd\:5b58\:6e08\:307f\:306e\:8a31\:53ef\:3092\:78ba\:8a8d *)
     perm = iGetDirPermission[nb, dir];
     If[StringQ[perm],
       $iDirPermissionCache[dir] = perm;
@@ -230,14 +233,14 @@ iEnsureDirPermission[nb_NotebookObject, dir_String] :=
         $ClaudeAccessibleDirs = DeleteDuplicates[
           Append[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], dir]]];
       Return[perm =!= "denied"]];
-    (* ダイアログを表示して許可を求める *)
+    (* \:30c0\:30a4\:30a2\:30ed\:30b0\:3092\:8868\:793a\:3057\:3066\:8a31\:53ef\:3092\:6c42\:3081\:308b *)
     perm = iAskDirPermission[nb, dir];
     $iDirPermissionCache[dir] = perm;
     iSetDirPermission[nb, dir, perm];
     If[perm =!= "denied",
       $ClaudeAccessibleDirs = DeleteDuplicates[
         Append[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], dir]];
-      (* TaggingRules のアクセス可能ディレクトリにも追加 *)
+      (* TaggingRules \:306e\:30a2\:30af\:30bb\:30b9\:53ef\:80fd\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306b\:3082\:8ffd\:52a0 *)
       Module[{currentDirs = Quiet @ NBAccess`NBGetAccessibleDirs[nb]},
         If[!ListQ[currentDirs], currentDirs = {}];
         Quiet @ NBAccess`NBSetAccessibleDirs[nb,
@@ -290,12 +293,12 @@ Acknowledgments::usage =
 If[!ListQ[$ClaudeFallbackModels],
   $ClaudeFallbackModels = {{"anthropic", $iModelOpus}, {"openai", "gpt-5"}}];
 
-(* $ClaudeFallbackModels を NBAccess に同期 *)
+(* $ClaudeFallbackModels \:3092 NBAccess \:306b\:540c\:671f *)
 iSyncFallbackModelsToNBAccess[] :=
   If[ListQ[$ClaudeFallbackModels],
     NBAccess`NBSetFallbackModels[$ClaudeFallbackModels]];
 
-(* パッケージロード時に同期 *)
+(* \:30d1\:30c3\:30b1\:30fc\:30b8\:30ed\:30fc\:30c9\:6642\:306b\:540c\:671f *)
 iSyncFallbackModelsToNBAccess[];
 
 If[!NumericQ[$ClaudeDocRetryDelay], $ClaudeDocRetryDelay = 60];
@@ -307,8 +310,8 @@ $ClaudeDocModel::usage =
   "\:30c7\:30d5\:30a9\:30eb\:30c8: Sonnet\:7cfb\:6700\:65b0\:30e2\:30c7\:30eb (\:5b89\:4fa1\:304b\:3064\:9ad8\:54c1\:8cea)\:3002\n" <>
   "\"\" \:3067 $ClaudeModel \:3068\:540c\:3058\:30e2\:30c7\:30eb\:3092\:4f7f\:7528\:3002\n" <>
   "\:4f8b: $ClaudeDocModel = \"claude-sonnet-4-6\"";
-(* $ClaudeDocModel: ユーザー未カスタマイズなら最新 Sonnet に更新。
-   古いモデルID が残っている場合も自動更新する。 *)
+(* $ClaudeDocModel: \:30e6\:30fc\:30b6\:30fc\:672a\:30ab\:30b9\:30bf\:30de\:30a4\:30ba\:306a\:3089\:6700\:65b0 Sonnet \:306b\:66f4\:65b0\:3002
+   \:53e4\:3044\:30e2\:30c7\:30ebID \:304c\:6b8b\:3063\:3066\:3044\:308b\:5834\:5408\:3082\:81ea\:52d5\:66f4\:65b0\:3059\:308b\:3002 *)
 If[!StringQ[$ClaudeDocModel] || $ClaudeDocModel === "" ||
    StringMatchQ[$ClaudeDocModel, "claude-sonnet-*"],
   $ClaudeDocModel = $iModelSonnet];
@@ -320,8 +323,8 @@ $ClaudeEvalMaxDepth::usage =
 If[!IntegerQ[$ClaudeEvalMaxDepth], $ClaudeEvalMaxDepth = 5];
 $iClaudeEvalCurrentDepth = 0;
 
-(* パッケージ操作の排他ロック: 同一パッケージへの並列更新を防止
-   <|"packageName" -> True, ...|> の形式で更新中のパッケージを追跡 *)
+(* \:30d1\:30c3\:30b1\:30fc\:30b8\:64cd\:4f5c\:306e\:6392\:4ed6\:30ed\:30c3\:30af: \:540c\:4e00\:30d1\:30c3\:30b1\:30fc\:30b8\:3078\:306e\:4e26\:5217\:66f4\:65b0\:3092\:9632\:6b62
+   <|"packageName" -> True, ...|> \:306e\:5f62\:5f0f\:3067\:66f4\:65b0\:4e2d\:306e\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:8ffd\:8de1 *)
 $iPackageUpdateLocks = <||>;
 
 iAcquirePackageLock[packageName_String, nb_NotebookObject] :=
@@ -336,11 +339,11 @@ iAcquirePackageLock[packageName_String, nb_NotebookObject] :=
 iReleasePackageLock[packageName_String] :=
   ($iPackageUpdateLocks = KeyDrop[$iPackageUpdateLocks, packageName]);
 
-(* 分離検証用モデル: デフォルトは $ClaudeModel と同じ *)
+(* \:5206\:96e2\:691c\:8a3c\:7528\:30e2\:30c7\:30eb: \:30c7\:30d5\:30a9\:30eb\:30c8\:306f $ClaudeModel \:3068\:540c\:3058 *)
 If[!StringQ[$ClaudeTestModel],
   $ClaudeTestModel = $ClaudeModel];
 
-(* 分離検証キャッシュ: ClaudeCheckSeparation の結果を保持し ClaudeFixSeparation で再利用 *)
+(* \:5206\:96e2\:691c\:8a3c\:30ad\:30e3\:30c3\:30b7\:30e5: ClaudeCheckSeparation \:306e\:7d50\:679c\:3092\:4fdd\:6301\:3057 ClaudeFixSeparation \:3067\:518d\:5229\:7528 *)
 $iSeparationCheckCache = <||>;
 
 (* \:975e\:540c\:671f\:30d1\:30b9\:306e\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:5236\:5fa1\:7528\:30b0\:30ed\:30fc\:30d0\:30eb\:30d5\:30e9\:30b0 *)
@@ -355,25 +358,24 @@ $iPaletteModel = "opus";
 $iPaletteEffort = "medium";
 $iPaletteFallback = False;
 
-(* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304b\:3089\:8a2d\:5b9a\:3092\:8aad\:307f\:8fbc\:307f\:3001\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:3092\:540c\:671f *)
-iLoadPaletteSettings[nb_NotebookObject] := (
-  $iPaletteModel = Replace[
-    Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteModel"}]],
-    Except["opus" | "sonnet" | "default"] -> "opus"];
-  $iPaletteEffort = Replace[
-    Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteEffort"}]],
-    Except["low" | "medium" | "high" | "max"] -> "medium"];
-  $iPaletteFallback = TrueQ[
-    Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteFallback"}]]];
-  $iPaletteUpdateApiMd = Replace[
-    Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteUpdateApiMd"}]],
-    Except[True | False] -> True];
+(* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304b\:3089\:8a2d\:5b9a\:3092\:8aad\:307f\:8fbc\:307f\:3001\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:3092\:540c\:671f\:3002
+   TaggingRules \:306b\:8a2d\:5b9a\:304c\:4fdd\:5b58\:3055\:308c\:3066\:3044\:308b\:5834\:5408\:306e\:307f\:66f4\:65b0\:3057\:3001
+   \:8a2d\:5b9a\:304c\:306a\:3044\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:ff08\:65b0\:898f\:7b49\:ff09\:3067\:306f\:30e1\:30e2\:30ea\:4e0a\:306e\:5024\:3092\:4fdd\:6301\:3059\:308b\:3002 *)
+iLoadPaletteSettings[nb_NotebookObject] := Module[{v},
+  v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteModel"}]];
+  If[MatchQ[v, "opus" | "sonnet" | "default"], $iPaletteModel = v];
+  v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteEffort"}]];
+  If[MatchQ[v, "low" | "medium" | "high" | "max"], $iPaletteEffort = v];
+  v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteFallback"}]];
+  If[MatchQ[v, True | False], $iPaletteFallback = v];
+  v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteUpdateApiMd"}]];
+  If[MatchQ[v, True | False], $iPaletteUpdateApiMd = v];
   (* $ClaudeModel \:3082\:540c\:671f *)
   $ClaudeModel = Switch[$iPaletteModel,
     "opus", $iModelOpus,
     "sonnet", $iModelSonnet,
     _, ""];
-);
+];
 
 Options[ClaudeUpdatePackage] = {TargetFunctions -> Automatic, StartTime -> Now, Fallback -> False, "UpdateApiMd" -> Automatic};
 iSavePaletteSettings[nb_NotebookObject] := (
@@ -392,6 +394,38 @@ iPaletteOptionsString[] := Module[{parts = {}},
 
 (* \:5b9f\:884c\:30bb\:30eb\:306e\:76f4\:5f8c\:306b\:30a2\:30f3\:30ab\:30fc\:3092\:914d\:7f6e\:3059\:308b\:305f\:3081\:306e\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570 *)
 
+
+ClaudeQuerySync::usage =
+  "ClaudeQuerySync[prompt] \:306f Claude \:306b prompt \:3092\:9001\:308a\:3001\:5fdc\:7b54\:6587\:5b57\:5217\:3092\:540c\:671f\:7684\:306b\:8fd4\:3059\:3002\n" <>
+  "WindowStatusArea \:306b\:7d4c\:904e\:6642\:9593\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
+  "\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:3084\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:66f8\:304d\:8fbc\:307f\:306f\:884c\:308f\:306a\:3044\:8efd\:91cf\:7248\:3002\n" <>
+  "\:30e2\:30c7\:30eb\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0\:306e\:30b3\:30a2\:ff1a\n" <>
+  "  Model -> Automatic \:304b\:3064 PrivacyLevel <= 0.5: Claude Code CLI\n" <>
+  "  Model -> Automatic \:304b\:3064 PrivacyLevel > 0.5: $ClaudePrivateModel \:3092\:81ea\:52d5\:4f7f\:7528\n" <>
+  "  Model -> {\"provider\",\"model\"}: \:6307\:5b9a\:30e2\:30c7\:30eb\:3092 API \:7d4c\:7531\:3067\:4f7f\:7528\n" <>
+  "Options:\n" <>
+  "  Fallback -> False, Model -> Automatic, PrivacyLevel -> Automatic,\n" <>
+  "  Timeout -> Automatic\n" <>
+  "\:4f8b: ClaudeQuerySync[\"Hello\"]\n" <>
+  "    ClaudeQuerySync[prompt, PrivacyLevel -> 1.0]\n" <>
+  "    ClaudeQuerySync[prompt, Model -> {\"anthropic\", \"claude-sonnet-4-6\"}]";
+
+ClaudeWriteResponse::usage =
+  "ClaudeWriteResponse[nb, text] \:306f\:30de\:30fc\:30af\:30c0\:30a6\:30f3\:5f62\:5f0f\:306e\:30c6\:30ad\:30b9\:30c8\:3092\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30bb\:30eb\:3068\:3057\:3066\:5c55\:958b\:3059\:308b\:3002\n" <>
+  "\:898b\:51fa\:3057\:30fb\:30ea\:30b9\:30c8\:30fb\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:7b49\:3092\:9069\:5207\:306a\:30bb\:30eb\:30b9\:30bf\:30a4\:30eb\:306b\:5909\:63db\:3059\:308b\:3002\n" <>
+  "ClaudeQuerySync \:3067\:53d6\:5f97\:3057\:305f\:5fdc\:7b54\:3092\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:51fa\:529b\:3059\:308b\:969b\:306b\:4f7f\:7528\:3059\:308b\:3002\n" <>
+  "Options: AutoEvaluate -> False\n" <>
+  "\:4f8b: ClaudeWriteResponse[EvaluationNotebook[], response]\n" <>
+  "    ClaudeWriteResponse[nb, response, AutoEvaluate -> True]";
+
+ClaudeQueryAsync::usage =
+  "ClaudeQueryAsync[prompt, callback, nb] \:306f Claude \:306b\:975e\:540c\:671f\:3067\:554f\:3044\:5408\:308f\:305b\:3001\:5b8c\:4e86\:6642\:306b callback[\:5fdc\:7b54\:6587\:5b57\:5217] \:3092\:547c\:3076\:3002\n" <>
+  "nb \:306f\:51fa\:529b\:5148 NotebookObject\:ff08\:30d1\:30ec\:30c3\:30c8\:304b\:3089\:547c\:3076\:5834\:5408\:306f iUserNotebook[] \:7b49\:3067\:89e3\:6c7a\:6e08\:307f\:306e\:3082\:306e\:ff09\:3002\n" <>
+  "\:30ab\:30fc\:30cd\:30eb\:3092\:30d6\:30ed\:30c3\:30af\:3057\:306a\:3044\:3002WindowStatusArea \:306b\:7d4c\:904e\:6642\:9593\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
+  "Job \:30b7\:30b9\:30c6\:30e0 (NBBeginJobAtEvalCell) \:3092\:4f7f\:7528\:3057\:3001iClaudeQueryImpl \:3068\:540c\:3058\:975e\:540c\:671f\:30d1\:30b9\:3092\:901a\:308b\:3002\n" <>
+  "Options: Fallback -> False, Model -> Automatic, PrivacyLevel -> Automatic, Timeout -> Automatic\n" <>
+  "\:4f8b: ClaudeQueryAsync[\"Hello\", Print, EvaluationNotebook[]]\n" <>
+  "    ClaudeQueryAsync[prompt, callback, nb, PrivacyLevel -> 1.0]";
 
 ClaudeQuery::usage =
   "ClaudeQuery[prompt] \:306f Claude Code \:306b prompt \:3092\:9001\:308a\:3001\:5fdc\:7b54\:6587\:5b57\:5217\:3092\:8fd4\:3059\:ff08\:540c\:671f\:ff09\:3002\n" <>
@@ -696,8 +730,8 @@ NBFileTranslate::usage =
 ClaudeProcessFile::usage =
   "ClaudeProcessFile[prompt, inputPath, outputPath, opts] \:306f .nb \:30d5\:30a1\:30a4\:30eb\:306e\:30bb\:30eb\:3092\n" <>
   "PrivacyLevel \:306b\:5fdc\:3058\:3066 2\:30ce\:30fc\:30c9\:306b\:5206\:914d\:3057\:3066\:4e26\:5217\:51e6\:7406\:3059\:308b\:6c4e\:7528\:95a2\:6570\:3002\n" <>
-  "  0 <= PrivacyLevel <= 0.5  \:2192  $ClaudeModel    (ClaudeCode/API)\n" <>
-  "  0.5 < PrivacyLevel <= 1.0 \:2192  $ClaudePrivateModel (LM Studio \:7b49)\n" <>
+  "  0 <= PrivacyLevel <= 0.5  \[RightArrow]  $ClaudeModel    (ClaudeCode/API)\n" <>
+  "  0.5 < PrivacyLevel <= 1.0 \[RightArrow]  $ClaudePrivateModel (LM Studio \:7b49)\n" <>
   "\:4e21\:30ce\:30fc\:30c9\:306e\:51fa\:529b\:3092\:5143\:306e\:30bb\:30eb\:9806\:306b\:30de\:30fc\:30b8\:3057\:3066 outputPath \:306b\:4fdd\:5b58\:3059\:308b\:3002\n" <>
   "LLMGraph \:306b\:30ce\:30fc\:30c9A (\:30d7\:30e9\:30a4\:30d9\:30fc\:30c8) \:3068\:30ce\:30fc\:30c9B (\:30af\:30e9\:30a6\:30c9) \:306e 2 \:30ce\:30fc\:30c9\:3092\:767b\:9332\:3059\:308b\:3002\n" <>
   "Options: \"Verbose\" (default True), \"SessionTag\" (default Automatic)\n" <>
@@ -712,12 +746,12 @@ If[!ValueQ[$ClaudeTimeout], $ClaudeTimeout = 1200];
 If[!ValueQ[$ClaudePrivateModel], $ClaudePrivateModel = {}];
 If[!AssociationQ[$ClaudePackageKeywordMap], $ClaudePackageKeywordMap = <||>];
 
-(* ClaudeUpdatePackage 自動リトライ: リロード後のエラーを検出し自動修正 *)
+(* ClaudeUpdatePackage \:81ea\:52d5\:30ea\:30c8\:30e9\:30a4: \:30ea\:30ed\:30fc\:30c9\:5f8c\:306e\:30a8\:30e9\:30fc\:3092\:691c\:51fa\:3057\:81ea\:52d5\:4fee\:6b63 *)
 If[!ValueQ[$ClaudeUpdateAutoRetryMax], $ClaudeUpdateAutoRetryMax = 2];
 $iUpdateRetryCount = 0;
-$iRetryTargetNotebook = None;  (* 自動リトライ時のノートブック参照 *)
+$iRetryTargetNotebook = None;  (* \:81ea\:52d5\:30ea\:30c8\:30e9\:30a4\:6642\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:53c2\:7167 *)
 
-(* モデルID定数: 新モデルリリース時はここだけ更新すればよい *)
+(* \:30e2\:30c7\:30ebID\:5b9a\:6570: \:65b0\:30e2\:30c7\:30eb\:30ea\:30ea\:30fc\:30b9\:6642\:306f\:3053\:3053\:3060\:3051\:66f4\:65b0\:3059\:308c\:3070\:3088\:3044 *)
 $iModelOpus = "claude-opus-4-6";
 $iModelSonnet = "claude-sonnet-4-6";
 
@@ -779,13 +813,13 @@ iCopyDirectoryRecursive[src_String, dst_String] := Module[{entries},
   dst
 ];
 
-(* ノートブック TaggingRules + グローバル変数からアクセス可能ディレクトリを収集。
-   $packageDirectory と $ClaudeWorkingDirectory は常にベースとして含める。
-   注: NotebookDirectory はここに含めない。--add-dir に含めると Read も可能になるため。
-   ファイルカタログ表示は iFileAccessContext が Mathematica 側の FileNames[] で
-   プロンプトに埋め込むので、Claude Code の --add-dir や Glob は不要。 *)
+(* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af TaggingRules + \:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:304b\:3089\:30a2\:30af\:30bb\:30b9\:53ef\:80fd\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3092\:53ce\:96c6\:3002
+   $packageDirectory \:3068 $ClaudeWorkingDirectory \:306f\:5e38\:306b\:30d9\:30fc\:30b9\:3068\:3057\:3066\:542b\:3081\:308b\:3002
+   \:6ce8: NotebookDirectory \:306f\:3053\:3053\:306b\:542b\:3081\:306a\:3044\:3002--add-dir \:306b\:542b\:3081\:308b\:3068 Read \:3082\:53ef\:80fd\:306b\:306a\:308b\:305f\:3081\:3002
+   \:30d5\:30a1\:30a4\:30eb\:30ab\:30bf\:30ed\:30b0\:8868\:793a\:306f iFileAccessContext \:304c Mathematica \:5074\:306e FileNames[] \:3067
+   \:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:57cb\:3081\:8fbc\:3080\:306e\:3067\:3001Claude Code \:306e --add-dir \:3084 Glob \:306f\:4e0d\:8981\:3002 *)
 iCollectAccessibleDirs[] := Module[{nbDirs = {}, attDirs = {}, baseDirs},
-  (* $packageDirectory と作業ディレクトリは常に保証 *)
+  (* $packageDirectory \:3068\:4f5c\:696d\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306f\:5e38\:306b\:4fdd\:8a3c *)
   baseDirs = Select[{Global`$packageDirectory, iClaudeWorkingDirectory[]},
     StringQ[#] && StringLength[#] > 0 && DirectoryQ[#] &];
   Quiet[nbDirs = NBAccess`NBGetAccessibleDirs[EvaluationNotebook[]]];
@@ -800,21 +834,21 @@ iCollectAccessibleDirs[] := Module[{nbDirs = {}, attDirs = {}, baseDirs},
     StringQ[#] && StringLength[#] > 0 &]
 ];
 
-(* セッションアタッチメントを一時的に保持するグローバル
-   ClaudeQuery/ClaudeEval が呼ばれるたびにセッションヘッダーから読み込む *)
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:3092\:4e00\:6642\:7684\:306b\:4fdd\:6301\:3059\:308b\:30b0\:30ed\:30fc\:30d0\:30eb
+   ClaudeQuery/ClaudeEval \:304c\:547c\:3070\:308c\:308b\:305f\:3073\:306b\:30bb\:30c3\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:304b\:3089\:8aad\:307f\:8fbc\:3080 *)
 $iCurrentSessionAttachments = {};
 
-(* プロンプト中のファイル名を NotebookDirectory 内で解決する。
-   NotebookDirectory が Read 許可されていない場合は解決しない。
-   注: この関数は fullPrompt（ファイル一覧コンテキスト含む）に対して呼ばれるため、
-   ここでダイアログを出すと常にトリガーされてしまう。
-   Read 許可は iEnsureDefaultSession での保存済み許可復元、
-   または $ClaudeAccessibleDirs への手動追加で設定する。 *)
+(* \:30d7\:30ed\:30f3\:30d7\:30c8\:4e2d\:306e\:30d5\:30a1\:30a4\:30eb\:540d\:3092 NotebookDirectory \:5185\:3067\:89e3\:6c7a\:3059\:308b\:3002
+   NotebookDirectory \:304c Read \:8a31\:53ef\:3055\:308c\:3066\:3044\:306a\:3044\:5834\:5408\:306f\:89e3\:6c7a\:3057\:306a\:3044\:3002
+   \:6ce8: \:3053\:306e\:95a2\:6570\:306f fullPrompt\:ff08\:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:542b\:3080\:ff09\:306b\:5bfe\:3057\:3066\:547c\:3070\:308c\:308b\:305f\:3081\:3001
+   \:3053\:3053\:3067\:30c0\:30a4\:30a2\:30ed\:30b0\:3092\:51fa\:3059\:3068\:5e38\:306b\:30c8\:30ea\:30ac\:30fc\:3055\:308c\:3066\:3057\:307e\:3046\:3002
+   Read \:8a31\:53ef\:306f iEnsureDefaultSession \:3067\:306e\:4fdd\:5b58\:6e08\:307f\:8a31\:53ef\:5fa9\:5143\:3001
+   \:307e\:305f\:306f $ClaudeAccessibleDirs \:3078\:306e\:624b\:52d5\:8ffd\:52a0\:3067\:8a2d\:5b9a\:3059\:308b\:3002 *)
 iResolveNotebookFiles[prompt_String] :=
   Module[{nbDir, filePattern, candidates, found},
     nbDir = Quiet @ Check[NotebookDirectory[InputNotebook[]], None];
     If[!StringQ[nbDir] || !DirectoryQ[nbDir], Return[prompt]];
-    (* Read 許可済みかチェック（未許可なら何もしない） *)
+    (* Read \:8a31\:53ef\:6e08\:307f\:304b\:30c1\:30a7\:30c3\:30af\:ff08\:672a\:8a31\:53ef\:306a\:3089\:4f55\:3082\:3057\:306a\:3044\:ff09 *)
     If[!(iIsSafeDefaultDir[nbDir] ||
          MemberQ[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], nbDir]),
       Return[prompt]];
@@ -831,7 +865,7 @@ iResolveNotebookFiles[prompt_String] :=
 iResolveNotebookFiles[prompt_List] := prompt;
 iResolveNotebookFiles[prompt_] := prompt;
 
-(* プロンプトにセッションアタッチメント + NotebookDirectory ファイルを注入する *)
+(* \:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:30bb\:30c3\:30b7\:30e7\:30f3\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8 + NotebookDirectory \:30d5\:30a1\:30a4\:30eb\:3092\:6ce8\:5165\:3059\:308b *)
 iInjectAttachments[prompt_] :=
   Module[{result},
     result = iResolveNotebookFiles[prompt];
@@ -842,8 +876,8 @@ iInjectAttachments[prompt_] :=
     ]
   ];
 
-(* ユーザープロンプトがファイル一覧を必要としているかを判定する。
-   ファイル一覧は NotebookDirectory のファイルリストをプロンプトに含めるかどうかの判定に使う。 *)
+(* \:30e6\:30fc\:30b6\:30fc\:30d7\:30ed\:30f3\:30d7\:30c8\:304c\:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\:3092\:5fc5\:8981\:3068\:3057\:3066\:3044\:308b\:304b\:3092\:5224\:5b9a\:3059\:308b\:3002
+   \:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\:306f NotebookDirectory \:306e\:30d5\:30a1\:30a4\:30eb\:30ea\:30b9\:30c8\:3092\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:542b\:3081\:308b\:304b\:3069\:3046\:304b\:306e\:5224\:5b9a\:306b\:4f7f\:3046\:3002 *)
 iNeedsFileList[prompt_String] :=
   AnyTrue[
     {"\:30d5\:30a1\:30a4\:30eb", "\:4e00\:89a7", "\:30ea\:30b9\:30c8", "file", "list",
@@ -852,33 +886,33 @@ iNeedsFileList[prompt_String] :=
      "folder", "ls", "\:691c\:7d22", "search", "\:63a2"},
     StringContainsQ[prompt, #, IgnoreCase -> True] &
   ] ||
-  (* 明示的なファイル名参照: xxx.pdf 等 *)
+  (* \:660e\:793a\:7684\:306a\:30d5\:30a1\:30a4\:30eb\:540d\:53c2\:7167: xxx.pdf \:7b49 *)
   StringContainsQ[prompt,
     RegularExpression["[\\w\\x{3000}-\\x{9fff}]+\\.(pdf|nb|csv|xlsx?|txt|wl|wls|py|md|json|html|tex|dat|svg|png|jpg)"]];
 iNeedsFileList[""] := False;
 iNeedsFileList[_] := False;
 
-(* プロンプトに注入するファイルアクセス情報を生成する。
-   userPrompt: ユーザーが入力した質問/タスク文字列。
-   NotebookDirectory のファイル一覧は以下の条件で含める:
-     - Read 許可済み → 常に含める
-     - Read 未許可 → iNeedsFileList[userPrompt] が True のときだけ含める
-   $packageDirectory のパッケージ一覧は常に含める。 *)
+(* \:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:6ce8\:5165\:3059\:308b\:30d5\:30a1\:30a4\:30eb\:30a2\:30af\:30bb\:30b9\:60c5\:5831\:3092\:751f\:6210\:3059\:308b\:3002
+   userPrompt: \:30e6\:30fc\:30b6\:30fc\:304c\:5165\:529b\:3057\:305f\:8cea\:554f/\:30bf\:30b9\:30af\:6587\:5b57\:5217\:3002
+   NotebookDirectory \:306e\:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\:306f\:4ee5\:4e0b\:306e\:6761\:4ef6\:3067\:542b\:3081\:308b:
+     - Read \:8a31\:53ef\:6e08\:307f \[RightArrow] \:5e38\:306b\:542b\:3081\:308b
+     - Read \:672a\:8a31\:53ef \[RightArrow] iNeedsFileList[userPrompt] \:304c True \:306e\:3068\:304d\:3060\:3051\:542b\:3081\:308b
+   $packageDirectory \:306e\:30d1\:30c3\:30b1\:30fc\:30b8\:4e00\:89a7\:306f\:5e38\:306b\:542b\:3081\:308b\:3002 *)
 (* ============================================================
-   ObjectSpec ベースの .nb ファイル並列処理アーキテクチャ
+   ObjectSpec \:30d9\:30fc\:30b9\:306e .nb \:30d5\:30a1\:30a4\:30eb\:4e26\:5217\:51e6\:7406\:30a2\:30fc\:30ad\:30c6\:30af\:30c1\:30e3
    ============================================================
-   .nb ファイルが検出されたとき、Claude Code に
-   ClaudeProcessFile の呼び出し1行だけを出力させる。
-   実際のPrivacyLevel分岐・LLMGraph登録・マージはClaudeProcessFile内部で行う。
+   .nb \:30d5\:30a1\:30a4\:30eb\:304c\:691c\:51fa\:3055\:308c\:305f\:3068\:304d\:3001Claude Code \:306b
+   ClaudeProcessFile \:306e\:547c\:3073\:51fa\:30571\:884c\:3060\:3051\:3092\:51fa\:529b\:3055\:305b\:308b\:3002
+   \:5b9f\:969b\:306ePrivacyLevel\:5206\:5c90\:30fbLLMGraph\:767b\:9332\:30fb\:30de\:30fc\:30b8\:306fClaudeProcessFile\:5185\:90e8\:3067\:884c\:3046\:3002
    ============================================================ *)
 
-(* .nb ファイルタスクを ClaudeProcessFile 呼び出しに変換する指令を生成 *)
+(* .nb \:30d5\:30a1\:30a4\:30eb\:30bf\:30b9\:30af\:3092 ClaudeProcessFile \:547c\:3073\:51fa\:3057\:306b\:5909\:63db\:3059\:308b\:6307\:4ee4\:3092\:751f\:6210 *)
 iNBFileCellContext[path_String, confResults_Association: <||>] :=
   Module[{nb2, allCells, nTotal = 0, nConf = 0, nPublic = 0, outputHint},
 
     If[!FileExistsQ[path], Return[""]];
 
-    (* セル統計だけ取得（内容は渡さない） *)
+    (* \:30bb\:30eb\:7d71\:8a08\:3060\:3051\:53d6\:5f97\:ff08\:5185\:5bb9\:306f\:6e21\:3055\:306a\:3044\:ff09 *)
     nb2 = Quiet @ NBAccess`NBFileOpen[path];
     If[Head[nb2] === NotebookObject,
       Module[{cells = Quiet @ NBAccess`NBFileReadAllCells[nb2]},
@@ -888,12 +922,12 @@ iNBFileCellContext[path_String, confResults_Association: <||>] :=
           nConf   = Count[cells, _?(TrueQ[#["IsConfidential"]] &)];
           nPublic = nTotal - nConf]]];
 
-    (* 出力ファイル名のヒント: inputのディレクトリ + ファイル名ベース *)
+    (* \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:540d\:306e\:30d2\:30f3\:30c8: input\:306e\:30c7\:30a3\:30ec\:30af\:30c8\:30ea + \:30d5\:30a1\:30a4\:30eb\:540d\:30d9\:30fc\:30b9 *)
     outputHint = FileNameJoin[{
       DirectoryName[path],
       FileBaseName[path] <> "-processed" <> "." <> FileExtension[path]}];
 
-    "=== NOTEBOOK FILE TASK — MANDATORY INSTRUCTION ===\n" <>
+    "=== NOTEBOOK FILE TASK \[LongDash] MANDATORY INSTRUCTION ===\n" <>
     "File: " <> path <> "\n" <>
     "Cells: " <> ToString[nTotal] <> " total (" <>
       ToString[nPublic] <> " public, " <>
@@ -910,13 +944,13 @@ iNBFileCellContext[path_String, confResults_Association: <||>] :=
     "- DO NOT write Module[...], NBFileOpen, NBFileReadCells, TextTranslation,\n" <>
     "  URLRead, Import, Get, or any other code.\n" <>
     "- ClaudeProcessFile handles PrivacyLevel routing internally:\n" <>
-    "    PrivacyLevel <= 0.5 → $ClaudeModel  (cloud, " <> ToString[nPublic] <> " cells)\n" <>
-    "    PrivacyLevel >  0.5 → $ClaudePrivateModel (local, " <> ToString[nConf] <> " cells)\n" <>
+    "    PrivacyLevel <= 0.5 \[RightArrow] $ClaudeModel  (cloud, " <> ToString[nPublic] <> " cells)\n" <>
+    "    PrivacyLevel >  0.5 \[RightArrow] $ClaudePrivateModel (local, " <> ToString[nConf] <> " cells)\n" <>
     "- Output ONLY the single ClaudeProcessFile[...] call, no explanation.\n" <>
     "==================================================="
   ];
 
-(* 秘匿セル処理ノード (LLMGraph ノードA): $ClaudePrivateModel に同期送信 *)
+(* \:79d8\:533f\:30bb\:30eb\:51e6\:7406\:30ce\:30fc\:30c9 (LLMGraph \:30ce\:30fc\:30c9A): $ClaudePrivateModel \:306b\:540c\:671f\:9001\:4fe1 *)
 iNBFileRunPrivateNode[nb_NotebookObject, tag_String,
                        path_String, task_String, step_Integer] :=
   Module[{nb2, confCells, confPrompt, provider, model, customURL,
@@ -980,7 +1014,7 @@ iNBFileRunPrivateNode[nb_NotebookObject, tag_String,
     If[!AssociationQ[parsed], <||>, parsed]
   ];
 
-(* 互換シム: 旧 API は新実装へ委譲 *)
+(* \:4e92\:63db\:30b7\:30e0: \:65e7 API \:306f\:65b0\:5b9f\:88c5\:3078\:59d4\:8b72 *)
 iNotebookFileContext[task_String] := "";
 iNotebookFileContext[task_String, _] := "";
 iNotebookFileContext[task_String, _, _] := "";
@@ -1011,19 +1045,19 @@ iFileAccessContext[userPrompt_String:""] := Module[
       AppendTo[lines, "Packages in $packageDirectory (" <> ToString[Length[pkgNames]] <> "):"];
       Scan[AppendTo[lines, #] &, Take[pkgNames, UpTo[30]]]]];
 
-  (* NotebookDirectory のアクセス状態を判定 *)
+  (* NotebookDirectory \:306e\:30a2\:30af\:30bb\:30b9\:72b6\:614b\:3092\:5224\:5b9a *)
   If[StringQ[nbDir] && DirectoryQ[nbDir],
     nbDirReadable = iIsSafeDefaultDir[nbDir] ||
       MemberQ[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], nbDir];
     nbFiles = Quiet @ FileNames["*", nbDir];
     nbFiles = Select[nbFiles, !DirectoryQ[#] &];
     fileCount = Length[nbFiles];
-    (* ファイル一覧を含めるかの判定 *)
+    (* \:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\:3092\:542b\:3081\:308b\:304b\:306e\:5224\:5b9a *)
     includeFileList = nbDirReadable || iNeedsFileList[userPrompt];
     AppendTo[lines, "NotebookDirectory: " <> nbDir <>
       If[nbDirReadable, " [Read \:8a31\:53ef]", " [Read \:4e0d\:53ef]"]];
     If[includeFileList,
-      (* ファイル一覧を含める *)
+      (* \:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\:3092\:542b\:3081\:308b *)
       If[fileCount > 0,
         AppendTo[lines, "Files in NotebookDirectory (" <>
           ToString[fileCount] <> "):"];
@@ -1035,11 +1069,11 @@ iFileAccessContext[userPrompt_String:""] := Module[
           {f, Take[nbFiles, UpTo[20]]}];
         If[fileCount > 20,
           AppendTo[lines, "  ... and " <> ToString[fileCount - 20] <> " more"]],
-      (* ファイルなし *)
+      (* \:30d5\:30a1\:30a4\:30eb\:306a\:3057 *)
       AppendTo[lines, "(NotebookDirectory is empty)"]],
-      (* ファイル一覧を省略 *)
+      (* \:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\:3092\:7701\:7565 *)
       AppendTo[lines, "(" <> ToString[fileCount] <>
-        " files \:2014 use \"\:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\" or similar keyword to see the list)"]]];
+        " files \[LongDash] use \"\:30d5\:30a1\:30a4\:30eb\:4e00\:89a7\" or similar keyword to see the list)"]]];
 
   attachments = If[ListQ[$iCurrentSessionAttachments],
     Select[$iCurrentSessionAttachments, StringQ[#] && FileExistsQ[#] &], {}];
@@ -1063,12 +1097,12 @@ iFileAccessContext[userPrompt_String:""] := Module[
   StringJoin[Riffle[lines, "\n"]] <> "\n\n"
 ];
 
-(* ディレクトリパスから Read 許可文字列を生成 *)
+(* \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:30d1\:30b9\:304b\:3089 Read \:8a31\:53ef\:6587\:5b57\:5217\:3092\:751f\:6210 *)
 iMakeReadPermission[dir_String] :=
   "Read(" <> StringReplace[StringReplace[dir, "\\" -> "/"],
     RegularExpression["/+$"] -> ""] <> "/*" <> "*)";
 
-(* settings.json に Read 許可を注入する *)
+(* settings.json \:306b Read \:8a31\:53ef\:3092\:6ce8\:5165\:3059\:308b *)
 iInjectSettingsPermissions[settingsFile_String, dirs_List] :=
   Module[{json, perms, allow, newAllow, newEntries, strm},
     json = If[FileExistsQ[settingsFile],
@@ -1128,14 +1162,14 @@ iPrepareClaudeProjectDirectory[] := Module[
     iCopyDirectoryRecursive[rulesSrc, rulesDst]
   ];
 
-  (* skills/ をコピー *)
+  (* skills/ \:3092\:30b3\:30d4\:30fc *)
   skillsSrc = FileNameJoin[{srcDir, ".claude", "skills"}];
   skillsDst = FileNameJoin[{tempDir, ".claude", "skills"}];
   If[DirectoryQ[skillsSrc],
     iCopyDirectoryRecursive[skillsSrc, skillsDst]
   ];
 
-  (* settings.json をコピー *)
+  (* settings.json \:3092\:30b3\:30d4\:30fc *)
   src = FileNameJoin[{srcDir, ".claude", "settings.json"}];
   dst = FileNameJoin[{tempDir, ".claude", "settings.json"}];
   If[FileExistsQ[src],
@@ -1145,7 +1179,7 @@ iPrepareClaudeProjectDirectory[] := Module[
     Quiet @ CopyFile[src, dst, OverwriteTarget -> True]
   ];
 
-  (* アクセス可能ディレクトリ + 一時ディレクトリ自体の Read 許可を settings.json に注入 *)
+  (* \:30a2\:30af\:30bb\:30b9\:53ef\:80fd\:30c7\:30a3\:30ec\:30af\:30c8\:30ea + \:4e00\:6642\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:81ea\:4f53\:306e Read \:8a31\:53ef\:3092 settings.json \:306b\:6ce8\:5165 *)
   accessDirs = DeleteDuplicates[Append[iCollectAccessibleDirs[], tempDir]];
   iInjectSettingsPermissions[dst, accessDirs];
 
@@ -1196,16 +1230,16 @@ iClaudeSysPrompt[] :=
   ] <> $claudeMathPromptPrefix;
 
 
-(* \:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
    \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:51fa\:529b\:30d8\:30eb\:30d1\:30fc
-   \:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500 *)
-(* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:51fa\:529b\:30d8\:30eb\:30d1\:30fc (\:5185\:90e8\:4e92\:63db\:5c64) \:2192 NBAccess\:306b\:59d4\:8b72
-   非同期コールバック中にユーザーが別のセルを編集していても、
-   常にノートブック末尾に追記することでセル破損を防止する。 *)
-(* Job active 中は SelectionMove[After, Notebook] をスキップするフラグ。
-   NBJobMoveToAnchor 後は Job がカーソル位置を制御しているため、
-   nbPrint が末尾に飛ばすと出力位置がずれる。
-   非 Job パス (ClaudeUpdateDocumentation 等) では末尾移動が必要。 *)
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
+(* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:51fa\:529b\:30d8\:30eb\:30d1\:30fc (\:5185\:90e8\:4e92\:63db\:5c64) \[RightArrow] NBAccess\:306b\:59d4\:8b72
+   \:975e\:540c\:671f\:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:4e2d\:306b\:30e6\:30fc\:30b6\:30fc\:304c\:5225\:306e\:30bb\:30eb\:3092\:7de8\:96c6\:3057\:3066\:3044\:3066\:3082\:3001
+   \:5e38\:306b\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:672b\:5c3e\:306b\:8ffd\:8a18\:3059\:308b\:3053\:3068\:3067\:30bb\:30eb\:7834\:640d\:3092\:9632\:6b62\:3059\:308b\:3002 *)
+(* Job active \:4e2d\:306f SelectionMove[After, Notebook] \:3092\:30b9\:30ad\:30c3\:30d7\:3059\:308b\:30d5\:30e9\:30b0\:3002
+   NBJobMoveToAnchor \:5f8c\:306f Job \:304c\:30ab\:30fc\:30bd\:30eb\:4f4d\:7f6e\:3092\:5236\:5fa1\:3057\:3066\:3044\:308b\:305f\:3081\:3001
+   nbPrint \:304c\:672b\:5c3e\:306b\:98db\:3070\:3059\:3068\:51fa\:529b\:4f4d\:7f6e\:304c\:305a\:308c\:308b\:3002
+   \:975e Job \:30d1\:30b9 (ClaudeUpdateDocumentation \:7b49) \:3067\:306f\:672b\:5c3e\:79fb\:52d5\:304c\:5fc5\:8981\:3002 *)
 $iJobActiveNb = None;
 
 nbPrint[nb_, text_String, style_String:"Text"] := (
@@ -1213,39 +1247,39 @@ nbPrint[nb_, text_String, style_String:"Text"] := (
     Quiet[SelectionMove[nb, After, Notebook]]];
   NBAccess`NBWriteText[nb, text, style]);
 
-(* Style 付きテキストのオーバーロード *)
+(* Style \:4ed8\:304d\:30c6\:30ad\:30b9\:30c8\:306e\:30aa\:30fc\:30d0\:30fc\:30ed\:30fc\:30c9 *)
 nbPrint[nb_, text_Style, ___] := (
   If[nb =!= $iJobActiveNb,
     Quiet[SelectionMove[nb, After, Notebook]]];
-  (* TextData + StyleBox で文字列を表示: BoxData[ToBoxes[...]] だと
-     引用符が表示される問題を回避 *)
+  (* TextData + StyleBox \:3067\:6587\:5b57\:5217\:3092\:8868\:793a: BoxData[ToBoxes[...]] \:3060\:3068
+     \:5f15\:7528\:7b26\:304c\:8868\:793a\:3055\:308c\:308b\:554f\:984c\:3092\:56de\:907f *)
   Module[{str, opts},
     str = First[text];
     opts = Sequence @@ Rest[List @@ text];
     NotebookWrite[nb,
       Cell[TextData[{StyleBox[str, opts]}], "Text"], After]]);
 
-(* 2つ以上のアンダースコアを含む変数名を修正
-   tiling3_12_12 → tiling3X12X12 (Mathematica でパターン解釈されるのを防ぐ)
-   tiling_12 は Subscript[tiling, 12] として正当なので変換しない
-   x_, x_Integer, x__ 等のパターン構文も変換しない *)
+(* 2\:3064\:4ee5\:4e0a\:306e\:30a2\:30f3\:30c0\:30fc\:30b9\:30b3\:30a2\:3092\:542b\:3080\:5909\:6570\:540d\:3092\:4fee\:6b63
+   tiling3_12_12 \[RightArrow] tiling3X12X12 (Mathematica \:3067\:30d1\:30bf\:30fc\:30f3\:89e3\:91c8\:3055\:308c\:308b\:306e\:3092\:9632\:3050)
+   tiling_12 \:306f Subscript[tiling, 12] \:3068\:3057\:3066\:6b63\:5f53\:306a\:306e\:3067\:5909\:63db\:3057\:306a\:3044
+   x_, x_Integer, x__ \:7b49\:306e\:30d1\:30bf\:30fc\:30f3\:69cb\:6587\:3082\:5909\:63db\:3057\:306a\:3044 *)
 iSanitizeUnderscoreVarNames[code_String] :=
   Module[{matches, result = code},
-    (* _が2回以上出現する識別子を検出 *)
+    (* _\:304c2\:56de\:4ee5\:4e0a\:51fa\:73fe\:3059\:308b\:8b58\:5225\:5b50\:3092\:691c\:51fa *)
     matches = Union @ StringCases[code,
       RegularExpression["[a-zA-Z][a-zA-Z0-9]*(?:_[a-zA-Z0-9]+){2,}"]];
-    (* 各マッチの _ を X に置換 *)
+    (* \:5404\:30de\:30c3\:30c1\:306e _ \:3092 X \:306b\:7f6e\:63db *)
     Do[result = StringReplace[result,
         m -> StringReplace[m, "_" -> "X"]],
       {m, matches}];
     result
   ];
 
-(* コード文字列を構文カラーリング付き Input セルとして書き込む → NBAccessに委譲 *)
+(* \:30b3\:30fc\:30c9\:6587\:5b57\:5217\:3092\:69cb\:6587\:30ab\:30e9\:30fc\:30ea\:30f3\:30b0\:4ed8\:304d Input \:30bb\:30eb\:3068\:3057\:3066\:66f8\:304d\:8fbc\:3080 \[RightArrow] NBAccess\:306b\:59d4\:8b72 *)
 iWriteCodeCell[nb_NotebookObject, code_String] := (
   NBAccess`NBWriteCode[nb, iSanitizeUnderscoreVarNames[code]]);
 
-(* CellPrintパターンを自動検出してスマートにセルを書き込む → NBAccessに委譲 *)
+(* CellPrint\:30d1\:30bf\:30fc\:30f3\:3092\:81ea\:52d5\:691c\:51fa\:3057\:3066\:30b9\:30de\:30fc\:30c8\:306b\:30bb\:30eb\:3092\:66f8\:304d\:8fbc\:3080 \[RightArrow] NBAccess\:306b\:59d4\:8b72 *)
 iWriteSmartCell[nb_, code_String, autoEvaluate_:False] :=
   Module[{sanitized},
     sanitized = iSanitizeUnderscoreVarNames[code];
@@ -1254,23 +1288,23 @@ iWriteSmartCell[nb_, code_String, autoEvaluate_:False] :=
       NBAccess`NBEvaluatePreviousCell[nb]]
   ];
 
-(* cellToText は NBAccess`NBCellExprToText に統合済み。後方互換エイリアス *)
+(* cellToText \:306f NBAccess`NBCellExprToText \:306b\:7d71\:5408\:6e08\:307f\:3002\:5f8c\:65b9\:4e92\:63db\:30a8\:30a4\:30ea\:30a2\:30b9 *)
 cellToText[cellExpr_] := NBAccess`NBCellExprToText[cellExpr];
 
-(* セクションヘッダーを EvaluationCell の直前に挿入する。
-   これにより入力セル自体も新しいセルグループに含まれる。
-   EvaluationCell が取得できない場合はフォールバックとして通常の After 挿入。 *)
+(* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092 EvaluationCell \:306e\:76f4\:524d\:306b\:633f\:5165\:3059\:308b\:3002
+   \:3053\:308c\:306b\:3088\:308a\:5165\:529b\:30bb\:30eb\:81ea\:4f53\:3082\:65b0\:3057\:3044\:30bb\:30eb\:30b0\:30eb\:30fc\:30d7\:306b\:542b\:307e\:308c\:308b\:3002
+   EvaluationCell \:304c\:53d6\:5f97\:3067\:304d\:306a\:3044\:5834\:5408\:306f\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3068\:3057\:3066\:901a\:5e38\:306e After \:633f\:5165\:3002 *)
 iWriteSectionHeaderBeforeEvalCell[nb_NotebookObject, title_String] :=
   Module[{evalCell, headerCell},
     evalCell = Quiet[EvaluationCell[]];
     headerCell = Cell[title, "Subsubsection",
       CellGroupingRules -> {"SectionGrouping", 68}];
     If[Head[evalCell] === CellObject,
-      (* EvaluationCell の前にヘッダーを挿入し、EvalCell の後に移動 *)
+      (* EvaluationCell \:306e\:524d\:306b\:30d8\:30c3\:30c0\:30fc\:3092\:633f\:5165\:3057\:3001EvalCell \:306e\:5f8c\:306b\:79fb\:52d5 *)
       Quiet[SelectionMove[evalCell, Before, Cell]];
       NotebookWrite[nb, headerCell, After];
       Quiet[SelectionMove[evalCell, After, Cell]],
-      (* フォールバック: 末尾に追記 *)
+      (* \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af: \:672b\:5c3e\:306b\:8ffd\:8a18 *)
       Quiet[SelectionMove[nb, After, Notebook]];
       NBAccess`NBWriteCell[nb, headerCell]
     ]
@@ -1294,11 +1328,12 @@ If[!AssociationQ[$confidentialSymbols], $confidentialSymbols = <||>];
 If[!AssociationQ[$confVarTimes], $confVarTimes = <||>];
 If[!AssociationQ[$allConfidentialVars], $allConfidentialVars = <||>];
 
-(* インクリメンタル依存グラフキャッシュ:
-   iPrecisionConfidentialCheck が全NB統合依存グラフを構築した際に、
-   グラフと最終 $Line を記録する。次回呼び出し時は新しいセルのみ追加走査。 *)
+(* \:30a4\:30f3\:30af\:30ea\:30e1\:30f3\:30bf\:30eb\:4f9d\:5b58\:30b0\:30e9\:30d5\:30ad\:30e3\:30c3\:30b7\:30e5:
+   iPrecisionConfidentialCheck \:304c\:5168NB\:7d71\:5408\:4f9d\:5b58\:30b0\:30e9\:30d5\:3092\:69cb\:7bc9\:3057\:305f\:969b\:306b\:3001
+   \:30b0\:30e9\:30d5\:3068\:6700\:7d42 $Line \:3092\:8a18\:9332\:3059\:308b\:3002\:6b21\:56de\:547c\:3073\:51fa\:3057\:6642\:306f\:65b0\:3057\:3044\:30bb\:30eb\:306e\:307f\:8ffd\:52a0\:8d70\:67fb\:3002 *)
 If[!AssociationQ[$iGlobalDepsCache], $iGlobalDepsCache = <||>];
 If[!IntegerQ[$iGlobalDepsCacheLastLine], $iGlobalDepsCacheLastLine = 0];
+$iEpilogRebuildDone = False;
 
 (* \:79d8\:5bc6\:5909\:6570\:3092\:767b\:9332\:3059\:308b\:30d8\:30eb\:30d1\:30fc:
    ClaudeCode\:5185\:90e8\:306e $confidentialSymbols \:3068
@@ -1329,7 +1364,7 @@ $confidentialCellOpts := NBAccess`$NBConfidentialCellOpts;
 $declassifiedDirectCellOpts := NBAccess`$NBDeclassifiedDirectCellOpts;
 $declassifiedDependentCellOpts := NBAccess`$NBDeclassifiedDependentCellOpts;
 
-(* \:2500\:2500\:2500 TaggingRules \:64cd\:4f5c \:2500\:2500\:2500 *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] TaggingRules \:64cd\:4f5c \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 (* TaggingRules \:64cd\:4f5c: NBAccess \:306b\:59d4\:8b72 *)
 iSetConfidentialTagValue[nb_NotebookObject, cellIdx_Integer, val_] :=
@@ -1348,7 +1383,7 @@ iIsConfidentialCell[nb_NotebookObject, cellIdx_Integer] := TrueQ[iGetConfidentia
 (* \:660e\:793a\:7684\:306b\:975e\:6a5f\:5bc6\:ff08Unmark\:6e08\:307f\:ff09? *)
 iIsExplicitlyUnmarked[nb_NotebookObject, cellIdx_Integer] := (iGetConfidentialTag[nb, cellIdx] === False);
 
-(* \:2500\:2500\:2500 \:5909\:6570\:540d\:8ffd\:8de1 \:2500\:2500\:2500 *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:5909\:6570\:540d\:8ffd\:8de1 \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 (* Held \:5f0f\:304b\:3089\:4ee3\:5165\:5148\:30b7\:30f3\:30dc\:30eb\:540d\:3092\:62bd\:51fa *)
 SetAttributes[iExtractAssigned, HoldAll];
@@ -1362,17 +1397,17 @@ iExtractAssigned[expr_] :=
 
 (* \:30bb\:30eb\:5185\:5bb9\:304c\:6a5f\:5bc6\:5909\:6570\:3092\:53c2\:7167\:3057\:3066\:3044\:308b\:304b *)
 (* \:79d8\:5bc6\:5909\:6570\:3092\:53c2\:7167\:3057\:3066\:3044\:308b\:304b\:5224\:5b9a (\:5185\:90e8\:7528: ScanConfidentialCells, CellEpilog) *)
-(* iCellUsesConfidentialSymbol は NBAccess`NBCellUsesConfidentialSymbol に移設 *)
+(* iCellUsesConfidentialSymbol \:306f NBAccess`NBCellUsesConfidentialSymbol \:306b\:79fb\:8a2d *)
 
 (* \:30d7\:30ed\:30f3\:30d7\:30c8\:304b\:3089\:9664\:5916\:3059\:3079\:304d\:304b\:ff1f\:ff08\:5185\:90e8\:5224\:5b9a\:ff09
    NBGetContext \:304c NBAccess`NBIsAccessible \:3092\:4f7f\:7528\:3059\:308b\:306e\:3067\:3001
    \:3053\:306e\:95a2\:6570\:306f\:30d1\:30ec\:30c3\:30c8\:306a\:3069\:5185\:90e8\:51e6\:7406\:5411\:3051\:306b\:6b8b\:3059 *)
-(* iShouldExcludeFromPrompt は NBAccess`NBShouldExcludeFromPrompt に移設 *)
+(* iShouldExcludeFromPrompt \:306f NBAccess`NBShouldExcludeFromPrompt \:306b\:79fb\:8a2d *)
 
 (* \:30bb\:30eb\:5185\:5bb9\:304b\:3089 Set/SetDelayed \:306e LHS \:5909\:6570\:540d\:3092\:62bd\:51fa\:ff08\:6c4e\:7528\:ff09 *)
-(* iExtractCellVarNames は NBAccess`NBCellExtractVarNames に移設 *)
+(* iExtractCellVarNames \:306f NBAccess`NBCellExtractVarNames \:306b\:79fb\:8a2d *)
 
-(* \:2500\:2500\:2500 \:516c\:958b API \:2500\:2500\:2500 *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:516c\:958b API \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 MarkConfidential[nb_NotebookObject, cellIdx_Integer] := (
   NBAccess`NBInvalidateCellsCache[nb];
@@ -1394,7 +1429,7 @@ MarkConfidential[] :=
 
 (* \:660e\:793a\:7684 Unmark: NBAccess`NBUnmarkCell \:306b\:59d4\:8b72 *)
 UnmarkConfidential[nb_NotebookObject, cellIdx_Integer] := (
-  (* Confidential[] で明示宣言されたセルは機密解除を拒否 *)
+  (* Confidential[] \:3067\:660e\:793a\:5ba3\:8a00\:3055\:308c\:305f\:30bb\:30eb\:306f\:6a5f\:5bc6\:89e3\:9664\:3092\:62d2\:5426 *)
   If[TrueQ[NBAccess`NBCellGetTaggingRule[nb, cellIdx, {"claudecode", "explicitConfidential"}]],
     MessageDialog[iL[
       "\[WarningSign] Confidential[] \:3067\:5ba3\:8a00\:3055\:308c\:305f\:30bb\:30eb\:306f\:6a5f\:5bc6\:89e3\:9664\:3067\:304d\:307e\:305b\:3093\:3002",
@@ -1405,12 +1440,12 @@ UnmarkConfidential[nb_NotebookObject, cellIdx_Integer] := (
     wasDependent = TrueQ[NBAccess`NBCellGetTaggingRule[nb, cellIdx, {"claudecode", "dependent"}]];
     iUnregisterConfidentialVars[NBAccess`NBCellExtractVarNames[nb, cellIdx]];
     NBAccess`NBUnmarkCell[nb, cellIdx];
-    (* 機密解除履歴を保持し、視覚スタイルを適用 *)
+    (* \:6a5f\:5bc6\:89e3\:9664\:5c65\:6b74\:3092\:4fdd\:6301\:3057\:3001\:8996\:899a\:30b9\:30bf\:30a4\:30eb\:3092\:9069\:7528 *)
     NBAccess`NBCellSetTaggingRule[nb, cellIdx,
       {"claudecode", "declassified"}, If[wasDependent, "dependent", "direct"]];
     declOpts = If[wasDependent, $declassifiedDependentCellOpts, $declassifiedDirectCellOpts];
     NBAccess`NBCellSetOptions[nb, cellIdx, Sequence @@ declOpts];
-    (* Output セルにも機密解除スタイルを即時適用 *)
+    (* Output \:30bb\:30eb\:306b\:3082\:6a5f\:5bc6\:89e3\:9664\:30b9\:30bf\:30a4\:30eb\:3092\:5373\:6642\:9069\:7528 *)
     nCells = NBAccess`NBCellCount[nb];
     If[cellIdx < nCells,
       outStyle = Quiet[NBAccess`NBCellStyle[nb, cellIdx + 1]];
@@ -1442,10 +1477,10 @@ IsConfidential[] :=
     iIsConfidentialCell[nb, idx]
   ];
 
-(* \:2500\:2500\:2500 Confidential \:30e9\:30c3\:30d1\:30fc \:2500\:2500\:2500 *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] Confidential \:30e9\:30c3\:30d1\:30fc \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 (* \:30bb\:30eb\:5185\:5bb9\:30c6\:30ad\:30b9\:30c8\:304b\:3089\:4ee3\:5165\:5148\:5909\:6570\:540d\:3092\:62bd\:51fa\:ff08var = Confidential[...] \:5f62\:5f0f\:5bfe\:5fdc\:ff09 *)
-(* iExtractCellAssignedNames は NBAccess`NBCellExtractAssignedNames に移設 *)
+(* iExtractCellAssignedNames \:306f NBAccess`NBCellExtractAssignedNames \:306b\:79fb\:8a2d *)
 
 SetAttributes[Confidential, HoldFirst];
 Confidential[expr_] :=
@@ -1463,7 +1498,7 @@ Confidential[expr_] :=
     If[cellIdx > 0,
       iSetConfidentialTag[nb, cellIdx];
       NBAccess`NBCellSetOptions[nb, cellIdx, Sequence @@ $confidentialCellOpts];
-      (* Confidential[] で明示宣言されたセルとしてマーク — 機密解除不可 *)
+      (* Confidential[] \:3067\:660e\:793a\:5ba3\:8a00\:3055\:308c\:305f\:30bb\:30eb\:3068\:3057\:3066\:30de\:30fc\:30af \[LongDash] \:6a5f\:5bc6\:89e3\:9664\:4e0d\:53ef *)
       NBAccess`NBCellSetTaggingRule[nb, cellIdx, {"claudecode", "explicitConfidential"}, True]
     ];
     $pendingConfidentialMark = True;
@@ -1472,10 +1507,10 @@ Confidential[expr_] :=
     result
   ];
 
-(* ─── NonConfidential ラッパー ─── *)
-(* 秘密変数や秘密依存変数の値に依存していても、機密解除として扱う。
-   ただし Confidential[] で明示宣言されたセルは機密解除不可。
-   機密解除されたセルには「元秘密」の視覚表示を保持する。 *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] NonConfidential \:30e9\:30c3\:30d1\:30fc \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
+(* \:79d8\:5bc6\:5909\:6570\:3084\:79d8\:5bc6\:4f9d\:5b58\:5909\:6570\:306e\:5024\:306b\:4f9d\:5b58\:3057\:3066\:3044\:3066\:3082\:3001\:6a5f\:5bc6\:89e3\:9664\:3068\:3057\:3066\:6271\:3046\:3002
+   \:305f\:3060\:3057 Confidential[] \:3067\:660e\:793a\:5ba3\:8a00\:3055\:308c\:305f\:30bb\:30eb\:306f\:6a5f\:5bc6\:89e3\:9664\:4e0d\:53ef\:3002
+   \:6a5f\:5bc6\:89e3\:9664\:3055\:308c\:305f\:30bb\:30eb\:306b\:306f\:300c\:5143\:79d8\:5bc6\:300d\:306e\:8996\:899a\:8868\:793a\:3092\:4fdd\:6301\:3059\:308b\:3002 *)
 
 SetAttributes[NonConfidential, HoldFirst];
 
@@ -1484,7 +1519,7 @@ NonConfidential[expr_] :=
     nb = Quiet[EvaluationNotebook[]];
     cellIdx = If[Head[nb] === NotebookObject,
       NBAccess`NBCurrentCellIndex[nb], 0];
-    (* Confidential[] で明示宣言されたセルは機密解除を拒否 *)
+    (* Confidential[] \:3067\:660e\:793a\:5ba3\:8a00\:3055\:308c\:305f\:30bb\:30eb\:306f\:6a5f\:5bc6\:89e3\:9664\:3092\:62d2\:5426 *)
     If[cellIdx > 0,
       isExplicit = TrueQ[NBAccess`NBCellGetTaggingRule[nb, cellIdx,
         {"claudecode", "explicitConfidential"}]];
@@ -1498,24 +1533,24 @@ NonConfidential[expr_] :=
     ];
     result = expr;
     If[cellIdx > 0,
-      (* 元が依存秘密か直接秘密かを判定 *)
+      (* \:5143\:304c\:4f9d\:5b58\:79d8\:5bc6\:304b\:76f4\:63a5\:79d8\:5bc6\:304b\:3092\:5224\:5b9a *)
       wasDependent = TrueQ[NBAccess`NBCellGetTaggingRule[nb, cellIdx,
         {"claudecode", "dependent"}]];
-      (* 機密タグを False に（CellEpilog による再マークを防止） *)
+      (* \:6a5f\:5bc6\:30bf\:30b0\:3092 False \:306b\:ff08CellEpilog \:306b\:3088\:308b\:518d\:30de\:30fc\:30af\:3092\:9632\:6b62\:ff09 *)
       iSetConfidentialTagValue[nb, cellIdx, False];
-      (* 機密解除履歴を保持 *)
+      (* \:6a5f\:5bc6\:89e3\:9664\:5c65\:6b74\:3092\:4fdd\:6301 *)
       NBAccess`NBCellSetTaggingRule[nb, cellIdx,
         {"claudecode", "declassified"}, If[wasDependent, "dependent", "direct"]];
-      (* 機密解除後の視覚スタイルを適用（元の種別で色分け） *)
+      (* \:6a5f\:5bc6\:89e3\:9664\:5f8c\:306e\:8996\:899a\:30b9\:30bf\:30a4\:30eb\:3092\:9069\:7528\:ff08\:5143\:306e\:7a2e\:5225\:3067\:8272\:5206\:3051\:ff09 *)
       declOpts = If[wasDependent, $declassifiedDependentCellOpts, $declassifiedDirectCellOpts];
       NBAccess`NBCellSetOptions[nb, cellIdx, Sequence @@ declOpts]
     ];
-    (* Output セルにも機密解除スタイルを適用 *)
+    (* Output \:30bb\:30eb\:306b\:3082\:6a5f\:5bc6\:89e3\:9664\:30b9\:30bf\:30a4\:30eb\:3092\:9069\:7528 *)
     If[cellIdx > 0, iDeferOutputDeclassify[nb, cellIdx, wasDependent]];
     result
   ];
 
-(* Output セルを非同期で機密解除スタイルに変更 *)
+(* Output \:30bb\:30eb\:3092\:975e\:540c\:671f\:3067\:6a5f\:5bc6\:89e3\:9664\:30b9\:30bf\:30a4\:30eb\:306b\:5909\:66f4 *)
 iDeferOutputUnmark[nb_NotebookObject, cellIdx_Integer] :=
   iDeferOutputDeclassify[nb, cellIdx, False];
 
@@ -1535,7 +1570,7 @@ iDeferOutputMark[nb_NotebookObject, cellIdx_Integer] :=
                 NBAccess`NBCellSetOptions[pNb, icIdx + 1,
                   Sequence @@ ClaudeCode`Private`$confidentialCellOpts]
               ];
-              (* Confidential[] の explicitConfidential タグを Output にも伝播 *)
+              (* Confidential[] \:306e explicitConfidential \:30bf\:30b0\:3092 Output \:306b\:3082\:4f1d\:64ad *)
               If[TrueQ[NBAccess`NBCellGetTaggingRule[pNb, icIdx,
                     {"claudecode", "explicitConfidential"}]],
                 NBAccess`NBCellSetTaggingRule[pNb, icIdx + 1,
@@ -1549,7 +1584,7 @@ iDeferOutputMark[nb_NotebookObject, cellIdx_Integer] :=
     ]
   ];
 
-(* 明示的 Unmark: Confidential[] で宣言されたセルは解除不可 *)
+(* \:660e\:793a\:7684 Unmark: Confidential[] \:3067\:5ba3\:8a00\:3055\:308c\:305f\:30bb\:30eb\:306f\:89e3\:9664\:4e0d\:53ef *)
 iConfidentialCellEpilog[] := Quiet @ Module[
   {nb, idx, nCells, inputText, ocStyle},
   nb = NBAccess`NBParentNotebookOfCurrentCell[];
@@ -1559,7 +1594,7 @@ iConfidentialCellEpilog[] := Quiet @ Module[
   If[idx < 1, Return[]];
   nCells = NBAccess`NBCellCount[nb];
 
-  (* Case 1: Confidential[] 直後 → Input 直後の Output をマーク *)
+  (* Case 1: Confidential[] \:76f4\:5f8c \[RightArrow] Input \:76f4\:5f8c\:306e Output \:3092\:30de\:30fc\:30af *)
   If[TrueQ[$pendingConfidentialMark],
     $pendingConfidentialMark = False;
     If[idx < nCells,
@@ -1567,7 +1602,7 @@ iConfidentialCellEpilog[] := Quiet @ Module[
       If[MemberQ[{"Output", "Print"}, ocStyle],
         iSetConfidentialTag[nb, idx + 1];
         NBAccess`NBCellSetOptions[nb, idx + 1, Sequence @@ $confidentialCellOpts];
-        (* explicitConfidential タグを Output にも伝播 *)
+        (* explicitConfidential \:30bf\:30b0\:3092 Output \:306b\:3082\:4f1d\:64ad *)
         If[TrueQ[NBAccess`NBCellGetTaggingRule[nb, idx, {"claudecode", "explicitConfidential"}]],
           NBAccess`NBCellSetTaggingRule[nb, idx + 1, {"claudecode", "explicitConfidential"}, True]]
       ]
@@ -1575,8 +1610,8 @@ iConfidentialCellEpilog[] := Quiet @ Module[
     Return[]
   ];
 
-  (* Case 2: Input セル自体が秘密マーク済み → 直後の Output も秘密マーク
-     iAutoMarkNewCellsConfidential 等でマークされたセルの評価結果を保護 *)
+  (* Case 2: Input \:30bb\:30eb\:81ea\:4f53\:304c\:79d8\:5bc6\:30de\:30fc\:30af\:6e08\:307f \[RightArrow] \:76f4\:5f8c\:306e Output \:3082\:79d8\:5bc6\:30de\:30fc\:30af
+     iAutoMarkNewCellsConfidential \:7b49\:3067\:30de\:30fc\:30af\:3055\:308c\:305f\:30bb\:30eb\:306e\:8a55\:4fa1\:7d50\:679c\:3092\:4fdd\:8b77 *)
   If[MemberQ[{"Input", "Code"}, NBAccess`NBCellStyle[nb, idx]] &&
      iIsConfidentialCell[nb, idx] &&
      idx < nCells,
@@ -1585,16 +1620,23 @@ iConfidentialCellEpilog[] := Quiet @ Module[
        !TrueQ[NBAccess`NBGetConfidentialTag[nb, idx + 1]],
       iSetConfidentialTag[nb, idx + 1];
       NBAccess`NBCellSetOptions[nb, idx + 1, Sequence @@ $confidentialCellOpts];
-      (* explicitConfidential タグも伝播 *)
+      (* explicitConfidential \:30bf\:30b0\:3082\:4f1d\:64ad *)
       If[TrueQ[NBAccess`NBCellGetTaggingRule[nb, idx, {"claudecode", "explicitConfidential"}]],
         NBAccess`NBCellSetTaggingRule[nb, idx + 1, {"claudecode", "explicitConfidential"}, True]]
     ];
     Return[]
   ];
 
-  (* Case 3: 機密変数に依存する Input → 直後の Output セルのみ依存秘密マーク（橙）
-     Input セル自体は式（変数名）を含むだけで公開情報なのでマークしない。
-     InputText 形式を使用して 2D 表示を正しく解析。 *)
+  (* Case 3: \:6a5f\:5bc6\:5909\:6570\:306b\:4f9d\:5b58\:3059\:308b Input \[RightArrow] \:76f4\:5f8c\:306e Output \:30bb\:30eb\:306e\:307f\:4f9d\:5b58\:79d8\:5bc6\:30de\:30fc\:30af\:ff08\:6a59\:ff09
+     Input \:30bb\:30eb\:81ea\:4f53\:306f\:5f0f\:ff08\:5909\:6570\:540d\:ff09\:3092\:542b\:3080\:3060\:3051\:3067\:516c\:958b\:60c5\:5831\:306a\:306e\:3067\:30de\:30fc\:30af\:3057\:306a\:3044\:3002
+     InputText \:5f62\:5f0f\:3092\:4f7f\:7528\:3057\:3066 2D \:8868\:793a\:3092\:6b63\:3057\:304f\:89e3\:6790\:3002 *)
+
+  (* \:9045\:5ef6\:518d\:69cb\:7bc9: \:30ab\:30fc\:30cd\:30eb\:518d\:8d77\:52d5\:5f8c\:3001CellEpilog \:306f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:4fdd\:5b58\:6e08\:307f\:3060\:304c
+     $confidentialSymbols \:306f\:7a7a\:306e\:307e\:307e\:3002\:6700\:521d\:306e\:30bb\:30eb\:8a55\:4fa1\:6642\:306b1\:56de\:3060\:3051\:518d\:69cb\:7bc9\:3059\:308b\:3002 *)
+  If[Length[$confidentialSymbols] === 0 && !TrueQ[$iEpilogRebuildDone],
+    iRebuildConfidentialSymbolsAll[];
+    $iEpilogRebuildDone = True];
+
   If[Length[$confidentialSymbols] > 0 &&
      MemberQ[{"Input", "Code"}, NBAccess`NBCellStyle[nb, idx]] &&
      !iIsConfidentialCell[nb, idx] &&
@@ -1619,13 +1661,13 @@ iConfidentialCellEpilog[] := Quiet @ Module[
             RegularExpression["(?<![\\p{L}\\p{N}$])" <> # <>
               "(?![\\p{L}\\p{N}$])"]] &]
       ];
-      (* Input はマークしない。Output のみ橙マーク。
-         ただし NonConfidential で明示解除済みなら上書きしない *)
+      (* Input \:306f\:30de\:30fc\:30af\:3057\:306a\:3044\:3002Output \:306e\:307f\:6a59\:30de\:30fc\:30af\:3002
+         \:305f\:3060\:3057 NonConfidential \:3067\:660e\:793a\:89e3\:9664\:6e08\:307f\:306a\:3089\:4e0a\:66f8\:304d\:3057\:306a\:3044 *)
       If[isDependent,
-        (* === チェーン伝播: LHS 変数を $confidentialSymbols に登録 ===
-           これにより a→b→d→y のような推移的依存が
-           CellEpilog レベルで正しく検出される。
-           例: b=2a で b が登録 → d=2c+b で d も登録 → y=2c+d で y も登録 *)
+        (* === \:30c1\:30a7\:30fc\:30f3\:4f1d\:64ad: LHS \:5909\:6570\:3092 $confidentialSymbols \:306b\:767b\:9332 ===
+           \:3053\:308c\:306b\:3088\:308a a\[RightArrow]b\[RightArrow]d\[RightArrow]y \:306e\:3088\:3046\:306a\:63a8\:79fb\:7684\:4f9d\:5b58\:304c
+           CellEpilog \:30ec\:30d9\:30eb\:3067\:6b63\:3057\:304f\:691c\:51fa\:3055\:308c\:308b\:3002
+           \:4f8b: b=2a \:3067 b \:304c\:767b\:9332 \[RightArrow] d=2c+b \:3067 d \:3082\:767b\:9332 \[RightArrow] y=2c+d \:3067 y \:3082\:767b\:9332 *)
         If[ListQ[assigns] && Length[assigns] > 0,
           Do[With[{lhs = First[a]},
             If[!KeyExistsQ[$confidentialSymbols, lhs],
@@ -1674,9 +1716,9 @@ iRebuildConfidentialSymbolsAll[] :=
       {nbx, allNBs}]
   ];
 
-(* インクリメンタル版: 前回結果をベースに、
-   新しく評価されたセル (CellLabel In[x] で x > afterLine) のみ走査。
-   既存の $confidentialSymbols は保持したまま差分追加する。 *)
+(* \:30a4\:30f3\:30af\:30ea\:30e1\:30f3\:30bf\:30eb\:7248: \:524d\:56de\:7d50\:679c\:3092\:30d9\:30fc\:30b9\:306b\:3001
+   \:65b0\:3057\:304f\:8a55\:4fa1\:3055\:308c\:305f\:30bb\:30eb (CellLabel In[x] \:3067 x > afterLine) \:306e\:307f\:8d70\:67fb\:3002
+   \:65e2\:5b58\:306e $confidentialSymbols \:306f\:4fdd\:6301\:3057\:305f\:307e\:307e\:5dee\:5206\:8ffd\:52a0\:3059\:308b\:3002 *)
 iRebuildConfidentialSymbolsIncremental[afterLine_Integer] :=
   Module[{allNBs, cells, lineNum},
     allNBs = NBAccess`NBUserNotebooks[];
@@ -1685,7 +1727,7 @@ iRebuildConfidentialSymbolsIncremental[afterLine_Integer] :=
       cells = Quiet[Cells[nbx]];
       If[!ListQ[cells], Continue[]];
       Do[Module[{lbl, num, tag, depTag},
-        (* CellLabel から In[x] の x を取得 *)
+        (* CellLabel \:304b\:3089 In[x] \:306e x \:3092\:53d6\:5f97 *)
         lbl = Quiet[CurrentValue[c, CellLabel]];
         If[!StringQ[lbl], Continue[]];
         num = First[StringCases[lbl,
@@ -1693,7 +1735,7 @@ iRebuildConfidentialSymbolsIncremental[afterLine_Integer] :=
         If[num === None, Continue[]];
         lineNum = Quiet @ Check[ToExpression[num], 0];
         If[!IntegerQ[lineNum] || lineNum <= afterLine, Continue[]];
-        (* このセルは前回チェック以降に評価された → 秘密チェック *)
+        (* \:3053\:306e\:30bb\:30eb\:306f\:524d\:56de\:30c1\:30a7\:30c3\:30af\:4ee5\:964d\:306b\:8a55\:4fa1\:3055\:308c\:305f \[RightArrow] \:79d8\:5bc6\:30c1\:30a7\:30c3\:30af *)
         tag = Quiet[CurrentValue[c,
           {TaggingRules, "claudecode", "confidential"}]];
         depTag = Quiet[CurrentValue[c,
@@ -1718,7 +1760,7 @@ iEnsureCellEpilog[nb_NotebookObject] :=
       iRebuildConfidentialSymbols[nb]]
   ];
 
-(* \:2500\:2500\:2500 \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:5168\:4f53\:306e\:30b9\:30ad\:30e3\:30f3 \:2500\:2500\:2500 *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:5168\:4f53\:306e\:30b9\:30ad\:30e3\:30f3 \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 ScanConfidentialCells[] := ScanConfidentialCells[Quiet[EvaluationNotebook[]]];
 ScanConfidentialCells[nb_NotebookObject] :=
@@ -1726,8 +1768,8 @@ ScanConfidentialCells[nb_NotebookObject] :=
     NBAccess`NBInvalidateCellsCache[];
     nCells = NBAccess`NBCellCount[nb];
     If[nCells === 0, Return[0]];
-    (* シンボルテーブルを完全にクリアしてから再構築。
-       前回の ClaudeQuery で設定された推移的依存変数を除去する *)
+    (* \:30b7\:30f3\:30dc\:30eb\:30c6\:30fc\:30d6\:30eb\:3092\:5b8c\:5168\:306b\:30af\:30ea\:30a2\:3057\:3066\:304b\:3089\:518d\:69cb\:7bc9\:3002
+       \:524d\:56de\:306e ClaudeQuery \:3067\:8a2d\:5b9a\:3055\:308c\:305f\:63a8\:79fb\:7684\:4f9d\:5b58\:5909\:6570\:3092\:9664\:53bb\:3059\:308b *)
     $confidentialSymbols = <||>;
     $confVarTimes = <||>;
     $allConfidentialVars = <||>;
@@ -1740,7 +1782,7 @@ ScanConfidentialCells[nb_NotebookObject] :=
           iRegisterConfidentialVars[NBAccess`NBCellExtractVarNames[nb, i]]]],
       {i, nCells}];
     directConfVars = Keys[$confidentialSymbols];
-    (* 機密解除済みセルの変数名を収集（依存伝搬のファイアウォール） *)
+    (* \:6a5f\:5bc6\:89e3\:9664\:6e08\:307f\:30bb\:30eb\:306e\:5909\:6570\:540d\:3092\:53ce\:96c6\:ff08\:4f9d\:5b58\:4f1d\:642c\:306e\:30d5\:30a1\:30a4\:30a2\:30a6\:30a9\:30fc\:30eb\:ff09 *)
     Module[{declVars = {}, rawVN},
       Do[With[{dk = NBAccess`NBCellGetTaggingRule[nb, i, {"claudecode", "declassified"}]},
           If[StringQ[dk],
@@ -1749,16 +1791,16 @@ ScanConfidentialCells[nb_NotebookObject] :=
         {i, nCells}];
       declVars = DeleteDuplicates[declVars];
       If[!ListQ[declVars], declVars = {}];
-      (* 依存セルを走査・マーキング（解除済み変数で伝搬を遮断） *)
+      (* \:4f9d\:5b58\:30bb\:30eb\:3092\:8d70\:67fb\:30fb\:30de\:30fc\:30ad\:30f3\:30b0\:ff08\:89e3\:9664\:6e08\:307f\:5909\:6570\:3067\:4f1d\:642c\:3092\:906e\:65ad\:ff09 *)
       n = NBAccess`NBScanDependentCells[nb, directConfVars, "ExcludeVars" -> declVars];
-      (* 推移的依存変数を $confidentialSymbols に反映
-         （CellEpilog のチェーン伝播が後続セル評価で正しく動作するため） *)
+      (* \:63a8\:79fb\:7684\:4f9d\:5b58\:5909\:6570\:3092 $confidentialSymbols \:306b\:53cd\:6620
+         \:ff08CellEpilog \:306e\:30c1\:30a7\:30fc\:30f3\:4f1d\:64ad\:304c\:5f8c\:7d9a\:30bb\:30eb\:8a55\:4fa1\:3067\:6b63\:3057\:304f\:52d5\:4f5c\:3059\:308b\:305f\:3081\:ff09 *)
       If[Length[directConfVars] > 0,
         deps = Quiet[NBAccess`NBBuildVarDependencies[nb]];
         If[AssociationQ[deps],
           allDepVars = Quiet[NBAccess`NBTransitiveDependents[deps, directConfVars, declVars]];
           If[ListQ[allDepVars],
-            (* 解除済み変数を除外 *)
+            (* \:89e3\:9664\:6e08\:307f\:5909\:6570\:3092\:9664\:5916 *)
             allDepVars = Complement[allDepVars, declVars];
             Do[If[!KeyExistsQ[$confidentialSymbols, v],
                 $confidentialSymbols[v] = AbsoluteTime[]],
@@ -1770,11 +1812,11 @@ ScanConfidentialCells[nb_NotebookObject] :=
   ];
 
 (* ============================================================
-   精密秘密依存チェック (第2層: LLM送信直前)
-   全ノートブックを走査して完全な依存グラフを構築し、
-   秘密依存変数の最終判定を行う。
-   第1層 (CellEpilog) は現在NBのみの軽量チェック。
-   第2層は全NB統合の精密チェックで、別NB経由の依存も検出する。
+   \:7cbe\:5bc6\:79d8\:5bc6\:4f9d\:5b58\:30c1\:30a7\:30c3\:30af (\:7b2c2\:5c64: LLM\:9001\:4fe1\:76f4\:524d)
+   \:5168\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3092\:8d70\:67fb\:3057\:3066\:5b8c\:5168\:306a\:4f9d\:5b58\:30b0\:30e9\:30d5\:3092\:69cb\:7bc9\:3057\:3001
+   \:79d8\:5bc6\:4f9d\:5b58\:5909\:6570\:306e\:6700\:7d42\:5224\:5b9a\:3092\:884c\:3046\:3002
+   \:7b2c1\:5c64 (CellEpilog) \:306f\:73fe\:5728NB\:306e\:307f\:306e\:8efd\:91cf\:30c1\:30a7\:30c3\:30af\:3002
+   \:7b2c2\:5c64\:306f\:5168NB\:7d71\:5408\:306e\:7cbe\:5bc6\:30c1\:30a7\:30c3\:30af\:3067\:3001\:5225NB\:7d4c\:7531\:306e\:4f9d\:5b58\:3082\:691c\:51fa\:3059\:308b\:3002
    ============================================================ *)
 
 iPrecisionConfidentialCheck[nb_NotebookObject] :=
@@ -1784,39 +1826,39 @@ iPrecisionConfidentialCheck[nb_NotebookObject] :=
 
     currentLine = If[IntegerQ[$Line], $Line, 0];
 
-    (* === 高速パス: 前回チェックから変化なし ===
-       $Line が前回チェック時から 1 以下の増加（= ClaudeQuery 自身のみ）の場合、
-       キャッシュが有効なので全NB走査をスキップ。
-       FrontEnd round-trip を完全に回避し、0.01秒で完了する。 *)
+    (* === \:9ad8\:901f\:30d1\:30b9: \:524d\:56de\:30c1\:30a7\:30c3\:30af\:304b\:3089\:5909\:5316\:306a\:3057 ===
+       $Line \:304c\:524d\:56de\:30c1\:30a7\:30c3\:30af\:6642\:304b\:3089 1 \:4ee5\:4e0b\:306e\:5897\:52a0\:ff08= ClaudeQuery \:81ea\:8eab\:306e\:307f\:ff09\:306e\:5834\:5408\:3001
+       \:30ad\:30e3\:30c3\:30b7\:30e5\:304c\:6709\:52b9\:306a\:306e\:3067\:5168NB\:8d70\:67fb\:3092\:30b9\:30ad\:30c3\:30d7\:3002
+       FrontEnd round-trip \:3092\:5b8c\:5168\:306b\:56de\:907f\:3057\:30010.01\:79d2\:3067\:5b8c\:4e86\:3059\:308b\:3002 *)
     If[IntegerQ[$iGlobalDepsCacheLastLine] && $iGlobalDepsCacheLastLine > 0 &&
        currentLine <= $iGlobalDepsCacheLastLine + 1,
       $iGlobalDepsCacheLastLine = currentLine;
       Return[Length[$allConfidentialVars]]];
 
-    (* === 超高速パス: 秘密変数が存在しない場合 ===
-       $confidentialSymbols と $allConfidentialVars の両方が空で、
-       かつ過去に少なくとも1回フルチェックを完了済みなら、
-       重い NBRefreshCellsCache / iRebuildConfidentialSymbolsAll を
-       完全にスキップする。カーネル再起動後の初回は必ずフルパスを通る。
-       Confidential[] / MarkConfidential は呼び出し時に即座に
-       $confidentialSymbols を更新するため、ここでの再走査は不要。 *)
+    (* === \:8d85\:9ad8\:901f\:30d1\:30b9: \:79d8\:5bc6\:5909\:6570\:304c\:5b58\:5728\:3057\:306a\:3044\:5834\:5408 ===
+       $confidentialSymbols \:3068 $allConfidentialVars \:306e\:4e21\:65b9\:304c\:7a7a\:3067\:3001
+       \:304b\:3064\:904e\:53bb\:306b\:5c11\:306a\:304f\:3068\:30821\:56de\:30d5\:30eb\:30c1\:30a7\:30c3\:30af\:3092\:5b8c\:4e86\:6e08\:307f\:306a\:3089\:3001
+       \:91cd\:3044 NBRefreshCellsCache / iRebuildConfidentialSymbolsAll \:3092
+       \:5b8c\:5168\:306b\:30b9\:30ad\:30c3\:30d7\:3059\:308b\:3002\:30ab\:30fc\:30cd\:30eb\:518d\:8d77\:52d5\:5f8c\:306e\:521d\:56de\:306f\:5fc5\:305a\:30d5\:30eb\:30d1\:30b9\:3092\:901a\:308b\:3002
+       Confidential[] / MarkConfidential \:306f\:547c\:3073\:51fa\:3057\:6642\:306b\:5373\:5ea7\:306b
+       $confidentialSymbols \:3092\:66f4\:65b0\:3059\:308b\:305f\:3081\:3001\:3053\:3053\:3067\:306e\:518d\:8d70\:67fb\:306f\:4e0d\:8981\:3002 *)
     If[Length[$confidentialSymbols] === 0 &&
        Length[$allConfidentialVars] === 0 &&
        IntegerQ[$iGlobalDepsCacheLastLine] && $iGlobalDepsCacheLastLine > 0,
       $iGlobalDepsCacheLastLine = currentLine;
       Return[0]];
 
-    (* === フルパス（新しいセルが評価された場合） ===
-       ただし前回の結果を起点にインクリメンタルに更新する。 *)
+    (* === \:30d5\:30eb\:30d1\:30b9\:ff08\:65b0\:3057\:3044\:30bb\:30eb\:304c\:8a55\:4fa1\:3055\:308c\:305f\:5834\:5408\:ff09 ===
+       \:305f\:3060\:3057\:524d\:56de\:306e\:7d50\:679c\:3092\:8d77\:70b9\:306b\:30a4\:30f3\:30af\:30ea\:30e1\:30f3\:30bf\:30eb\:306b\:66f4\:65b0\:3059\:308b\:3002 *)
 
-    (* Cells[] キャッシュのスマートリフレッシュ:
-       ModifiedInMemory=False のNBは FE call なしでスキップ。
-       Cells[] リスト不変のNBもキャッシュ保持。
-       返り値: 変化があったNBのリスト *)
+    (* Cells[] \:30ad\:30e3\:30c3\:30b7\:30e5\:306e\:30b9\:30de\:30fc\:30c8\:30ea\:30d5\:30ec\:30c3\:30b7\:30e5:
+       ModifiedInMemory=False \:306eNB\:306f FE call \:306a\:3057\:3067\:30b9\:30ad\:30c3\:30d7\:3002
+       Cells[] \:30ea\:30b9\:30c8\:4e0d\:5909\:306eNB\:3082\:30ad\:30e3\:30c3\:30b7\:30e5\:4fdd\:6301\:3002
+       \:8fd4\:308a\:5024: \:5909\:5316\:304c\:3042\:3063\:305fNB\:306e\:30ea\:30b9\:30c8 *)
     Module[{changedNBs = NBAccess`NBRefreshCellsCache[]},
 
-    (* Step 1: 秘密変数の再構築
-       前回の結果をベースに、新しく評価されたセル (In[x] > lastLine) のみ追加走査。 *)
+    (* Step 1: \:79d8\:5bc6\:5909\:6570\:306e\:518d\:69cb\:7bc9
+       \:524d\:56de\:306e\:7d50\:679c\:3092\:30d9\:30fc\:30b9\:306b\:3001\:65b0\:3057\:304f\:8a55\:4fa1\:3055\:308c\:305f\:30bb\:30eb (In[x] > lastLine) \:306e\:307f\:8ffd\:52a0\:8d70\:67fb\:3002 *)
     If[Length[$confidentialSymbols] > 0 && $iGlobalDepsCacheLastLine > 0,
       iRebuildConfidentialSymbolsIncremental[$iGlobalDepsCacheLastLine],
       $confidentialSymbols = <||>;
@@ -1831,7 +1873,7 @@ iPrecisionConfidentialCheck[nb_NotebookObject] :=
       $iGlobalDepsCacheLastLine = currentLine;
       Return[0]];
 
-    (* Step 2: 機密解除済み変数を全NBから収集（伝搬ファイアウォール） *)
+    (* Step 2: \:6a5f\:5bc6\:89e3\:9664\:6e08\:307f\:5909\:6570\:3092\:5168NB\:304b\:3089\:53ce\:96c6\:ff08\:4f1d\:642c\:30d5\:30a1\:30a4\:30a2\:30a6\:30a9\:30fc\:30eb\:ff09 *)
     Module[{declVars = {}, allNBsForDecl, rawDeclResult},
       allNBsForDecl = NBAccess`NBUserNotebooks[];
       If[ListQ[allNBsForDecl],
@@ -1841,13 +1883,13 @@ iPrecisionConfidentialCheck[nb_NotebookObject] :=
       declVars = DeleteDuplicates[declVars];
       If[!ListQ[declVars], declVars = {}];
 
-    (* Step 2b: 現在NBの軽量版依存グラフ（Step 7 の通知比較用） *)
+    (* Step 2b: \:73fe\:5728NB\:306e\:8efd\:91cf\:7248\:4f9d\:5b58\:30b0\:30e9\:30d5\:ff08Step 7 \:306e\:901a\:77e5\:6bd4\:8f03\:7528\:ff09 *)
     localDeps = Quiet[NBAccess`NBBuildVarDependencies[nb]];
     If[!AssociationQ[localDeps], localDeps = <||>];
     localDepVars = Quiet[NBAccess`NBTransitiveDependents[localDeps, directConfVars, declVars]];
     If[!ListQ[localDepVars], localDepVars = directConfVars];
 
-    (* Step 3: 全NB統合依存グラフ（インクリメンタル更新） *)
+    (* Step 3: \:5168NB\:7d71\:5408\:4f9d\:5b58\:30b0\:30e9\:30d5\:ff08\:30a4\:30f3\:30af\:30ea\:30e1\:30f3\:30bf\:30eb\:66f4\:65b0\:ff09 *)
     If[AssociationQ[$iGlobalDepsCache] && Length[$iGlobalDepsCache] > 0 &&
        IntegerQ[$iGlobalDepsCacheLastLine] && $iGlobalDepsCacheLastLine > 0,
       updateResult = Quiet[
@@ -1860,32 +1902,32 @@ iPrecisionConfidentialCheck[nb_NotebookObject] :=
     If[!AssociationQ[globalDeps], globalDeps = localDeps];
     $iGlobalDepsCache = globalDeps;
 
-    (* Step 4: 推移的依存を計算（解除済み変数で伝搬を遮断） *)
+    (* Step 4: \:63a8\:79fb\:7684\:4f9d\:5b58\:3092\:8a08\:7b97\:ff08\:89e3\:9664\:6e08\:307f\:5909\:6570\:3067\:4f1d\:642c\:3092\:906e\:65ad\:ff09 *)
     allDepVars = Quiet[NBAccess`NBTransitiveDependents[globalDeps, directConfVars, declVars]];
     If[!ListQ[allDepVars], allDepVars = directConfVars];
-    (* 解除済み変数を除外 *)
+    (* \:89e3\:9664\:6e08\:307f\:5909\:6570\:3092\:9664\:5916 *)
     allDepVars = Complement[allDepVars, declVars];
 
-    (* Step 5: $allConfidentialVars を更新 *)
+    (* Step 5: $allConfidentialVars \:3092\:66f4\:65b0 *)
     prevAllDepVars = Keys[$allConfidentialVars];
     $allConfidentialVars = Association[# -> True & /@ allDepVars];
     NBAccess`NBSetConfidentialVars[$allConfidentialVars];
 
-    (* Step 5b: $confidentialSymbols に推移的依存変数を反映 *)
+    (* Step 5b: $confidentialSymbols \:306b\:63a8\:79fb\:7684\:4f9d\:5b58\:5909\:6570\:3092\:53cd\:6620 *)
     Do[If[!KeyExistsQ[$confidentialSymbols, v],
         $confidentialSymbols[v] = AbsoluteTime[]],
       {v, allDepVars}];
-    (* 解除済み変数を $confidentialSymbols からも除去 *)
+    (* \:89e3\:9664\:6e08\:307f\:5909\:6570\:3092 $confidentialSymbols \:304b\:3089\:3082\:9664\:53bb *)
     Do[KeyDropFrom[$confidentialSymbols, v], {v, declVars}];
 
-    (* Step 6: 依存セルの橙マーク更新
-       allDepVars が変化した場合: 変化があったNBのみ走査。
-       変化なし: CellEpilog インストールチェックのみ。 *)
+    (* Step 6: \:4f9d\:5b58\:30bb\:30eb\:306e\:6a59\:30de\:30fc\:30af\:66f4\:65b0
+       allDepVars \:304c\:5909\:5316\:3057\:305f\:5834\:5408: \:5909\:5316\:304c\:3042\:3063\:305fNB\:306e\:307f\:8d70\:67fb\:3002
+       \:5909\:5316\:306a\:3057: CellEpilog \:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\:30c1\:30a7\:30c3\:30af\:306e\:307f\:3002 *)
     If[Sort[allDepVars] =!= Sort[prevAllDepVars],
       Module[{allNBs = NBAccess`NBUserNotebooks[], targetNBs},
         If[ListQ[allNBs],
-          (* allDepVars が変化 + NB構造が変化したNBのみ走査。
-             ただし初回 (prevAllDepVars が空) は全NB走査。 *)
+          (* allDepVars \:304c\:5909\:5316 + NB\:69cb\:9020\:304c\:5909\:5316\:3057\:305fNB\:306e\:307f\:8d70\:67fb\:3002
+             \:305f\:3060\:3057\:521d\:56de (prevAllDepVars \:304c\:7a7a) \:306f\:5168NB\:8d70\:67fb\:3002 *)
           targetNBs = If[Length[prevAllDepVars] === 0,
             allNBs,
             If[Length[changedNBs] > 0, changedNBs, allNBs]];
@@ -1906,16 +1948,16 @@ iPrecisionConfidentialCheck[nb_NotebookObject] :=
 
     ]; (* Module declVars end *)
 
-    (* Step 7: 新たに検出された秘密依存を通知 *)
+    (* Step 7: \:65b0\:305f\:306b\:691c\:51fa\:3055\:308c\:305f\:79d8\:5bc6\:4f9d\:5b58\:3092\:901a\:77e5 *)
     If[Sort[allDepVars] =!= Sort[prevAllDepVars],
       newlyFound = Complement[allDepVars, localDepVars];
       If[Length[newlyFound] > 0,
         Module[{msg},
-          msg = "\[WarningSign] 精密チェック: 別ノートブック経由の秘密依存を " <>
-                ToString[Length[newlyFound]] <> " 個検出しました (" <>
+          msg = "\[WarningSign] \:7cbe\:5bc6\:30c1\:30a7\:30c3\:30af: \:5225\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:7d4c\:7531\:306e\:79d8\:5bc6\:4f9d\:5b58\:3092 " <>
+                ToString[Length[newlyFound]] <> " \:500b\:691c\:51fa\:3057\:307e\:3057\:305f (" <>
                 StringRiffle[Take[newlyFound, UpTo[5]], ", "] <>
                 If[Length[newlyFound] > 5, ", ...", ""] <>
-                ")。これらはコンテキスト送信から除外されます。";
+                ")\:3002\:3053\:308c\:3089\:306f\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:9001\:4fe1\:304b\:3089\:9664\:5916\:3055\:308c\:307e\:3059\:3002";
           NBAccess`NBWritePrintNotice[None, msg, RGBColor[0.85, 0.5, 0.1]]]]];
 
     ]; (* Module changedNBs end *)
@@ -1924,15 +1966,15 @@ iPrecisionConfidentialCheck[nb_NotebookObject] :=
   ];
 
 (* ============================================================
-   アクセスレベル解決ヘルパー
-   PrivacySpec と Model の両方から実効アクセスレベルを決定する。
-   PrivacySpec が Automatic の場合:
-     Model 指定あり {"provider",...} → そのプロバイダーの MaxAccessLevel
-     Model 指定なし (Automatic)     → "claudecode" の MaxAccessLevel
-   PrivacySpec が明示的 <|"AccessLevel"->n|> の場合: n を使用
+   \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:89e3\:6c7a\:30d8\:30eb\:30d1\:30fc
+   PrivacySpec \:3068 Model \:306e\:4e21\:65b9\:304b\:3089\:5b9f\:52b9\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:3092\:6c7a\:5b9a\:3059\:308b\:3002
+   PrivacySpec \:304c Automatic \:306e\:5834\:5408:
+     Model \:6307\:5b9a\:3042\:308a {"provider",...} \[RightArrow] \:305d\:306e\:30d7\:30ed\:30d0\:30a4\:30c0\:30fc\:306e MaxAccessLevel
+     Model \:6307\:5b9a\:306a\:3057 (Automatic)     \[RightArrow] "claudecode" \:306e MaxAccessLevel
+   PrivacySpec \:304c\:660e\:793a\:7684 <|"AccessLevel"->n|> \:306e\:5834\:5408: n \:3092\:4f7f\:7528
    ============================================================ *)
 
-(* modelSpec 付き: PrivacySpec が Automatic ならプロバイダーに応じて解決 *)
+(* modelSpec \:4ed8\:304d: PrivacySpec \:304c Automatic \:306a\:3089\:30d7\:30ed\:30d0\:30a4\:30c0\:30fc\:306b\:5fdc\:3058\:3066\:89e3\:6c7a *)
 iResolveAccessLevel[Automatic, Automatic] :=
   NBAccess`NBGetProviderMaxAccessLevel["claudecode"];
 iResolveAccessLevel[Automatic, modelSpec_List] :=
@@ -1944,7 +1986,7 @@ iResolveAccessLevel[ps_Association, _] :=
 iResolveAccessLevel[_, _] :=
   NBAccess`NBGetProviderMaxAccessLevel["claudecode"];
 
-(* 後方互換: modelSpec なし — "claudecode" プロバイダーとして解決 *)
+(* \:5f8c\:65b9\:4e92\:63db: modelSpec \:306a\:3057 \[LongDash] "claudecode" \:30d7\:30ed\:30d0\:30a4\:30c0\:30fc\:3068\:3057\:3066\:89e3\:6c7a *)
 iResolveAccessLevel[Automatic] :=
   NBAccess`NBGetProviderMaxAccessLevel["claudecode"];
 iResolveAccessLevel[ps_Association] :=
@@ -1954,7 +1996,7 @@ iResolveAccessLevel[_] :=
 
 (* ============================================================
    \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:53ce\:96c6\:ff08\:6a5f\:5bc6\:9664\:5916\:4ed8\:304d\:ff09
-   \:2192 NBAccess\:306e NBGetContext \:306b\:59d4\:8b72\:3002
+   \[RightArrow] NBAccess\:306e NBGetContext \:306b\:59d4\:8b72\:3002
    PrivacySpec \:306e\:30c7\:30a3\:30d5\:30a9\:30eb\:30c8 AccessLevel=0.5 \:3067
    \:79d8\:5bc6\:30bb\:30eb (1.0) \:3092\:9664\:5916\:3057\:305f\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:6587\:5b57\:5217\:3092\:8fd4\:3059\:3002
    \:30ed\:30fc\:30ab\:30ebLLM\:74b0\:5883\:304b\:3089\:306f PrivacySpec \:3092\:660e\:793a\:6307\:5b9a\:3057\:3066\:547c\:3073\:51fa\:3059\:3053\:3068\:3002
@@ -1985,11 +2027,11 @@ iSessionToContext[history_List, confVars_List] :=
         e        = NBAccess`NBFilterHistoryEntry[rawE, confVars, $confVarTimes];
         summary  = Lookup[e, "summary", ""];
         resp     = Lookup[e, "response", None];
-        (* response が無い = コンパクション済み: サマリーのみ出力 *)
+        (* response \:304c\:7121\:3044 = \:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:6e08\:307f: \:30b5\:30de\:30ea\:30fc\:306e\:307f\:51fa\:529b *)
         If[resp === None || (!StringQ[resp] && summary =!= ""),
           "=== \:30b9\:30c6\:30c3\:30d7 " <> ToString[Lookup[e, "step", "?"]] <>
           " (\:8981\:7d04) ===\n" <> summary <> "\n\n",
-          (* 通常エントリ: 詳細出力 *)
+          (* \:901a\:5e38\:30a8\:30f3\:30c8\:30ea: \:8a73\:7d30\:51fa\:529b *)
           resp     = If[StringQ[resp], resp, "\:ff08\:306a\:3057\:ff09"];
           textOnly = If[StringQ[resp], StringTrim[iStripCodeBlocks[resp]], ""];
           "=== \:30b9\:30c6\:30c3\:30d7 " <> ToString[Lookup[e, "step", "?"]] <> " ===\n" <>
@@ -2006,7 +2048,7 @@ iSessionToContext[history_List, confVars_List] :=
     history
   ];
 
-(* \:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
    \:30bb\:30c3\:30b7\:30e7\:30f3\:7ba1\:7406
    \:8a2d\:8a08\:ff1a
      \:30fbTaggingRules \:306b\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:3092\:683c\:7d0d\:ff08\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:4fdd\:5b58\:6642\:306b\:6c38\:7d9a\:5316\:ff09
@@ -2014,51 +2056,51 @@ iSessionToContext[history_List, confVars_List] :=
      \:30fb\:540d\:524d\:4ed8\:304d\:30bb\:30c3\:30b7\:30e7\:30f3\:30bf\:30b0: "history_\:540d\:524d"
      \:30fb\:5404\:30bf\:30b0\:306b <|"header" -> ..., "entries" -> {...}|> \:3092\:683c\:7d0d
      \:30fb\:5404\:30a8\:30f3\:30c8\:30ea\:306f "step"\:30fb"time"->AbsoluteTime[] \:3092\:5fc5\:305a\:6301\:3064
-   \:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500 *)
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
-(* セッションタグを決定 *)
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:30bf\:30b0\:3092\:6c7a\:5b9a *)
 iSessionTag[] := "history";
 iNamedSessionTag[name_String] := "history_" <> name;
 
-(* ---- セッション履歴アクセスは全て NBAccess の汎用履歴 DB API に委譲 ---- *)
+(* ---- \:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:30a2\:30af\:30bb\:30b9\:306f\:5168\:3066 NBAccess \:306e\:6c4e\:7528\:5c65\:6b74 DB API \:306b\:59d4\:8b72 ---- *)
 
-(* セッションデータ読み取り (復元済み) *)
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:30c7\:30fc\:30bf\:8aad\:307f\:53d6\:308a (\:5fa9\:5143\:6e08\:307f) *)
 iSessionData[nb_NotebookObject, tag_String] :=
   NBAccess`NBHistoryData[nb, tag];
 
-(* セッションデータ書き込み (初期化用: 圧縮付き) *)
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:30c7\:30fc\:30bf\:66f8\:304d\:8fbc\:307f (\:521d\:671f\:5316\:7528: \:5727\:7e2e\:4ed8\:304d) *)
 iSessionSetData[nb_NotebookObject, tag_String, data_Association] :=
   NBAccess`NBHistorySetData[nb, tag, data];
 
-(* セッションヘッダーを書き込む *)
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:66f8\:304d\:8fbc\:3080 *)
 iWriteSessionHeader[nb_NotebookObject, tag_String, header_Association] :=
   NBAccess`NBHistoryWriteHeader[nb, tag, header];
 
-(* セッションヘッダーを読み取る *)
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:8aad\:307f\:53d6\:308b *)
 iReadSessionHeader[nb_NotebookObject, tag_String] :=
   NBAccess`NBHistoryReadHeader[nb, tag];
 
-(* 1エントリを追記 (差分圧縮 + privacylevel 付与)
-   コンパクションは iSessionUpdateLast に移動済み（レスポンス受信後に実行）
-   Phase 2b: LLMGraph にもノードを追加する *)
+(* 1\:30a8\:30f3\:30c8\:30ea\:3092\:8ffd\:8a18 (\:5dee\:5206\:5727\:7e2e + privacylevel \:4ed8\:4e0e)
+   \:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:306f iSessionUpdateLast \:306b\:79fb\:52d5\:6e08\:307f\:ff08\:30ec\:30b9\:30dd\:30f3\:30b9\:53d7\:4fe1\:5f8c\:306b\:5b9f\:884c\:ff09
+   Phase 2b: LLMGraph \:306b\:3082\:30ce\:30fc\:30c9\:3092\:8ffd\:52a0\:3059\:308b *)
 iSessionAppend[nb_NotebookObject, tag_String, entry_Association] := (
   NBAccess`NBHistoryAppend[nb, tag, entry];
-  (* LLMGraph へのリアルタイムノード追加 *)
+  (* LLMGraph \:3078\:306e\:30ea\:30a2\:30eb\:30bf\:30a4\:30e0\:30ce\:30fc\:30c9\:8ffd\:52a0 *)
   Quiet @ iLLMGraphOnAppend[nb, tag, entry]);
 
-(* 全エントリを返す (復元済み) *)
+(* \:5168\:30a8\:30f3\:30c8\:30ea\:3092\:8fd4\:3059 (\:5fa9\:5143\:6e08\:307f) *)
 iSessionHistory[nb_NotebookObject, tag_String] :=
   NBAccess`NBHistoryEntries[nb, tag];
 
-(* 最後のエントリを更新 + レスポンス受信後にコンパクションチェック
-   Phase 2b: LLMGraph ノードも更新する *)
+(* \:6700\:5f8c\:306e\:30a8\:30f3\:30c8\:30ea\:3092\:66f4\:65b0 + \:30ec\:30b9\:30dd\:30f3\:30b9\:53d7\:4fe1\:5f8c\:306b\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:30c1\:30a7\:30c3\:30af
+   Phase 2b: LLMGraph \:30ce\:30fc\:30c9\:3082\:66f4\:65b0\:3059\:308b *)
 iSessionUpdateLast[nb_NotebookObject, tag_String, updates_Association] := (
   NBAccess`NBHistoryUpdateLast[nb, tag, updates];
   Quiet @ iCheckHistoryCompaction[nb, tag];
-  (* LLMGraph ノードのステータス・サマリー更新 *)
+  (* LLMGraph \:30ce\:30fc\:30c9\:306e\:30b9\:30c6\:30fc\:30bf\:30b9\:30fb\:30b5\:30de\:30ea\:30fc\:66f4\:65b0 *)
   Quiet @ iLLMGraphOnUpdate[nb, tag, updates]);
 
-(* step 番号を指定してエントリを更新 (ClaudeProcessFile の並列ノード用) *)
+(* step \:756a\:53f7\:3092\:6307\:5b9a\:3057\:3066\:30a8\:30f3\:30c8\:30ea\:3092\:66f4\:65b0 (ClaudeProcessFile \:306e\:4e26\:5217\:30ce\:30fc\:30c9\:7528) *)
 iSessionUpdateByStep[nb_NotebookObject, tag_String,
                       targetStep_Integer, updates_Association] :=
   Module[{entries, idx},
@@ -2068,39 +2110,39 @@ iSessionUpdateByStep[nb_NotebookObject, tag_String,
     idx = First[idx];
     entries[[idx]] = Join[entries[[idx]], updates];
     NBAccess`NBHistoryReplaceEntries[nb, tag, entries];
-    (* LLMGraph ノードも更新 *)
+    (* LLMGraph \:30ce\:30fc\:30c9\:3082\:66f4\:65b0 *)
     Quiet @ iLLMGraphOnUpdate[nb, tag, updates]];
 
-(* 継承を含む全履歴を取得（親セッションの履歴 + 自分の履歴） *)
+(* \:7d99\:627f\:3092\:542b\:3080\:5168\:5c65\:6b74\:3092\:53d6\:5f97\:ff08\:89aa\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74 + \:81ea\:5206\:306e\:5c65\:6b74\:ff09 *)
 iSessionHistoryWithInherit[nb_NotebookObject, tag_String] :=
   NBAccess`NBHistoryEntriesWithInherit[nb, tag];
 
-(* fullPrompt の圧縮/復元: TaggingRules の肥大化を防ぐ *)
-(* fullPrompt の圧縮・復元は NBAccess の diffFields 機構に委譲済み。
-   NBHistoryCreate の diffFields に "fullPrompt" を含めることで、
-   NBAccess 側の差分圧縮が自動的に適用される。 *)
+(* fullPrompt \:306e\:5727\:7e2e/\:5fa9\:5143: TaggingRules \:306e\:80a5\:5927\:5316\:3092\:9632\:3050 *)
+(* fullPrompt \:306e\:5727\:7e2e\:30fb\:5fa9\:5143\:306f NBAccess \:306e diffFields \:6a5f\:69cb\:306b\:59d4\:8b72\:6e08\:307f\:3002
+   NBHistoryCreate \:306e diffFields \:306b "fullPrompt" \:3092\:542b\:3081\:308b\:3053\:3068\:3067\:3001
+   NBAccess \:5074\:306e\:5dee\:5206\:5727\:7e2e\:304c\:81ea\:52d5\:7684\:306b\:9069\:7528\:3055\:308c\:308b\:3002 *)
 
 (* ============================================================
-   履歴保存時のプロンプトサニタイズ
-   TaggingRules 肥大化（→ ノートブックフリーズ）を防ぐため、
-   fullPrompt / instruction を履歴に保存する前にサイズを制限する。
-   特にマルチモーダル入力時の base64 データ混入を防止。
+   \:5c65\:6b74\:4fdd\:5b58\:6642\:306e\:30d7\:30ed\:30f3\:30d7\:30c8\:30b5\:30cb\:30bf\:30a4\:30ba
+   TaggingRules \:80a5\:5927\:5316\:ff08\[RightArrow] \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30d5\:30ea\:30fc\:30ba\:ff09\:3092\:9632\:3050\:305f\:3081\:3001
+   fullPrompt / instruction \:3092\:5c65\:6b74\:306b\:4fdd\:5b58\:3059\:308b\:524d\:306b\:30b5\:30a4\:30ba\:3092\:5236\:9650\:3059\:308b\:3002
+   \:7279\:306b\:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb\:5165\:529b\:6642\:306e base64 \:30c7\:30fc\:30bf\:6df7\:5165\:3092\:9632\:6b62\:3002
    ============================================================ *)
 
-$iHistoryMaxPromptChars = 50000; (* 履歴に保存する fullPrompt の最大文字数 *)
+$iHistoryMaxPromptChars = 50000; (* \:5c65\:6b74\:306b\:4fdd\:5b58\:3059\:308b fullPrompt \:306e\:6700\:5927\:6587\:5b57\:6570 *)
 
-(* base64 風の長い文字列を除去し、サイズを制限して Compress する *)
+(* base64 \:98a8\:306e\:9577\:3044\:6587\:5b57\:5217\:3092\:9664\:53bb\:3057\:3001\:30b5\:30a4\:30ba\:3092\:5236\:9650\:3057\:3066 Compress \:3059\:308b *)
 iCompressForHistory[text_String] :=
   Module[{cleaned, stripped},
-    (* data:xxx;base64,... 形式の埋め込みを短い参照に置換 *)
+    (* data:xxx;base64,... \:5f62\:5f0f\:306e\:57cb\:3081\:8fbc\:307f\:3092\:77ed\:3044\:53c2\:7167\:306b\:7f6e\:63db *)
     stripped = StringReplace[text,
       RegularExpression["data:[a-z]+/[a-z]+;base64,[A-Za-z0-9+/=]{100,}"] ->
         "[base64 data omitted]"];
-    (* 長い base64 風文字列を除去 (100文字以上連続の [A-Za-z0-9+/=]) *)
+    (* \:9577\:3044 base64 \:98a8\:6587\:5b57\:5217\:3092\:9664\:53bb (100\:6587\:5b57\:4ee5\:4e0a\:9023\:7d9a\:306e [A-Za-z0-9+/=]) *)
     cleaned = StringReplace[stripped,
       RegularExpression["[A-Za-z0-9+/=]{500,}"] ->
         "[large binary data omitted]"];
-    (* サイズ制限 *)
+    (* \:30b5\:30a4\:30ba\:5236\:9650 *)
     If[StringLength[cleaned] > $iHistoryMaxPromptChars,
       cleaned = StringTake[cleaned, $iHistoryMaxPromptChars] <>
         "\n... (\:5c65\:6b74\:4fdd\:5b58\:7528\:306b " <> ToString[$iHistoryMaxPromptChars] <> " \:6587\:5b57\:306b\:5207\:308a\:8a70\:3081)"];
@@ -2108,7 +2150,7 @@ iCompressForHistory[text_String] :=
   ];
 iCompressForHistory[x_] := Compress[ToString[x, InputForm, CharacterEncoding -> "ASCII"]];
 
-(* instruction 用: テキスト部分のみ保存（ファイルパス参照は短縮） *)
+(* instruction \:7528: \:30c6\:30ad\:30b9\:30c8\:90e8\:5206\:306e\:307f\:4fdd\:5b58\:ff08\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:53c2\:7167\:306f\:77ed\:7e2e\:ff09 *)
 iSanitizeInstructionForHistory[text_String] :=
   Module[{s},
     s = StringReplace[text,
@@ -2119,21 +2161,21 @@ iSanitizeInstructionForHistory[text_String] :=
 iSanitizeInstructionForHistory[x_] := StringTake[ToString[x], UpTo[2000]];
 
 (* ============================================================
-   履歴コンパクション
-   設計:
-     ・各エントリに "summary" フィールドを追加
-     ・閾値 2n+1+w を超えたら p ステップおきに詳細を残し、
-       間引きエントリはサマリーのみにする
-     ・p は毎回 p*2 で増加
+   \:5c65\:6b74\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3
+   \:8a2d\:8a08:
+     \:30fb\:5404\:30a8\:30f3\:30c8\:30ea\:306b "summary" \:30d5\:30a3\:30fc\:30eb\:30c9\:3092\:8ffd\:52a0
+     \:30fb\:95be\:5024 2n+1+w \:3092\:8d85\:3048\:305f\:3089 p \:30b9\:30c6\:30c3\:30d7\:304a\:304d\:306b\:8a73\:7d30\:3092\:6b8b\:3057\:3001
+       \:9593\:5f15\:304d\:30a8\:30f3\:30c8\:30ea\:306f\:30b5\:30de\:30ea\:30fc\:306e\:307f\:306b\:3059\:308b
+     \:30fbp \:306f\:6bce\:56de p*2 \:3067\:5897\:52a0
    ============================================================ *)
 
-$iHistoryCompactN = 10;   (* 基本間引き幅パラメータ（旧: 25） *)
-$iHistoryCompactW = 2;    (* 直近 w ステップは常に平文保持 *)
-$iHistoryCompactP = 2;    (* 初期間引き間隔 — セッションヘッダーに保存 *)
-$iHistoryMaxBytes = 200000; (* TaggingRules 推定サイズ上限（約200KB）—
-                               超過時はエントリ数に関わらずコンパクション発動 *)
+$iHistoryCompactN = 10;   (* \:57fa\:672c\:9593\:5f15\:304d\:5e45\:30d1\:30e9\:30e1\:30fc\:30bf\:ff08\:65e7: 25\:ff09 *)
+$iHistoryCompactW = 2;    (* \:76f4\:8fd1 w \:30b9\:30c6\:30c3\:30d7\:306f\:5e38\:306b\:5e73\:6587\:4fdd\:6301 *)
+$iHistoryCompactP = 2;    (* \:521d\:671f\:9593\:5f15\:304d\:9593\:9694 \[LongDash] \:30bb\:30c3\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:306b\:4fdd\:5b58 *)
+$iHistoryMaxBytes = 200000; (* TaggingRules \:63a8\:5b9a\:30b5\:30a4\:30ba\:4e0a\:9650\:ff08\:7d04200KB\:ff09\[LongDash]
+                               \:8d85\:904e\:6642\:306f\:30a8\:30f3\:30c8\:30ea\:6570\:306b\:95a2\:308f\:3089\:305a\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:767a\:52d5 *)
 
-(* 1エントリの概要テキスト (API 不要) *)
+(* 1\:30a8\:30f3\:30c8\:30ea\:306e\:6982\:8981\:30c6\:30ad\:30b9\:30c8 (API \:4e0d\:8981) *)
 iMakeLocalSummary[entry_Association] :=
   Module[{inst, resp, code},
     inst = StringTake[Lookup[entry, "instruction",
@@ -2149,20 +2191,20 @@ iMakeLocalSummary[entry_Association] :=
       "\n\:30b3\:30fc\:30c9: " <> code, ""]
   ];
 
-(* サマリーペアをローカルで結合
-   旧実装では API (Haiku) を呼び出していたが、
-   コンパクション毎に数秒〜十数秒のブロックが発生するため廃止。
-   簡潔な連結で十分機能する。 *)
+(* \:30b5\:30de\:30ea\:30fc\:30da\:30a2\:3092\:30ed\:30fc\:30ab\:30eb\:3067\:7d50\:5408
+   \:65e7\:5b9f\:88c5\:3067\:306f API (Haiku) \:3092\:547c\:3073\:51fa\:3057\:3066\:3044\:305f\:304c\:3001
+   \:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:6bce\:306b\:6570\:79d2\:301c\:5341\:6570\:79d2\:306e\:30d6\:30ed\:30c3\:30af\:304c\:767a\:751f\:3059\:308b\:305f\:3081\:5ec3\:6b62\:3002
+   \:7c21\:6f54\:306a\:9023\:7d50\:3067\:5341\:5206\:6a5f\:80fd\:3059\:308b\:3002 *)
 iMergeSummaries[sum1_String, sum2_String] :=
   Module[{s1 = StringTrim[sum1], s2 = StringTrim[sum2]},
-    (* 合計が600文字を超える場合は各300文字に切り詰め *)
+    (* \:5408\:8a08\:304c600\:6587\:5b57\:3092\:8d85\:3048\:308b\:5834\:5408\:306f\:5404300\:6587\:5b57\:306b\:5207\:308a\:8a70\:3081 *)
     If[StringLength[s1] + StringLength[s2] > 600,
       s1 = StringTake[s1, UpTo[300]];
       s2 = StringTake[s2, UpTo[300]]];
     s1 <> "\n" <> s2
   ];
 
-(* 履歴コンパクション実行 *)
+(* \:5c65\:6b74\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:5b9f\:884c *)
 iCompactHistory[nb_NotebookObject, tag_String] :=
   Module[{entries, n, w, p, total, keepDetailIndices, i, entry,
           summary, prevSummary, merged},
@@ -2170,7 +2212,7 @@ iCompactHistory[nb_NotebookObject, tag_String] :=
     total = Length[entries];
     If[total === 0, Return[]];
 
-    (* セッションヘッダーから p を取得 *)
+    (* \:30bb\:30c3\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:304b\:3089 p \:3092\:53d6\:5f97 *)
     Module[{hdr = NBAccess`NBHistoryReadHeader[nb, tag]},
       p = If[AssociationQ[hdr], Lookup[hdr, "compactP", $iHistoryCompactP], $iHistoryCompactP];
       n = If[AssociationQ[hdr], Lookup[hdr, "compactN", $iHistoryCompactN], $iHistoryCompactN];
@@ -2178,41 +2220,41 @@ iCompactHistory[nb_NotebookObject, tag_String] :=
 
     NBAccess`NBWritePrintNotice[None,
       "[History] \:5c65\:6b74\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:5b9f\:884c\:4e2d (p=" <> ToString[p] <>
-      ", \:30a8\:30f3\:30c8\:30ea\:6570=" <> ToString[total] <> ")\:2026",
+      ", \:30a8\:30f3\:30c8\:30ea\:6570=" <> ToString[total] <> ")\[Ellipsis]",
       RGBColor[0.5, 0.3, 0.6]];
 
-    (* 直近 w エントリは常に保持 *)
+    (* \:76f4\:8fd1 w \:30a8\:30f3\:30c8\:30ea\:306f\:5e38\:306b\:4fdd\:6301 *)
     keepDetailIndices = Range[Max[1, total - w + 1], total];
-    (* p ステップおきに保持 *)
+    (* p \:30b9\:30c6\:30c3\:30d7\:304a\:304d\:306b\:4fdd\:6301 *)
     Do[If[Mod[i, p] === 1, AppendTo[keepDetailIndices, i]],
       {i, 1, total - w}];
     keepDetailIndices = Sort[DeleteDuplicates[keepDetailIndices]];
 
-    (* 間引き対象エントリ: サマリー生成 + 詳細削除 *)
+    (* \:9593\:5f15\:304d\:5bfe\:8c61\:30a8\:30f3\:30c8\:30ea: \:30b5\:30de\:30ea\:30fc\:751f\:6210 + \:8a73\:7d30\:524a\:9664 *)
     Do[
       If[!MemberQ[keepDetailIndices, i],
         entry = entries[[i]];
-        (* まだサマリーがなければ生成 *)
+        (* \:307e\:3060\:30b5\:30de\:30ea\:30fc\:304c\:306a\:3051\:308c\:3070\:751f\:6210 *)
         If[!KeyExistsQ[entry, "summary"] || entry["summary"] === "",
           summary = iMakeLocalSummary[entry];
-          (* 前のエントリとマージ *)
+          (* \:524d\:306e\:30a8\:30f3\:30c8\:30ea\:3068\:30de\:30fc\:30b8 *)
           If[i > 1 && KeyExistsQ[entries[[i - 1]], "summary"] &&
              entries[[i - 1]]["summary"] =!= "",
             prevSummary = entries[[i - 1]]["summary"];
             merged = iMergeSummaries[prevSummary, summary];
             entry = Append[entry, "summary" -> merged],
             entry = Append[entry, "summary" -> summary]],
-          (* 既存サマリーがある場合はそのまま *)
+          (* \:65e2\:5b58\:30b5\:30de\:30ea\:30fc\:304c\:3042\:308b\:5834\:5408\:306f\:305d\:306e\:307e\:307e *)
           summary = entry["summary"]];
-        (* 詳細データを削除 *)
+        (* \:8a73\:7d30\:30c7\:30fc\:30bf\:3092\:524a\:9664 *)
         entry = KeyDrop[entry, {"fullPrompt", "response", "code"}];
         entries[[i]] = entry],
       {i, total}];
 
-    (* 書き戻し *)
+    (* \:66f8\:304d\:623b\:3057 *)
     NBAccess`NBHistoryReplaceEntries[nb, tag, entries];
 
-    (* p を更新 (次回は p*2) *)
+    (* p \:3092\:66f4\:65b0 (\:6b21\:56de\:306f p*2) *)
     NBAccess`NBHistoryUpdateHeader[nb, tag,
       <|"compactP" -> p * 2,
         "compactN" -> n, "compactW" -> w,
@@ -2226,10 +2268,10 @@ iCompactHistory[nb_NotebookObject, tag_String] :=
       RGBColor[0.3, 0.5, 0.3]];
   ];
 
-(* 閾値チェック + 自動コンパクション
-   エントリ数ベース + サイズベースの二重チェック。
-   サイズベースにより、エントリ数が少なくても巨大な response を持つ
-   セッションでのノートブック肥大化・フリーズを防ぐ。 *)
+(* \:95be\:5024\:30c1\:30a7\:30c3\:30af + \:81ea\:52d5\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3
+   \:30a8\:30f3\:30c8\:30ea\:6570\:30d9\:30fc\:30b9 + \:30b5\:30a4\:30ba\:30d9\:30fc\:30b9\:306e\:4e8c\:91cd\:30c1\:30a7\:30c3\:30af\:3002
+   \:30b5\:30a4\:30ba\:30d9\:30fc\:30b9\:306b\:3088\:308a\:3001\:30a8\:30f3\:30c8\:30ea\:6570\:304c\:5c11\:306a\:304f\:3066\:3082\:5de8\:5927\:306a response \:3092\:6301\:3064
+   \:30bb\:30c3\:30b7\:30e7\:30f3\:3067\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:80a5\:5927\:5316\:30fb\:30d5\:30ea\:30fc\:30ba\:3092\:9632\:3050\:3002 *)
 iCheckHistoryCompaction[nb_NotebookObject, tag_String] :=
   Module[{entries, total, hdr, n, w, rawData, estimatedBytes, needCompact = False},
     entries = NBAccess`NBHistoryEntries[nb, tag];
@@ -2237,9 +2279,9 @@ iCheckHistoryCompaction[nb_NotebookObject, tag_String] :=
     hdr = Quiet[NBAccess`NBHistoryReadHeader[nb, tag]];
     n = If[AssociationQ[hdr], Lookup[hdr, "compactN", $iHistoryCompactN], $iHistoryCompactN];
     w = If[AssociationQ[hdr], Lookup[hdr, "compactW", $iHistoryCompactW], $iHistoryCompactW];
-    (* 条件1: エントリ数ベース *)
+    (* \:6761\:4ef61: \:30a8\:30f3\:30c8\:30ea\:6570\:30d9\:30fc\:30b9 *)
     If[total > 2 n + 1 + w, needCompact = True];
-    (* 条件2: サイズベース（エントリ数が少なくても巨大な場合） *)
+    (* \:6761\:4ef62: \:30b5\:30a4\:30ba\:30d9\:30fc\:30b9\:ff08\:30a8\:30f3\:30c8\:30ea\:6570\:304c\:5c11\:306a\:304f\:3066\:3082\:5de8\:5927\:306a\:5834\:5408\:ff09 *)
     If[!needCompact && total > w + 1,
       rawData = Quiet[NBAccess`NBHistoryRawData[nb, tag]];
       estimatedBytes = Quiet @ Check[ByteCount[rawData], 0];
@@ -2247,26 +2289,26 @@ iCheckHistoryCompaction[nb_NotebookObject, tag_String] :=
     If[needCompact, iCompactHistory[nb, tag]]
   ];
 
-(* セッションオブジェクトから継承付き履歴を取得 *)
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:30aa\:30d6\:30b8\:30a7\:30af\:30c8\:304b\:3089\:7d99\:627f\:4ed8\:304d\:5c65\:6b74\:3092\:53d6\:5f97 *)
 iFullHistory[session_Association] :=
   NBAccess`NBHistoryEntriesWithInherit[session["Notebook"], session["SessionTag"]];
 
-(* デフォルトセッションの取得/初期化 — NBHistoryCreate は冪等 *)
+(* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:53d6\:5f97/\:521d\:671f\:5316 \[LongDash] NBHistoryCreate \:306f\:51aa\:7b49 *)
 iEnsureDefaultSession[nb_NotebookObject] := Module[{tag, nbDirs, nbDir},
   tag = iSessionTag[];
   NBAccess`NBHistoryCreate[nb, tag, {"fullPrompt", "response", "code"},
     <|"name" -> "$default"|>];
-  (* $packageDirectory がロード時に未定義だった場合に備え、ここで再保証 *)
+  (* $packageDirectory \:304c\:30ed\:30fc\:30c9\:6642\:306b\:672a\:5b9a\:7fa9\:3060\:3063\:305f\:5834\:5408\:306b\:5099\:3048\:3001\:3053\:3053\:3067\:518d\:4fdd\:8a3c *)
   If[StringQ[Global`$packageDirectory] && StringLength[Global`$packageDirectory] > 0 &&
      !MemberQ[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], Global`$packageDirectory],
     $ClaudeAccessibleDirs = DeleteDuplicates[
       Prepend[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], Global`$packageDirectory]]];
-  (* TaggingRules に保存済みのディレクトリを復元（ユーザーが以前承認済み） *)
+  (* TaggingRules \:306b\:4fdd\:5b58\:6e08\:307f\:306e\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3092\:5fa9\:5143\:ff08\:30e6\:30fc\:30b6\:30fc\:304c\:4ee5\:524d\:627f\:8a8d\:6e08\:307f\:ff09 *)
   nbDirs = NBAccess`NBGetAccessibleDirs[nb];
   If[ListQ[nbDirs] && Length[nbDirs] > 0,
     $ClaudeAccessibleDirs = DeleteDuplicates[
       Join[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], nbDirs]]];
-  (* TaggingRules に保存済みの Read 許可も復元（ダイアログは出さない） *)
+  (* TaggingRules \:306b\:4fdd\:5b58\:6e08\:307f\:306e Read \:8a31\:53ef\:3082\:5fa9\:5143\:ff08\:30c0\:30a4\:30a2\:30ed\:30b0\:306f\:51fa\:3055\:306a\:3044\:ff09 *)
   nbDir = Quiet @ Check[NotebookDirectory[nb], None];
   If[StringQ[nbDir] && DirectoryQ[nbDir] && !iIsSafeDefaultDir[nbDir],
     Module[{savedPerm = iGetDirPermission[nb, nbDir]},
@@ -2274,9 +2316,9 @@ iEnsureDefaultSession[nb_NotebookObject] := Module[{tag, nbDirs, nbDir},
         $iDirPermissionCache[nbDir] = savedPerm;
         $ClaudeAccessibleDirs = DeleteDuplicates[
           Append[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}], nbDir]],
-      (* 未許可でもキャッシュに記録しない — 後で必要時にダイアログ表示 *)
+      (* \:672a\:8a31\:53ef\:3067\:3082\:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:8a18\:9332\:3057\:306a\:3044 \[LongDash] \:5f8c\:3067\:5fc5\:8981\:6642\:306b\:30c0\:30a4\:30a2\:30ed\:30b0\:8868\:793a *)
       Null]]];
-  (* セッションアタッチメントを読み込み *)
+  (* \:30bb\:30c3\:30b7\:30e7\:30f3\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:3092\:8aad\:307f\:8fbc\:307f *)
   $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
   <|"SessionTag" -> tag, "Notebook" -> nb, "Name" -> "default",
     "InheritFrom" -> {}|>
@@ -2307,14 +2349,14 @@ iClaudeCallPrefix[] :=
 $claudeProgress = <||>;
 $iDeferredWork = <||>;
 
-(* --print モードではツール使用許可プロンプトに応答できないため
-   Read ツールと Glob（ファイルリスト）を常に許可する。
-   $iAllowReadTool が True の場合は Grep も追加し、内容検索を許可する。
-   $iAllowWebSearch が True の場合は WebSearch も追加し、Claude Code の Web 検索を許可する。
-   Glob はファイルカタログ取得のみで低リスクなため常に有効とする。 *)
+(* --print \:30e2\:30fc\:30c9\:3067\:306f\:30c4\:30fc\:30eb\:4f7f\:7528\:8a31\:53ef\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:5fdc\:7b54\:3067\:304d\:306a\:3044\:305f\:3081
+   Read \:30c4\:30fc\:30eb\:3068 Glob\:ff08\:30d5\:30a1\:30a4\:30eb\:30ea\:30b9\:30c8\:ff09\:3092\:5e38\:306b\:8a31\:53ef\:3059\:308b\:3002
+   $iAllowReadTool \:304c True \:306e\:5834\:5408\:306f Grep \:3082\:8ffd\:52a0\:3057\:3001\:5185\:5bb9\:691c\:7d22\:3092\:8a31\:53ef\:3059\:308b\:3002
+   $iAllowWebSearch \:304c True \:306e\:5834\:5408\:306f WebSearch \:3082\:8ffd\:52a0\:3057\:3001Claude Code \:306e Web \:691c\:7d22\:3092\:8a31\:53ef\:3059\:308b\:3002
+   Glob \:306f\:30d5\:30a1\:30a4\:30eb\:30ab\:30bf\:30ed\:30b0\:53d6\:5f97\:306e\:307f\:3067\:4f4e\:30ea\:30b9\:30af\:306a\:305f\:3081\:5e38\:306b\:6709\:52b9\:3068\:3059\:308b\:3002 *)
 iCLIPermissionFlags[excludeRead_:False] :=
   Module[{tools = {"Glob"}},
-    (* .nb ファイルタスク以外では Read を許可 *)
+    (* .nb \:30d5\:30a1\:30a4\:30eb\:30bf\:30b9\:30af\:4ee5\:5916\:3067\:306f Read \:3092\:8a31\:53ef *)
     If[!TrueQ[excludeRead], AppendTo[tools, "Read"]];
     If[TrueQ[$iAllowReadTool], AppendTo[tools, "Grep"]];
     If[TrueQ[$iAllowWebSearch], AppendTo[tools, "WebSearch"]];
@@ -2375,12 +2417,12 @@ iMakeBatStreamJson[promptFile_String, outFile_String, imageDirs_List:{},
       "claude_run_" <> ToString[UnixTime[]] <> "_" <>
       ToString[RandomInteger[99999]] <> ".bat"}];
     workDir = iPrepareClaudeProjectDirectory[];
-    (* プロンプト内の .nb パスを自動検出して Read を制限 *)
+    (* \:30d7\:30ed\:30f3\:30d7\:30c8\:5185\:306e .nb \:30d1\:30b9\:3092\:81ea\:52d5\:691c\:51fa\:3057\:3066 Read \:3092\:5236\:9650 *)
     promptText = Quiet @ If[FileExistsQ[promptFile],
       Import[promptFile, "Text", CharacterEncoding -> "UTF-8"], ""];
     detectedNBPath = If[StringQ[promptText],
       iLLMGraphDetectFilePath[promptText], None];
-    (* 検出したパスが $ClaudeAccessibleDirs / $packageDirectory 外なら自動除外 *)
+    (* \:691c\:51fa\:3057\:305f\:30d1\:30b9\:304c $ClaudeAccessibleDirs / $packageDirectory \:5916\:306a\:3089\:81ea\:52d5\:9664\:5916 *)
     autoExcludeRead = excludeRead || (
       StringQ[detectedNBPath] &&
       !iIsSafeDefaultDir[DirectoryName[detectedNBPath]] &&
@@ -2420,11 +2462,11 @@ iMakeBatStreamJson[promptFile_String, outFile_String, imageDirs_List:{},
     batFile
   ];
 
-(* --- stream-json パースヘルパー --- *)
+(* --- stream-json \:30d1\:30fc\:30b9\:30d8\:30eb\:30d1\:30fc --- *)
 
-(* Windows でのファイルロック競合を回避する安全なファイル読み取り。
-   Import["...","Text"] は書き込み中のファイルをブロックする可能性があるため、
-   ReadByteArray を使用して非ブロッキングで読み取る。 *)
+(* Windows \:3067\:306e\:30d5\:30a1\:30a4\:30eb\:30ed\:30c3\:30af\:7af6\:5408\:3092\:56de\:907f\:3059\:308b\:5b89\:5168\:306a\:30d5\:30a1\:30a4\:30eb\:8aad\:307f\:53d6\:308a\:3002
+   Import["...","Text"] \:306f\:66f8\:304d\:8fbc\:307f\:4e2d\:306e\:30d5\:30a1\:30a4\:30eb\:3092\:30d6\:30ed\:30c3\:30af\:3059\:308b\:53ef\:80fd\:6027\:304c\:3042\:308b\:305f\:3081\:3001
+   ReadByteArray \:3092\:4f7f\:7528\:3057\:3066\:975e\:30d6\:30ed\:30c3\:30ad\:30f3\:30b0\:3067\:8aad\:307f\:53d6\:308b\:3002 *)
 iSafeReadStreamFile[file_String] :=
   Quiet @ Check[
     Module[{bytes},
@@ -2436,12 +2478,12 @@ iSafeReadStreamFile[file_String] :=
     ""
   ];
 
-(* 1行のJSONLをパースしてイベント情報を返す *)
+(* 1\:884c\:306eJSONL\:3092\:30d1\:30fc\:30b9\:3057\:3066\:30a4\:30d9\:30f3\:30c8\:60c5\:5831\:3092\:8fd4\:3059 *)
 iParseStreamJsonLine[line_String] :=
   Quiet @ Check[Developer`ReadRawJSONString[line], $Failed];
 
-(* stream-json 出力ファイルから最終テキスト結果を抽出する。
-   text_delta を結合してテキストを復元する。 *)
+(* stream-json \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304b\:3089\:6700\:7d42\:30c6\:30ad\:30b9\:30c8\:7d50\:679c\:3092\:62bd\:51fa\:3059\:308b\:3002
+   text_delta \:3092\:7d50\:5408\:3057\:3066\:30c6\:30ad\:30b9\:30c8\:3092\:5fa9\:5143\:3059\:308b\:3002 *)
 iExtractResultFromStreamJson[outFile_String] :=
   Module[{raw, lines, textDeltas = {}, resultText = None, j, evt, delta,
           stderrLines = {}},
@@ -2452,12 +2494,12 @@ iExtractResultFromStreamJson[outFile_String] :=
     Do[
       j = iParseStreamJsonLine[line];
       If[!AssociationQ[j],
-        (* JSON パース失敗: stderr 由来のプレーンテキスト行を収集 *)
+        (* JSON \:30d1\:30fc\:30b9\:5931\:6557: stderr \:7531\:6765\:306e\:30d7\:30ec\:30fc\:30f3\:30c6\:30ad\:30b9\:30c8\:884c\:3092\:53ce\:96c6 *)
         If[StringLength[line] > 0 && !StringStartsQ[line, "{"],
           AppendTo[stderrLines, line]];
         Continue[]];
       Which[
-        (* result イベントからテキストを抽出（最優先） *)
+        (* result \:30a4\:30d9\:30f3\:30c8\:304b\:3089\:30c6\:30ad\:30b9\:30c8\:3092\:62bd\:51fa\:ff08\:6700\:512a\:5148\:ff09 *)
         j["type"] === "result" && AssociationQ[Lookup[j, "result", None]],
           Module[{res = j["result"], content},
             content = Lookup[res, "content", {}];
@@ -2465,7 +2507,7 @@ iExtractResultFromStreamJson[outFile_String] :=
               resultText = StringJoin[
                 Lookup[#, "text", ""] & /@
                   Select[content, AssociationQ[#] && Lookup[#, "type", ""] === "text" &]]]],
-        (* text_delta: テキスト断片を蓄積 *)
+        (* text_delta: \:30c6\:30ad\:30b9\:30c8\:65ad\:7247\:3092\:84c4\:7a4d *)
         j["type"] === "stream_event" && AssociationQ[Lookup[j, "event", None]],
           evt = j["event"];
           delta = Lookup[evt, "delta", None];
@@ -2473,20 +2515,20 @@ iExtractResultFromStreamJson[outFile_String] :=
             AppendTo[textDeltas, Lookup[delta, "text", ""]]]
       ],
       {line, lines}];
-    (* result があればそれを優先、なければ text_delta を結合 *)
+    (* result \:304c\:3042\:308c\:3070\:305d\:308c\:3092\:512a\:5148\:3001\:306a\:3051\:308c\:3070 text_delta \:3092\:7d50\:5408 *)
     Which[
       StringQ[resultText] && resultText =!= "", resultText,
       Length[textDeltas] > 0, StringJoin[textDeltas],
-      (* JSON結果もtext_deltaも無い場合: stderr行をエラーメッセージとして返す *)
+      (* JSON\:7d50\:679c\:3082text_delta\:3082\:7121\:3044\:5834\:5408: stderr\:884c\:3092\:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8\:3068\:3057\:3066\:8fd4\:3059 *)
       Length[stderrLines] > 0,
         "Error: " <> StringJoin[Riffle[stderrLines, "\n"]],
       True, ""
     ]
   ];
 
-(* stream-json 出力ファイルの新規行を読み取り $claudeProgress を更新する。
-   注意: ScheduledTask 内で毎秒呼ばれるため、Import ではなく iSafeReadStreamFile を使い
-   Windows のファイルロック競合によるカーネルフリーズを防止する。 *)
+(* stream-json \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:306e\:65b0\:898f\:884c\:3092\:8aad\:307f\:53d6\:308a $claudeProgress \:3092\:66f4\:65b0\:3059\:308b\:3002
+   \:6ce8\:610f: ScheduledTask \:5185\:3067\:6bce\:79d2\:547c\:3070\:308c\:308b\:305f\:3081\:3001Import \:3067\:306f\:306a\:304f iSafeReadStreamFile \:3092\:4f7f\:3044
+   Windows \:306e\:30d5\:30a1\:30a4\:30eb\:30ed\:30c3\:30af\:7af6\:5408\:306b\:3088\:308b\:30ab\:30fc\:30cd\:30eb\:30d5\:30ea\:30fc\:30ba\:3092\:9632\:6b62\:3059\:308b\:3002 *)
 iUpdateStreamProgress[key_String, outFile_String] :=
   Module[{raw, allLines, prevCount, newLines, j, evt, delta, info, prevSize},
     If[!AssociationQ[$claudeProgress[key]], Return[]];
@@ -2510,22 +2552,22 @@ iUpdateStreamProgress[key_String, outFile_String] :=
           evt = j["event"];
           delta = Lookup[evt, "delta", None];
           Which[
-            (* テキスト生成中 *)
+            (* \:30c6\:30ad\:30b9\:30c8\:751f\:6210\:4e2d *)
             AssociationQ[delta] && delta["type"] === "text_delta",
               info["status"] = iL["\:30c6\:30ad\:30b9\:30c8\:751f\:6210\:4e2d", "Generating text"];
               info["textFragments"] = Lookup[info, "textFragments", 0] + 1;
               info["lastText"] = Lookup[delta, "text", ""],
-            (* thinking 中 *)
+            (* thinking \:4e2d *)
             AssociationQ[delta] && delta["type"] === "thinking_delta",
               info["status"] = iL["\:601d\:8003\:4e2d", "Thinking"];
               info["thinkingFragments"] = Lookup[info, "thinkingFragments", 0] + 1,
-            (* ツール使用開始 *)
+            (* \:30c4\:30fc\:30eb\:4f7f\:7528\:958b\:59cb *)
             evt["type"] === "content_block_start" &&
               AssociationQ[Lookup[evt, "content_block", None]] &&
               Lookup[evt["content_block"], "type", ""] === "tool_use",
               info["status"] = iL["\:30c4\:30fc\:30eb\:5b9f\:884c\:4e2d: ", "Running tool: "] <> Lookup[evt["content_block"], "name", "?"];
               info["toolUses"] = Lookup[info, "toolUses", 0] + 1,
-            (* メッセージ終了 *)
+            (* \:30e1\:30c3\:30bb\:30fc\:30b8\:7d42\:4e86 *)
             evt["type"] === "message_stop",
               info["status"] = iL["\:5fdc\:7b54\:5b8c\:4e86", "Response complete"],
             True, Null],
@@ -2542,7 +2584,7 @@ iUpdateStreamProgress[key_String, outFile_String] :=
     $claudeProgress[key] = info;
   ];
 
-(* verbose 版: stderr を logFile に分離してストリーミング辺を取得 *)
+(* verbose \:7248: stderr \:3092 logFile \:306b\:5206\:96e2\:3057\:3066\:30b9\:30c8\:30ea\:30fc\:30df\:30f3\:30b0\:8fba\:3092\:53d6\:5f97 *)
 iMakeBatVerbose[promptFile_String, outFile_String, logFile_String] :=
   Module[{batFile, bc, strm, addDirFlags, permFlags, workDir, allDirs},
     batFile = FileNameJoin[{$TemporaryDirectory,
@@ -2586,15 +2628,15 @@ iParseVerboseLog[logFile_String, prevSize_Integer] :=
     {StringJoin[texts], StringLength[raw]}
   ];
 
-(* Job 終了ヘルパー: 進捗スロット (slot 1) を未使用に戻してから NBEndJob を呼ぶ。
-   ScheduledTask の polling/received フェーズで NBWriteSlot が written=True に設定するため、
-   そのままだと NBEndJob がスロットを削除しない。 *)
+(* Job \:7d42\:4e86\:30d8\:30eb\:30d1\:30fc: \:9032\:6357\:30b9\:30ed\:30c3\:30c8 (slot 1) \:3092\:672a\:4f7f\:7528\:306b\:623b\:3057\:3066\:304b\:3089 NBEndJob \:3092\:547c\:3076\:3002
+   ScheduledTask \:306e polling/received \:30d5\:30a7\:30fc\:30ba\:3067 NBWriteSlot \:304c written=True \:306b\:8a2d\:5b9a\:3059\:308b\:305f\:3081\:3001
+   \:305d\:306e\:307e\:307e\:3060\:3068 NBEndJob \:304c\:30b9\:30ed\:30c3\:30c8\:3092\:524a\:9664\:3057\:306a\:3044\:3002 *)
 iEndJobCleanSlot[jid_String] := (
   $iJobActiveNb = None;
   NBAccess`NBJobResetSlotWritten[jid, 1];
   NBAccess`NBEndJob[jid]);
 
-(* \:30d7\:30ed\:30b0\:30ec\:30b9\:8868\:793a\:4ed8\:304d\:975e\:540c\:671f\:5b9f\:884c (Job \:30b7\:30b9\:30c6\:30e0\:5bfe\:5fdc) — stream-json \:7248 *)
+(* \:30d7\:30ed\:30b0\:30ec\:30b9\:8868\:793a\:4ed8\:304d\:975e\:540c\:671f\:5b9f\:884c (Job \:30b7\:30b9\:30c6\:30e0\:5bfe\:5fdc) \[LongDash] stream-json \:7248 *)
 iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
     extraImageDirs_List:{}, jobId_String:"", fallbackModels_List:{},
     excludeRead_:False, excludeDirs_List:{}] :=
@@ -2620,7 +2662,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
     proc      = StartProcess[{"cmd", "/c", batFile}];
     startTime = AbsoluteTime[];
 
-    (* $claudeProgress にリッチ情報を格納 *)
+    (* $claudeProgress \:306b\:30ea\:30c3\:30c1\:60c5\:5831\:3092\:683c\:7d0d *)
     $claudeProgress[ts] = <|
       "disp" -> "Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s",
       "status" -> "\:521d\:671f\:5316",
@@ -2637,9 +2679,9 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
     |>;
 
     With[{k = ts, jid = jobId, uj = useJob},
-      (* 全フェーズで WindowStatusArea を使用: カーソル位置に影響しない *)
-      $claudeProgress[k]["disp"] = iL["Claude に問い合わせ中... 0s", "Querying Claude... 0s"];
-      Quiet[CurrentValue[nb, WindowStatusArea] = iL[iL["Claude に問い合わせ中... 0s", "Querying Claude... 0s"], "Querying Claude... 0s"]]
+      (* \:5168\:30d5\:30a7\:30fc\:30ba\:3067 WindowStatusArea \:3092\:4f7f\:7528: \:30ab\:30fc\:30bd\:30eb\:4f4d\:7f6e\:306b\:5f71\:97ff\:3057\:306a\:3044 *)
+      $claudeProgress[k]["disp"] = iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s", "Querying Claude... 0s"];
+      Quiet[CurrentValue[nb, WindowStatusArea] = iL[iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s", "Querying Claude... 0s"], "Querying Claude... 0s"]]
     ];
 
     With[{gSym = Symbol["ClaudeCode`Private`$task" <> ts]},
@@ -2653,12 +2695,12 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
           elapsed = Round[AbsoluteTime[] - t0, 1];
           phase = Lookup[$claudeProgress[k], "phase", "polling"];
 
-          (* === 進捗テキスト更新ヘルパー: WindowStatusArea に統一 === *)
+          (* === \:9032\:6357\:30c6\:30ad\:30b9\:30c8\:66f4\:65b0\:30d8\:30eb\:30d1\:30fc: WindowStatusArea \:306b\:7d71\:4e00 === *)
           iUpdateDisp[text_String, color_:RGBColor[0.8, 0.4, 0]] :=
             Quiet[CurrentValue[pNb, WindowStatusArea] = text];
 
           Which[
-            (* === Phase: polling — プロセス実行中 === *)
+            (* === Phase: polling \[LongDash] \:30d7\:30ed\:30bb\:30b9\:5b9f\:884c\:4e2d === *)
             phase === "polling",
               iUpdateStreamProgress[k, oFile];
               info = $claudeProgress[k];
@@ -2675,7 +2717,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
               iUpdateDisp[$claudeProgress[k]["disp"]];
               status = ProcessStatus[p];
               If[status === "Finished" || elapsed > $ClaudeTimeout,
-                (* プロセス完了: 結果を保存し次のティックで処理 *)
+                (* \:30d7\:30ed\:30bb\:30b9\:5b8c\:4e86: \:7d50\:679c\:3092\:4fdd\:5b58\:3057\:6b21\:306e\:30c6\:30a3\:30c3\:30af\:3067\:51e6\:7406 *)
                 Quiet @ DeleteFile /@ Select[{bFile, pFile}, FileExistsQ];
                 If[status =!= "Finished",
                   KillProcess[p];
@@ -2685,7 +2727,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                       iL["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08", "Error: Timeout ("] <> ToString[$ClaudeTimeout] <> iL["\:79d2\:ff09", " sec)"]],
                     Quiet[SelectionMove[pNb, After, Notebook]];
                     cb[iL["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08", "Error: Timeout ("] <> ToString[$ClaudeTimeout] <> iL["\:79d2\:ff09\:3057\:307e\:3057\:305f\:3002", " sec)."]]],
-                  (* 正常完了: 結果ファイルを読み取り *)
+                  (* \:6b63\:5e38\:5b8c\:4e86: \:7d50\:679c\:30d5\:30a1\:30a4\:30eb\:3092\:8aad\:307f\:53d6\:308a *)
                   Module[{retries2 = 0, result2, isEmpty2},
                     While[!FileExistsQ[oFile] && retries2 < 3, Pause[0.5]; retries2++];
                     If[FileExistsQ[oFile] && FileByteCount[oFile] > 0,
@@ -2695,7 +2737,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                       If[isEmpty2,
                         result2 = iL["Error: Claude Code \:304c\:7a7a\:306e\:30ec\:30b9\:30dd\:30f3\:30b9\:3092\:8fd4\:3057\:307e\:3057\:305f\:3002\:5229\:7528\:5236\:9650\:306b\:9054\:3057\:3066\:3044\:308b\:53ef\:80fd\:6027\:304c\:3042\:308a\:307e\:3059\:3002", "Error: Claude Code returned an empty response. You may have reached the usage limit."]];
                       If[TrueQ[useFb] && (isEmpty2 || iIsLimitError[result2]),
-                        (* フォールバック: 直接起動して完了 *)
+                        (* \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af: \:76f4\:63a5\:8d77\:52d5\:3057\:3066\:5b8c\:4e86 *)
                         $claudeProgress[k]["phase"] = "done";
                         Module[{fbModels2 = fbMdls},
                           iStartFallbackAsync[norm["text"], pNb,
@@ -2709,10 +2751,10 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                                   Quiet[SelectionMove[pNb, After, Notebook]];
                                   NBAccess`NBWriteCell[pNb, Cell[result2, "Text"]]]]],
                             fbModels2, 1, jid]],
-                        (* 正常結果: 次のティックで callback 実行 *)
+                        (* \:6b63\:5e38\:7d50\:679c: \:6b21\:306e\:30c6\:30a3\:30c3\:30af\:3067 callback \:5b9f\:884c *)
                         $claudeProgress[k]["result"] = result2;
                         $claudeProgress[k]["phase"] = "received"],
-                      (* エラーなし・フォールバック不要: ファイルなし *)
+                      (* \:30a8\:30e9\:30fc\:306a\:3057\:30fb\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:4e0d\:8981: \:30d5\:30a1\:30a4\:30eb\:306a\:3057 *)
                       $claudeProgress[k]["phase"] = "done";
                       If[uj,
                         NBAccess`NBAbortJob[jid, iL["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f", "Error: Output file was not generated"]],
@@ -2720,11 +2762,11 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                         cb[iL["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f", "Error: Output file was not generated"]]]
                     ]]]],
 
-            (* === Phase: received — callback でキューを準備 === *)
+            (* === Phase: received \[LongDash] callback \:3067\:30ad\:30e5\:30fc\:3092\:6e96\:5099 === *)
             phase === "received",
               If[uj, NBAccess`NBJobResetSlotWritten[jid, 1]];
-              (* 非 Job パス: カーソルをノートブック末尾に移動してから cb を呼ぶ。
-                 Job パスは callback 内の NBJobMoveToAnchor が位置を制御する。 *)
+              (* \:975e Job \:30d1\:30b9: \:30ab\:30fc\:30bd\:30eb\:3092\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:672b\:5c3e\:306b\:79fb\:52d5\:3057\:3066\:304b\:3089 cb \:3092\:547c\:3076\:3002
+                 Job \:30d1\:30b9\:306f callback \:5185\:306e NBJobMoveToAnchor \:304c\:4f4d\:7f6e\:3092\:5236\:5fa1\:3059\:308b\:3002 *)
               If[!uj, Quiet[SelectionMove[pNb, After, Notebook]]];
               Module[{queue, t1 = AbsoluteTime[], dt},
                 queue = cb[$claudeProgress[k]["result"]];
@@ -2740,9 +2782,9 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                     ToString[Length[queue]] <> ")"],
                   $claudeProgress[k]["phase"] = "done"]],
 
-            (* === Phase: writing — 表示と実行を交互ティックで分離 ===
-               writeSub="disp": WindowStatusArea 更新のみ (FrontEnd に描画時間を与える)
-               writeSub="exec": thunk 1つ実行 *)
+            (* === Phase: writing \[LongDash] \:8868\:793a\:3068\:5b9f\:884c\:3092\:4ea4\:4e92\:30c6\:30a3\:30c3\:30af\:3067\:5206\:96e2 ===
+               writeSub="disp": WindowStatusArea \:66f4\:65b0\:306e\:307f (FrontEnd \:306b\:63cf\:753b\:6642\:9593\:3092\:4e0e\:3048\:308b)
+               writeSub="exec": thunk 1\:3064\:5b9f\:884c *)
             phase === "writing",
               Module[{idx, total, queue, thunk, sub},
                 idx   = Lookup[$claudeProgress[k], "writeIdx", 1];
@@ -2750,30 +2792,30 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                 queue = Lookup[$claudeProgress[k], "writeQueue", {}];
                 sub   = Lookup[$claudeProgress[k], "writeSub", "disp"];
                 If[idx > Length[queue],
-                  (* 全ステップ完了 *)
+                  (* \:5168\:30b9\:30c6\:30c3\:30d7\:5b8c\:4e86 *)
                   Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
                   $claudeProgress[k]["phase"] = "done",
                   If[sub === "disp",
-                    (* 表示ティック: polling と同じフォーマット + 書き込み進捗 *)
+                    (* \:8868\:793a\:30c6\:30a3\:30c3\:30af: polling \:3068\:540c\:3058\:30d5\:30a9\:30fc\:30de\:30c3\:30c8 + \:66f8\:304d\:8fbc\:307f\:9032\:6357 *)
                     Quiet[CurrentValue[pNb, WindowStatusArea] =
-                      iL["Claude に問い合わせ中... ", "Querying Claude... "] <> ToString[elapsed] <> iL["s | 出力を書き込み中 (", "s | Writing output ("] <>
+                      iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... ", "Querying Claude... "] <> ToString[elapsed] <> iL["s | \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d (", "s | Writing output ("] <>
                       ToString[idx] <> "/" <> ToString[total] <> ")"];
                     $claudeProgress[k]["writeSub"] = "exec",
-                    (* 実行ティック: thunk を 1 つ実行 + 所要時間を記録 *)
+                    (* \:5b9f\:884c\:30c6\:30a3\:30c3\:30af: thunk \:3092 1 \:3064\:5b9f\:884c + \:6240\:8981\:6642\:9593\:3092\:8a18\:9332 *)
                     thunk = queue[[idx]];
                     If[idx === 1 && uj, NBAccess`NBJobMoveToAnchor[jid]];
                     Module[{t1 = AbsoluteTime[], dt},
                       Quiet @ thunk[];
                       dt = AbsoluteTime[] - t1;
-                      (* デバッグ: 1秒以上かかった thunk を記録 *)
+                      (* \:30c7\:30d0\:30c3\:30b0: 1\:79d2\:4ee5\:4e0a\:304b\:304b\:3063\:305f thunk \:3092\:8a18\:9332 *)
                       If[dt > 1, $iLastSlowThunk = <|
                         "idx" -> idx, "total" -> total,
                         "elapsed" -> Round[dt, 0.1], "key" -> k|>]];
                     $claudeProgress[k]["writeIdx"] = idx + 1;
                     $claudeProgress[k]["writeSub"] = "disp"]]],
 
-            (* === Phase: done — ScheduledTask のクリーンアップのみ ===
-               NBEndJob はキューの最終 thunk または非キュー callback 内で実行済み。 *)
+            (* === Phase: done \[LongDash] ScheduledTask \:306e\:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7\:306e\:307f ===
+               NBEndJob \:306f\:30ad\:30e5\:30fc\:306e\:6700\:7d42 thunk \:307e\:305f\:306f\:975e\:30ad\:30e5\:30fc callback \:5185\:3067\:5b9f\:884c\:6e08\:307f\:3002 *)
             phase === "done",
               Module[{deferred = Quiet @ $iDeferredWork[jid]},
                 $claudeProgress = KeyDrop[$claudeProgress, k];
@@ -2781,8 +2823,8 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                 Quiet[RemoveScheduledTask[sym]];
                 Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
                 If[!uj, NBAccess`NBDeleteCellsByTag[pNb, ptag]];
-                (* 重い処理を完全に別の ScheduledTask で非同期実行。
-                   現在のティックは即座に完了し、FrontEnd に制御が戻る。 *)
+                (* \:91cd\:3044\:51e6\:7406\:3092\:5b8c\:5168\:306b\:5225\:306e ScheduledTask \:3067\:975e\:540c\:671f\:5b9f\:884c\:3002
+                   \:73fe\:5728\:306e\:30c6\:30a3\:30c3\:30af\:306f\:5373\:5ea7\:306b\:5b8c\:4e86\:3057\:3001FrontEnd \:306b\:5236\:5fa1\:304c\:623b\:308b\:3002 *)
                 If[Head[deferred] === Function,
                   RunScheduledTask[
                     Quiet[RemoveScheduledTask[$ScheduledTask]];
@@ -2955,21 +2997,21 @@ iExprToPromptText[expr_] :=
   ];
 
 (* ============================================================
-   Think トリガー自動挿入システム
+   Think \:30c8\:30ea\:30ac\:30fc\:81ea\:52d5\:633f\:5165\:30b7\:30b9\:30c6\:30e0
    
-   1. 日本語の励まし表現 → 適切な think トリガーワードに変換
-   2. /think 系スラッシュコマンド → プロンプト先頭に移動
+   1. \:65e5\:672c\:8a9e\:306e\:52b1\:307e\:3057\:8868\:73fe \[RightArrow] \:9069\:5207\:306a think \:30c8\:30ea\:30ac\:30fc\:30ef\:30fc\:30c9\:306b\:5909\:63db
+   2. /think \:7cfb\:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9 \[RightArrow] \:30d7\:30ed\:30f3\:30d7\:30c8\:5148\:982d\:306b\:79fb\:52d5
    
-   Claude Code CLI は think/megathink/ultrathink をプロンプト内の
-   どこにあっても検出し thinking budget を設定する。
-   部分的長考（プロンプト内の特定箇所だけ長考）機能は存在しない。
-   キーワードは全体の budget 設定に影響する。
+   Claude Code CLI \:306f think/megathink/ultrathink \:3092\:30d7\:30ed\:30f3\:30d7\:30c8\:5185\:306e
+   \:3069\:3053\:306b\:3042\:3063\:3066\:3082\:691c\:51fa\:3057 thinking budget \:3092\:8a2d\:5b9a\:3059\:308b\:3002
+   \:90e8\:5206\:7684\:9577\:8003\:ff08\:30d7\:30ed\:30f3\:30d7\:30c8\:5185\:306e\:7279\:5b9a\:7b87\:6240\:3060\:3051\:9577\:8003\:ff09\:6a5f\:80fd\:306f\:5b58\:5728\:3057\:306a\:3044\:3002
+   \:30ad\:30fc\:30ef\:30fc\:30c9\:306f\:5168\:4f53\:306e budget \:8a2d\:5b9a\:306b\:5f71\:97ff\:3059\:308b\:3002
    ============================================================ *)
 
-(* 日本語表現 → think レベルのマッピング
-   レベル: 1=think (4K), 2=think hard (10K), 3=ultrathink (32K) *)
+(* \:65e5\:672c\:8a9e\:8868\:73fe \[RightArrow] think \:30ec\:30d9\:30eb\:306e\:30de\:30c3\:30d4\:30f3\:30b0
+   \:30ec\:30d9\:30eb: 1=think (4K), 2=think hard (10K), 3=ultrathink (32K) *)
 $iJapaneseThinkPatterns = {
-  (* レベル3: ultrathink — 最大限の長考 *)
+  (* \:30ec\:30d9\:30eb3: ultrathink \[LongDash] \:6700\:5927\:9650\:306e\:9577\:8003 *)
   RegularExpression["\:6b7b\:306c\:6c17\:3067\:8003\:3048"] -> 3,
   RegularExpression["\:672c\:6c17\:51fa\:305b|\:672c\:6c17\:3092\:51fa\:305b|\:672c\:6c17\:3060\:305b|\:672c\:6c17\:3067"] -> 3,
   RegularExpression["\:5168\:529b\:3067\:8003\:3048|\:5168\:529b\:3092\:51fa\:305b|\:5168\:529b\:3067\:3084"] -> 3,
@@ -2977,7 +3019,7 @@ $iJapaneseThinkPatterns = {
   RegularExpression["\:6b7b\:529b\:3092\:5c3d\:304f|\:3042\:3089\:3086\:308b\:53ef\:80fd\:6027|\:3042\:3089\:3086\:308b\:30b1\:30fc\:30b9"] -> 3,
   RegularExpression["\:8d85\:672c\:6c17|\:8d85\:771f\:5263"] -> 3,
   RegularExpression["\:7d76\:5bfe\:306b\:9593\:9055\:3048\:308b\:306a|\:7d76\:5bfe\:306b\:5931\:6557\:3059\:308b\:306a"] -> 3,
-  (* レベル2: think hard — 中程度の長考 *)
+  (* \:30ec\:30d9\:30eb2: think hard \[LongDash] \:4e2d\:7a0b\:5ea6\:306e\:9577\:8003 *)
   RegularExpression["\:3088\:304f\:8003\:3048\:3066|\:3088\:304f\:8003\:3048\:308d"] -> 2,
   RegularExpression["\:3058\:3063\:304f\:308a\:8003\:3048\:3066|\:3058\:3063\:304f\:308a\:691c\:8a0e"] -> 2,
   RegularExpression["\:3082\:3063\:3068\:8003\:3048\:3066|\:3082\:3063\:3068\:6df1\:304f"] -> 2,
@@ -2986,12 +3028,12 @@ $iJapaneseThinkPatterns = {
   RegularExpression["\:4e01\:5be7\:306b\:8003\:3048|\:4e01\:5be7\:306b\:691c\:8a0e|\:4e01\:5be7\:306b\:5206\:6790"] -> 2,
   RegularExpression["\:6df1\:304f\:8003\:3048|\:6df1\:304f\:691c\:8a0e|\:6df1\:304f\:5206\:6790"] -> 2,
   RegularExpression["\:771f\:5263\:306b\:8003\:3048|\:771f\:5263\:306b\:691c\:8a0e"] -> 2,
-  (* レベル1: think — 基本の長考 *)
+  (* \:30ec\:30d9\:30eb1: think \[LongDash] \:57fa\:672c\:306e\:9577\:8003 *)
   RegularExpression["\:8003\:3048\:3066\:307f\:3066|\:8003\:3048\:3066\:307f\:308d|\:8003\:3048\:3066\:304f\:308c"] -> 1,
   RegularExpression["\:5c11\:3057\:8003\:3048\:3066|\:3061\:3087\:3063\:3068\:8003\:3048\:3066"] -> 1
 };
 
-(* 日本語表現から最大の think レベルを検出 *)
+(* \:65e5\:672c\:8a9e\:8868\:73fe\:304b\:3089\:6700\:5927\:306e think \:30ec\:30d9\:30eb\:3092\:691c\:51fa *)
 iDetectJapaneseThinkLevel[text_String] :=
   Module[{maxLevel = 0},
     Scan[
@@ -3002,30 +3044,30 @@ iDetectJapaneseThinkLevel[text_String] :=
     maxLevel
   ];
 
-(* think レベル → トリガーワード *)
+(* think \:30ec\:30d9\:30eb \[RightArrow] \:30c8\:30ea\:30ac\:30fc\:30ef\:30fc\:30c9 *)
 iThinkLevelToTrigger[1] := "think";
 iThinkLevelToTrigger[2] := "think hard";
 iThinkLevelToTrigger[3] := "ultrathink";
 iThinkLevelToTrigger[_] := None;
 
-(* 既に英語の think トリガーが含まれているかチェック *)
+(* \:65e2\:306b\:82f1\:8a9e\:306e think \:30c8\:30ea\:30ac\:30fc\:304c\:542b\:307e\:308c\:3066\:3044\:308b\:304b\:30c1\:30a7\:30c3\:30af *)
 $iExistingThinkPattern = RegularExpression[
   "(?i)\\b(ultrathink|megathink|think\\s+(?:hard(?:er)?|really\\s+hard|very\\s+hard|deeply|more))\\b|\\bthink\\b"];
 
 iHasExistingThinkTrigger[text_String] :=
   StringContainsQ[text, $iExistingThinkPattern];
 
-(* メインの前処理関数: 日本語検出 + /コマンド先頭移動 *)
+(* \:30e1\:30a4\:30f3\:306e\:524d\:51e6\:7406\:95a2\:6570: \:65e5\:672c\:8a9e\:691c\:51fa + /\:30b3\:30de\:30f3\:30c9\:5148\:982d\:79fb\:52d5 *)
 iHoistThinkPrefix[text_String] :=
   Module[{result = text, level, trigger, slashMatches},
-    (* 1. 既に英語の think トリガーがあればそのまま返す *)
+    (* 1. \:65e2\:306b\:82f1\:8a9e\:306e think \:30c8\:30ea\:30ac\:30fc\:304c\:3042\:308c\:3070\:305d\:306e\:307e\:307e\:8fd4\:3059 *)
     If[iHasExistingThinkTrigger[result], Return[result]];
-    (* 2. 日本語の励まし表現を検出して think トリガーを挿入 *)
+    (* 2. \:65e5\:672c\:8a9e\:306e\:52b1\:307e\:3057\:8868\:73fe\:3092\:691c\:51fa\:3057\:3066 think \:30c8\:30ea\:30ac\:30fc\:3092\:633f\:5165 *)
     level = iDetectJapaneseThinkLevel[result];
     trigger = iThinkLevelToTrigger[level];
     If[StringQ[trigger],
       result = trigger <> "\n" <> result];
-    (* 3. /think 系スラッシュコマンドがあれば先頭に移動 *)
+    (* 3. /think \:7cfb\:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9\:304c\:3042\:308c\:3070\:5148\:982d\:306b\:79fb\:52d5 *)
     slashMatches = StringCases[result,
       RegularExpression["(?m)^\\s*(/think(?:\\s+(?:hard(?:er)?|really\\s+hard|very\\s+hard|deeply|more))?|/megathink|/ultrathink)\\s*$"]
       :> "$1", 1];
@@ -3038,8 +3080,8 @@ iHoistThinkPrefix[text_String] :=
   ];
 
 (* ============================================================
-   メディアファイル判定・MIME タイプ解決
-   マルチモーダル API 呼び出しに使用
+   \:30e1\:30c7\:30a3\:30a2\:30d5\:30a1\:30a4\:30eb\:5224\:5b9a\:30fbMIME \:30bf\:30a4\:30d7\:89e3\:6c7a
+   \:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb API \:547c\:3073\:51fa\:3057\:306b\:4f7f\:7528
    ============================================================ *)
 
 $iMediaExtensions = <|
@@ -3058,11 +3100,11 @@ iIsMediaFile[path_String] :=
 
 iIsImageMediaType[mt_String] := StringStartsQ[mt, "image/"];
 
-(* マルチモーダル送信用の画像リサイズ。
-   最大辺が $iMediaMaxImageSize を超える場合に縮小する。
-   JPEG 品質は $iMediaJPEGQuality で制御。
-   リサイズされた場合は一時ファイルのパスを返し、不要な場合は元パスを返す。 *)
-$iMediaMaxImageSize = 1024; (* ピクセル *)
+(* \:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb\:9001\:4fe1\:7528\:306e\:753b\:50cf\:30ea\:30b5\:30a4\:30ba\:3002
+   \:6700\:5927\:8fba\:304c $iMediaMaxImageSize \:3092\:8d85\:3048\:308b\:5834\:5408\:306b\:7e2e\:5c0f\:3059\:308b\:3002
+   JPEG \:54c1\:8cea\:306f $iMediaJPEGQuality \:3067\:5236\:5fa1\:3002
+   \:30ea\:30b5\:30a4\:30ba\:3055\:308c\:305f\:5834\:5408\:306f\:4e00\:6642\:30d5\:30a1\:30a4\:30eb\:306e\:30d1\:30b9\:3092\:8fd4\:3057\:3001\:4e0d\:8981\:306a\:5834\:5408\:306f\:5143\:30d1\:30b9\:3092\:8fd4\:3059\:3002 *)
+$iMediaMaxImageSize = 1024; (* \:30d4\:30af\:30bb\:30eb *)
 $iMediaJPEGQuality = 85;
 
 iResizeImageFile[path_String, tmpDir_String] :=
@@ -3337,32 +3379,32 @@ cleanMarkdown[s_String] := StringTrim @ StringReplace[s, {
   RegularExpression["\\n{3,}"] -> "\n\n"
 }];
 
-(* テキスト中の $...$ / $$...$$ LaTeX 数式を Mathematica インライン数式に変換して Cell を作る *)
+(* \:30c6\:30ad\:30b9\:30c8\:4e2d\:306e $...$ / $$...$$ LaTeX \:6570\:5f0f\:3092 Mathematica \:30a4\:30f3\:30e9\:30a4\:30f3\:6570\:5f0f\:306b\:5909\:63db\:3057\:3066 Cell \:3092\:4f5c\:308b *)
 
-(* TeX前処理: Mathematica の TeXForm パーサーが扱えないコマンドを正規化 *)
+(* TeX\:524d\:51e6\:7406: Mathematica \:306e TeXForm \:30d1\:30fc\:30b5\:30fc\:304c\:6271\:3048\:306a\:3044\:30b3\:30de\:30f3\:30c9\:3092\:6b63\:898f\:5316 *)
 iTeXPreprocess[tex_String] :=
   StringReplace[tex, {
-    (* \mathbf{X} → X, \mathrm{X} → X, \text{X} → X *)
+    (* \mathbf{X} \[RightArrow] X, \mathrm{X} \[RightArrow] X, \text{X} \[RightArrow] X *)
     RegularExpression["\\\\math(?:bf|rm|cal|it|sf|tt)\\{([^}]*)\\}"] -> "$1",
     RegularExpression["\\\\text(?:rm|bf|it|sf)?\\{([^}]*)\\}"] -> "$1",
     RegularExpression["\\\\boldsymbol\\{([^}]*)\\}"] -> "$1",
-    (* \hat{X} → X, \tilde{X} → X, \bar{X} → X, \vec{X} → X *)
+    (* \hat{X} \[RightArrow] X, \tilde{X} \[RightArrow] X, \bar{X} \[RightArrow] X, \vec{X} \[RightArrow] X *)
     RegularExpression["\\\\(?:hat|tilde|bar|vec|dot|ddot|overline|underline|widehat|widetilde)\\{([^}]*)\\}"] -> "$1",
-    (* Mathematica 角括弧混在を丸括弧に変換: \Psi[x,t] → \Psi(x,t) *)
+    (* Mathematica \:89d2\:62ec\:5f27\:6df7\:5728\:3092\:4e38\:62ec\:5f27\:306b\:5909\:63db: \Psi[x,t] \[RightArrow] \Psi(x,t) *)
     RegularExpression["\\\\([A-Za-z]+)\\[([^\\]]*?)\\]"] -> "\\$1($2)",
-    (* 残りの [...] → (...) （TeXにない角括弧記法） *)
+    (* \:6b8b\:308a\:306e [...] \[RightArrow] (...) \:ff08TeX\:306b\:306a\:3044\:89d2\:62ec\:5f27\:8a18\:6cd5\:ff09 *)
     RegularExpression["([A-Za-z])\\[([^\\]]{1,30})\\]"] -> "$1($2)",
-    (* \, \; \! \quad 等のスペースコマンドを除去 *)
+    (* \, \; \! \quad \:7b49\:306e\:30b9\:30da\:30fc\:30b9\:30b3\:30de\:30f3\:30c9\:3092\:9664\:53bb *)
     RegularExpression["\\\\[,;!]"] -> " ",
     RegularExpression["\\\\(?:quad|qquad|hspace\\{[^}]*\\})"] -> " ",
-    (* \left \right を除去 *)
+    (* \left \right \:3092\:9664\:53bb *)
     "\\left" -> "", "\\right" -> "",
-    (* \cdot → * *)
+    (* \cdot \[RightArrow] * *)
     "\\cdot" -> " "
   }];
 
-(* 単一の TeX 式を Mathematica Box に変換。失敗時は $Failed *)
-(* MakeBoxes[HoldAllComplete] を使い、等式(==)等が評価されるのを防ぐ *)
+(* \:5358\:4e00\:306e TeX \:5f0f\:3092 Mathematica Box \:306b\:5909\:63db\:3002\:5931\:6557\:6642\:306f $Failed *)
+(* MakeBoxes[HoldAllComplete] \:3092\:4f7f\:3044\:3001\:7b49\:5f0f(==)\:7b49\:304c\:8a55\:4fa1\:3055\:308c\:308b\:306e\:3092\:9632\:3050 *)
 iTeXToBoxes[tex_String] :=
   Module[{cleaned, expr, boxes},
     cleaned = iTeXPreprocess[tex];
@@ -3374,13 +3416,13 @@ iTeXToBoxes[tex_String] :=
     boxes
   ];
 
-(* 等式を含む TeX 式を分割して変換: "lhs = rhs" → Row[{lhs, "=", rhs}] *)
+(* \:7b49\:5f0f\:3092\:542b\:3080 TeX \:5f0f\:3092\:5206\:5272\:3057\:3066\:5909\:63db: "lhs = rhs" \[RightArrow] Row[{lhs, "=", rhs}] *)
 iTeXEquationToBoxes[tex_String] :=
   Module[{eqParts, lhsBoxes, rhsBoxes, sep},
-    (* まず全体を試す *)
+    (* \:307e\:305a\:5168\:4f53\:3092\:8a66\:3059 *)
     Module[{direct = iTeXToBoxes[tex]},
       If[direct =!= $Failed, Return[direct]]];
-    (* "=" で分割して左辺・右辺を個別に変換 *)
+    (* "=" \:3067\:5206\:5272\:3057\:3066\:5de6\:8fba\:30fb\:53f3\:8fba\:3092\:500b\:5225\:306b\:5909\:63db *)
     eqParts = StringSplit[tex, RegularExpression["\\s*=\\s*"], 2];
     If[Length[eqParts] === 2,
       lhsBoxes = iTeXToBoxes[StringTrim[eqParts[[1]]]];
@@ -3388,7 +3430,7 @@ iTeXEquationToBoxes[tex_String] :=
       sep = "=";
       If[lhsBoxes =!= $Failed && rhsBoxes =!= $Failed,
         Return[RowBox[{lhsBoxes, sep, rhsBoxes}]]];
-      (* 片方だけ成功した場合 *)
+      (* \:7247\:65b9\:3060\:3051\:6210\:529f\:3057\:305f\:5834\:5408 *)
       If[lhsBoxes =!= $Failed,
         Return[RowBox[{lhsBoxes, "=", StringTrim[eqParts[[2]]]}]]];
       If[rhsBoxes =!= $Failed,
@@ -3399,14 +3441,14 @@ iTeXEquationToBoxes[tex_String] :=
 
 iTeXMathToCell[text_String, style_String] :=
   Module[{preprocessed, parts, result = {}, tex, boxes},
-    (* $$...$$ → $...$ に正規化（改行を含むケースにも対応） *)
+    (* $$...$$ \[RightArrow] $...$ \:306b\:6b63\:898f\:5316\:ff08\:6539\:884c\:3092\:542b\:3080\:30b1\:30fc\:30b9\:306b\:3082\:5bfe\:5fdc\:ff09 *)
     preprocessed = StringReplace[text,
       RegularExpression["(?s)\\$\\$(.+?)\\$\\$"] :> "$" <> "$1" <> "$"];
-    (* $...$ を区切りとして分割（改行を含むケースにも対応） *)
+    (* $...$ \:3092\:533a\:5207\:308a\:3068\:3057\:3066\:5206\:5272\:ff08\:6539\:884c\:3092\:542b\:3080\:30b1\:30fc\:30b9\:306b\:3082\:5bfe\:5fdc\:ff09 *)
     parts = StringSplit[preprocessed,
       RegularExpression["(?s)\\$([^$]+?)\\$"] :> "$TEXMATH$" <> "$1"];
     If[Length[parts] === 1 && !StringContainsQ[preprocessed, "$"],
-      (* LaTeX 数式なし → 通常のテキストセル *)
+      (* LaTeX \:6570\:5f0f\:306a\:3057 \[RightArrow] \:901a\:5e38\:306e\:30c6\:30ad\:30b9\:30c8\:30bb\:30eb *)
       Return[Cell[text, style]]];
     Do[
       If[StringStartsQ[p, "$TEXMATH$"],
@@ -3417,12 +3459,12 @@ iTeXMathToCell[text_String, style_String] :=
             Cell[BoxData[boxes], "InlineFormula"]];
           Continue[]
         ];
-        (* 変換失敗 → $tex$ 形式のままイタリックで表示 *)
+        (* \:5909\:63db\:5931\:6557 \[RightArrow] $tex$ \:5f62\:5f0f\:306e\:307e\:307e\:30a4\:30bf\:30ea\:30c3\:30af\:3067\:8868\:793a *)
         AppendTo[result,
           Cell[BoxData[StyleBox["$" <> tex <> "$",
             FontSlant -> "Italic", FontColor -> GrayLevel[0.4]]],
             "InlineFormula"]],
-        (* 通常テキスト部分 *)
+        (* \:901a\:5e38\:30c6\:30ad\:30b9\:30c8\:90e8\:5206 *)
         If[p =!= "", AppendTo[result, p]]
       ],
       {p, parts}];
@@ -3431,21 +3473,21 @@ iTeXMathToCell[text_String, style_String] :=
       Cell[TextData[result], style]]
   ];
 
-(* ClaudeQuery 応答をマークダウン解析して適切なスタイルのセルで出力 *)
+(* ClaudeQuery \:5fdc\:7b54\:3092\:30de\:30fc\:30af\:30c0\:30a6\:30f3\:89e3\:6790\:3057\:3066\:9069\:5207\:306a\:30b9\:30bf\:30a4\:30eb\:306e\:30bb\:30eb\:3067\:51fa\:529b *)
 iFlushQueryTextBuf[nb_NotebookObject, buf_List] :=
   If[Length[buf] > 0,
-    (* Job システムがカーソルをアンカー位置に配置済み。
-       NotebookWrite[..., After] で順次チェインする。 *)
+    (* Job \:30b7\:30b9\:30c6\:30e0\:304c\:30ab\:30fc\:30bd\:30eb\:3092\:30a2\:30f3\:30ab\:30fc\:4f4d\:7f6e\:306b\:914d\:7f6e\:6e08\:307f\:3002
+       NotebookWrite[..., After] \:3067\:9806\:6b21\:30c1\:30a7\:30a4\:30f3\:3059\:308b\:3002 *)
     NBAccess`NBWriteCell[nb,
       iTeXMathToCell[StringJoin[Riffle[buf, "\n"]], "Text"]]];
 
-(* レスポンス文字列中の Mathematica コードブロックを依存解析し結合する。
-   依存関係のあるブロック群を 1 つのブロックにまとめる。
-   テキスト部分はそのまま保持。結合が起きた場合、2 番目以降のブロックは
-   空テキストに置換される。 *)
+(* \:30ec\:30b9\:30dd\:30f3\:30b9\:6587\:5b57\:5217\:4e2d\:306e Mathematica \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:3092\:4f9d\:5b58\:89e3\:6790\:3057\:7d50\:5408\:3059\:308b\:3002
+   \:4f9d\:5b58\:95a2\:4fc2\:306e\:3042\:308b\:30d6\:30ed\:30c3\:30af\:7fa4\:3092 1 \:3064\:306e\:30d6\:30ed\:30c3\:30af\:306b\:307e\:3068\:3081\:308b\:3002
+   \:30c6\:30ad\:30b9\:30c8\:90e8\:5206\:306f\:305d\:306e\:307e\:307e\:4fdd\:6301\:3002\:7d50\:5408\:304c\:8d77\:304d\:305f\:5834\:5408\:30012 \:756a\:76ee\:4ee5\:964d\:306e\:30d6\:30ed\:30c3\:30af\:306f
+   \:7a7a\:30c6\:30ad\:30b9\:30c8\:306b\:7f6e\:63db\:3055\:308c\:308b\:3002 *)
 iMergeResponseCodeBlocks[text_String] :=
   Module[{pattern, positions, codes, merged, result, i, groupStart, groupEnd},
-    (* コードブロックの位置とコードを抽出 *)
+    (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:306e\:4f4d\:7f6e\:3068\:30b3\:30fc\:30c9\:3092\:62bd\:51fa *)
     pattern = RegularExpression["```(?:mathematica|wolfram|wl|mma)\\n([\\s\\S]*?)\\n```"];
     positions = StringPosition[text, pattern];
     If[Length[positions] <= 1, Return[text]];
@@ -3453,19 +3495,19 @@ iMergeResponseCodeBlocks[text_String] :=
     codes = StringTrim /@ codes;
     merged = iMergeDependentBlocks[codes];
     If[Length[merged] === Length[codes], Return[text]];
-    (* 結合が発生: 末尾から置換して位置ずれを防ぐ *)
+    (* \:7d50\:5408\:304c\:767a\:751f: \:672b\:5c3e\:304b\:3089\:7f6e\:63db\:3057\:3066\:4f4d\:7f6e\:305a\:308c\:3092\:9632\:3050 *)
     result = text;
     i = Length[codes];
     groupEnd = Length[merged];
     While[groupEnd >= 1,
-      (* この結合グループに属する元ブロック数を数える *)
+      (* \:3053\:306e\:7d50\:5408\:30b0\:30eb\:30fc\:30d7\:306b\:5c5e\:3059\:308b\:5143\:30d6\:30ed\:30c3\:30af\:6570\:3092\:6570\:3048\:308b *)
       Module[{gc = merged[[groupEnd]], cnt = 0, j = i},
         While[j >= 1,
           If[StringContainsQ[gc, codes[[j]]],
             cnt++; j--,
             Break[]]];
         groupStart = i - cnt + 1;
-        (* グループ内の最初のブロックを結合コードで置換、残りを除去 *)
+        (* \:30b0\:30eb\:30fc\:30d7\:5185\:306e\:6700\:521d\:306e\:30d6\:30ed\:30c3\:30af\:3092\:7d50\:5408\:30b3\:30fc\:30c9\:3067\:7f6e\:63db\:3001\:6b8b\:308a\:3092\:9664\:53bb *)
         Do[
           If[k === groupStart,
             result = StringReplacePart[result,
@@ -3475,7 +3517,7 @@ iMergeResponseCodeBlocks[text_String] :=
           {k, i, groupStart, -1}];
         i = groupStart - 1;
         groupEnd--]];
-    (* 空行の連続を整理 *)
+    (* \:7a7a\:884c\:306e\:9023\:7d9a\:3092\:6574\:7406 *)
     StringReplace[result, RegularExpression["\\n{3,}"] -> "\n\n"]
   ];
 
@@ -3483,17 +3525,17 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
   Module[{lines, i, line, trimmed, textBuf = {}, content,
           inCodeBlock = False, codeLang = "", codeBuf = {},
           processedText},
-    (* AutoEvaluate 時: 依存関係のあるコードブロックを事前結合 *)
+    (* AutoEvaluate \:6642: \:4f9d\:5b58\:95a2\:4fc2\:306e\:3042\:308b\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:3092\:4e8b\:524d\:7d50\:5408 *)
     processedText = If[TrueQ[autoEvaluate],
       iMergeResponseCodeBlocks[text], text];
-    (* Job システムがカーソルをアンカー位置に配置済み。
-       ここから After 書き込みが順次チェインする。 *)
+    (* Job \:30b7\:30b9\:30c6\:30e0\:304c\:30ab\:30fc\:30bd\:30eb\:3092\:30a2\:30f3\:30ab\:30fc\:4f4d\:7f6e\:306b\:914d\:7f6e\:6e08\:307f\:3002
+       \:3053\:3053\:304b\:3089 After \:66f8\:304d\:8fbc\:307f\:304c\:9806\:6b21\:30c1\:30a7\:30a4\:30f3\:3059\:308b\:3002 *)
     lines = StringSplit[processedText, "\n"];
     Do[
       line = lines[[i]];
       trimmed = StringTrim[line];
       Which[
-        (* コードブロック開始: ```lang *)
+        (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:958b\:59cb: ```lang *)
         !inCodeBlock && StringMatchQ[trimmed, "```" ~~ ___],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           codeLang = StringTrim[StringReplace[trimmed,
@@ -3501,30 +3543,30 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
           inCodeBlock = True;
           codeBuf = {},
 
-        (* コードブロック終了: ``` *)
+        (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:7d42\:4e86: ``` *)
         inCodeBlock && StringMatchQ[trimmed, "```"],
           inCodeBlock = False;
           If[Length[codeBuf] > 0,
             Module[{codeText = StringJoin[Riffle[codeBuf, "\n"]]},
               If[MemberQ[{"mathematica", "wolfram", "wl", "mma"}, ToLowerCase[codeLang]],
-                (* Mathematica コード → Input セル（AutoEvaluate に従う） *)
+                (* Mathematica \:30b3\:30fc\:30c9 \[RightArrow] Input \:30bb\:30eb\:ff08AutoEvaluate \:306b\:5f93\:3046\:ff09 *)
                 iWriteSmartCell[nb, codeText, autoEvaluate],
-                (* 他の言語やコードブロック → Program セル *)
+                (* \:4ed6\:306e\:8a00\:8a9e\:3084\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af \[RightArrow] Program \:30bb\:30eb *)
                 NBAccess`NBWriteCell[nb, Cell[codeText, "Program"]]]]];
           codeBuf = {};
           codeLang = "",
 
-        (* コードブロック内: そのまま蓄積（Item等の解釈をしない） *)
+        (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:5185: \:305d\:306e\:307e\:307e\:84c4\:7a4d\:ff08Item\:7b49\:306e\:89e3\:91c8\:3092\:3057\:306a\:3044\:ff09 *)
         inCodeBlock,
           AppendTo[codeBuf, line],
 
-        (* --- 以下はコードブロック外の通常処理 --- *)
+        (* --- \:4ee5\:4e0b\:306f\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:5916\:306e\:901a\:5e38\:51e6\:7406 --- *)
 
-        (* 空行: バッファフラッシュ *)
+        (* \:7a7a\:884c: \:30d0\:30c3\:30d5\:30a1\:30d5\:30e9\:30c3\:30b7\:30e5 *)
         trimmed === "",
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {},
 
-        (* ### 見出し → Subsubsection *)
+        (* ### \:898b\:51fa\:3057 \[RightArrow] Subsubsection *)
         StringContainsQ[trimmed, RegularExpression["^#{3,}\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
@@ -3532,7 +3574,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
           content = StringReplace[content, "**" -> ""];
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsubsection"]],
 
-        (* ## 見出し → Subsection *)
+        (* ## \:898b\:51fa\:3057 \[RightArrow] Subsection *)
         StringContainsQ[trimmed, RegularExpression["^#{2}\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
@@ -3540,7 +3582,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
           content = StringReplace[content, "**" -> ""];
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsection"]],
 
-        (* # 見出し → Subsection *)
+        (* # \:898b\:51fa\:3057 \[RightArrow] Subsection *)
         StringContainsQ[trimmed, RegularExpression["^#\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
@@ -3548,31 +3590,31 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
           content = StringReplace[content, "**" -> ""];
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsection"]],
 
-        (* 深いインデントリスト → Subsubitem *)
-        StringContainsQ[line, RegularExpression["^(\\s{4,}|\\t\\t)[-*\:2022]\\s"]],
+        (* \:6df1\:3044\:30a4\:30f3\:30c7\:30f3\:30c8\:30ea\:30b9\:30c8 \[RightArrow] Subsubitem *)
+        StringContainsQ[line, RegularExpression["^(\\s{4,}|\\t\\t)[-*\[Bullet]]\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
-            RegularExpression["^[-*\:2022]\\s*"] -> ""]];
+            RegularExpression["^[-*\[Bullet]]\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsubitem"]],
 
-        (* 浅いインデントリスト → Subitem *)
-        StringContainsQ[line, RegularExpression["^(\\s{2,3}|\\t)[-*\:2022]\\s"]],
+        (* \:6d45\:3044\:30a4\:30f3\:30c7\:30f3\:30c8\:30ea\:30b9\:30c8 \[RightArrow] Subitem *)
+        StringContainsQ[line, RegularExpression["^(\\s{2,3}|\\t)[-*\[Bullet]]\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
-            RegularExpression["^[-*\:2022]\\s*"] -> ""]];
+            RegularExpression["^[-*\[Bullet]]\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subitem"]],
 
-        (* リスト項目 (箇条書き) → Item *)
-        StringContainsQ[trimmed, RegularExpression["^[-*\:2022]\\s"]],
+        (* \:30ea\:30b9\:30c8\:9805\:76ee (\:7b87\:6761\:66f8\:304d) \[RightArrow] Item *)
+        StringContainsQ[trimmed, RegularExpression["^[-*\[Bullet]]\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
-            RegularExpression["^[-*\:2022]\\s*"] -> ""]];
+            RegularExpression["^[-*\[Bullet]]\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Item"]],
 
-        (* 番号付きリスト → Item *)
+        (* \:756a\:53f7\:4ed8\:304d\:30ea\:30b9\:30c8 \[RightArrow] Item *)
         StringContainsQ[trimmed, RegularExpression["^\\d+\\.\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
@@ -3580,24 +3622,24 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
           content = StringReplace[content, "**" -> ""];
           NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Item"]],
 
-        (* 水平線 → 無視 *)
+        (* \:6c34\:5e73\:7dda \[RightArrow] \:7121\:8996 *)
         StringMatchQ[trimmed, RegularExpression["^[-*_]{3,}$"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {},
 
-        (* 通常テキスト → バッファに追加 *)
+        (* \:901a\:5e38\:30c6\:30ad\:30b9\:30c8 \[RightArrow] \:30d0\:30c3\:30d5\:30a1\:306b\:8ffd\:52a0 *)
         True,
           content = StringReplace[trimmed, {"**" -> "", "__" -> ""}];
           AppendTo[textBuf, content]
       ],
       {i, Length[lines]}];
 
-    (* コードブロックが閉じられなかった場合もフラッシュ *)
+    (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:304c\:9589\:3058\:3089\:308c\:306a\:304b\:3063\:305f\:5834\:5408\:3082\:30d5\:30e9\:30c3\:30b7\:30e5 *)
     If[inCodeBlock && Length[codeBuf] > 0,
       Module[{codeText = StringJoin[Riffle[codeBuf, "\n"]]},
         If[MemberQ[{"mathematica", "wolfram", "wl", "mma"}, ToLowerCase[codeLang]],
           iWriteSmartCell[nb, codeText, autoEvaluate],
           NBAccess`NBWriteCell[nb, Cell[codeText, "Program"]]]]];
-    (* 残りをフラッシュ *)
+    (* \:6b8b\:308a\:3092\:30d5\:30e9\:30c3\:30b7\:30e5 *)
     iFlushQueryTextBuf[nb, textBuf];
   ];
 
@@ -3651,34 +3693,34 @@ iIsLimitError[response_String] :=
     "hit your limit" | "rate limit" | "overloaded" |
     "TIMEOUT" | "RunProcess" | "ExitCode=",
     IgnoreCase -> True] ||
-  (* "resets" は単独では誤判定しやすいので "limit" との共起を要求 *)
+  (* "resets" \:306f\:5358\:72ec\:3067\:306f\:8aa4\:5224\:5b9a\:3057\:3084\:3059\:3044\:306e\:3067 "limit" \:3068\:306e\:5171\:8d77\:3092\:8981\:6c42 *)
   (StringContainsQ[response, "resets", IgnoreCase -> True] &&
    StringContainsQ[response, "limit" | "hit your", IgnoreCase -> True]);
 
-(* API レスポンスがエラー/制限メッセージかを判定する統一関数。
-   ファイル書き込み前に必ずチェックし、ファイル破損を防止する。 *)
+(* API \:30ec\:30b9\:30dd\:30f3\:30b9\:304c\:30a8\:30e9\:30fc/\:5236\:9650\:30e1\:30c3\:30bb\:30fc\:30b8\:304b\:3092\:5224\:5b9a\:3059\:308b\:7d71\:4e00\:95a2\:6570\:3002
+   \:30d5\:30a1\:30a4\:30eb\:66f8\:304d\:8fbc\:307f\:524d\:306b\:5fc5\:305a\:30c1\:30a7\:30c3\:30af\:3057\:3001\:30d5\:30a1\:30a4\:30eb\:7834\:640d\:3092\:9632\:6b62\:3059\:308b\:3002 *)
 iIsAPIErrorResponse[response_String] :=
   StringStartsQ[response, "Error"] ||
   StringContainsQ[response,
     "hit your limit" | "rate limit" | "overloaded",
     IgnoreCase -> True] ||
-  (* CenterDot (·) 付きリミットメッセージ: "You've hit your limit · resets..." のみ検出。
-     注意: · は物理式の積 (F·v) や箇条書きにも使われるため、単独では誤検知する。
-     "unavailable" も通常の説明文に出現するため、単独チェックから除外。 *)
+  (* CenterDot (\[CenterDot]) \:4ed8\:304d\:30ea\:30df\:30c3\:30c8\:30e1\:30c3\:30bb\:30fc\:30b8: "You've hit your limit \[CenterDot] resets..." \:306e\:307f\:691c\:51fa\:3002
+     \:6ce8\:610f: \[CenterDot] \:306f\:7269\:7406\:5f0f\:306e\:7a4d (F\[CenterDot]v) \:3084\:7b87\:6761\:66f8\:304d\:306b\:3082\:4f7f\:308f\:308c\:308b\:305f\:3081\:3001\:5358\:72ec\:3067\:306f\:8aa4\:691c\:77e5\:3059\:308b\:3002
+     "unavailable" \:3082\:901a\:5e38\:306e\:8aac\:660e\:6587\:306b\:51fa\:73fe\:3059\:308b\:305f\:3081\:3001\:5358\:72ec\:30c1\:30a7\:30c3\:30af\:304b\:3089\:9664\:5916\:3002 *)
   ((StringContainsQ[response, "\[CenterDot]"] ||
-    StringContainsQ[response, "\:00b7"]) &&
+    StringContainsQ[response, "\[CenterDot]"]) &&
    StringContainsQ[response, "limit" | "resets",
      IgnoreCase -> True]) ||
-  (* "unavailable" は "service unavailable" など API エラー文脈のみ検出 *)
+  (* "unavailable" \:306f "service unavailable" \:306a\:3069 API \:30a8\:30e9\:30fc\:6587\:8108\:306e\:307f\:691c\:51fa *)
   (StringContainsQ[response, "unavailable", IgnoreCase -> True] &&
    StringContainsQ[response, "service" | "temporarily" | "503",
      IgnoreCase -> True]) ||
-  (* 短すぎる応答 (正常なドキュメントやコードにはならない) *)
+  (* \:77ed\:3059\:304e\:308b\:5fdc\:7b54 (\:6b63\:5e38\:306a\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3084\:30b3\:30fc\:30c9\:306b\:306f\:306a\:3089\:306a\:3044) *)
   (StringLength[response] < 100 &&
    StringContainsQ[response, "resets" | "limit" | "error" | "failed",
      IgnoreCase -> True]);
 
-iIsAPIErrorResponse[_] := True;  (* 非文字列は常にエラー扱い *)
+iIsAPIErrorResponse[_] := True;  (* \:975e\:6587\:5b57\:5217\:306f\:5e38\:306b\:30a8\:30e9\:30fc\:6271\:3044 *)
 
 iHTTPResponseBodyUTF8[resp_HTTPResponse] := Module[{bytes, body},
   bytes = Quiet @ Check[resp["BodyByteArray"], $Failed];
@@ -3856,9 +3898,9 @@ iResolvePowerShellExe[] := Module[{sysRoot, candidates},
 (* Anthropic Messages API \:7d4c\:7531\:3067\:30af\:30a8\:30ea
    URLRead \:7d4c\:7531\:3060\:3068 Windows/ShiftJIS \:74b0\:5883\:3067
    Body \:304c ISO-8859-1 \:98a8\:306b\:8aa4\:89e3\:91c8\:3055\:308c\:3001
-   ã... \:578b\:306e\:6587\:5b57\:5316\:3051\:304c\:767a\:751f\:3059\:308b\:3053\:3068\:304c\:3042\:308b。
-   そのため Anthropi c だけは curl で生の JSON \:3092\:30d5\:30a1\:30a4\:30eb\:306b\:4fdd\:5b58\:3057、
-   その UTF-8 \:30d0\:30a4\:30c8\:5217\:304b\:3089\:76f4\:63a5\:30d1\:30fc\:30b9\:3059\:308b。 *)
+   \[ATilde]... \:578b\:306e\:6587\:5b57\:5316\:3051\:304c\:767a\:751f\:3059\:308b\:3053\:3068\:304c\:3042\:308b\:3002
+   \:305d\:306e\:305f\:3081 Anthropi c \:3060\:3051\:306f curl \:3067\:751f\:306e JSON \:3092\:30d5\:30a1\:30a4\:30eb\:306b\:4fdd\:5b58\:3057\:3001
+   \:305d\:306e UTF-8 \:30d0\:30a4\:30c8\:5217\:304b\:3089\:76f4\:63a5\:30d1\:30fc\:30b9\:3059\:308b\:3002 *)
 iQueryAnthropicAPI[apiKey_String, model_String, prompt_String] :=
   Module[{url, psExe, tmpDir = None, promptFile, outFile, errFile, ps1File,
           script, res, ba, errText, text, strm},
@@ -3868,7 +3910,7 @@ iQueryAnthropicAPI[apiKey_String, model_String, prompt_String] :=
 
     If[!StringQ[psExe] || StringTrim[psExe] === "",
       Return[
-        iL["Error: PowerShell の実行ファイルを解決できません。Anthropic fallback には powershell.exe または pwsh が必要です。", "Error: Cannot resolve PowerShell executable. Anthropic fallback requires powershell.exe or pwsh."]
+        iL["Error: PowerShell \:306e\:5b9f\:884c\:30d5\:30a1\:30a4\:30eb\:3092\:89e3\:6c7a\:3067\:304d\:307e\:305b\:3093\:3002Anthropic fallback \:306b\:306f powershell.exe \:307e\:305f\:306f pwsh \:304c\:5fc5\:8981\:3067\:3059\:3002", "Error: Cannot resolve PowerShell executable. Anthropic fallback requires powershell.exe or pwsh."]
       ]
     ];
 
@@ -4022,7 +4064,7 @@ iQueryAnthropicAPI[apiKey_String, model_String, prompt_String] :=
       ];
 
       If[res === $Failed,
-        Return[iL["Error: PowerShell 実行に失敗しました。", "Error: PowerShell execution failed."]]
+        Return[iL["Error: PowerShell \:5b9f\:884c\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002", "Error: PowerShell execution failed."]]
       ];
 
       If[Lookup[res, "ExitCode", 1] =!= 0,
@@ -4040,7 +4082,7 @@ iQueryAnthropicAPI[apiKey_String, model_String, prompt_String] :=
           errText = Lookup[res, "StandardOutput", ""]
         ];
         Return[
-          iL["Error: Anthropic fallback PowerShell 実行失敗", "Error: Anthropic fallback PowerShell execution failed"] <>
+          iL["Error: Anthropic fallback PowerShell \:5b9f\:884c\:5931\:6557", "Error: Anthropic fallback PowerShell execution failed"] <>
           If[StringQ[errText] && StringTrim[errText] =!= "",
             "
 " <> StringTake[errText, UpTo[800]],
@@ -4051,13 +4093,13 @@ iQueryAnthropicAPI[apiKey_String, model_String, prompt_String] :=
 
       ba = iReadFileByteArray[outFile];
       If[Head[ba] =!= ByteArray,
-        Return[iL["Error: Anthropic fallback の応答ファイルを読み取れません。", "Error: Cannot read Anthropic fallback response file."]]
+        Return[iL["Error: Anthropic fallback \:306e\:5fdc\:7b54\:30d5\:30a1\:30a4\:30eb\:3092\:8aad\:307f\:53d6\:308c\:307e\:305b\:3093\:3002", "Error: Cannot read Anthropic fallback response file."]]
       ];
 
       text = iByteArrayToUTF8String[ba];
       If[StringQ[text],
         text,
-        iL["Error: Anthropic fallback 応答の UTF-8 復号に失敗しました。", "Error: UTF-8 decoding of Anthropic fallback response failed."]
+        iL["Error: Anthropic fallback \:5fdc\:7b54\:306e UTF-8 \:5fa9\:53f7\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002", "Error: UTF-8 decoding of Anthropic fallback response failed."]
       ],
 
       If[StringQ[tmpDir] && DirectoryQ[tmpDir],
@@ -4068,7 +4110,7 @@ iQueryAnthropicAPI[apiKey_String, model_String, prompt_String] :=
 
 (* OpenAI Chat Completions API \:7d4c\:7531\:3067\:30af\:30a8\:30ea *)
 
-(* Anthropic API + web_search tool 付きクエリ *)
+(* Anthropic API + web_search tool \:4ed8\:304d\:30af\:30a8\:30ea *)
 iQueryAnthropicAPIWithWebSearch[apiKey_String, model_String, prompt_String] :=
   Module[{url, psExe, tmpDir = None, promptFile, outFile, errFile, ps1File,
           script, res, ba, errText, text, strm},
@@ -4223,7 +4265,7 @@ iQueryAnthropicAPIWithWebSearch[apiKey_String, model_String, prompt_String] :=
     ]
   ];
 
-(* Web 検索の内部共通関数 *)
+(* Web \:691c\:7d22\:306e\:5185\:90e8\:5171\:901a\:95a2\:6570 *)
 iDoWebSearch[prompt_String] :=
   Module[{apiKey, model = $iModelSonnet},
     apiKey = Quiet[NBAccess`NBGetAPIKey["anthropic",
@@ -4233,11 +4275,11 @@ iDoWebSearch[prompt_String] :=
     iQueryAnthropicAPIWithWebSearch[apiKey, model, prompt]
   ];
 
-(* 公開関数: Web 検索 *)
+(* \:516c\:958b\:95a2\:6570: Web \:691c\:7d22 *)
 ClaudeWebSearch[query_String] :=
   iDoWebSearch["Web\:3067\:4ee5\:4e0b\:306e\:30af\:30a8\:30ea\:3092\:691c\:7d22\:3057\:3001\:7d50\:679c\:3092\:65e5\:672c\:8a9e\:3067\:307e\:3068\:3081\:3066\:304f\:3060\:3055\:3044\:3002\n\n" <> query];
 
-(* 公開関数: Web ページ取得 *)
+(* \:516c\:958b\:95a2\:6570: Web \:30da\:30fc\:30b8\:53d6\:5f97 *)
 ClaudeWebFetch[url_String] :=
   ClaudeWebFetch[url, "\:3053\:306e\:30da\:30fc\:30b8\:306e\:4e3b\:8981\:306a\:5185\:5bb9\:3092\:65e5\:672c\:8a9e\:3067\:8981\:7d04\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
 
@@ -4248,7 +4290,7 @@ ClaudeWebFetch[url_String, instruction_String] :=
       $Failed];
     If[!StringQ[htmlText],
       Return[iL["Error: URL \:306e\:53d6\:5f97\:306b\:5931\:6557\:3057\:307e\:3057\:305f: ", "Error: Failed to fetch URL: "] <> url]];
-    (* HTML が大きすぎる場合は切り詰め *)
+    (* HTML \:304c\:5927\:304d\:3059\:304e\:308b\:5834\:5408\:306f\:5207\:308a\:8a70\:3081 *)
     If[StringLength[htmlText] > 50000,
       htmlText = StringTake[htmlText, 50000] <> "\n...(truncated)"];
     prompt = instruction <> "\n\nURL: " <> url <>
@@ -4294,8 +4336,8 @@ iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
   ];
 
 (* \:30d7\:30ed\:30d0\:30a4\:30c0\:306b\:5fdc\:3058\:305f API \:547c\:3073\:51fa\:3057\:30c7\:30a3\:30b9\:30d1\:30c3\:30c1 *)
-(* provider に応じた API 呼び出しディスパッチ。
-   customURL が指定されている場合はそれを使用する（LM Studio 等のローカルモデル）。 *)
+(* provider \:306b\:5fdc\:3058\:305f API \:547c\:3073\:51fa\:3057\:30c7\:30a3\:30b9\:30d1\:30c3\:30c1\:3002
+   customURL \:304c\:6307\:5b9a\:3055\:308c\:3066\:3044\:308b\:5834\:5408\:306f\:305d\:308c\:3092\:4f7f\:7528\:3059\:308b\:ff08LM Studio \:7b49\:306e\:30ed\:30fc\:30ab\:30eb\:30e2\:30c7\:30eb\:ff09\:3002 *)
 iEnsureChatCompletionsPath[url_String] :=
   If[StringEndsQ[url, "/v1/chat/completions"],
     url,
@@ -4305,12 +4347,12 @@ iEnsureChatCompletionsPath[url_String] :=
 
 iQueryViaAPI[provider_String, model_String, prompt_String, customURL_String:""] :=
   Module[{apiKey, url, prov = ToLowerCase[provider]},
-    (* LM Studio 等ローカルモデル: API キー不要 *)
+    (* LM Studio \:7b49\:30ed\:30fc\:30ab\:30eb\:30e2\:30c7\:30eb: API \:30ad\:30fc\:4e0d\:8981 *)
     If[prov === "lmstudio",
       url = iEnsureChatCompletionsPath[
         If[customURL =!= "", customURL, "http://localhost:1234"]];
       Return[iQueryOpenAIAPI["lm-studio", model, prompt, url]]];
-    (* 通常プロバイダー *)
+    (* \:901a\:5e38\:30d7\:30ed\:30d0\:30a4\:30c0\:30fc *)
     apiKey = Quiet[NBAccess`NBGetAPIKey[provider,
       PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
     If[apiKey === $Failed || !StringQ[apiKey],
@@ -4326,15 +4368,15 @@ iQueryViaAPI[provider_String, model_String, prompt_String, customURL_String:""] 
         iL["Error: \:672a\:5bfe\:5fdc\:30d7\:30ed\:30d0\:30a4\:30c0: ", "Error: Unsupported provider: "] <> provider]
   ];
 
-(* フォールバック通知: nb===None なら CellPrint (In/Out 間), NotebookObject なら NotebookWrite *)
+(* \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:901a\:77e5: nb===None \:306a\:3089 CellPrint (In/Out \:9593), NotebookObject \:306a\:3089 NotebookWrite *)
 iFallbackNotify[None, text_String, color_] :=
   NBAccess`NBWritePrintNotice[None, text, color];
 iFallbackNotify[nb_NotebookObject, text_String, color_] :=
   NBAccess`NBWritePrintNotice[nb, text, color];
 
-(* Claude Code → フォールバック付きラッパー
-   nb=None: 同期用 (CellPrint で In/Out 間に通知)
-   nb=NotebookObject: 非同期用 (NotebookWrite で通知) *)
+(* Claude Code \[RightArrow] \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:4ed8\:304d\:30e9\:30c3\:30d1\:30fc
+   nb=None: \:540c\:671f\:7528 (CellPrint \:3067 In/Out \:9593\:306b\:901a\:77e5)
+   nb=NotebookObject: \:975e\:540c\:671f\:7528 (NotebookWrite \:3067\:901a\:77e5) *)
 iQueryWithFallback[prompt_String, useFallback_, nb_:None] :=
   Module[{response, models, provider, model, customURL, fbResponse, result},
     response = iClaudeQueryRaw[prompt];
@@ -4349,7 +4391,7 @@ iQueryWithFallback[prompt_String, useFallback_, nb_:None] :=
         customURL = If[Length[fm] >= 3, fm[[3]], ""];
         iFallbackNotify[nb,
           "\[RightArrow] Claude Code \:5229\:7528\:4e0d\:53ef\:3002" <> provider <> "/" <> model <>
-          " \:306b\:5207\:66ff\:3048\:307e\:3059\:2026",
+          " \:306b\:5207\:66ff\:3048\:307e\:3059\[Ellipsis]",
           RGBColor[0.8, 0.4, 0]];
         fbResponse = iQueryViaAPI[provider, model, prompt, customURL];
         If[StringQ[fbResponse] && !StringStartsQ[fbResponse, "Error:"],
@@ -4365,8 +4407,8 @@ iQueryWithFallback[prompt_String, useFallback_, nb_:None] :=
     result
   ];
 
-(* 非同期パス用: Claude Code をスキップして API フォールバックのみ実行
-   メッセージは $iFallbackLog に蓄積し、呼び出し側がアンカー位置で書き出す *)
+(* \:975e\:540c\:671f\:30d1\:30b9\:7528: Claude Code \:3092\:30b9\:30ad\:30c3\:30d7\:3057\:3066 API \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:306e\:307f\:5b9f\:884c
+   \:30e1\:30c3\:30bb\:30fc\:30b8\:306f $iFallbackLog \:306b\:84c4\:7a4d\:3057\:3001\:547c\:3073\:51fa\:3057\:5074\:304c\:30a2\:30f3\:30ab\:30fc\:4f4d\:7f6e\:3067\:66f8\:304d\:51fa\:3059 *)
 $iFallbackLog = {};
 
 iQueryFallbackOnly[prompt_String, nb_NotebookObject] :=
@@ -4381,7 +4423,7 @@ iQueryFallbackOnly[prompt_String, nb_NotebookObject] :=
         customURL = If[Length[fm] >= 3, fm[[3]], ""];
         AppendTo[$iFallbackLog,
           {"\[RightArrow] Claude Code \:5229\:7528\:4e0d\:53ef\:3002" <> provider <> "/" <> model <>
-           " \:306b\:5207\:66ff\:3048\:307e\:3059\:2026", RGBColor[0.8, 0.4, 0]}];
+           " \:306b\:5207\:66ff\:3048\:307e\:3059\[Ellipsis]", RGBColor[0.8, 0.4, 0]}];
         fbResponse = iQueryViaAPI[provider, model, prompt, customURL];
         If[StringQ[fbResponse] && !StringStartsQ[fbResponse, "Error:"],
           AppendTo[$iFallbackLog,
@@ -4396,13 +4438,13 @@ iQueryFallbackOnly[prompt_String, nb_NotebookObject] :=
     result
   ];
 
-(* 蓄積されたフォールバックメッセージをノートブックに書き出す *)
+(* \:84c4\:7a4d\:3055\:308c\:305f\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:30e1\:30c3\:30bb\:30fc\:30b8\:3092\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:66f8\:304d\:51fa\:3059 *)
 iFlushFallbackLog[nb_NotebookObject] :=
   (* \:30e1\:30c3\:30bb\:30fc\:30b8\:306f iFallbackNotifyAndLog \:3067\:5373\:5ea7\:306b\:66f8\:304d\:51fa\:3057\:6e08\:307f\:3002\:30ed\:30b0\:3092\:30af\:30ea\:30a2\:306e\:307f *)
   ($iFallbackLog = {});
 
-(* 非同期フォールバック: StartProcess + ScheduledTask で API 呼び出し
-   カーネルをブロックせずにフォールバックモデルを順次試行する *)
+(* \:975e\:540c\:671f\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af: StartProcess + ScheduledTask \:3067 API \:547c\:3073\:51fa\:3057
+   \:30ab\:30fc\:30cd\:30eb\:3092\:30d6\:30ed\:30c3\:30af\:305b\:305a\:306b\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:30e2\:30c7\:30eb\:3092\:9806\:6b21\:8a66\:884c\:3059\:308b *)
 iPrepareAnthropicPS1[apiKey_String, model_String, prompt_String,
     url_String:"https://api.anthropic.com/v1/messages",
     provider_String:"anthropic", psTimeout_Integer:300, mediaFiles_List:{}] :=
@@ -4418,7 +4460,7 @@ iPrepareAnthropicPS1[apiKey_String, model_String, prompt_String,
     strm = OpenWrite[promptFile, BinaryFormat -> True];
     BinaryWrite[strm, ToCharacterCode[iHoistThinkPrefix[prompt], "UTF-8"], "Byte"];
     Close[strm];
-    (* マルチモーダルマニフェストを書き出す *)
+    (* \:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb\:30de\:30cb\:30d5\:30a7\:30b9\:30c8\:3092\:66f8\:304d\:51fa\:3059 *)
     manifestFile = FileNameJoin[{tmpDir, "media_manifest.json"}];
     If[Length[mediaFiles] > 0,
       Quiet[Export[manifestFile,
@@ -4568,12 +4610,12 @@ iReadAnthropicResult[outFile_String, errFile_String] :=
     "Error: API response unreadable."
   ];
 
-(* 非同期フォールバック: モデルリストを順次試行 (カーネル非ブロック)
-   modelIdx から開始し、成功したら callback を呼ぶ
-   全モデル失敗時は callback[$Failed] を呼ぶ (呼び出し側が処理) *)
+(* \:975e\:540c\:671f\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af: \:30e2\:30c7\:30eb\:30ea\:30b9\:30c8\:3092\:9806\:6b21\:8a66\:884c (\:30ab\:30fc\:30cd\:30eb\:975e\:30d6\:30ed\:30c3\:30af)
+   modelIdx \:304b\:3089\:958b\:59cb\:3057\:3001\:6210\:529f\:3057\:305f\:3089 callback \:3092\:547c\:3076
+   \:5168\:30e2\:30c7\:30eb\:5931\:6557\:6642\:306f callback[$Failed] \:3092\:547c\:3076 (\:547c\:3073\:51fa\:3057\:5074\:304c\:51e6\:7406) *)
 $iFallbackDone = False;
 $iFallbackActiveTasks = {};
-$iFallbackLastError = ""; (* 最後の API エラーメッセージ *)
+$iFallbackLastError = ""; (* \:6700\:5f8c\:306e API \:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8 *)
 $iFallbackTimeout = 600; (* \:79d2: \:30ed\:30fc\:30ab\:30eb\:5927\:578b\:63a8\:8ad6\:30e2\:30c7\:30eb\:ff08Qwen 122B, DeepSeek-R1\:7b49\:ff09\:3092\:8003\:616e *)
 $iFallbackProgress = <||>;
 
@@ -4630,12 +4672,12 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
         callback[If[StringQ[$iFallbackLastError] && $iFallbackLastError =!= "",
           $iFallbackLastError, $Failed]]];
       Return[]];
-    (* モデル指定を展開: {provider, model} または {provider, model, url} *)
+    (* \:30e2\:30c7\:30eb\:6307\:5b9a\:3092\:5c55\:958b: {provider, model} \:307e\:305f\:306f {provider, model, url} *)
     Module[{entry = models[[modelIdx]]},
       provider = entry[[1]];
       model    = entry[[2]];
       customURL = If[Length[entry] >= 3, entry[[3]], ""]];
-    (* API キー取得: lmstudio はキー不要 *)
+    (* API \:30ad\:30fc\:53d6\:5f97: lmstudio \:306f\:30ad\:30fc\:4e0d\:8981 *)
     If[ToLowerCase[provider] === "lmstudio",
       apiKey = "lm-studio",
       apiKey = Quiet[NBAccess`NBGetAPIKey[provider,
@@ -4643,8 +4685,8 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
       If[!StringQ[apiKey],
         iStartFallbackAsync[prompt, nb, callback, models, modelIdx + 1, jobId, timeout, mediaFiles];
         Return[]]];
-    (* 切替え通知: Job ならスロット1、従来なら NotifyAndLog *)
-    Module[{noticeText = "\[RightArrow] " <> provider <> "/" <> model <> " \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d\:2026"},
+    (* \:5207\:66ff\:3048\:901a\:77e5: Job \:306a\:3089\:30b9\:30ed\:30c3\:30c81\:3001\:5f93\:6765\:306a\:3089 NotifyAndLog *)
+    Module[{noticeText = "\[RightArrow] " <> provider <> "/" <> model <> " \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d\[Ellipsis]"},
     If[useJob,
       NBAccess`NBWriteSlot[jobId, 1,
         Cell[noticeText, "Print",
@@ -4700,11 +4742,11 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
             $iFallbackProgress[pk] = <|"disp" ->
               "Fallback: " <> prov <> "/" <> mdl <>
               " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... ", "querying... "] <> ToString[elapsed] <> "s"|>;
-            (* WindowStatusArea に経過時間を表示 *)
+            (* WindowStatusArea \:306b\:7d4c\:904e\:6642\:9593\:3092\:8868\:793a *)
             Quiet[CurrentValue[pNb, WindowStatusArea] =
               "Fallback: " <> prov <> "/" <> mdl <>
               " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... ", "querying... "] <> ToString[elapsed] <> "s"];
-            (* 進捗テキストをスロットに直接書き込み *)
+            (* \:9032\:6357\:30c6\:30ad\:30b9\:30c8\:3092\:30b9\:30ed\:30c3\:30c8\:306b\:76f4\:63a5\:66f8\:304d\:8fbc\:307f *)
             Quiet @ If[uj,
               NBAccess`NBWriteSlot[jid, 1,
                 Cell[$iFallbackProgress[pk]["disp"],
@@ -4714,14 +4756,14 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
             Quiet[StopScheduledTask[sym]];
             Quiet[RemoveScheduledTask[sym]];
             $iFallbackActiveTasks = DeleteCases[$iFallbackActiveTasks, sym];
-            (* WindowStatusArea をクリア *)
+            (* WindowStatusArea \:3092\:30af\:30ea\:30a2 *)
             Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
             If[!uj,
               iFallbackDeleteProgress[pNb, pk],
-              (* Job パス: 進捗テキストを更新し written=False で NBEndJob に任せる *)
+              (* Job \:30d1\:30b9: \:9032\:6357\:30c6\:30ad\:30b9\:30c8\:3092\:66f4\:65b0\:3057 written=False \:3067 NBEndJob \:306b\:4efb\:305b\:308b *)
               $iFallbackProgress = KeyDrop[$iFallbackProgress, pk];
               Quiet @ NBAccess`NBWriteSlot[jid, 1,
-                Cell["\:2713 Fallback: " <> prov <> "/" <> mdl <> " " <> iL["\:304b\:3089\:306e\:5fdc\:7b54\:3092\:53d6\:5f97\:3002\:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d...", "response obtained. Writing output..."],
+                Cell["\[Checkmark] Fallback: " <> prov <> "/" <> mdl <> " " <> iL["\:304b\:3089\:306e\:5fdc\:7b54\:3092\:53d6\:5f97\:3002\:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d...", "response obtained. Writing output..."],
                   "Print", FontWeight -> Bold, FontColor -> RGBColor[0.3, 0.6, 0.3], FontSize -> 11]];
               NBAccess`NBJobResetSlotWritten[jid, 1]];
             If[status =!= "Finished",
@@ -4745,7 +4787,7 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
                       " " <> iL["\:3067\:5fdc\:7b54\:3092\:53d6\:5f97\:3057\:307e\:3057\:305f\:3002", " response obtained."], RGBColor[0, 0.5, 0.2]];
                     Quiet[SelectionMove[pNb, After, Notebook]]];
                   cb[text]],
-                (* エラー: 最後のエラーを保存して次のモデルへ *)
+                (* \:30a8\:30e9\:30fc: \:6700\:5f8c\:306e\:30a8\:30e9\:30fc\:3092\:4fdd\:5b58\:3057\:3066\:6b21\:306e\:30e2\:30c7\:30eb\:3078 *)
                 If[StringQ[text], $iFallbackLastError = text];
                 iStartFallbackAsync[pmt, pNb, cb, mods, mIdx + 1, jid, tmo, mf]
               ]
@@ -4779,7 +4821,7 @@ ClaudeQueryShowContext[] :=
       Print[iL["NBGetContext \:306e\:7d50\:679c:\n", "NBGetContext result:\n"], ctx]]
   ];
 
-(* デバッグ用: アクセス設定の確認 *)
+(* \:30c7\:30d0\:30c3\:30b0\:7528: \:30a2\:30af\:30bb\:30b9\:8a2d\:5b9a\:306e\:78ba\:8a8d *)
 ClaudeShowAccessConfig[] := Module[
   {dirs, nbDirs, tempDir, settingsPath, settingsContent},
   dirs = If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}];
@@ -4813,7 +4855,7 @@ ClaudeShowAccessConfig[] := Module[
   Print["\n  tempDir: ", tempDir];
 ];
 
-(* セッション状態の確認 *)
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:72b6\:614b\:306e\:78ba\:8a8d *)
 ClaudeSessionStatus[] := iClaudeSessionStatusImpl[EvaluationNotebook[], iSessionTag[], "default"];
 
 ClaudeSessionStatus[name_String] :=
@@ -4823,7 +4865,7 @@ ClaudeSessionStatus[session_Association] :=
   iClaudeSessionStatusImpl[session["Notebook"], session["SessionTag"], session["Name"]];
 
 (* ============================================================
-   ClaudeStatus: 実行中タスクのリアルタイム状態表示
+   ClaudeStatus: \:5b9f\:884c\:4e2d\:30bf\:30b9\:30af\:306e\:30ea\:30a2\:30eb\:30bf\:30a4\:30e0\:72b6\:614b\:8868\:793a
    ============================================================ *)
 
 ClaudeStatus[] :=
@@ -4851,7 +4893,7 @@ ClaudeStatus[] :=
                       FileExistsQ[info["outFile"]],
                     FileByteCount[info["outFile"]], 0];
 
-        Print[Style[iL["\:25b6 \:30bf\:30b9\:30af: ", "\:25b6 Task: "] <> key, Bold, 12]];
+        Print[Style[iL["\[FilledRightTriangle] \:30bf\:30b9\:30af: ", "\[FilledRightTriangle] Task: "] <> key, Bold, 12]];
         Print[iL["  \:7d4c\:904e\:6642\:9593: ", "  Elapsed: "], elapsed, iL[" \:79d2", " sec"]];
         Print[iL["  \:30d7\:30ed\:30bb\:30b9: ", "  Process: "],
           If[proc =!= None, ToString[ProcessStatus[proc]], "?"]];
@@ -4879,20 +4921,20 @@ ClaudeStatus[] :=
   ];
 
 (* ============================================================
-   ClaudeAbort: 実行中の全 Claude タスクを停止
+   ClaudeAbort: \:5b9f\:884c\:4e2d\:306e\:5168 Claude \:30bf\:30b9\:30af\:3092\:505c\:6b62
    ============================================================ *)
 
 ClaudeAbort[] :=
   Module[{keys, stopped = 0},
-    (* 1. メイン ScheduledTask + プロセスを停止 *)
+    (* 1. \:30e1\:30a4\:30f3 ScheduledTask + \:30d7\:30ed\:30bb\:30b9\:3092\:505c\:6b62 *)
     keys = If[AssociationQ[$claudeProgress], Keys[$claudeProgress], {}];
     Do[
       Module[{info = $claudeProgress[key], proc, sym},
         If[!AssociationQ[info], Continue[]];
-        (* Claude Code プロセスを強制終了 *)
+        (* Claude Code \:30d7\:30ed\:30bb\:30b9\:3092\:5f37\:5236\:7d42\:4e86 *)
         proc = Lookup[info, "process", None];
         If[proc =!= None, Quiet[KillProcess[proc]]];
-        (* ScheduledTask を停止 *)
+        (* ScheduledTask \:3092\:505c\:6b62 *)
         sym = Quiet[Symbol["ClaudeCode`Private`$task" <> key]];
         If[Head[sym] =!= Symbol,
           Quiet[StopScheduledTask[sym]];
@@ -4900,11 +4942,11 @@ ClaudeAbort[] :=
         stopped++],
       {key, keys}];
     $claudeProgress = <||>;
-    (* 2. フォールバックタスクを停止 *)
+    (* 2. \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:30bf\:30b9\:30af\:3092\:505c\:6b62 *)
     iCancelActiveFallbacks[];
-    (* 3. Job システムの後始末 *)
+    (* 3. Job \:30b7\:30b9\:30c6\:30e0\:306e\:5f8c\:59cb\:672b *)
     $iJobActiveNb = None;
-    (* 4. WindowStatusArea に結果表示 → 2秒後に自動クリア *)
+    (* 4. WindowStatusArea \:306b\:7d50\:679c\:8868\:793a \[RightArrow] 2\:79d2\:5f8c\:306b\:81ea\:52d5\:30af\:30ea\:30a2 *)
     Module[{nb = Quiet[InputNotebook[]], msg},
       msg = If[stopped > 0,
         iL["\:26d4 " <> ToString[stopped] <> " \:4ef6\:306e Claude \:30bf\:30b9\:30af\:3092\:505c\:6b62\:3057\:307e\:3057\:305f\:3002",
@@ -5018,14 +5060,14 @@ iClaudeSessionStatusImpl[nb_NotebookObject, tag_String, name_String] :=
   ];
 
 (* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:5bfe\:5fdc\:7248 ClaudeQuery\:ff08\:540c\:671f\:30fb\:30c7\:30d5\:30a9\:30eb\:30c8\:5c65\:6b74\:4fdd\:5b58\:4ed8\:304d\:ff09 *)
-(* 手動コンパクション *)
+(* \:624b\:52d5\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3 *)
 ClaudeCompactHistory[] :=
   iCompactHistory[EvaluationNotebook[], iSessionTag[]];
 
 ClaudeCompactHistory[name_String] :=
   iCompactHistory[EvaluationNotebook[], iNamedSessionTag[name]];
 
-(* 履歴サイズ診断 *)
+(* \:5c65\:6b74\:30b5\:30a4\:30ba\:8a3a\:65ad *)
 ClaudeHistorySize[] := ClaudeHistorySize[EvaluationNotebook[]];
 ClaudeHistorySize[nb_NotebookObject] :=
   Module[{tag = iSessionTag[], raw, entries, byteSize, entryCount},
@@ -5037,19 +5079,19 @@ ClaudeHistorySize[nb_NotebookObject] :=
       "ByteCount" -> byteSize,
       "KiloBytes" -> Round[byteSize / 1024.0, 0.1],
       "Status" -> Which[
-        byteSize > 500000, Style[iL["危険: ノートブック動作に深刻な影響", "Critical: Severe notebook impact"], Red, Bold],
-        byteSize > 200000, Style[iL["警告: コンパクション推奨", "Warning: Compaction recommended"], Orange, Bold],
-        byteSize > 100000, Style[iL["注意: やや大きい", "Note: Somewhat large"], RGBColor[0.6, 0.5, 0]],
-        True, Style[iL["正常", "OK"], Darker[Green]]]|>
+        byteSize > 500000, Style[iL["\:5371\:967a: \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:52d5\:4f5c\:306b\:6df1\:523b\:306a\:5f71\:97ff", "Critical: Severe notebook impact"], Red, Bold],
+        byteSize > 200000, Style[iL["\:8b66\:544a: \:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:63a8\:5968", "Warning: Compaction recommended"], Orange, Bold],
+        byteSize > 100000, Style[iL["\:6ce8\:610f: \:3084\:3084\:5927\:304d\:3044", "Note: Somewhat large"], RGBColor[0.6, 0.5, 0]],
+        True, Style[iL["\:6b63\:5e38", "OK"], Darker[Green]]]|>
   ];
 
 (* iMoveAfterEvalCell removed: use NBAccess`NBWriteAnchorAfterEvalCell *)
 
 (* ============================================================
-   AutoPrivate プロンプト注入
-   AutoPrivate -> True の場合、秘密変数にアクセスするタスクで
-   生成コードに Model -> $ClaudePrivateModel, PrivacySpec -> Automatic を
-   付与するようシステムプロンプトに指示を追加する。
+   AutoPrivate \:30d7\:30ed\:30f3\:30d7\:30c8\:6ce8\:5165
+   AutoPrivate -> True \:306e\:5834\:5408\:3001\:79d8\:5bc6\:5909\:6570\:306b\:30a2\:30af\:30bb\:30b9\:3059\:308b\:30bf\:30b9\:30af\:3067
+   \:751f\:6210\:30b3\:30fc\:30c9\:306b Model -> $ClaudePrivateModel, PrivacySpec -> Automatic \:3092
+   \:4ed8\:4e0e\:3059\:308b\:3088\:3046\:30b7\:30b9\:30c6\:30e0\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:6307\:793a\:3092\:8ffd\:52a0\:3059\:308b\:3002
    ============================================================ *)
 
 iAutoPrivatePrompt[True] :=
@@ -5069,7 +5111,7 @@ iAutoPrivatePrompt[True] :=
     "If the user's task does NOT involve these confidential variables, " <>
     "you do NOT need to add Model/PrivacySpec options.\n" <>
     "=== End AutoPrivate ===\n",
-    (* $ClaudePrivateModel が未設定の場合 *)
+    (* $ClaudePrivateModel \:304c\:672a\:8a2d\:5b9a\:306e\:5834\:5408 *)
     "\n\n[AutoPrivate] Warning: $ClaudePrivateModel is not configured. " <>
     "Set it to a local model spec, e.g.:\n" <>
     "  $ClaudePrivateModel = {\"lmstudio\", \"openai/gpt-oss-20b\", \"http://127.0.0.1:1234\"}\n"
@@ -5077,11 +5119,11 @@ iAutoPrivatePrompt[True] :=
 iAutoPrivatePrompt[_] := "";
 
 (* ============================================================
-   ノートブック定義済みシンボル一覧のプロンプト注入
-   ノートブック内で定義されている変数・関数名を収集し、
-   LLM が生成するコードで名前衝突を避けるよう指示する。
-   iPrecisionConfidentialCheck 後に呼ぶことで、セルキャッシュが
-   有効な状態で NBBuildVarDependencies を軽量に実行できる。
+   \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:5b9a\:7fa9\:6e08\:307f\:30b7\:30f3\:30dc\:30eb\:4e00\:89a7\:306e\:30d7\:30ed\:30f3\:30d7\:30c8\:6ce8\:5165
+   \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:5185\:3067\:5b9a\:7fa9\:3055\:308c\:3066\:3044\:308b\:5909\:6570\:30fb\:95a2\:6570\:540d\:3092\:53ce\:96c6\:3057\:3001
+   LLM \:304c\:751f\:6210\:3059\:308b\:30b3\:30fc\:30c9\:3067\:540d\:524d\:885d\:7a81\:3092\:907f\:3051\:308b\:3088\:3046\:6307\:793a\:3059\:308b\:3002
+   iPrecisionConfidentialCheck \:5f8c\:306b\:547c\:3076\:3053\:3068\:3067\:3001\:30bb\:30eb\:30ad\:30e3\:30c3\:30b7\:30e5\:304c
+   \:6709\:52b9\:306a\:72b6\:614b\:3067 NBBuildVarDependencies \:3092\:8efd\:91cf\:306b\:5b9f\:884c\:3067\:304d\:308b\:3002
    ============================================================ *)
 
 iNotebookDefinedSymbolsContext[nb_NotebookObject] :=
@@ -5089,7 +5131,7 @@ iNotebookDefinedSymbolsContext[nb_NotebookObject] :=
     deps = Quiet[NBAccess`NBBuildVarDependencies[nb]];
     If[!AssociationQ[deps] || Length[deps] === 0, Return[""]];
     names = Keys[deps];
-    (* Out$N 仮想変数を除外 *)
+    (* Out$N \:4eee\:60f3\:5909\:6570\:3092\:9664\:5916 *)
     filtered = Select[names, !StringMatchQ[#, "Out$" ~~ DigitCharacter ..] &];
     If[Length[filtered] === 0, Return[""]];
     "=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3067\:5b9a\:7fa9\:6e08\:307f\:306e\:30b7\:30f3\:30dc\:30eb ===\n" <>
@@ -5101,12 +5143,12 @@ iNotebookDefinedSymbolsContext[nb_NotebookObject] :=
   ];
 
 (* ============================================================
-   サンドイッチ構造ヘルパー:
-   長いコンテキストの前後にタスク/質問を配置し、
-   LLM の注意が中間で希薄化する "Lost in the Middle" 問題を緩和する。
+   \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020\:30d8\:30eb\:30d1\:30fc:
+   \:9577\:3044\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306e\:524d\:5f8c\:306b\:30bf\:30b9\:30af/\:8cea\:554f\:3092\:914d\:7f6e\:3057\:3001
+   LLM \:306e\:6ce8\:610f\:304c\:4e2d\:9593\:3067\:5e0c\:8584\:5316\:3059\:308b "Lost in the Middle" \:554f\:984c\:3092\:7de9\:548c\:3059\:308b\:3002
    ============================================================ *)
 
-(* タスク概要ブロック: コンテキスト前に配置するプロンプト冒頭部 *)
+(* \:30bf\:30b9\:30af\:6982\:8981\:30d6\:30ed\:30c3\:30af: \:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:524d\:306b\:914d\:7f6e\:3059\:308b\:30d7\:30ed\:30f3\:30d7\:30c8\:5192\:982d\:90e8 *)
 iTaskOverviewBlock[task_String] :=
   Module[{brief},
     brief = If[StringLength[task] > 300,
@@ -5118,16 +5160,16 @@ iTaskOverviewBlock[task_String] :=
     "=== END TASK OVERVIEW ===\n\n"
   ];
 
-(* タスク詳細ブロック: コンテキスト後に配置するプロンプト末尾部 *)
+(* \:30bf\:30b9\:30af\:8a73\:7d30\:30d6\:30ed\:30c3\:30af: \:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:5f8c\:306b\:914d\:7f6e\:3059\:308b\:30d7\:30ed\:30f3\:30d7\:30c8\:672b\:5c3e\:90e8 *)
 iTaskDetailBlock[label_String, task_String] :=
   "=== " <> label <> " ===\n" <> task;
 
 (* ============================================================
-   自動秘密マーク: AccessLevel が cloudcode の MaxAccessLevel を超える
-   場合、LLM が書き込んだセルを自動的に秘密マークする。
-   ローカルモデルが Confidential[] を使い忘れても安全。
-   cellCountBefore: 書き込み前のセル数
-   nb: ノートブック
+   \:81ea\:52d5\:79d8\:5bc6\:30de\:30fc\:30af: AccessLevel \:304c cloudcode \:306e MaxAccessLevel \:3092\:8d85\:3048\:308b
+   \:5834\:5408\:3001LLM \:304c\:66f8\:304d\:8fbc\:3093\:3060\:30bb\:30eb\:3092\:81ea\:52d5\:7684\:306b\:79d8\:5bc6\:30de\:30fc\:30af\:3059\:308b\:3002
+   \:30ed\:30fc\:30ab\:30eb\:30e2\:30c7\:30eb\:304c Confidential[] \:3092\:4f7f\:3044\:5fd8\:308c\:3066\:3082\:5b89\:5168\:3002
+   cellCountBefore: \:66f8\:304d\:8fbc\:307f\:524d\:306e\:30bb\:30eb\:6570
+   nb: \:30ce\:30fc\:30c8\:30d6\:30c3\:30af
    ============================================================ *)
 
 iAutoMarkNewCellsConfidential[nb_NotebookObject, cellCountBefore_Integer] :=
@@ -5137,16 +5179,251 @@ iAutoMarkNewCellsConfidential[nb_NotebookObject, cellCountBefore_Integer] :=
     newIndices = Range[cellCountBefore + 1, nAfter];
     Do[
       style = NBAccess`NBCellStyle[nb, idx];
-      (* Input/Output/Code セルのみマーク。Text/Print/Subsection 等はスキップ *)
+      (* Input/Output/Code \:30bb\:30eb\:306e\:307f\:30de\:30fc\:30af\:3002Text/Print/Subsection \:7b49\:306f\:30b9\:30ad\:30c3\:30d7 *)
       If[MemberQ[{"Input", "Output", "Code", "ExternalLanguage"}, style] &&
          !TrueQ[NBAccess`NBGetConfidentialTag[nb, idx]],
         NBAccess`NBMarkCellConfidential[nb, idx]],
       {idx, newIndices}]
   ];
 
-(* accessLevel が cloudcode の上限を超えるかの判定 *)
+(* accessLevel \:304c cloudcode \:306e\:4e0a\:9650\:3092\:8d85\:3048\:308b\:304b\:306e\:5224\:5b9a *)
 iShouldAutoMarkConfidential[accessLevel_?NumericQ] :=
   accessLevel > NBAccess`NBGetProviderMaxAccessLevel["claudecode"];
+
+Options[ClaudeQuerySync] = {
+  Fallback -> False,
+  Model -> Automatic,
+  PrivacySpec -> Automatic,
+  PrivacyLevel -> Automatic,
+  Timeout -> Automatic
+};
+
+(* \:540c\:671f LLM \:30af\:30a8\:30ea\:ff08WindowStatusArea \:7d4c\:904e\:6642\:9593\:8868\:793a\:4ed8\:304d\:ff09\:3002
+   \:4ed6\:30d1\:30c3\:30b1\:30fc\:30b8 (documentation.wl \:7b49) \:304b\:3089\:306e\:8efd\:91cf LLM \:547c\:3073\:51fa\:3057\:7528\:3002
+   \:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:3084\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:66f8\:304d\:8fbc\:307f\:306f\:884c\:308f\:306a\:3044\:3002
+   
+   \:30e2\:30c7\:30eb\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0\:ff08\:552f\:4e00\:306e\:30b3\:30a2\:ff09:
+     Model \:304c\:660e\:793a\:6307\:5b9a \[RightArrow] \:305d\:306e\:30e2\:30c7\:30eb\:3092 API \:7d4c\:7531\:3067\:4f7f\:7528
+     Model === Automatic:
+       PrivacyLevel <= 0.5 \[RightArrow] Claude Code CLI (+ Fallback \:3067 API)
+       PrivacyLevel >  0.5 \[RightArrow] $ClaudePrivateModel \:3092\:81ea\:52d5\:4f7f\:7528
+   \:623b\:308a\:5024: \:5fdc\:7b54\:6587\:5b57\:5217\:3002 *)
+ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
+  Module[{modelSpec, response, nb, startTime, progressTask, label, elapsed,
+          privLevel, useFallback},
+    modelSpec = OptionValue[Model];
+    privLevel = Replace[OptionValue[PrivacyLevel], Automatic -> 0.0];
+    useFallback = TrueQ[OptionValue[Fallback]];
+
+    (* === \:30e2\:30c7\:30eb\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0\:ff08\:30b3\:30a2\:30fb\:552f\:4e00\:306e\:5834\:6240\:ff09 === *)
+    If[modelSpec === Automatic,
+      Which[
+        (* \:30af\:30e9\:30a6\:30c9\:53ef\:80fd *)
+        privLevel <= 0.5,
+          Null,  (* modelSpec \:306f Automatic \:306e\:307e\:307e \[RightArrow] iQueryWithFallback \:304c\:51e6\:7406 *)
+        (* \:79d8\:5bc6\:30bb\:30eb: $ClaudePrivateModel \:3092\:81ea\:52d5\:4f7f\:7528 *)
+        ListQ[$ClaudePrivateModel] && Length[$ClaudePrivateModel] >= 2,
+          modelSpec = $ClaudePrivateModel,
+        (* $ClaudePrivateModel \:672a\:8a2d\:5b9a: \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:30e2\:30c7\:30eb\:3092\:691c\:7d22 *)
+        useFallback,
+          Module[{avail = NBAccess`NBGetAvailableFallbackModels[privLevel]},
+            If[Length[avail] > 0,
+              modelSpec = First[avail],
+              Return[iL["Error: PrivacyLevel " <> ToString[privLevel] <>
+                " \:306b\:5bfe\:5fdc\:3059\:308b\:30e2\:30c7\:30eb\:304c\:3042\:308a\:307e\:305b\:3093\:3002",
+                "Error: No model available for PrivacyLevel " <> ToString[privLevel] <> "."]]]],
+        (* \:3069\:308c\:306b\:3082\:8a72\:5f53\:3057\:306a\:3044 *)
+        True,
+          Return[iL["Error: \:79d8\:5bc6\:30bb\:30eb\:306e\:51e6\:7406\:306b\:306f $ClaudePrivateModel \:307e\:305f\:306f Fallback \:304c\:5fc5\:8981\:3067\:3059\:3002",
+            "Error: $ClaudePrivateModel or Fallback required for confidential cells."]]
+      ]];
+
+    (* \:9032\:6357\:8868\:793a\:7528\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3092\:53d6\:5f97 *)
+    nb = Quiet[InputNotebook[]];
+    If[Head[nb] =!= NotebookObject, nb = Quiet[EvaluationNotebook[]]];
+    startTime = AbsoluteTime[];
+
+    (* \:8868\:793a\:30e9\:30d9\:30eb *)
+    label = Which[
+      ListQ[modelSpec] && Length[modelSpec] >= 2,
+        modelSpec[[1]] <> "/" <> modelSpec[[2]],
+      True,
+        "Claude"
+    ];
+
+    (* WindowStatusArea \:7d4c\:904e\:6642\:9593\:8868\:793a\:30bf\:30b9\:30af\:3092\:958b\:59cb *)
+    If[Head[nb] === NotebookObject,
+      Quiet[CurrentValue[nb, WindowStatusArea] =
+        label <> " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s", "querying... 0s"]];
+      progressTask = CreateScheduledTask[
+        With[{pNb = nb, t0 = startTime, lbl = label},
+          Module[{e = Round[AbsoluteTime[] - t0, 1]},
+            Quiet[CurrentValue[pNb, WindowStatusArea] =
+              lbl <> " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... ", "querying... "] <> ToString[e] <> "s"]]],
+        1];
+      Quiet[StartScheduledTask[progressTask]],
+      progressTask = None];
+
+    (* LLM \:547c\:3073\:51fa\:3057\:672c\:4f53 *)
+    response = If[modelSpec =!= Automatic && ListQ[modelSpec] && Length[modelSpec] >= 2,
+      (* \:660e\:793a\:30e2\:30c7\:30eb\:6307\:5b9a (or \:81ea\:52d5\:89e3\:6c7a\:6e08\:307f $ClaudePrivateModel): API \:7d4c\:7531 *)
+      iQueryViaAPI[
+        modelSpec[[1]], modelSpec[[2]], prompt,
+        If[Length[modelSpec] >= 3, modelSpec[[3]], ""]],
+      (* Automatic: Claude Code CLI + \:30aa\:30d7\:30b7\:30e7\:30ca\:30eb\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af *)
+      iQueryWithFallback[prompt, useFallback]
+    ];
+
+    (* \:9032\:6357\:8868\:793a\:3092\:505c\:6b62\:30fb\:30af\:30ea\:30a2 *)
+    If[progressTask =!= None,
+      Quiet[StopScheduledTask[progressTask]];
+      Quiet[RemoveScheduledTask[progressTask]]];
+    If[Head[nb] === NotebookObject,
+      elapsed = Round[AbsoluteTime[] - startTime, 1];
+      Quiet[CurrentValue[nb, WindowStatusArea] =
+        label <> " " <> iL["\:5b8c\:4e86 ", "done "] <> ToString[elapsed] <> "s"];
+      RunScheduledTask[
+        With[{pNb = nb},
+          Quiet[CurrentValue[pNb, WindowStatusArea] = ""]],
+        {2}]];
+
+    response
+  ];
+
+
+Options[ClaudeWriteResponse] = {AutoEvaluate -> False};
+ClaudeWriteResponse[nb_NotebookObject, text_String, opts:OptionsPattern[]] :=
+  iWriteQueryResponse[nb, text, TrueQ[OptionValue[AutoEvaluate]]];
+
+(* ============================================================
+   ClaudeQueryAsync: \:975e\:540c\:671f LLM \:30af\:30a8\:30ea\:ff08\:30ab\:30fc\:30cd\:30eb\:975e\:30d6\:30ed\:30c3\:30af\:ff09
+   \:5b8c\:4e86\:6642\:306b callback[\:5fdc\:7b54\:6587\:5b57\:5217] \:3092\:547c\:3076\:3002
+   iClaudeQueryImpl \:3068\:5b8c\:5168\:306b\:540c\:3058\:975e\:540c\:671f\:30d1\:30b9\:3092\:4f7f\:7528:
+   - Job \:30b7\:30b9\:30c6\:30e0 (NBBeginJobAtEvalCell) \:3067\:9032\:6357\:7ba1\:7406
+   - iClaudeQueryAsyncWithProgress / iStartFallbackAsync \:3067\:975e\:540c\:671f\:5b9f\:884c
+   nb \:5f15\:6570\:3092\:5fc5\:305a\:6307\:5b9a\:3059\:308b\:3053\:3068\:ff08\:30d1\:30ec\:30c3\:30c8\:304b\:3089\:306f iDocUserNotebook[] \:7b49\:3067\:89e3\:6c7a\:6e08\:307f\:306e nb\:ff09\:3002
+   ============================================================ *)
+Options[ClaudeQueryAsync] = {
+  Fallback -> False,
+  Model -> Automatic,
+  PrivacyLevel -> Automatic,
+  Timeout -> Automatic
+};
+
+ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPattern[]] :=
+  Module[{modelSpec, privLevel, useFallback, availModels, useClaudeCode,
+          jobId, wrappedCallback, accessLevel, norm, hasMedia, mediaFiles},
+    modelSpec = OptionValue[Model];
+    privLevel = Replace[OptionValue[PrivacyLevel], Automatic -> 0.0];
+    useFallback = TrueQ[OptionValue[Fallback]];
+    accessLevel = If[privLevel > 0, privLevel, 0.5];
+
+    (* === \:30b0\:30ed\:30fc\:30d0\:30eb\:72b6\:614b\:8a2d\:5b9a: ClaudeQuery \:3068\:540c\:3058 === *)
+    $currentUseFallback = useFallback;
+    $iAllowReadTool = False;
+    $iAllowWebSearch = False;
+    (* \:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:3092\:30ed\:30fc\:30c9: iInjectAttachments \:304c\:4f7f\:7528\:3059\:308b *)
+    $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, iSessionTag[]];
+
+    (* === \:30e1\:30c7\:30a3\:30a2\:30d5\:30a1\:30a4\:30eb\:691c\:51fa ===
+       PDF/\:753b\:50cf\:7b49\:304c\:30a2\:30bf\:30c3\:30c1\:3055\:308c\:3066\:3044\:308b\:5834\:5408:
+       - \:8ab2\:91d1API\:8a31\:53ef (useFallback=True): Anthropic API \:3067\:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb\:9001\:4fe1
+       - \:8ab2\:91d1API\:7981\:6b62 (useFallback=False): CLI \:30d1\:30b9\:3067\:51e6\:7406\:ff08\:30c4\:30fc\:30eb\:627f\:8a8d\:304c\:5fc5\:8981\:306b\:306a\:308b\:5834\:5408\:3042\:308a\:ff09 *)
+    norm = iNormalizePrompt[iInjectAttachments[prompt]];
+    mediaFiles = If[ListQ[norm["mediaFiles"]], norm["mediaFiles"], {}];
+    hasMedia = Length[mediaFiles] > 0 && useFallback;
+
+    (* === \:30e2\:30c7\:30eb\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0 === *)
+    If[modelSpec === Automatic,
+      Which[
+        (* \:30e1\:30c7\:30a3\:30a2\:30d5\:30a1\:30a4\:30eb\:3042\:308a + \:8ab2\:91d1API\:8a31\:53ef: Anthropic API \:5fc5\:9808\:ff08\:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb PDF \:5bfe\:5fdc\:ff09 *)
+        hasMedia,
+          Module[{allModels, anthropicModels, apiKey},
+            allModels = NBAccess`NBGetAvailableFallbackModels[accessLevel];
+            anthropicModels = Select[allModels,
+              ToLowerCase[#[[1]]] === "anthropic" &];
+            If[Length[anthropicModels] > 0,
+              modelSpec = First[anthropicModels],
+              apiKey = Quiet[NBAccess`NBGetAPIKey["anthropic",
+                PrivacySpec -> <|"AccessLevel" -> 0.5|>]];
+              If[StringQ[apiKey],
+                modelSpec = {"anthropic", "claude-sonnet-4-6"},
+                callback[iL[
+                  "Error: PDF/\:753b\:50cf\:306e\:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb\:9001\:4fe1\:306b\:306f Anthropic API \:30ad\:30fc\:304c\:5fc5\:8981\:3067\:3059\:3002\n" <>
+                  "NBSetAPIKey[\"anthropic\", \"sk-...\"] \:3067\:8a2d\:5b9a\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+                  "Error: Multimodal PDF/image requires an Anthropic API key.\n" <>
+                  "Set it with NBSetAPIKey[\"anthropic\", \"sk-...\"]."]];
+                Return[]]]],
+        privLevel <= 0.5, Null,
+        ListQ[$ClaudePrivateModel] && Length[$ClaudePrivateModel] >= 2,
+          modelSpec = $ClaudePrivateModel,
+        useFallback,
+          availModels = NBAccess`NBGetAvailableFallbackModels[privLevel];
+          If[Length[availModels] > 0,
+            modelSpec = First[availModels],
+            callback[iL["Error: PrivacyLevel " <> ToString[privLevel] <>
+              " \:306b\:5bfe\:5fdc\:3059\:308b\:30e2\:30c7\:30eb\:304c\:3042\:308a\:307e\:305b\:3093\:3002",
+              "Error: No model available for PrivacyLevel " <> ToString[privLevel] <> "."]];
+            Return[]],
+        True,
+          callback[iL["Error: \:79d8\:5bc6\:30bb\:30eb\:306e\:51e6\:7406\:306b\:306f $ClaudePrivateModel \:307e\:305f\:306f Fallback \:304c\:5fc5\:8981\:3067\:3059\:3002",
+            "Error: $ClaudePrivateModel or Fallback required for confidential cells."]];
+          Return[]
+      ]];
+
+    (* === Job \:30b7\:30b9\:30c6\:30e0: iClaudeQueryImpl \:3068\:5b8c\:5168\:306b\:540c\:3058 === *)
+    jobId = NBAccess`NBBeginJobAtEvalCell[nb];
+
+    useClaudeCode = NBAccess`NBProviderCanAccess["claudecode", accessLevel];
+    availModels = If[useFallback && !hasMedia,
+      NBAccess`NBGetAvailableFallbackModels[accessLevel], {}];
+
+    (* === \:30b3\:30fc\:30eb\:30d0\:30c3\:30af: Job \:30e9\:30a4\:30d5\:30b5\:30a4\:30af\:30eb\:7ba1\:7406\:4ed8\:304d === *)
+    wrappedCallback = With[{nb2 = nb, jid = jobId, userCb = callback},
+      Function[response,
+        Module[{},
+          NBAccess`NBJobMoveToAnchor[jid];
+          $iJobActiveNb = nb2;
+          userCb[response];
+          NBAccess`NBJobResetSlotWritten[jid, 1];
+          $iJobActiveNb = None;
+          NBAccess`NBEndJob[jid]
+        ]]
+    ];
+
+    (* === \:975e\:540c\:671f\:30c7\:30a3\:30b9\:30d1\:30c3\:30c1 ===
+       \:512a\:5148\:9806\:4f4d:
+       1. hasMedia (\:8ab2\:91d1API\:8a31\:53ef + \:30e1\:30c7\:30a3\:30a2\:30d5\:30a1\:30a4\:30eb) \[RightArrow] Anthropic API \:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb
+       2. modelSpec \:660e\:793a\:6307\:5b9a \[RightArrow] API \:7d4c\:7531
+       3. Claude Code CLI \:5229\:7528\:53ef\:80fd \[RightArrow] CLI (\:8ab2\:91d1API\:7981\:6b62\:6642\:306e\:30c7\:30d5\:30a9\:30eb\:30c8)
+       4. Fallback \:30e2\:30c7\:30eb\:3042\:308a \[RightArrow] API \:7d4c\:7531
+       5. \:3069\:308c\:3082\:4e0d\:53ef \[RightArrow] \:30a8\:30e9\:30fc *)
+    Which[
+      (* \:30e1\:30c7\:30a3\:30a2\:30d5\:30a1\:30a4\:30eb\:3042\:308a + \:8ab2\:91d1API\:8a31\:53ef: Anthropic API \:3067\:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb\:9001\:4fe1 *)
+      hasMedia,
+        iStartFallbackAsync[norm["text"], nb, wrappedCallback,
+          {modelSpec}, 1, jobId, OptionValue[Timeout], mediaFiles],
+      (* Model \:660e\:793a\:6307\:5b9a: API \:7d4c\:7531\:3067\:975e\:540c\:671f *)
+      modelSpec =!= Automatic && ListQ[modelSpec] && Length[modelSpec] >= 2,
+        iStartFallbackAsync[prompt, nb, wrappedCallback,
+          {modelSpec}, 1, jobId, OptionValue[Timeout], {}],
+      (* Automatic: \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:57fa\:3065\:304f\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0 *)
+      useClaudeCode,
+        iClaudeQueryAsyncWithProgress[
+          prompt, wrappedCallback, nb, {}, jobId, availModels],
+      Length[availModels] > 0,
+        iStartFallbackAsync[prompt, nb, wrappedCallback,
+          availModels, 1, jobId, OptionValue[Timeout], {}],
+      (* \:3069\:306e\:30e2\:30c7\:30eb\:3082\:5bfe\:5fdc\:4e0d\:53ef *)
+      True,
+        NBAccess`NBWriteSlot[jobId, 1,
+          Cell["\[WarningSign] AccessLevel " <> ToString[accessLevel] <>
+            " \:306b\:5bfe\:5fdc\:3059\:308b\:30e2\:30c7\:30eb\:304c\:3042\:308a\:307e\:305b\:3093\:3002", "Print",
+            FontWeight -> Bold, FontColor -> Red, FontSize -> 11]];
+        $iJobActiveNb = None;
+        NBAccess`NBEndJob[jobId]
+    ];
+  ];
 
 Options[ClaudeQuery] = {Fallback -> False, WebFetch -> False, WebSearch -> True, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False, AutoEvaluate -> False, Timeout -> Automatic};
 
@@ -5157,14 +5434,14 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
   Module[{history, lastEntry, cellCountAfter, notebookCtx,
           fullPrompt, step, entry, jobId, queryCallback,
           accessLevel, availModels, useClaudeCode},
-    (* アクセスレベルの解決: PrivacySpec と Model の両方を考慮 *)
+    (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306e\:89e3\:6c7a: PrivacySpec \:3068 Model \:306e\:4e21\:65b9\:3092\:8003\:616e *)
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
     $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
     history = iSessionHistoryWithInherit[nb, tag];
     lastEntry      = If[Length[history] > 0, Last[history], <||>];
     cellCountAfter = Replace[Lookup[lastEntry, "cellCountAfter",
                        Lookup[lastEntry, "cellCount", 0]], Except[_Integer] -> 0];
-    (* アクセスレベルに基づいてノートブックコンテキストを構築 *)
+    (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:57fa\:3065\:3044\:3066\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3092\:69cb\:7bc9 *)
     notebookCtx    = With[{r = Quiet[iCaptureNotebookContext[nb, cellCountAfter, accessLevel]]}, If[StringQ[r], r, ""]];
     step           = Length[iSessionHistory[nb, tag]];
 
@@ -5198,11 +5475,11 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
     (* Job \:30b7\:30b9\:30c6\:30e0\:3067\:8a55\:4fa1\:30bb\:30eb\:76f4\:5f8c\:306b\:30b9\:30ed\:30c3\:30c8\:3092\:4e88\:7d04 *)
     jobId = NBAccess`NBBeginJobAtEvalCell[nb];
 
-    (* アクセスレベルに基づいてフォールバック可能モデルを取得 *)
+    (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:57fa\:3065\:3044\:3066\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:53ef\:80fd\:30e2\:30c7\:30eb\:3092\:53d6\:5f97 *)
     availModels = If[TrueQ[useFallback],
       NBAccess`NBGetAvailableFallbackModels[accessLevel],
       {}];
-    (* Claude Code 自体がアクセスレベルに対応可能か判定 *)
+    (* Claude Code \:81ea\:4f53\:304c\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:5bfe\:5fdc\:53ef\:80fd\:304b\:5224\:5b9a *)
     useClaudeCode = NBAccess`NBProviderCanAccess["claudecode", accessLevel];
 
     If[TrueQ[useWebFetch] && TrueQ[useFallback],
@@ -5242,10 +5519,10 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
               iWriteQueryResponse[nb2, response, ae],
               NBAccess`NBWriteCell[nb2,
                 Cell[iL["Error: \:5fdc\:7b54\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002", "Error: Could not obtain a response."], "Text"]]];
-            (* 高 AccessLevel の場合、新規セルを自動秘密マーク *)
+            (* \:9ad8 AccessLevel \:306e\:5834\:5408\:3001\:65b0\:898f\:30bb\:30eb\:3092\:81ea\:52d5\:79d8\:5bc6\:30de\:30fc\:30af *)
             If[TrueQ[autoMark],
               iAutoMarkNewCellsConfidential[nb2, ccBefore]];
-            (* ジョブ終了: 進捗スロットを未使用に戻して削除 *)
+            (* \:30b8\:30e7\:30d6\:7d42\:4e86: \:9032\:6357\:30b9\:30ed\:30c3\:30c8\:3092\:672a\:4f7f\:7528\:306b\:623b\:3057\:3066\:524a\:9664 *)
             NBAccess`NBJobResetSlotWritten[jid, 1];
             $iJobActiveNb = None;
             NBAccess`NBEndJob[jid];
@@ -5260,16 +5537,16 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
         (* Model \:6307\:5b9a\:3042\:308a: API \:7d4c\:7531\:3067\:6307\:5b9a\:30e2\:30c7\:30eb\:3092\:76f4\:63a5\:547c\:3073\:51fa\:3057 *)
         iStartFallbackAsync[fullPrompt, nb, queryCallback,
           {modelSpec}, 1, jobId, timeout, mediaFiles],
-        (* アクセスレベルに基づくルーティング *)
+        (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:57fa\:3065\:304f\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0 *)
         If[useClaudeCode,
-          (* Claude Code 使用可能: 通常パス (フォールバック時は availModels を使用) *)
+          (* Claude Code \:4f7f\:7528\:53ef\:80fd: \:901a\:5e38\:30d1\:30b9 (\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:6642\:306f availModels \:3092\:4f7f\:7528) *)
           iClaudeQueryAsyncWithProgress[
             fullPrompt, queryCallback, nb, extraImageDirs, jobId, availModels],
-          (* Claude Code 使用不可: フォールバックモデルへ直接 *)
+          (* Claude Code \:4f7f\:7528\:4e0d\:53ef: \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:30e2\:30c7\:30eb\:3078\:76f4\:63a5 *)
           If[Length[availModels] > 0,
             iStartFallbackAsync[fullPrompt, nb, queryCallback,
               availModels, 1, jobId, timeout, mediaFiles],
-            (* どのモデルもアクセスレベルに対応不可 *)
+            (* \:3069\:306e\:30e2\:30c7\:30eb\:3082\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:5bfe\:5fdc\:4e0d\:53ef *)
             NBAccess`NBWriteSlot[jobId, 1,
               Cell["\[WarningSign] AccessLevel " <> ToString[accessLevel] <>
                 " \:306b\:5bfe\:5fdc\:3059\:308b\:30e2\:30c7\:30eb\:304c\:3042\:308a\:307e\:305b\:3093\:3002", "Print",
@@ -5292,9 +5569,9 @@ ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
     $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
   With[{nb = Quiet[EvaluationNotebook[]]},
   Module[{session, tag},
-  (* LLM 送信直前の精密チェック (第2層):
-     全ノートブックを走査して完全な依存グラフを構築し、
-     秘密依存変数の最終判定を行う *)
+  (* LLM \:9001\:4fe1\:76f4\:524d\:306e\:7cbe\:5bc6\:30c1\:30a7\:30c3\:30af (\:7b2c2\:5c64):
+     \:5168\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3092\:8d70\:67fb\:3057\:3066\:5b8c\:5168\:306a\:4f9d\:5b58\:30b0\:30e9\:30d5\:3092\:69cb\:7bc9\:3057\:3001
+     \:79d8\:5bc6\:4f9d\:5b58\:5909\:6570\:306e\:6700\:7d42\:5224\:5b9a\:3092\:884c\:3046 *)
   iPrecisionConfidentialCheck[nb];
   session = iEnsureDefaultSession[nb];
   tag     = session["SessionTag"];
@@ -5305,7 +5582,7 @@ ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
     {}, {}]
   ]]);
 
-(* セッション対応版 ClaudeQuery（非同期・履歴保存付き） *)
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:5bfe\:5fdc\:7248 ClaudeQuery\:ff08\:975e\:540c\:671f\:30fb\:5c65\:6b74\:4fdd\:5b58\:4ed8\:304d\:ff09 *)
 ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ClaudeQuery, {opts}, Fallback]];
     $iAllowReadTool = True;
@@ -5313,7 +5590,7 @@ ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
   With[{nb = session["Notebook"]},
   Module[{tag},
     tag = session["SessionTag"];
-    (* LLM 送信直前の精密チェック (第2層) *)
+    (* LLM \:9001\:4fe1\:76f4\:524d\:306e\:7cbe\:5bc6\:30c1\:30a7\:30c3\:30af (\:7b2c2\:5c64) *)
     iPrecisionConfidentialCheck[nb];
     $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
     iClaudeQueryImpl[nb, tag, prompt,
@@ -5327,8 +5604,8 @@ ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
       {}, {}]
   ]]);
 
-(* リスト入力版 ClaudeQuery: {"質問", Image[...], File["path"], ...}
-   画像・PDF・音声ファイルを API にマルチモーダルコンテンツとして直接送信する。 *)
+(* \:30ea\:30b9\:30c8\:5165\:529b\:7248 ClaudeQuery: {"\:8cea\:554f", Image[...], File["path"], ...}
+   \:753b\:50cf\:30fbPDF\:30fb\:97f3\:58f0\:30d5\:30a1\:30a4\:30eb\:3092 API \:306b\:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb\:30b3\:30f3\:30c6\:30f3\:30c4\:3068\:3057\:3066\:76f4\:63a5\:9001\:4fe1\:3059\:308b\:3002 *)
 ClaudeQuery[items_List, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = True;
@@ -5346,7 +5623,7 @@ ClaudeQuery[items_List, opts:OptionsPattern[]] := (
       norm["mediaFiles"], norm["imageDirs"]]
   ]]);
 
-(* セッション指定版リスト入力 ClaudeQuery *)
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:6307\:5b9a\:7248\:30ea\:30b9\:30c8\:5165\:529b ClaudeQuery *)
 ClaudeQuery[session_Association, items_List, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ClaudeQuery, {opts}, Fallback]];
     $iAllowReadTool = True;
@@ -5369,18 +5646,18 @@ ClaudeQuery[session_Association, items_List, opts:OptionsPattern[]] := (
   ]]);
 
 (* ============================================================
-   $Language ベースの言語指示ヘルパー
-   プロンプト内の言語指定を $Language に基づいて動的生成する。
+   $Language \:30d9\:30fc\:30b9\:306e\:8a00\:8a9e\:6307\:793a\:30d8\:30eb\:30d1\:30fc
+   \:30d7\:30ed\:30f3\:30d7\:30c8\:5185\:306e\:8a00\:8a9e\:6307\:5b9a\:3092 $Language \:306b\:57fa\:3065\:3044\:3066\:52d5\:7684\:751f\:6210\:3059\:308b\:3002
    ============================================================ *)
 
-(* 現在の言語名を返す（英語表記） *)
+(* \:73fe\:5728\:306e\:8a00\:8a9e\:540d\:3092\:8fd4\:3059\:ff08\:82f1\:8a9e\:8868\:8a18\:ff09 *)
 iLanguageName[] := If[StringQ[$Language], $Language, "English"];
 
-(* プロンプト用の言語指示文を生成。
+(* \:30d7\:30ed\:30f3\:30d7\:30c8\:7528\:306e\:8a00\:8a9e\:6307\:793a\:6587\:3092\:751f\:6210\:3002
    style:
-     "polite"  → 敬体 (日本語) / polite style (他言語)
-     "plain"   → 常体 (日本語) / concise style (他言語)
-     "general" → "All text must be written in ..." *)
+     "polite"  \[RightArrow] \:656c\:4f53 (\:65e5\:672c\:8a9e) / polite style (\:4ed6\:8a00\:8a9e)
+     "plain"   \[RightArrow] \:5e38\:4f53 (\:65e5\:672c\:8a9e) / concise style (\:4ed6\:8a00\:8a9e)
+     "general" \[RightArrow] "All text must be written in ..." *)
 iLanguageInstruction["polite"] :=
   If[$Language === "Japanese",
     "Write in Japanese using \:656c\:4f53 (\:3067\:3059\:30fb\:307e\:3059\:8abf) style.\n",
@@ -5424,7 +5701,7 @@ ClaudeExtractAllCode[response_String] :=
   StringCases[response,
     "```mathematica" ~~ Shortest[code__] ~~ "```" :> StringTrim[code]];
 
-(* 言語タグ付きコードブロック抽出: {<|"lang"->..., "code"->...|>, ...} *)
+(* \:8a00\:8a9e\:30bf\:30b0\:4ed8\:304d\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:62bd\:51fa: {<|"lang"->..., "code"->...|>, ...} *)
 $iExternalLangMap = <|
   "python" -> "Python", "py" -> "Python",
   "r" -> "R",
@@ -5447,17 +5724,17 @@ iExtractAllCodeBlocks[response_String] := Module[{raw},
     ]], raw]
 ];
 
-(* \uXXXX / \xNN 形式の Unicode エスケープを実文字に変換。
-   Claude が日本語を \x4e00\x81f4 や \:30d1\:30c3 のように出力する問題への対策。
-   Mathematica は \:XXXX 形式なので \uXXXX / \xNN はリテラルとして残ってしまう。 *)
+(* \uXXXX / \xNN \:5f62\:5f0f\:306e Unicode \:30a8\:30b9\:30b1\:30fc\:30d7\:3092\:5b9f\:6587\:5b57\:306b\:5909\:63db\:3002
+   Claude \:304c\:65e5\:672c\:8a9e\:3092 \x4e00\x81f4 \:3084 \:30d1\:30c3 \:306e\:3088\:3046\:306b\:51fa\:529b\:3059\:308b\:554f\:984c\:3078\:306e\:5bfe\:7b56\:3002
+   Mathematica \:306f \:XXXX \:5f62\:5f0f\:306a\:306e\:3067 \uXXXX / \xNN \:306f\:30ea\:30c6\:30e9\:30eb\:3068\:3057\:3066\:6b8b\:3063\:3066\:3057\:307e\:3046\:3002 *)
 iFixUnicodeEscapes[code_String] :=
   Module[{result},
-    (* Step 1: \uXXXX → 実文字 *)
+    (* Step 1: \uXXXX \[RightArrow] \:5b9f\:6587\:5b57 *)
     result = StringReplace[code,
       "\\u" ~~ hex : Repeated[HexadecimalCharacter, {4}] :>
         FromCharacterCode[FromDigits[hex, 16]]];
-    (* Step 2: \xNN\xNN... (UTF-8 バイト列) → 実文字
-       連続する \xNN を UTF-8 バイト列として解釈 *)
+    (* Step 2: \xNN\xNN... (UTF-8 \:30d0\:30a4\:30c8\:5217) \[RightArrow] \:5b9f\:6587\:5b57
+       \:9023\:7d9a\:3059\:308b \xNN \:3092 UTF-8 \:30d0\:30a4\:30c8\:5217\:3068\:3057\:3066\:89e3\:91c8 *)
     result = StringReplace[result,
       s : Repeated["\\x" ~~ Repeated[HexadecimalCharacter, {2}], {2, Infinity}] :>
         Module[{bytes},
@@ -5465,19 +5742,19 @@ iFixUnicodeEscapes[code_String] :=
             StringCases[s, "\\x" ~~ h : Repeated[HexadecimalCharacter, {2}] :> h];
           Quiet @ Check[
             FromCharacterCode[bytes, "UTF-8"],
-            s  (* デコード失敗時は元のまま *)
+            s  (* \:30c7\:30b3\:30fc\:30c9\:5931\:6557\:6642\:306f\:5143\:306e\:307e\:307e *)
           ]]];
     result
   ];
 
-(* ExternalLanguage セルを書き込む *)
+(* ExternalLanguage \:30bb\:30eb\:3092\:66f8\:304d\:8fbc\:3080 *)
 iWriteExternalLanguageCell[nb_NotebookObject, code_String,
     lang_String, autoEvaluate_:False] :=
   NBAccess`NBWriteExternalLanguageCell[nb, code, lang, autoEvaluate];
 
-(* レスポンスからコードブロックを書き込む共通処理 *)
-(* 長時間ブロッキングする可能性のある関数パターン *)
-(* 外部サービスへの不可逆な書き込み操作: 自動実行をスキップして確認を求める *)
+(* \:30ec\:30b9\:30dd\:30f3\:30b9\:304b\:3089\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:3092\:66f8\:304d\:8fbc\:3080\:5171\:901a\:51e6\:7406 *)
+(* \:9577\:6642\:9593\:30d6\:30ed\:30c3\:30ad\:30f3\:30b0\:3059\:308b\:53ef\:80fd\:6027\:306e\:3042\:308b\:95a2\:6570\:30d1\:30bf\:30fc\:30f3 *)
+(* \:5916\:90e8\:30b5\:30fc\:30d3\:30b9\:3078\:306e\:4e0d\:53ef\:9006\:306a\:66f8\:304d\:8fbc\:307f\:64cd\:4f5c: \:81ea\:52d5\:5b9f\:884c\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:3066\:78ba\:8a8d\:3092\:6c42\:3081\:308b *)
 $iLongRunningPatterns = {
   "GitHubRefreshAndCommit", "GitHubPushAll", "GitHubCommit",
   "GitHubCreatePullRequest", "GitHubMergePullRequest",
@@ -5487,10 +5764,10 @@ $iLongRunningPatterns = {
 iIsLongRunningCode[code_String] :=
   AnyTrue[$iLongRunningPatterns, StringContainsQ[code, #] &];
 
-(* コードブロック間の依存関係を解析し、依存するブロックを結合する。
-   各ブロックで定義されるシンボル (x = ..., x := ...) を抽出し、
-   後続ブロックがそのシンボルを参照している場合に結合する。
-   並列実行を維持しつつ変数依存エラーを防止する。 *)
+(* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:9593\:306e\:4f9d\:5b58\:95a2\:4fc2\:3092\:89e3\:6790\:3057\:3001\:4f9d\:5b58\:3059\:308b\:30d6\:30ed\:30c3\:30af\:3092\:7d50\:5408\:3059\:308b\:3002
+   \:5404\:30d6\:30ed\:30c3\:30af\:3067\:5b9a\:7fa9\:3055\:308c\:308b\:30b7\:30f3\:30dc\:30eb (x = ..., x := ...) \:3092\:62bd\:51fa\:3057\:3001
+   \:5f8c\:7d9a\:30d6\:30ed\:30c3\:30af\:304c\:305d\:306e\:30b7\:30f3\:30dc\:30eb\:3092\:53c2\:7167\:3057\:3066\:3044\:308b\:5834\:5408\:306b\:7d50\:5408\:3059\:308b\:3002
+   \:4e26\:5217\:5b9f\:884c\:3092\:7dad\:6301\:3057\:3064\:3064\:5909\:6570\:4f9d\:5b58\:30a8\:30e9\:30fc\:3092\:9632\:6b62\:3059\:308b\:3002 *)
 iExtractDefinedSymbols[code_String] :=
   Union[StringCases[code,
     RegularExpression["(?m)^\\s*([a-zA-Z$][a-zA-Z0-9$]*)\\s*=(?!=)"] :> "$1"]];
@@ -5510,10 +5787,10 @@ iMergeDependentBlocks[codeList_List] :=
       refs = iExtractReferencedSymbols[code];
       defs = iExtractDefinedSymbols[code];
       If[Length[Intersection[currentDefs, refs]] > 0,
-        (* 依存あり: 現在のグループに結合 *)
+        (* \:4f9d\:5b58\:3042\:308a: \:73fe\:5728\:306e\:30b0\:30eb\:30fc\:30d7\:306b\:7d50\:5408 *)
         current = current <> "\n\n" <> code;
         currentDefs = Union[currentDefs, defs],
-        (* 依存なし: 現在のグループを確定し新グループ開始 *)
+        (* \:4f9d\:5b58\:306a\:3057: \:73fe\:5728\:306e\:30b0\:30eb\:30fc\:30d7\:3092\:78ba\:5b9a\:3057\:65b0\:30b0\:30eb\:30fc\:30d7\:958b\:59cb *)
         AppendTo[groups, current];
         current = code;
         currentDefs = defs],
@@ -5527,26 +5804,26 @@ iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
     allBlocks = iExtractAllCodeBlocks[response];
     mathBlocks = Select[allBlocks, #["lang"] === "mathematica" &];
     extBlocks  = Select[allBlocks, #["lang"] =!= "mathematica" &];
-    (* 依存関係のあるコードブロックを結合 *)
+    (* \:4f9d\:5b58\:95a2\:4fc2\:306e\:3042\:308b\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:3092\:7d50\:5408 *)
     If[Length[mathBlocks] > 1,
       mergedCodes = iMergeDependentBlocks[#["code"] & /@ mathBlocks];
       mathBlocks = Map[<|"lang" -> "mathematica", "code" -> #,
         "syntaxError" -> !TrueQ[Quiet[SyntaxQ[#]]]|> &, mergedCodes],
-      (* Mathematica ブロックの構文チェック: 不正なコードは警告付きで挿入 *)
+      (* Mathematica \:30d6\:30ed\:30c3\:30af\:306e\:69cb\:6587\:30c1\:30a7\:30c3\:30af: \:4e0d\:6b63\:306a\:30b3\:30fc\:30c9\:306f\:8b66\:544a\:4ed8\:304d\:3067\:633f\:5165 *)
       mathBlocks = Map[
         Function[b,
           If[!TrueQ[Quiet[SyntaxQ[b["code"]]]],
             <|b, "syntaxError" -> True|>, b]
         ], mathBlocks]];
-    (* 構文エラー通知 *)
+    (* \:69cb\:6587\:30a8\:30e9\:30fc\:901a\:77e5 *)
     Scan[If[TrueQ[#["syntaxError"]],
       nbPrint[nb, iL["\:26a0\:fe0f \:69cb\:6587\:30a8\:30e9\:30fc\:3092\:691c\:51fa: \:751f\:6210\:30b3\:30fc\:30c9\:306e\:6587\:6cd5\:304c\:4e0d\:6b63\:3067\:3059\:3002\:624b\:52d5\:3067\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\:3002", "\:26a0\:fe0f Syntax error detected: Generated code has invalid syntax. Please fix manually."]]] &, mathBlocks];
     Which[
-      (* Mathematica ブロックがある場合 *)
+      (* Mathematica \:30d6\:30ed\:30c3\:30af\:304c\:3042\:308b\:5834\:5408 *)
       Length[mathBlocks] > 0,
         Do[
-          (* 長時間ブロッキング関数を含むセルは autoEvaluate を抑制 *)
-          (* 構文エラーのブロックも autoEvaluate を抑制 *)
+          (* \:9577\:6642\:9593\:30d6\:30ed\:30c3\:30ad\:30f3\:30b0\:95a2\:6570\:3092\:542b\:3080\:30bb\:30eb\:306f autoEvaluate \:3092\:6291\:5236 *)
+          (* \:69cb\:6587\:30a8\:30e9\:30fc\:306e\:30d6\:30ed\:30c3\:30af\:3082 autoEvaluate \:3092\:6291\:5236 *)
           ae = autoEvaluate && !iIsLongRunningCode[b["code"]] && !TrueQ[b["syntaxError"]];
           iWriteSmartCell[nb, b["code"], ae];
           If[!ae && autoEvaluate,
@@ -5556,7 +5833,7 @@ iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
           {b, mathBlocks}];
         iWriteContinueEvalButton[nb, autoEvaluate];
         blocks = #["code"] & /@ mathBlocks,
-      (* 外部言語ブロックのみの場合: ExternalLanguage セルとして書き込む *)
+      (* \:5916\:90e8\:8a00\:8a9e\:30d6\:30ed\:30c3\:30af\:306e\:307f\:306e\:5834\:5408: ExternalLanguage \:30bb\:30eb\:3068\:3057\:3066\:66f8\:304d\:8fbc\:3080 *)
       Length[extBlocks] > 0,
         Do[iWriteExternalLanguageCell[nb, b["code"], b["lang"], autoEvaluate],
           {b, extBlocks}];
@@ -5602,7 +5879,7 @@ Use parentheses for function arguments, not square brackets:\n\
   WRONG: $\\Psi[x,t]$  CORRECT: $\\Psi(x,t)$\n\
   WRONG: $V[x]$  CORRECT: $V(x)$\n\
 Avoid \\hat{}, \\vec{} if possible; use simple letters. \
-Keep formulas concise — very complex multi-line TeX may not convert.\n\
+Keep formulas concise \[LongDash] very complex multi-line TeX may not convert.\n\
 SYMBOL REFERENCE CONVENTION: <<n>> in the prompt refers to a specific symbol (variable or function) \
 in the user's Mathematica notebook kernel. Metadata about referenced symbols is appended at the end of the prompt. \
 In your answer, refer to the symbol by name.\n\
@@ -5631,7 +5908,7 @@ Plain text without code blocks will be discarded.\n\n\
 - If the task asks for information, a summary, or a list (e.g. 'list what we did', 'explain X'): \
 wrap the answer as a Mathematica expression using Column[{...}], Print[...], \
 or assign it to a variable like result = {...}. \
-Do NOT use CellPrint, TextCell, or Cell[...] to create text cells \:2014 text is placed automatically. \
+Do NOT use CellPrint, TextCell, or Cell[...] to create text cells \[LongDash] text is placed automatically. \
 Example: Instead of writing a plain text list, write:\n\
 ```mathematica\n\
 Column[{\n\
@@ -5640,15 +5917,15 @@ Column[{\n\
   \"2. \\:30d5\\:30a3\\:30dc\\:30ca\\:30c3\\:30c1\\:6570\\:5217\"\n\
 }, Spacings -> 1]\n\
 ```\n\n\
-PACKAGE USE vs UPDATE (CRITICAL \:2014 ABSOLUTE RULE):\n\
+PACKAGE USE vs UPDATE (CRITICAL \[LongDash] ABSOLUTE RULE):\n\
 When a package name appears in the task, FIRST check api.md for existing functions.\n\
 - If the task is to COMPUTE, DISPLAY, ANALYZE, USE, or EXECUTE something with the package: \
 generate code that CALLS the package's existing functions. NEVER generate ClaudeUpdatePackage.\n\
 - If the task is to ADD, MODIFY, FIX, CHANGE, or REMOVE functionality IN the package: \
 generate ClaudeUpdatePackage.\n\
-- WRONG: Task='\\:500d\\:6570\\:8a08\\:7b97\\:3067\\:ff13\\:500d\\:3059\\:308b\\:8a08\\:7b97\\:3092' \:2192 ClaudeUpdatePackage[...] (this USES the package, does NOT modify it)\n\
-- CORRECT: Task='\\:500d\\:6570\\:8a08\\:7b97\\:3067\\:ff13\\:500d\\:3059\\:308b\\:8a08\\:7b97\\:3092' \:2192 \\:4e09\\:500d\\:8a08\\:7b97[10] (call the existing function)\n\
-- CORRECT: Task='\\:500d\\:6570\\:8a08\\:7b97\\:306b\\:ff13\\:500d\\:3059\\:308b\\:95a2\\:6570\\:3092\\:8ffd\\:52a0\\:3057\\:3066' \:2192 ClaudeUpdatePackage[\"\\:500d\\:6570\\:8a08\\:7b97\", \"...\"]\n\
+- WRONG: Task='\\:500d\\:6570\\:8a08\\:7b97\\:3067\\:ff13\\:500d\\:3059\\:308b\\:8a08\\:7b97\\:3092' \[RightArrow] ClaudeUpdatePackage[...] (this USES the package, does NOT modify it)\n\
+- CORRECT: Task='\\:500d\\:6570\\:8a08\\:7b97\\:3067\\:ff13\\:500d\\:3059\\:308b\\:8a08\\:7b97\\:3092' \[RightArrow] \\:4e09\\:500d\\:8a08\\:7b97[10] (call the existing function)\n\
+- CORRECT: Task='\\:500d\\:6570\\:8a08\\:7b97\\:306b\\:ff13\\:500d\\:3059\\:308b\\:95a2\\:6570\\:3092\\:8ffd\\:52a0\\:3057\\:3066' \[RightArrow] ClaudeUpdatePackage[\"\\:500d\\:6570\\:8a08\\:7b97\", \"...\"]\n\
 The KEY distinction: '\\:3067...\\:3092' (use the package to do X) vs '\\:306b...\\:3092' (add X to the package).\n\n\
 Use idiomatic Wolfram Language style. \
 VARIABLE NAMING: A single underscore creates a Subscript \
@@ -5694,11 +5971,11 @@ Example - WRONG:\n\
 Example - CORRECT:\n\
   Style[Row[{\"\\:30e9\\:30d7\\:30e9\\:30b9\\:65b9\\:7a0b\\:5f0f: \", Superscript[\"\\[Del]\", 2], \"\\[CurlyPhi] = 0\"}], Bold]\n\
   Row[{Superscript[\"\\[Del]\", 2], \"\\[CurlyPhi] = \", expr}]\n\n\
-UNICODE IN STRINGS (CRITICAL \:2014 ABSOLUTE RULE):\n\
+UNICODE IN STRINGS (CRITICAL \[LongDash] ABSOLUTE RULE):\n\
 When writing Mathematica string literals that contain Japanese or other non-ASCII text, \
 ALWAYS write the actual characters directly as UTF-8. \
 NEVER use any escape sequence for Japanese characters:\n\
-- NEVER \\xNN\\xNN (e.g. \\x4e00\\x81f4) \:2014 this is the most common mistake\n\
+- NEVER \\xNN\\xNN (e.g. \\x4e00\\x81f4) \[LongDash] this is the most common mistake\n\
 - NEVER \\uXXXX (e.g. \\:ff08)\n\
 - NEVER \\:XXXX (e.g. \\:4e00) in notebook code (only allowed in .wl package files)\n\
 Simply write: \"\:4e00\:81f4\" not \"\\x4e00\\x81f4\", \"\:30d1\:30c3\:30b1\:30fc\:30b8\" not \"\\x30d1\\x30c3\\x30b1\\x30fc\\x30b8\".\n\
@@ -5722,7 +5999,7 @@ NOTE: Some cells in the notebook are marked as confidential and excluded from th
 Do NOT ask the user to share confidential data. Reference excluded data by variable name only.\n\
 SYMBOL REFERENCE: <<n>> in the prompt refers to a specific symbol in the user's kernel. \
 Metadata is appended at the end. Use the symbol name directly in your code.\n\
-Do NOT add any final guidance like 'ContinueEval', 'ContinueEval[]', '継続できます', '下のボタン', or 'コードを実行して確認'.\nThe notebook front end adds the continuation UI automatically, so your response must NOT mention it.\n\n" <>
+Do NOT add any final guidance like 'ContinueEval', 'ContinueEval[]', '\:7d99\:7d9a\:3067\:304d\:307e\:3059', '\:4e0b\:306e\:30dc\:30bf\:30f3', or '\:30b3\:30fc\:30c9\:3092\:5b9f\:884c\:3057\:3066\:78ba\:8a8d'.\nThe notebook front end adds the continuation UI automatically, so your response must NOT mention it.\n\n" <>
 "EXTERNAL LANGUAGE CODE:\n" <>
 "When the user asks for code entirely in Python, R, Julia, Ruby, or JavaScript (NodeJS):\n" <>
 "- Use the appropriate fenced code block: ```python, ```r, ```julia, ```ruby, or ```javascript\n" <>
@@ -5770,7 +6047,7 @@ Do NOT add any final guidance like 'ContinueEval', 'ContinueEval[]', '継続で�
 "(marked as excluded/confidential in the prompt, with no type info available):\n" <>
 "1. Do NOT guess or fabricate the variable's structure.\n" <>
 "2. Output a structure-probing code block ONLY:\n" <>
-"3. Add brief text: '上の構造調査結果を確認後、ContinueEval[] で本コードを生成します。'\n" <>
+"3. Add brief text: '\:4e0a\:306e\:69cb\:9020\:8abf\:67fb\:7d50\:679c\:3092\:78ba\:8a8d\:5f8c\:3001ContinueEval[] \:3067\:672c\:30b3\:30fc\:30c9\:3092\:751f\:6210\:3057\:307e\:3059\:3002'\n" <>
 "4. When ContinueEval is called with the structure results in history, " <>
 "generate the actual code using the revealed structure.\n\n" <>
 "R CODE OUTPUT CONVENTION:\n" <>
@@ -5800,8 +6077,8 @@ Do NOT add any final guidance like 'ContinueEval', 'ContinueEval[]', '継続で�
 "- NEVER paste the user's long text (especially content containing quotes, parentheses, " <>
 "or code block markers) directly into a Mathematica string literal.\n" <>
 "- Summarize the intent in 1-3 short sentences. Example:\n" <>
-"  BAD:  ClaudeUpdateDocumentation[\"pkg\", \"READMEの末尾（ライセンスの後）に誤って...（長い引用）...\"]\n" <>
-"  GOOD: ClaudeUpdateDocumentation[\"pkg\", \"README.mdのライセンスセクション以降に誤挿入されたテキストを削除する\"]\n" <>
+"  BAD:  ClaudeUpdateDocumentation[\"pkg\", \"README\:306e\:672b\:5c3e\:ff08\:30e9\:30a4\:30bb\:30f3\:30b9\:306e\:5f8c\:ff09\:306b\:8aa4\:3063\:3066...\:ff08\:9577\:3044\:5f15\:7528\:ff09...\"]\n" <>
+"  GOOD: ClaudeUpdateDocumentation[\"pkg\", \"README.md\:306e\:30e9\:30a4\:30bb\:30f3\:30b9\:30bb\:30af\:30b7\:30e7\:30f3\:4ee5\:964d\:306b\:8aa4\:633f\:5165\:3055\:308c\:305f\:30c6\:30ad\:30b9\:30c8\:3092\:524a\:9664\:3059\:308b\"]\n" <>
 "- Ensure all generated string literals are properly closed with matching quotes.\n" <>
 "- Verify the generated code has balanced brackets: [...], (...), \"...\".\n" <>
 "Example: User says 'Maildb\:306eshowMails\:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:8868\:793a\:6570\:309230\:306b\:5909\:66f4' -> Output:\n" <>
@@ -5864,7 +6141,7 @@ ToString[$ClaudeEvalMaxDepth] <> ").\n" <>
 "WEB SEARCH RECOMMENDATION (IMPORTANT):\n" <>
 "If the task requires up-to-date information, real-world data, current API specs, recent library versions,\n" <>
 "or any knowledge that may be beyond your training cutoff, include a note in your response:\n" <>
-"  '最新の情報が必要な場合は、WebSearch オプション付きで再実行してください:'\n" <>
+"  '\:6700\:65b0\:306e\:60c5\:5831\:304c\:5fc5\:8981\:306a\:5834\:5408\:306f\:3001WebSearch \:30aa\:30d7\:30b7\:30e7\:30f3\:4ed8\:304d\:3067\:518d\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044:'\n" <>
 "  '  ClaudeEval[\"...\", WebSearch -> True]'\n" <>
 "  'For up-to-date information, re-run with WebSearch option:'\n" <>
 "  '  ClaudeEval[\"...\", WebSearch -> True]'\n" <>
@@ -5875,42 +6152,42 @@ ToString[$ClaudeEvalMaxDepth] <> ").\n" <>
 iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     autoEvaluate_:True, modelSpec_:Automatic, privSpec_:Automatic, autoPrivate_:False,
     timeout_:Automatic, mediaFiles_List:{}] :=
-  Catch[  (* .nb ファイル検出時の早期リターンを Throw で実現 *)
+  Catch[  (* .nb \:30d5\:30a1\:30a4\:30eb\:691c\:51fa\:6642\:306e\:65e9\:671f\:30ea\:30bf\:30fc\:30f3\:3092 Throw \:3067\:5b9f\:73fe *)
   Module[{step, entry, jobId, history, contextPrompt, evalCallback,
           accessLevel, availModels, useClaudeCode,
           lastEntry, cellCountAfter, notebookCtx},
-    (* アクセスレベルの解決: PrivacySpec と Model の両方を考慮 *)
+    (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306e\:89e3\:6c7a: PrivacySpec \:3068 Model \:306e\:4e21\:65b9\:3092\:8003\:616e *)
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
-    (* 再帰深さチェック *)
+    (* \:518d\:5e30\:6df1\:3055\:30c1\:30a7\:30c3\:30af *)
     If[$iClaudeEvalCurrentDepth >= $ClaudeEvalMaxDepth,
       nbPrint[nb, iL["\:26a0\:fe0f ClaudeEval \:306e\:518d\:5e30\:6df1\:5ea6\:4e0a\:9650 (", "\:26a0\:fe0f ClaudeEval recursion depth limit ("] <> ToString[$ClaudeEvalMaxDepth] <>
         ") \:306b\:9054\:3057\:307e\:3057\:305f\:3002\:5fc5\:8981\:306a\:3089 $ClaudeEvalMaxDepth \:3092\:5897\:3084\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
       Return[$Failed]];
     $iClaudeEvalCurrentDepth++;
-    (* LLM 送信直前の精密チェック (第2層):
-       再帰呼び出しでは親が既にチェック済みなので、トップレベルのみ実行 *)
+    (* LLM \:9001\:4fe1\:76f4\:524d\:306e\:7cbe\:5bc6\:30c1\:30a7\:30c3\:30af (\:7b2c2\:5c64):
+       \:518d\:5e30\:547c\:3073\:51fa\:3057\:3067\:306f\:89aa\:304c\:65e2\:306b\:30c1\:30a7\:30c3\:30af\:6e08\:307f\:306a\:306e\:3067\:3001\:30c8\:30c3\:30d7\:30ec\:30d9\:30eb\:306e\:307f\:5b9f\:884c *)
     If[$iClaudeEvalCurrentDepth === 1,
       iPrecisionConfidentialCheck[nb]];
     $iCurrentSessionAttachments = NBAccess`NBHistoryGetAttachments[nb, tag];
     history = iSessionHistoryWithInherit[nb, tag];
     step    = Length[iSessionHistory[nb, tag]];
 
-    (* ノートブックコンテキスト収集: 直近のセル出力（エラー含む）を取得 *)
+    (* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:53ce\:96c6: \:76f4\:8fd1\:306e\:30bb\:30eb\:51fa\:529b\:ff08\:30a8\:30e9\:30fc\:542b\:3080\:ff09\:3092\:53d6\:5f97 *)
     lastEntry      = If[Length[history] > 0, Last[history], <||>];
     cellCountAfter = Replace[Lookup[lastEntry, "cellCountAfter",
                        Lookup[lastEntry, "cellCount", 0]], Except[_Integer] -> 0];
     notebookCtx    = With[{r = Quiet[iCaptureNotebookContext[nb, cellCountAfter, accessLevel]]},
                        If[StringQ[r], r, ""]];
 
-    (* ── .nb ファイル検出: Claude Code をバイパスして直接 ClaudeProcessFile を実行 ── *)
+    (* \[HorizontalLine]\[HorizontalLine] .nb \:30d5\:30a1\:30a4\:30eb\:691c\:51fa: Claude Code \:3092\:30d0\:30a4\:30d1\:30b9\:3057\:3066\:76f4\:63a5 ClaudeProcessFile \:3092\:5b9f\:884c \[HorizontalLine]\[HorizontalLine] *)
     Module[{nbFilePath, nbOutputPath, taskPrompt, nbCallCode},
 
     nbFilePath = iLLMGraphDetectFilePath[task];
     If[StringQ[nbFilePath] && FileExistsQ[nbFilePath],
 
-      (* 出力パスを task から抽出するか、デフォルトを生成 *)
+      (* \:51fa\:529b\:30d1\:30b9\:3092 task \:304b\:3089\:62bd\:51fa\:3059\:308b\:304b\:3001\:30c7\:30d5\:30a9\:30eb\:30c8\:3092\:751f\:6210 *)
       nbOutputPath = Module[{m, dir, base, ext, normInput},
-        (* タスク内の "xxx.nb" 形式を検索 *)
+        (* \:30bf\:30b9\:30af\:5185\:306e "xxx.nb" \:5f62\:5f0f\:3092\:691c\:7d22 *)
         m = StringCases[task,
           RegularExpression["([\\w\\s\\-\\.\\p{L}]+\\.nb)"] :> "$1",
           IgnoreCase -> True];
@@ -5920,28 +6197,28 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
           StringReplace[#, "\\" -> "/"] =!=
             StringReplace[nbFilePath, "\\" -> "/"] &];
         If[Length[m] > 0,
-          (* タスクに出力ファイル名が含まれていた *)
+          (* \:30bf\:30b9\:30af\:306b\:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:540d\:304c\:542b\:307e\:308c\:3066\:3044\:305f *)
           FileNameJoin[{DirectoryName[nbFilePath], First[m]}],
-          (* デフォルト: 入力と同じディレクトリに -processed suffix *)
+          (* \:30c7\:30d5\:30a9\:30eb\:30c8: \:5165\:529b\:3068\:540c\:3058\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306b -processed suffix *)
           dir  = DirectoryName[nbFilePath];
           base = FileBaseName[nbFilePath];
           ext  = FileExtension[nbFilePath];
           FileNameJoin[{dir, base <> "-processed." <> ext}]]];
 
-      (* task から .nb パスを除いた部分をプロンプトとして使用 *)
+      (* task \:304b\:3089 .nb \:30d1\:30b9\:3092\:9664\:3044\:305f\:90e8\:5206\:3092\:30d7\:30ed\:30f3\:30d7\:30c8\:3068\:3057\:3066\:4f7f\:7528 *)
       taskPrompt = StringTrim @ StringReplace[task,
         {nbFilePath -> "",
          RegularExpression["notebookfile\\s*=\\s*\"[^\"]*\"\\s*\\n?"] -> "",
          RegularExpression["\\n+"] -> " "}];
       If[taskPrompt === "", taskPrompt = task];
 
-      (* ClaudeProcessFile 呼び出しコードを生成 *)
+      (* ClaudeProcessFile \:547c\:3073\:51fa\:3057\:30b3\:30fc\:30c9\:3092\:751f\:6210 *)
       nbCallCode =
         "ClaudeProcessFile[\n  \"" <> taskPrompt <> "\",\n  \"" <>
         StringReplace[nbFilePath,    "\\" -> "\\\\"] <> "\",\n  \"" <>
         StringReplace[nbOutputPath, "\\" -> "\\\\"] <> "\"\n]";
 
-      (* セッションエントリ登録 *)
+      (* \:30bb\:30c3\:30b7\:30e7\:30f3\:30a8\:30f3\:30c8\:30ea\:767b\:9332 *)
       iSessionAppend[nb, tag, <|
         "step"        -> step,
         "time"        -> AbsoluteTime[],
@@ -5955,20 +6232,20 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
         "accessLevel" -> 0.5
       |>];
 
-      (* Job スロット確保 *)
+      (* Job \:30b9\:30ed\:30c3\:30c8\:78ba\:4fdd *)
       Module[{jid = NBAccess`NBBeginJobAtEvalCell[nb]},
         NBAccess`NBJobMoveToAnchor[jid];
 
-        (* 説明テキストを出力 *)
+        (* \:8aac\:660e\:30c6\:30ad\:30b9\:30c8\:3092\:51fa\:529b *)
         NBAccess`NBWriteCell[nb, Cell[
           "\:26a1 ClaudeProcessFile \:3092\:81ea\:52d5\:8d77\:52d5: " <>
-          FileNameTake[nbFilePath] <> " \:2192 " <>
+          FileNameTake[nbFilePath] <> " \[RightArrow] " <>
           FileNameTake[nbOutputPath],
           "Text",
           FontColor -> RGBColor[0, 0.5, 0],
           FontSize  -> 10]];
 
-        (* Input セルとして表示用に書き込み *)
+        (* Input \:30bb\:30eb\:3068\:3057\:3066\:8868\:793a\:7528\:306b\:66f8\:304d\:8fbc\:307f *)
         Quiet @ NotebookWrite[nb,
           Cell[nbCallCode, "Input",
             CellLabel -> "ClaudeProcessFile (auto)"],
@@ -5977,7 +6254,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
         $iJobActiveNb = None;
         NBAccess`NBEndJob[jid];
 
-        (* 直接評価 *)
+        (* \:76f4\:63a5\:8a55\:4fa1 *)
         If[TrueQ[autoEvaluate],
           ToExpression[nbCallCode, InputForm]]];
 
@@ -5985,8 +6262,8 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
       Throw[Null, "iClaudeEvalNBFileEarlyReturn"]
     ]]; (* End nbFilePath interception *)
 
-    (* .nb ファイルでない通常タスク: 以下の通常フローへ *)
-    Module[{nbFileCtxDummy = ""},  (* 旧 nbFileCtx 互換 *)
+    (* .nb \:30d5\:30a1\:30a4\:30eb\:3067\:306a\:3044\:901a\:5e38\:30bf\:30b9\:30af: \:4ee5\:4e0b\:306e\:901a\:5e38\:30d5\:30ed\:30fc\:3078 *)
+    Module[{nbFileCtxDummy = ""},  (* \:65e7 nbFileCtx \:4e92\:63db *)
 
     contextPrompt = If[Length[history] > 0,
       iClaudeSysPrompt[] <>
@@ -6039,15 +6316,15 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     (* Job \:30b7\:30b9\:30c6\:30e0\:3067\:8a55\:4fa1\:30bb\:30eb\:76f4\:5f8c\:306b\:30b9\:30ed\:30c3\:30c8\:3092\:4e88\:7d04 *)
     jobId = NBAccess`NBBeginJobAtEvalCell[nb];
 
-    (* アクセスレベルに基づいてフォールバック可能モデルを取得 *)
+    (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:57fa\:3065\:3044\:3066\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:53ef\:80fd\:30e2\:30c7\:30eb\:3092\:53d6\:5f97 *)
     availModels = If[TrueQ[$currentUseFallback],
       NBAccess`NBGetAvailableFallbackModels[accessLevel],
       {}];
     useClaudeCode = NBAccess`NBProviderCanAccess["claudecode", accessLevel];
 
-    (* .nb ファイルタスク: Read ツール禁止 + そのディレクトリを --add-dir から除外
-       ObjectSpec のルートが "local" または "cloud"+"local" の場合は
-       ClaudeCode が読む必要がないため Read を禁止する *)
+    (* .nb \:30d5\:30a1\:30a4\:30eb\:30bf\:30b9\:30af: Read \:30c4\:30fc\:30eb\:7981\:6b62 + \:305d\:306e\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3092 --add-dir \:304b\:3089\:9664\:5916
+       ObjectSpec \:306e\:30eb\:30fc\:30c8\:304c "local" \:307e\:305f\:306f "cloud"+"local" \:306e\:5834\:5408\:306f
+       ClaudeCode \:304c\:8aad\:3080\:5fc5\:8981\:304c\:306a\:3044\:305f\:3081 Read \:3092\:7981\:6b62\:3059\:308b *)
     Module[{nbPath2, nbSpec2, nbRoutes2, nbExcludeRead, nbExcludeDirs},
       nbPath2       = iLLMGraphDetectFilePath[task];
       nbSpec2       = If[StringQ[nbPath2] && FileExistsQ[nbPath2],
@@ -6055,14 +6332,14 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
       nbRoutes2     = If[AssociationQ[nbSpec2],
         NBAccess`NBPrivacyLevelToRoutes[nbSpec2["PrivacyLevel"]],
         {"cloud"}];
-      (* .nb ファイルがある場合は常に Read 禁止 (cell data はプロンプトに注入済み) *)
+      (* .nb \:30d5\:30a1\:30a4\:30eb\:304c\:3042\:308b\:5834\:5408\:306f\:5e38\:306b Read \:7981\:6b62 (cell data \:306f\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:6ce8\:5165\:6e08\:307f) *)
       nbExcludeRead = StringQ[nbPath2] && nbPath2 =!= None;
       nbExcludeDirs = If[nbExcludeRead, {DirectoryName[nbPath2]}, {}];
 
-    (* コールバックを書き込みキュー方式に変換:
-       各セル書き込みを個別のサンク(引数なし関数)としてキューに積み、
-       ScheduledTask の writing フェーズが1ティック1操作で実行する。
-       これによりティック間でカウンタが更新される。 *)
+    (* \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:3092\:66f8\:304d\:8fbc\:307f\:30ad\:30e5\:30fc\:65b9\:5f0f\:306b\:5909\:63db:
+       \:5404\:30bb\:30eb\:66f8\:304d\:8fbc\:307f\:3092\:500b\:5225\:306e\:30b5\:30f3\:30af(\:5f15\:6570\:306a\:3057\:95a2\:6570)\:3068\:3057\:3066\:30ad\:30e5\:30fc\:306b\:7a4d\:307f\:3001
+       ScheduledTask \:306e writing \:30d5\:30a7\:30fc\:30ba\:304c1\:30c6\:30a3\:30c3\:30af1\:64cd\:4f5c\:3067\:5b9f\:884c\:3059\:308b\:3002
+       \:3053\:308c\:306b\:3088\:308a\:30c6\:30a3\:30c3\:30af\:9593\:3067\:30ab\:30a6\:30f3\:30bf\:304c\:66f4\:65b0\:3055\:308c\:308b\:3002 *)
     evalCallback = With[{nb2 = nb, stag2 = tag, st = step, jid = jobId,
           autoMark = iShouldAutoMarkConfidential[accessLevel],
           ccBefore = NBAccess`NBCellCount[nb], ae = autoEvaluate,
@@ -6073,10 +6350,10 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
             If[timeout =!= Automatic, "Timeout" -> timeout, Nothing]|>},
       Function[response,
         Module[{textOnly, blocks, queue = {}, fallbackCode, lines},
-          (* アンカーの直後に出力を配置 *)
+          (* \:30a2\:30f3\:30ab\:30fc\:306e\:76f4\:5f8c\:306b\:51fa\:529b\:3092\:914d\:7f6e *)
           NBAccess`NBJobMoveToAnchor[jid];
           $iJobActiveNb = nb2;
-          (* エラー/制限レスポンスは即座に処理して終了 *)
+          (* \:30a8\:30e9\:30fc/\:5236\:9650\:30ec\:30b9\:30dd\:30f3\:30b9\:306f\:5373\:5ea7\:306b\:51e6\:7406\:3057\:3066\:7d42\:4e86 *)
           If[iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"],
             NBAccess`NBWritePrintNotice[nb2, response, RGBColor[0.8, 0, 0]];
             $iJobActiveNb = None;
@@ -6086,18 +6363,18 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
               "response" -> response, "code" -> "",
               "cellCountAfter" -> NBAccess`NBCellCount[nb2]|>];
             Return[{}]];
-          (* テキスト部分を準備 *)
+          (* \:30c6\:30ad\:30b9\:30c8\:90e8\:5206\:3092\:6e96\:5099 *)
           textOnly = iStripContinueEvalGuidance @ cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
           If[textOnly =!= "",
             AppendTo[queue, Function[
               NBAccess`NBWriteCell[nb2, iTeXMathToCell[textOnly, "Text"]]]]];
-          (* コードブロックを個別にキューに追加。
-             NBWriteSmartCode の ToExpression はシンボル作成時に
-             DeclarePackage 等のオートロードをトリガーして
-             数十秒ブロックする場合があるため、軽量な直接書き込みを使用。 *)
+          (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:3092\:500b\:5225\:306b\:30ad\:30e5\:30fc\:306b\:8ffd\:52a0\:3002
+             NBWriteSmartCode \:306e ToExpression \:306f\:30b7\:30f3\:30dc\:30eb\:4f5c\:6210\:6642\:306b
+             DeclarePackage \:7b49\:306e\:30aa\:30fc\:30c8\:30ed\:30fc\:30c9\:3092\:30c8\:30ea\:30ac\:30fc\:3057\:3066
+             \:6570\:5341\:79d2\:30d6\:30ed\:30c3\:30af\:3059\:308b\:5834\:5408\:304c\:3042\:308b\:305f\:3081\:3001\:8efd\:91cf\:306a\:76f4\:63a5\:66f8\:304d\:8fbc\:307f\:3092\:4f7f\:7528\:3002 *)
           blocks = StringCases[response,
             RegularExpression["```(?:mathematica|wolfram)?\\n([\\s\\S]*?)```"] :> "$1"];
-          (* 依存関係のあるブロックを結合 *)
+          (* \:4f9d\:5b58\:95a2\:4fc2\:306e\:3042\:308b\:30d6\:30ed\:30c3\:30af\:3092\:7d50\:5408 *)
           blocks = iMergeDependentBlocks[
             iFixUnicodeEscapes[StringTrim[#]] & /@ blocks];
           Do[With[{code = blk},
@@ -6116,12 +6393,12 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
                   Cell[box, "Input"],
                   Cell[code, "Input", CellAutoOverwrite -> True]];
                 NotebookWrite[nb2, cell, After]]]];
-            (* AutoEvaluate: 書き込み後に別ティックで評価 *)
+            (* AutoEvaluate: \:66f8\:304d\:8fbc\:307f\:5f8c\:306b\:5225\:30c6\:30a3\:30c3\:30af\:3067\:8a55\:4fa1 *)
             If[TrueQ[ae],
               AppendTo[queue, Function[
                 NBAccess`NBEvaluatePreviousCell[nb2]]]]],
           {blk, blocks}];
-          (* コードブロックがない場合のフォールバック *)
+          (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:304c\:306a\:3044\:5834\:5408\:306e\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af *)
           If[Length[blocks] === 0,
             lines = Select[StringSplit[textOnly, "\n"], StringTrim[#] =!= "" &];
             If[Length[lines] > 0,
@@ -6149,8 +6426,8 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
                 AppendTo[queue, Function[
                   NBAccess`NBEvaluatePreviousCell[nb2]]]];
               blocks = {fallbackCode}]];
-          (* クリーンアップ: 軽量操作のみキューに入れる。
-             重い TaggingRules 書き込みは done フェーズに移動。 *)
+          (* \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7: \:8efd\:91cf\:64cd\:4f5c\:306e\:307f\:30ad\:30e5\:30fc\:306b\:5165\:308c\:308b\:3002
+             \:91cd\:3044 TaggingRules \:66f8\:304d\:8fbc\:307f\:306f done \:30d5\:30a7\:30fc\:30ba\:306b\:79fb\:52d5\:3002 *)
           If[TrueQ[autoMark],
             AppendTo[queue, Function[
               iAutoMarkNewCellsConfidential[nb2, ccBefore]]]];
@@ -6161,7 +6438,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
             $iJobActiveNb = None;
             NBAccess`NBEndJob[jid];
             $iClaudeEvalCurrentDepth = Max[0, $iClaudeEvalCurrentDepth - 1]]];
-          (* done フェーズで実行する重い処理を jobId で保存 *)
+          (* done \:30d5\:30a7\:30fc\:30ba\:3067\:5b9f\:884c\:3059\:308b\:91cd\:3044\:51e6\:7406\:3092 jobId \:3067\:4fdd\:5b58 *)
           $iDeferredWork[jid] = Function[
             NBAccess`NBHistoryUpdateLast[nb2, stag2, <|
               "response"       -> response,
@@ -6169,17 +6446,17 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
               "cellCountAfter" -> NBAccess`NBCellCount[nb2]
             |>];
             Quiet @ iCheckHistoryCompaction[nb2, stag2]];
-          (* キューを返す: ScheduledTask の writing フェーズが消費 *)
+          (* \:30ad\:30e5\:30fc\:3092\:8fd4\:3059: ScheduledTask \:306e writing \:30d5\:30a7\:30fc\:30ba\:304c\:6d88\:8cbb *)
           queue
         ]
       ]
     ];
 
     If[modelSpec =!= Automatic && ListQ[modelSpec] && Length[modelSpec] >= 2,
-      (* Model 指定あり: API 経由で指定モデルを直接呼び出し *)
+      (* Model \:6307\:5b9a\:3042\:308a: API \:7d4c\:7531\:3067\:6307\:5b9a\:30e2\:30c7\:30eb\:3092\:76f4\:63a5\:547c\:3073\:51fa\:3057 *)
       iStartFallbackAsync[contextPrompt, nb, evalCallback,
         {modelSpec}, 1, jobId, timeout, mediaFiles],
-      (* アクセスレベルに基づくルーティング *)
+      (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:57fa\:3065\:304f\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0 *)
       If[useClaudeCode,
         iClaudeQueryAsyncWithProgress[
           contextPrompt, evalCallback, nb, imageDirs, jobId, availModels,
@@ -6187,7 +6464,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
         If[Length[availModels] > 0,
           iStartFallbackAsync[contextPrompt, nb, evalCallback,
             availModels, 1, jobId, timeout, mediaFiles],
-          (* どのモデルもアクセスレベルに対応不可 *)
+          (* \:3069\:306e\:30e2\:30c7\:30eb\:3082\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:5bfe\:5fdc\:4e0d\:53ef *)
           NBAccess`NBWriteSlot[jobId, 1,
             Cell["\[WarningSign] AccessLevel " <> ToString[accessLevel] <>
               " \:306b\:5bfe\:5fdc\:3059\:308b\:30e2\:30c7\:30eb\:304c\:3042\:308a\:307e\:305b\:3093\:3002", "Print",
@@ -6205,7 +6482,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     ]
     ] (* End nbExcludeRead Module *)
   ]  (* End Module *)
-  , "iClaudeEvalNBFileEarlyReturn"  (* Catch タグ *)
+  , "iClaudeEvalNBFileEarlyReturn"  (* Catch \:30bf\:30b0 *)
   ];
 
 (* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:7248 ClaudeEval\:ff08\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:8fd4\:3055\:306a\:3044\:ff09 *)
@@ -6233,11 +6510,11 @@ iScheduleAt[body_, startSpec_] :=
     ]
   ];
 
-(* RepeatInterval スケジューリングヘルパー:
-   指定間隔で繰り返し実行する。TaskObject を返す。
+(* RepeatInterval \:30b9\:30b1\:30b8\:30e5\:30fc\:30ea\:30f3\:30b0\:30d8\:30eb\:30d1\:30fc:
+   \:6307\:5b9a\:9593\:9694\:3067\:7e70\:308a\:8fd4\:3057\:5b9f\:884c\:3059\:308b\:3002TaskObject \:3092\:8fd4\:3059\:3002
    repeatSpec:
-     Quantity[n, "Hours"] など  → 無限繰り返し
-     {Quantity[n, "Hours"], maxCount} → 最大 maxCount 回 *)
+     Quantity[n, "Hours"] \:306a\:3069  \[RightArrow] \:7121\:9650\:7e70\:308a\:8fd4\:3057
+     {Quantity[n, "Hours"], maxCount} \[RightArrow] \:6700\:5927 maxCount \:56de *)
 SetAttributes[iScheduleRepeating, HoldFirst];
 iScheduleRepeating[body_, startSpec_, repeatSpec_] :=
   Module[{dateObj, delaySec, intervalSec, maxCount, intervalQ,
@@ -6247,7 +6524,7 @@ iScheduleRepeating[body_, startSpec_, repeatSpec_] :=
       QuantityMagnitude[DateDifference[DateObject[], dateObj, "Seconds"]],
       0];
     If[!NumericQ[delaySec] || delaySec < 0, delaySec = 0];
-    (* RepeatInterval の解析 *)
+    (* RepeatInterval \:306e\:89e3\:6790 *)
     {intervalQ, maxCount} = Replace[repeatSpec, {
       {q_, n_Integer} :> {q, n},
       q_ :> {q, Infinity}
@@ -6256,34 +6533,34 @@ iScheduleRepeating[body_, startSpec_, repeatSpec_] :=
       Ceiling[QuantityMagnitude[UnitConvert[intervalQ, "Seconds"]]],
       $Failed];
     If[!IntegerQ[intervalSec] || intervalSec <= 0,
-      Print[iL["[Schedule] RepeatInterval の値が不正です。", "[Schedule] Invalid RepeatInterval value."]];
+      Print[iL["[Schedule] RepeatInterval \:306e\:5024\:304c\:4e0d\:6b63\:3067\:3059\:3002", "[Schedule] Invalid RepeatInterval value."]];
       Return[$Failed]];
-    Print[iL["[Schedule] ClaudeEval を ", "[Schedule] ClaudeEval scheduled for "] <>
+    Print[iL["[Schedule] ClaudeEval \:3092 ", "[Schedule] ClaudeEval scheduled for "] <>
       If[delaySec > 0.5,
         DateString[dateObj, {"Year","/","Month","/","Day"," ","Hour",":","Minute",":","Second"}] <>
-        iL[" から", " from"],
-        iL["今から", "now"]] <>
-      " " <> ToString[intervalSec] <> iL[" 秒ごとに", " sec interval"] <>
-      If[maxCount === Infinity, iL["繰り返し", " repeating"],
-        iL["最大 ", " max "] <> ToString[maxCount] <> iL[" 回", " times"]] <>
-      iL["実行します。TaskRemove[] で停止できます。", ". Use TaskRemove[] to stop."]];
+        iL[" \:304b\:3089", " from"],
+        iL["\:4eca\:304b\:3089", "now"]] <>
+      " " <> ToString[intervalSec] <> iL[" \:79d2\:3054\:3068\:306b", " sec interval"] <>
+      If[maxCount === Infinity, iL["\:7e70\:308a\:8fd4\:3057", " repeating"],
+        iL["\:6700\:5927 ", " max "] <> ToString[maxCount] <> iL[" \:56de", " times"]] <>
+      iL["\:5b9f\:884c\:3057\:307e\:3059\:3002TaskRemove[] \:3067\:505c\:6b62\:3067\:304d\:307e\:3059\:3002", ". Use TaskRemove[] to stop."]];
     If[delaySec > 0.5,
-      (* 初回を遅延してから繰り返し開始 *)
+      (* \:521d\:56de\:3092\:9045\:5ef6\:3057\:3066\:304b\:3089\:7e70\:308a\:8fd4\:3057\:958b\:59cb *)
       SessionSubmit[ScheduledTask[
         If[maxCount =!= Infinity,
           counter++;
           If[counter > maxCount,
-            Print[iL["[Schedule] 指定回数 (", "[Schedule] Repeat count ("] <> ToString[maxCount] <> iL[" 回) に達しました。", " ) reached."]];
+            Print[iL["[Schedule] \:6307\:5b9a\:56de\:6570 (", "[Schedule] Repeat count ("] <> ToString[maxCount] <> iL[" \:56de) \:306b\:9054\:3057\:307e\:3057\:305f\:3002", " ) reached."]];
             TaskRemove[$CurrentTask],
             body],
           body],
         {Ceiling[delaySec], intervalSec}]],
-      (* 即時開始で繰り返し *)
+      (* \:5373\:6642\:958b\:59cb\:3067\:7e70\:308a\:8fd4\:3057 *)
       SessionSubmit[ScheduledTask[
         If[maxCount =!= Infinity,
           counter++;
           If[counter > maxCount,
-            Print[iL["[Schedule] 指定回数 (", "[Schedule] Repeat count ("] <> ToString[maxCount] <> iL[" 回) に達しました。", " ) reached."]];
+            Print[iL["[Schedule] \:6307\:5b9a\:56de\:6570 (", "[Schedule] Repeat count ("] <> ToString[maxCount] <> iL[" \:56de) \:306b\:9054\:3057\:307e\:3057\:305f\:3002", " ) reached."]];
             TaskRemove[$CurrentTask],
             body],
           body],
@@ -6291,11 +6568,11 @@ iScheduleRepeating[body_, startSpec_, repeatSpec_] :=
     ]
   ];
 
-(* Web 検索結果でタスクを補強 *)
+(* Web \:691c\:7d22\:7d50\:679c\:3067\:30bf\:30b9\:30af\:3092\:88dc\:5f37 *)
 iEnrichWithWebSearch[task_String] :=
   Module[{searchResult, nb = Quiet[InputNotebook[]]},
     NBAccess`NBWritePrintNotice[None,
-      "[WebFetch] Web \:691c\:7d22\:4e2d\:2026", RGBColor[0.2, 0.4, 0.7]];
+      "[WebFetch] Web \:691c\:7d22\:4e2d\[Ellipsis]", RGBColor[0.2, 0.4, 0.7]];
     searchResult = iDoWebSearch[
       "\:4ee5\:4e0b\:306e\:30bf\:30b9\:30af\:306b\:95a2\:9023\:3059\:308b\:60c5\:5831\:3092 Web \:3067\:691c\:7d22\:3057\:3066\:3001\:5177\:4f53\:7684\:306a\:30c7\:30fc\:30bf\:3092\:307e\:3068\:3081\:3066\:304f\:3060\:3055\:3044\:3002\n\n" <> task];
     If[!StringQ[searchResult] || StringStartsQ[searchResult, "Error:"],
@@ -6303,10 +6580,10 @@ iEnrichWithWebSearch[task_String] :=
       "=== Web \:691c\:7d22\:7d50\:679c ===\n" <> searchResult <> "\n\n=== \:30bf\:30b9\:30af ===\n" <> task]
   ];
 
-(* 軽量プレフライト: タスクに Web 検索が有益かを Claude に判断させる *)
+(* \:8efd\:91cf\:30d7\:30ec\:30d5\:30e9\:30a4\:30c8: \:30bf\:30b9\:30af\:306b Web \:691c\:7d22\:304c\:6709\:76ca\:304b\:3092 Claude \:306b\:5224\:65ad\:3055\:305b\:308b *)
 iNeedsWebSearch[task_String] :=
   Module[{apiKey, prompt, response},
-    (* $packageDirectory 内のパッケージ名に言及するタスクは Web 検索不要 *)
+    (* $packageDirectory \:5185\:306e\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:306b\:8a00\:53ca\:3059\:308b\:30bf\:30b9\:30af\:306f Web \:691c\:7d22\:4e0d\:8981 *)
     If[AnyTrue[
         Quiet @ Check[
           FileBaseName /@ FileNames["*.wl", Global`$packageDirectory],
@@ -6323,7 +6600,7 @@ iNeedsWebSearch[task_String] :=
       "niche library details, current data, product-specific shortcuts).\n" <>
       "If the task mentions updating/creating documentation for a local package, " <>
       "or mentions ClaudeUpdatePackage/ClaudeCreateDocumentation/ClaudeUpdateDocumentation, " <>
-      "answer NO — these are local operations.\n" <>
+      "answer NO \[LongDash] these are local operations.\n" <>
       "Answer ONLY 'YES' or 'NO'. No explanation.\n\n" <>
       "Task: " <> StringTake[task, UpTo[500]];
     response = Quiet @ Check[
@@ -6332,12 +6609,12 @@ iNeedsWebSearch[task_String] :=
     StringMatchQ[StringTrim[response], "YES" ~~ ___, IgnoreCase -> True]
   ];
 
-(* WebFetch オプションの解決:
-   True     -> 必ず検索
-   False    -> 検索しない
-   Automatic -> Claude に判断させる
-   重要: WebFetch は Anthropic API 経由で課金が発生するため、
-   Fallback -> True の場合のみ有効。Fallback が False なら強制的に False。 *)
+(* WebFetch \:30aa\:30d7\:30b7\:30e7\:30f3\:306e\:89e3\:6c7a:
+   True     -> \:5fc5\:305a\:691c\:7d22
+   False    -> \:691c\:7d22\:3057\:306a\:3044
+   Automatic -> Claude \:306b\:5224\:65ad\:3055\:305b\:308b
+   \:91cd\:8981: WebFetch \:306f Anthropic API \:7d4c\:7531\:3067\:8ab2\:91d1\:304c\:767a\:751f\:3059\:308b\:305f\:3081\:3001
+   Fallback -> True \:306e\:5834\:5408\:306e\:307f\:6709\:52b9\:3002Fallback \:304c False \:306a\:3089\:5f37\:5236\:7684\:306b False\:3002 *)
 iResolveWebFetchWithFallback[task_String, wfOpt_, fallbackQ_] :=
   If[!TrueQ[fallbackQ], task, iResolveWebFetch[task, wfOpt]];
 
@@ -6373,7 +6650,7 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := (
     ]
   ]);
 
-(* リスト入力版: {"指示", data, Image, ...} *)
+(* \:30ea\:30b9\:30c8\:5165\:529b\:7248: {"\:6307\:793a", data, Image, ...} *)
 ClaudeEval[items_List, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = False;
@@ -6398,7 +6675,7 @@ ClaudeEval[items_List, opts:OptionsPattern[]] := (
     ]
   ]]);
 
-(* セッション指定版 ClaudeEval *)
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:6307\:5b9a\:7248 ClaudeEval *)
 ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := (
     $currentUseFallback = TrueQ[OptionValue[ClaudeEval, {opts}, Fallback]];
     $iAllowReadTool = False;
@@ -6452,7 +6729,7 @@ iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :
     history = iSessionHistoryWithInherit[nb, tag];
     step    = Length[iSessionHistory[nb, tag]];
 
-    (* .nb ファイル検出 *)
+    (* .nb \:30d5\:30a1\:30a4\:30eb\:691c\:51fa *)
     nbFilePath = iLLMGraphDetectFilePath[task];
     If[StringQ[nbFilePath] && FileExistsQ[nbFilePath],
       nbFileCtx = iNBFileCellContext[nbFilePath]];
@@ -6540,7 +6817,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
           contextPrompt, step, entry, anchorTag, continueCallback,
           accessLevel, availModels, useClaudeCode},
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
-    (* LLM 送信直前の精密チェック (第2層) *)
+    (* LLM \:9001\:4fe1\:76f4\:524d\:306e\:7cbe\:5bc6\:30c1\:30a7\:30c3\:30af (\:7b2c2\:5c64) *)
     iPrecisionConfidentialCheck[nb];
     history = iSessionHistoryWithInherit[nb, tag];
     If[Length[history] === 0,
@@ -6553,7 +6830,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
     step           = Length[iSessionHistory[nb, tag]];
     notebookCtx    = With[{r = Quiet[iCaptureNotebookContext[nb, cellCountAfter, accessLevel]]}, If[StringQ[r], r, ""]];
 
-    (* アクセスレベルに基づいてフォールバック可能モデルを取得 *)
+    (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:57fa\:3065\:3044\:3066\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:53ef\:80fd\:30e2\:30c7\:30eb\:3092\:53d6\:5f97 *)
     availModels = If[TrueQ[$currentUseFallback],
       NBAccess`NBGetAvailableFallbackModels[accessLevel],
       {}];
@@ -6592,7 +6869,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
     anchorTag = "claude-anchor-" <> ToString[UnixTime[]] <> "-" <>
                 ToString[RandomInteger[99999]];
     (* \:5b9f\:884c\:30bb\:30eb\:306e\:76f4\:5f8c\:306b\:30ab\:30fc\:30bd\:30eb\:3092\:914d\:7f6e *)
-    (* NBAccess経由: EvaluationCell直後にアンカーセル挿入 *)
+    (* NBAccess\:7d4c\:7531: EvaluationCell\:76f4\:5f8c\:306b\:30a2\:30f3\:30ab\:30fc\:30bb\:30eb\:633f\:5165 *)
     NBAccess`NBWriteAnchorAfterEvalCell[nb, anchorTag];
 
     continueCallback = With[{nb2 = nb, stag2 = tag, tag2 = anchorTag,
@@ -6632,7 +6909,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
                 blocks = {fallbackCode}
               ]
             ]];
-          (* 高 AccessLevel の場合、新規セルを自動秘密マーク *)
+          (* \:9ad8 AccessLevel \:306e\:5834\:5408\:3001\:65b0\:898f\:30bb\:30eb\:3092\:81ea\:52d5\:79d8\:5bc6\:30de\:30fc\:30af *)
           If[TrueQ[autoMark],
             iAutoMarkNewCellsConfidential[nb2, ccBefore]];
           NBAccess`NBDeleteCellsByTag[nb2, tag2];
@@ -6648,7 +6925,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
     If[modelSpec =!= Automatic && ListQ[modelSpec] && Length[modelSpec] >= 2,
       (* Model \:6307\:5b9a\:3042\:308a: API \:7d4c\:7531\:3067\:6307\:5b9a\:30e2\:30c7\:30eb\:3092\:76f4\:63a5\:547c\:3073\:51fa\:3057 *)
       iStartFallbackAsync[contextPrompt, nb, continueCallback, {modelSpec}, 1, "", timeout, {}],
-      (* アクセスレベルに基づくルーティング *)
+      (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:57fa\:3065\:304f\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0 *)
       If[useClaudeCode,
         iClaudeQueryAsyncWithProgress[contextPrompt, continueCallback, nb, {}, "", availModels],
         If[Length[availModels] > 0,
@@ -6716,7 +6993,7 @@ iCaptureRecentOutput[nb_NotebookObject, afterCellCount_Integer] :=
     If[StringQ[ctx], StringTake[ctx, UpTo[3000]], ""]
   ];
 
-(* --- 内部ヘルパー: 直前の更新セッション情報をバックアップから復元 --- *)
+(* --- \:5185\:90e8\:30d8\:30eb\:30d1\:30fc: \:76f4\:524d\:306e\:66f4\:65b0\:30bb\:30c3\:30b7\:30e7\:30f3\:60c5\:5831\:3092\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:304b\:3089\:5fa9\:5143 --- *)
 iRecoverLastUpdateFromBackup[packageName_String] :=
   Module[{bdir, dirs, lastDir, promptFile, responseFile, promptText, responseText, instr},
     bdir = backupDir[packageName];
@@ -6730,9 +7007,9 @@ iRecoverLastUpdateFromBackup[packageName_String] :=
     If[!FileExistsQ[promptFile], Return[None]];
     promptText = Import[promptFile, "Text"];
     responseText = If[FileExistsQ[responseFile], Import[responseFile, "Text"], ""];
-    (* INSTRUCTION: 以降を元のプロンプトとして抽出 *)
+    (* INSTRUCTION: \:4ee5\:964d\:3092\:5143\:306e\:30d7\:30ed\:30f3\:30d7\:30c8\:3068\:3057\:3066\:62bd\:51fa *)
     instr = StringTrim[Last[StringSplit[promptText, "INSTRUCTION: ", 2], ""]];
-    (* CURRENT FUNCTIONS: 以降は除去 *)
+    (* CURRENT FUNCTIONS: \:4ee5\:964d\:306f\:9664\:53bb *)
     instr = First[StringSplit[instr, "\n\nCURRENT FUNCTIONS:", 2], instr];
     instr = First[StringSplit[instr, "\n\nATTACHMENTS", 2], instr];
     If[instr === "", instr = StringTake[promptText, UpTo[500]]];
@@ -6744,7 +7021,7 @@ iRecoverLastUpdateFromBackup[packageName_String] :=
     |>
   ];
 
-(* --- 継続プロンプトの構築 --- *)
+(* --- \:7d99\:7d9a\:30d7\:30ed\:30f3\:30d7\:30c8\:306e\:69cb\:7bc9 --- *)
 iBuildContinueUpdatePrompt[originalPrompt_, instruction_String, response_String,
     notebookOutput_String] :=
   Module[{origText, resultSummary, nbOut},
@@ -6752,7 +7029,7 @@ iBuildContinueUpdatePrompt[originalPrompt_, instruction_String, response_String,
       If[ListQ[originalPrompt],
         StringJoin[Select[originalPrompt, StringQ]],
         ToString[originalPrompt]]];
-    (* response の末尾説明部分（===END_FUNCTIONS=== 以降）を要約として使用 *)
+    (* response \:306e\:672b\:5c3e\:8aac\:660e\:90e8\:5206\:ff08===END_FUNCTIONS=== \:4ee5\:964d\:ff09\:3092\:8981\:7d04\:3068\:3057\:3066\:4f7f\:7528 *)
     resultSummary = Module[{afterEnd},
       afterEnd = Last[StringSplit[response, "===END_FUNCTIONS===", 2], ""];
       If[afterEnd === "",
@@ -6765,18 +7042,18 @@ iBuildContinueUpdatePrompt[originalPrompt_, instruction_String, response_String,
     ];
     nbOut = StringTrim[notebookOutput];
 
-    "前回のアップデート指示とその結果を踏まえて、パッケージを修正してください。\n\n" <>
-    "=== 前回の指示 ===\n" <> StringTake[origText, UpTo[2000]] <> "\n\n" <>
-    "=== 前回の結果 (Claude の応答要約) ===\n" <> resultSummary <> "\n\n" <>
+    "\:524d\:56de\:306e\:30a2\:30c3\:30d7\:30c7\:30fc\:30c8\:6307\:793a\:3068\:305d\:306e\:7d50\:679c\:3092\:8e0f\:307e\:3048\:3066\:3001\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\:3002\n\n" <>
+    "=== \:524d\:56de\:306e\:6307\:793a ===\n" <> StringTake[origText, UpTo[2000]] <> "\n\n" <>
+    "=== \:524d\:56de\:306e\:7d50\:679c (Claude \:306e\:5fdc\:7b54\:8981\:7d04) ===\n" <> resultSummary <> "\n\n" <>
     If[nbOut =!= "",
-      "=== 前回の実行後のノートブック出力 (エラーメッセージ等) ===\n" <> nbOut <> "\n\n",
+      "=== \:524d\:56de\:306e\:5b9f\:884c\:5f8c\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:51fa\:529b (\:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8\:7b49) ===\n" <> nbOut <> "\n\n",
       ""] <>
-    "=== 今回の指示 ===\n" <> instruction <> "\n\n" <>
-    "上記の前回の変更内容と実行結果を把握した上で、今回の指示に従って修正してください。\n" <>
-    "前回正しく変更できた部分はそのまま維持し、問題のある部分のみ修正してください。"
+    "=== \:4eca\:56de\:306e\:6307\:793a ===\n" <> instruction <> "\n\n" <>
+    "\:4e0a\:8a18\:306e\:524d\:56de\:306e\:5909\:66f4\:5185\:5bb9\:3068\:5b9f\:884c\:7d50\:679c\:3092\:628a\:63e1\:3057\:305f\:4e0a\:3067\:3001\:4eca\:56de\:306e\:6307\:793a\:306b\:5f93\:3063\:3066\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\:3002\n" <>
+    "\:524d\:56de\:6b63\:3057\:304f\:5909\:66f4\:3067\:304d\:305f\:90e8\:5206\:306f\:305d\:306e\:307e\:307e\:7dad\:6301\:3057\:3001\:554f\:984c\:306e\:3042\:308b\:90e8\:5206\:306e\:307f\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\:3002"
   ];
 
-(* --- ContinueUpdate 本体 --- *)
+(* --- ContinueUpdate \:672c\:4f53 --- *)
 
 Options[ContinueUpdate] = {Fallback -> False, StartTime -> Now, "UpdateApiMd" -> False};
 
@@ -6897,12 +7174,12 @@ iClaudeReviewChunkedAsync[nb_, chunks_, label_, i_, results_] :=
    \:30d1\:30c3\:30b1\:30fc\:30b8\:7ba1\:7406\:ff1a\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30fb\:66f4\:65b0\:30fb\:30ea\:30b9\:30c8\:30a2\:30fb\:5c65\:6b74
    ============================================================ *)
 
-(* FileQ 互換ヘルパー: FileQ は Mathematica 14.1+ のため、
-   古いバージョンでは未定義。全バージョンで動作する代替を定義。 *)
+(* FileQ \:4e92\:63db\:30d8\:30eb\:30d1\:30fc: FileQ \:306f Mathematica 14.1+ \:306e\:305f\:3081\:3001
+   \:53e4\:3044\:30d0\:30fc\:30b8\:30e7\:30f3\:3067\:306f\:672a\:5b9a\:7fa9\:3002\:5168\:30d0\:30fc\:30b8\:30e7\:30f3\:3067\:52d5\:4f5c\:3059\:308b\:4ee3\:66ff\:3092\:5b9a\:7fa9\:3002 *)
 iFileQ[path_String] := FileExistsQ[path] && !DirectoryQ[path];
 iFileQ[_] := False;
 
-(* バイナリファイル判定: 画像・PDF・音声等は差分圧縮ではなく直接コピー *)
+(* \:30d0\:30a4\:30ca\:30ea\:30d5\:30a1\:30a4\:30eb\:5224\:5b9a: \:753b\:50cf\:30fbPDF\:30fb\:97f3\:58f0\:7b49\:306f\:5dee\:5206\:5727\:7e2e\:3067\:306f\:306a\:304f\:76f4\:63a5\:30b3\:30d4\:30fc *)
 $iBinaryExtensions = {"png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif",
   "webp", "svg", "ico", "pdf", "mp3", "wav", "ogg", "mp4", "avi",
   "zip", "gz", "tar", "7z", "exe", "dll", "so", "dylib"};
@@ -6914,21 +7191,21 @@ backupDir[packageName_String] :=
   FileNameJoin[{Global`$packageDirectory, packageName <> "_info", "history"}];
 
 (* ============================================================
-   差分ベースバックアップシステム（汎用）
-   .wl / .md 等のテキストファイルを SequenceAlignment ベースの
-   差分で保存し、バックアップ容量を削減する。
+   \:5dee\:5206\:30d9\:30fc\:30b9\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30b7\:30b9\:30c6\:30e0\:ff08\:6c4e\:7528\:ff09
+   .wl / .md \:7b49\:306e\:30c6\:30ad\:30b9\:30c8\:30d5\:30a1\:30a4\:30eb\:3092 SequenceAlignment \:30d9\:30fc\:30b9\:306e
+   \:5dee\:5206\:3067\:4fdd\:5b58\:3057\:3001\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5bb9\:91cf\:3092\:524a\:6e1b\:3059\:308b\:3002
    
-   保存形式:
-   - filename.cz        Compress[全文] ベースライン
-   - filename.cdiff      Compress[{前回Dir名, SequenceAlignment結果}] 差分
-   - filename.unchanged  前回Dir名（内容同一、1ホップ解決保証）
-   - filename            レガシー生ファイル（後方互換読み取り対応）
+   \:4fdd\:5b58\:5f62\:5f0f:
+   - filename.cz        Compress[\:5168\:6587] \:30d9\:30fc\:30b9\:30e9\:30a4\:30f3
+   - filename.cdiff      Compress[{\:524d\:56deDir\:540d, SequenceAlignment\:7d50\:679c}] \:5dee\:5206
+   - filename.unchanged  \:524d\:56deDir\:540d\:ff08\:5185\:5bb9\:540c\:4e00\:30011\:30db\:30c3\:30d7\:89e3\:6c7a\:4fdd\:8a3c\:ff09
+   - filename            \:30ec\:30ac\:30b7\:30fc\:751f\:30d5\:30a1\:30a4\:30eb\:ff08\:5f8c\:65b9\:4e92\:63db\:8aad\:307f\:53d6\:308a\:5bfe\:5fdc\:ff09
    ============================================================ *)
 
 $iBackupBaselineInterval = 10;
 
-(* --- 汎用保存: ファイルパス指定 --- *)
-(* srcFilePath のテキストを読み込み、差分形式で histDir に保存する。 *)
+(* --- \:6c4e\:7528\:4fdd\:5b58: \:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:6307\:5b9a --- *)
+(* srcFilePath \:306e\:30c6\:30ad\:30b9\:30c8\:3092\:8aad\:307f\:8fbc\:307f\:3001\:5dee\:5206\:5f62\:5f0f\:3067 histDir \:306b\:4fdd\:5b58\:3059\:308b\:3002 *)
 iSaveBackupFile[histDir_String, srcFilePath_String, packageName_String,
     fullBaseline:(True|False):False] :=
   Module[{content},
@@ -6937,19 +7214,19 @@ iSaveBackupFile[histDir_String, srcFilePath_String, packageName_String,
     iSaveBackupFileContent[histDir, FileNameTake[srcFilePath], content, packageName, fullBaseline]
   ];
 
-(* サブディレクトリ構造を保持してバックアップ:
-   baseDir からの相対パスを fileName として使用 *)
+(* \:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:69cb\:9020\:3092\:4fdd\:6301\:3057\:3066\:30d0\:30c3\:30af\:30a2\:30c3\:30d7:
+   baseDir \:304b\:3089\:306e\:76f8\:5bfe\:30d1\:30b9\:3092 fileName \:3068\:3057\:3066\:4f7f\:7528 *)
 iSaveBackupFileRelative[histDir_String, srcFilePath_String, baseDir_String,
     packageName_String, fullBaseline:(True|False):False] :=
   Module[{content, relPath, subDir, dstPath},
-    (* baseDir からの相対パスを計算 *)
+    (* baseDir \:304b\:3089\:306e\:76f8\:5bfe\:30d1\:30b9\:3092\:8a08\:7b97 *)
     relPath = StringReplace[srcFilePath,
       StartOfString ~~ baseDir ~~ ($PathnameSeparator | "/") -> ""];
-    (* 相対パスにサブディレクトリが含まれる場合、histDir 内にディレクトリを作成 *)
+    (* \:76f8\:5bfe\:30d1\:30b9\:306b\:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:542b\:307e\:308c\:308b\:5834\:5408\:3001histDir \:5185\:306b\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3092\:4f5c\:6210 *)
     subDir = DirectoryName[FileNameJoin[{histDir, relPath}]];
     If[subDir =!= "" && subDir =!= histDir,
       Quiet @ CreateDirectory[subDir, CreateIntermediateDirectories -> True]];
-    (* バイナリファイル（画像等）は直接コピー。差分圧縮はテキストのみ *)
+    (* \:30d0\:30a4\:30ca\:30ea\:30d5\:30a1\:30a4\:30eb\:ff08\:753b\:50cf\:7b49\:ff09\:306f\:76f4\:63a5\:30b3\:30d4\:30fc\:3002\:5dee\:5206\:5727\:7e2e\:306f\:30c6\:30ad\:30b9\:30c8\:306e\:307f *)
     If[iIsBinaryFile[srcFilePath],
       dstPath = FileNameJoin[{histDir, relPath}];
       Quiet @ CopyFile[srcFilePath, dstPath, OverwriteTarget -> True];
@@ -6959,9 +7236,9 @@ iSaveBackupFileRelative[histDir_String, srcFilePath_String, baseDir_String,
     iSaveBackupFileContent[histDir, relPath, content, packageName, fullBaseline]
   ];
 
-(* --- 汎用保存: コンテンツ直接指定 --- *)
-(* テキスト content を fileName として histDir に保存。
-   前回バックアップと比較し baseline / diff / unchanged を自動選択。 *)
+(* --- \:6c4e\:7528\:4fdd\:5b58: \:30b3\:30f3\:30c6\:30f3\:30c4\:76f4\:63a5\:6307\:5b9a --- *)
+(* \:30c6\:30ad\:30b9\:30c8 content \:3092 fileName \:3068\:3057\:3066 histDir \:306b\:4fdd\:5b58\:3002
+   \:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3068\:6bd4\:8f03\:3057 baseline / diff / unchanged \:3092\:81ea\:52d5\:9078\:629e\:3002 *)
 iSaveBackupFileContent[histDir_String, fileName_String, content_String,
     packageName_String, fullBaseline:(True|False):False] :=
   Module[{czPath, cdiffPath, unchangedPath, prevDir, prevContent,
@@ -6969,11 +7246,11 @@ iSaveBackupFileContent[histDir_String, fileName_String, content_String,
     czPath = FileNameJoin[{histDir, fileName <> ".cz"}];
     cdiffPath = FileNameJoin[{histDir, fileName <> ".cdiff"}];
     unchangedPath = FileNameJoin[{histDir, fileName <> ".unchanged"}];
-    (* 強制ベースライン *)
+    (* \:5f37\:5236\:30d9\:30fc\:30b9\:30e9\:30a4\:30f3 *)
     If[fullBaseline,
       Export[czPath, Compress[content], "String"];
       Return[czPath]];
-    (* 前回バックアップを検索 *)
+    (* \:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:691c\:7d22 *)
     prevDir = iFindPreviousBackupWithFile[histDir, fileName, packageName];
     If[!StringQ[prevDir],
       Export[czPath, Compress[content], "String"];
@@ -6982,7 +7259,7 @@ iSaveBackupFileContent[histDir_String, fileName_String, content_String,
     If[!StringQ[prevContent],
       Export[czPath, Compress[content], "String"];
       Return[czPath]];
-    (* 内容同一 → .unchanged (1ホップ解決: .unchanged チェーンを辿らない) *)
+    (* \:5185\:5bb9\:540c\:4e00 \[RightArrow] .unchanged (1\:30db\:30c3\:30d7\:89e3\:6c7a: .unchanged \:30c1\:30a7\:30fc\:30f3\:3092\:8fbf\:3089\:306a\:3044) *)
     If[content === prevContent,
       Module[{prevUnchangedPath, targetDirName},
         prevUnchangedPath = FileNameJoin[{prevDir, fileName <> ".unchanged"}];
@@ -6992,13 +7269,13 @@ iSaveBackupFileContent[histDir_String, fileName_String, content_String,
         If[targetDirName === "", targetDirName = FileNameTake[prevDir, -1]];
         Export[unchangedPath, targetDirName, "String"]];
       Return[unchangedPath]];
-    (* ベースライン間隔チェック *)
+    (* \:30d9\:30fc\:30b9\:30e9\:30a4\:30f3\:9593\:9694\:30c1\:30a7\:30c3\:30af *)
     backupCount = Length[FileNames["*_documentupdate", backupDir[packageName]]] +
                   Length[FileNames["pre_*", backupDir[packageName]]];
     If[Mod[backupCount, $iBackupBaselineInterval] === 0,
       Export[czPath, Compress[content], "String"];
       Return[czPath]];
-    (* 差分計算 *)
+    (* \:5dee\:5206\:8a08\:7b97 *)
     alignment = Quiet @ Check[
       SequenceAlignment[
         StringSplit[prevContent, "\n"],
@@ -7012,9 +7289,9 @@ iSaveBackupFileContent[histDir_String, fileName_String, content_String,
     cdiffPath
   ];
 
-(* --- 汎用読み込み --- *)
-(* バックアップディレクトリから任意のファイルを復元する。
-   生ファイル / .cz / .cdiff / .unchanged すべてに対応。 *)
+(* --- \:6c4e\:7528\:8aad\:307f\:8fbc\:307f --- *)
+(* \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304b\:3089\:4efb\:610f\:306e\:30d5\:30a1\:30a4\:30eb\:3092\:5fa9\:5143\:3059\:308b\:3002
+   \:751f\:30d5\:30a1\:30a4\:30eb / .cz / .cdiff / .unchanged \:3059\:3079\:3066\:306b\:5bfe\:5fdc\:3002 *)
 iLoadBackupFile[dir_String, fileName_String, packageName_String] :=
   Module[{rawPath, czPath, cdiffPath, unchangedPath},
     rawPath = FileNameJoin[{dir, fileName}];
@@ -7039,8 +7316,8 @@ iLoadBackupFile[dir_String, fileName_String, packageName_String] :=
     ]
   ];
 
-(* --- 前回バックアップ検索 --- *)
-(* histDir より前のバックアップで fileName を持つ最新ディレクトリを返す。 *)
+(* --- \:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:691c\:7d22 --- *)
+(* histDir \:3088\:308a\:524d\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3067 fileName \:3092\:6301\:3064\:6700\:65b0\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3092\:8fd4\:3059\:3002 *)
 iFindPreviousBackupWithFile[histDir_String, fileName_String, packageName_String] :=
   Module[{bdir, allDirs, histName, preceding},
     bdir = backupDir[packageName];
@@ -7060,7 +7337,7 @@ iFindPreviousBackupWithFile[histDir_String, fileName_String, packageName_String]
     $Failed
   ];
 
-(* --- 差分チェーン復元 --- *)
+(* --- \:5dee\:5206\:30c1\:30a7\:30fc\:30f3\:5fa9\:5143 --- *)
 iReconstructFileFromChain[targetDir_String, fileName_String,
     packageName_String, depth_Integer] :=
   Module[{cdiffPath, compressed, diffData, prevDirName, alignment,
@@ -7076,7 +7353,7 @@ iReconstructFileFromChain[targetDir_String, fileName_String,
     bdir = backupDir[packageName];
     prevDir = FileNameJoin[{bdir, prevDirName}];
     If[!DirectoryQ[prevDir], Return[$Failed]];
-    (* 前回コンテンツ取得: .unchanged は1ホップで解決するため深度を消費しない *)
+    (* \:524d\:56de\:30b3\:30f3\:30c6\:30f3\:30c4\:53d6\:5f97: .unchanged \:306f1\:30db\:30c3\:30d7\:3067\:89e3\:6c7a\:3059\:308b\:305f\:3081\:6df1\:5ea6\:3092\:6d88\:8cbb\:3057\:306a\:3044 *)
     prevContent = Which[
       FileExistsQ[FileNameJoin[{prevDir, fileName}]],
         Quiet @ Check[Import[FileNameJoin[{prevDir, fileName}], "Text"], $Failed],
@@ -7098,7 +7375,7 @@ iReconstructFileFromChain[targetDir_String, fileName_String,
     StringRiffle[newLines, "\n"]
   ];
 
-(* SequenceAlignment → ターゲット側テキスト復元 *)
+(* SequenceAlignment \[RightArrow] \:30bf\:30fc\:30b2\:30c3\:30c8\:5074\:30c6\:30ad\:30b9\:30c8\:5fa9\:5143 *)
 iApplyAlignment[alignment_List] :=
   Quiet @ Check[
     Flatten[
@@ -7107,8 +7384,8 @@ iApplyAlignment[alignment_List] :=
         alignment]],
     $Failed];
 
-(* --- バックアップディレクトリから復元可能なファイル名一覧 --- *)
-(* 指定拡張子パターンのファイルを生/.cz/.cdiff/.unchanged から検出 *)
+(* --- \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304b\:3089\:5fa9\:5143\:53ef\:80fd\:306a\:30d5\:30a1\:30a4\:30eb\:540d\:4e00\:89a7 --- *)
+(* \:6307\:5b9a\:62e1\:5f35\:5b50\:30d1\:30bf\:30fc\:30f3\:306e\:30d5\:30a1\:30a4\:30eb\:3092\:751f/.cz/.cdiff/.unchanged \:304b\:3089\:691c\:51fa *)
 iListRestorableFiles[dir_String, extPattern_String] :=
   Module[{allFiles, stripSuffix},
     allFiles = FileNameTake /@ Select[FileNames["*", dir], iFileQ];
@@ -7119,7 +7396,7 @@ iListRestorableFiles[dir_String, extPattern_String] :=
       StringMatchQ[#, __ ~~ extPattern] &]
   ];
 
-(* --- .wl 専用ラッパー（後方互換） --- *)
+(* --- .wl \:5c02\:7528\:30e9\:30c3\:30d1\:30fc\:ff08\:5f8c\:65b9\:4e92\:63db\:ff09 --- *)
 iSaveBackupWl[histDir_String, srcFile_String, packageName_String,
     fullBaseline:(True|False):False] :=
   iSaveBackupFile[histDir, srcFile, packageName, fullBaseline];
@@ -7130,7 +7407,7 @@ iLoadBackupWl[dir_String, packageName_String] :=
 iFindPreviousBackupWithWl[histDir_String, packageName_String] :=
   iFindPreviousBackupWithFile[histDir, packageName <> ".wl", packageName];
 
-(* _info サブディレクトリ *)
+(* _info \:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea *)
 iInfoDir[packageName_String] :=
   FileNameJoin[{Global`$packageDirectory, packageName <> "_info"}];
 iDesignDir[packageName_String] :=
@@ -7138,7 +7415,7 @@ iDesignDir[packageName_String] :=
 iReferencesDir[packageName_String] :=
   FileNameJoin[{iInfoDir[packageName], "references"}];
 
-(* パッケージの references ディレクトリを $ClaudeAccessibleDirs に追加 *)
+(* \:30d1\:30c3\:30b1\:30fc\:30b8\:306e references \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3092 $ClaudeAccessibleDirs \:306b\:8ffd\:52a0 *)
 iEnsureReferencesAccessible[packageName_String] :=
   Module[{refDir},
     refDir = iReferencesDir[packageName];
@@ -7148,12 +7425,12 @@ iEnsureReferencesAccessible[packageName_String] :=
           refDir]]]];
 
 (* ============================================================
-   ドキュメントオプション永続化: Demos/References/Disclaimer/Acknowledgments/License を
-   _info/references/doc_options.json に保存し、次回の
-   ClaudeCreateDocumentation / ClaudeUpdateDocumentation で自動復元する。
+   \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30aa\:30d7\:30b7\:30e7\:30f3\:6c38\:7d9a\:5316: Demos/References/Disclaimer/Acknowledgments/License \:3092
+   _info/references/doc_options.json \:306b\:4fdd\:5b58\:3057\:3001\:6b21\:56de\:306e
+   ClaudeCreateDocumentation / ClaudeUpdateDocumentation \:3067\:81ea\:52d5\:5fa9\:5143\:3059\:308b\:3002
    ============================================================ *)
 
-(* パッケージ別 Doc 状態の読み出しヘルパー *)
+(* \:30d1\:30c3\:30b1\:30fc\:30b8\:5225 Doc \:72b6\:614b\:306e\:8aad\:307f\:51fa\:3057\:30d8\:30eb\:30d1\:30fc *)
 iDocGet[packageName_String, key_String] :=
   Module[{state},
     state = Lookup[$iDocState, packageName, <||>];
@@ -7161,8 +7438,8 @@ iDocGet[packageName_String, key_String] :=
     Lookup[state, key, If[key === "License" || key === "GlobalInstruction", "", {}]]
   ];
 
-(* パッケージ別 Doc 状態の初期化。
-   エントリポイント (ClaudeCreate/UpdateDocumentation) で呼ぶ。 *)
+(* \:30d1\:30c3\:30b1\:30fc\:30b8\:5225 Doc \:72b6\:614b\:306e\:521d\:671f\:5316\:3002
+   \:30a8\:30f3\:30c8\:30ea\:30dd\:30a4\:30f3\:30c8 (ClaudeCreate/UpdateDocumentation) \:3067\:547c\:3076\:3002 *)
 iDocInitState[packageName_String, refs_List, demos_List,
     disclaimer_List, acks_List, license_String, instruction_String:"",
     explicitDemosOrRefs_:False] :=
@@ -7177,21 +7454,21 @@ iDocInitState[packageName_String, refs_List, demos_List,
 iDocOptionsPath[packageName_String] :=
   FileNameJoin[{iReferencesDir[packageName], "doc_options.json"}];
 
-(* 現在の $iDoc* 変数を JSON に保存。
-   既存ファイルが存在する場合、空でない値のみ上書きする（read-modify-write）。
-   これにより、非同期コールバック中に $iDoc* がリセットされても
-   既存の保存値が破壊されない。 *)
+(* \:73fe\:5728\:306e $iDoc* \:5909\:6570\:3092 JSON \:306b\:4fdd\:5b58\:3002
+   \:65e2\:5b58\:30d5\:30a1\:30a4\:30eb\:304c\:5b58\:5728\:3059\:308b\:5834\:5408\:3001\:7a7a\:3067\:306a\:3044\:5024\:306e\:307f\:4e0a\:66f8\:304d\:3059\:308b\:ff08read-modify-write\:ff09\:3002
+   \:3053\:308c\:306b\:3088\:308a\:3001\:975e\:540c\:671f\:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:4e2d\:306b $iDoc* \:304c\:30ea\:30bb\:30c3\:30c8\:3055\:308c\:3066\:3082
+   \:65e2\:5b58\:306e\:4fdd\:5b58\:5024\:304c\:7834\:58ca\:3055\:308c\:306a\:3044\:3002 *)
 iSaveDocOptions[packageName_String] :=
   Module[{path, existing, data, refDir, merged},
     refDir = iReferencesDir[packageName];
     If[!DirectoryQ[refDir],
       Quiet @ CreateDirectory[refDir, CreateIntermediateDirectories -> True]];
     path = iDocOptionsPath[packageName];
-    (* 既存ファイルを読み込む *)
+    (* \:65e2\:5b58\:30d5\:30a1\:30a4\:30eb\:3092\:8aad\:307f\:8fbc\:3080 *)
     existing = If[FileExistsQ[path],
       Quiet @ Check[Import[path, "RawJSON"], <||>], <||>];
     If[!AssociationQ[existing], existing = <||>];
-    (* $iDocState[packageName] から値を取得 *)
+    (* $iDocState[packageName] \:304b\:3089\:5024\:3092\:53d6\:5f97 *)
     data = <|
       "References" -> Replace[iDocGet[packageName, "References"], Except[_List] -> {}],
       "Demos" -> Replace[iDocGet[packageName, "Demos"], Except[_List] -> {}],
@@ -7200,7 +7477,7 @@ iSaveDocOptions[packageName_String] :=
       "License" -> Replace[iDocGet[packageName, "License"], Except[_String] -> ""],
       "Figures" -> Replace[iDocGet[packageName, "Figures"], Except[_List] -> {}]
     |>;
-    (* マージ: 新しい値が空でなければ採用、空なら既存値を保持 *)
+    (* \:30de\:30fc\:30b8: \:65b0\:3057\:3044\:5024\:304c\:7a7a\:3067\:306a\:3051\:308c\:3070\:63a1\:7528\:3001\:7a7a\:306a\:3089\:65e2\:5b58\:5024\:3092\:4fdd\:6301 *)
     merged = <|
       "References" -> If[Length[data["References"]] > 0,
         data["References"],
@@ -7224,8 +7501,8 @@ iSaveDocOptions[packageName_String] :=
     Quiet @ Export[path, merged, "RawJSON"];
   ];
 
-(* JSON から読み込み、現在のオプション値とマージ。
-   オプションで明示的に指定された値を優先し、永続化された値は追加のみ。 *)
+(* JSON \:304b\:3089\:8aad\:307f\:8fbc\:307f\:3001\:73fe\:5728\:306e\:30aa\:30d7\:30b7\:30e7\:30f3\:5024\:3068\:30de\:30fc\:30b8\:3002
+   \:30aa\:30d7\:30b7\:30e7\:30f3\:3067\:660e\:793a\:7684\:306b\:6307\:5b9a\:3055\:308c\:305f\:5024\:3092\:512a\:5148\:3057\:3001\:6c38\:7d9a\:5316\:3055\:308c\:305f\:5024\:306f\:8ffd\:52a0\:306e\:307f\:3002 *)
 iLoadAndMergeDocOptions[packageName_String] :=
   Module[{path, saved, state, key},
     path = iDocOptionsPath[packageName];
@@ -7234,29 +7511,29 @@ iLoadAndMergeDocOptions[packageName_String] :=
     If[!AssociationQ[saved], Return[]];
     state = Lookup[$iDocState, packageName, <||>];
     If[!AssociationQ[state], state = <||>];
-    (* マージ: 現在値が空なら永続値を採用、非空なら重複排除で結合 *)
+    (* \:30de\:30fc\:30b8: \:73fe\:5728\:5024\:304c\:7a7a\:306a\:3089\:6c38\:7d9a\:5024\:3092\:63a1\:7528\:3001\:975e\:7a7a\:306a\:3089\:91cd\:8907\:6392\:9664\:3067\:7d50\:5408 *)
     Do[
       state[key] = DeleteDuplicates @ Join[
         Replace[Lookup[state, key, {}], Except[_List] -> {}],
         Replace[Lookup[saved, key, {}], Except[_List] -> {}]],
       {key, {"References", "Demos", "Disclaimer", "Acknowledgments"}}];
-    (* Figures: JSON のリスト形式を復元して結合 *)
+    (* Figures: JSON \:306e\:30ea\:30b9\:30c8\:5f62\:5f0f\:3092\:5fa9\:5143\:3057\:3066\:7d50\:5408 *)
     Module[{savedFigs, stateFigs, merged},
       savedFigs = Replace[Lookup[saved, "Figures", {}], Except[_List] -> {}];
       stateFigs = Replace[Lookup[state, "Figures", {}], Except[_List] -> {}];
-      (* JSON では各エントリが {targetDocs, filename, description} のリスト。
-         filename で重複排除して結合。 *)
+      (* JSON \:3067\:306f\:5404\:30a8\:30f3\:30c8\:30ea\:304c {targetDocs, filename, description} \:306e\:30ea\:30b9\:30c8\:3002
+         filename \:3067\:91cd\:8907\:6392\:9664\:3057\:3066\:7d50\:5408\:3002 *)
       merged = Join[stateFigs, savedFigs];
       merged = DeleteDuplicatesBy[merged,
         Function[entry, If[ListQ[entry] && Length[entry] >= 2, entry[[2]], entry]]];
       state["Figures"] = merged];
-    (* License: 明示指定があればそちらを優先、なければ永続値 *)
+    (* License: \:660e\:793a\:6307\:5b9a\:304c\:3042\:308c\:3070\:305d\:3061\:3089\:3092\:512a\:5148\:3001\:306a\:3051\:308c\:3070\:6c38\:7d9a\:5024 *)
     If[!StringQ[Lookup[state, "License", ""]] || Lookup[state, "License", ""] === "",
       state["License"] = Replace[Lookup[saved, "License", ""], Except[_String] -> ""]];
     $iDocState[packageName] = state;
   ];
 
-(* Paclet 形式か単一ファイルかを判定 *)
+(* Paclet \:5f62\:5f0f\:304b\:5358\:4e00\:30d5\:30a1\:30a4\:30eb\:304b\:3092\:5224\:5b9a *)
 iPacletQ[packageName_String] :=
   FileExistsQ[FileNameJoin[{Global`$packageDirectory, packageName, "PacletInfo.wl"}]];
 
@@ -7269,7 +7546,7 @@ iPackageSourceFile[packageName_String] :=
 
 (* \:30bf\:30a4\:30e0\:30b9\:30bf\:30f3\:30d7\:6587\:5b57\:5217 "YYYYMMDD_HHMMSS" \:307e\:305f\:306f "YYYYMMDDHHMM" \:3092\:8aad\:307f\:3084\:3059\:3044\:5f62\:5f0f\:306b\:5909\:63db *)
 formatTimestamp[ts_String] := Module[{m, m2},
-  (* YYYYMMDD_HHMMSS \:5f62\:5f0f (ClaudeUpdatePackage) → 秒は省略 *)
+  (* YYYYMMDD_HHMMSS \:5f62\:5f0f (ClaudeUpdatePackage) \[RightArrow] \:79d2\:306f\:7701\:7565 *)
   m = StringCases[ts,
     RegularExpression["(\\d{4})(\\d{2})(\\d{2})_(\\d{2})(\\d{2})(\\d{2})"] :>
       {"$1", "$2", "$3", "$4", "$5"}];
@@ -7371,16 +7648,16 @@ iBackupTypeLabel[type_String] := Switch[type,
 iTruncatePrompt[prompt_String, maxLen_Integer:35] :=
   Module[{s},
     If[prompt === "", Return[Style[iL[iL["(\:306a\:3057)", "(none)"], "(none)"], GrayLevel[0.5]]]];
-    (* INSTRUCTION: 以降だけ抽出（Claude向けプロンプトの場合） *)
+    (* INSTRUCTION: \:4ee5\:964d\:3060\:3051\:62bd\:51fa\:ff08Claude\:5411\:3051\:30d7\:30ed\:30f3\:30d7\:30c8\:306e\:5834\:5408\:ff09 *)
     s = First[StringCases[prompt,
       "INSTRUCTION: " ~~ rest__ :> rest], prompt];
-    (* 先頭の定型句を除去 *)
+    (* \:5148\:982d\:306e\:5b9a\:578b\:53e5\:3092\:9664\:53bb *)
     s = StringReplace[s, {
       StartOfString ~~ WhitespaceCharacter.. -> "",
       StartOfString ~~ "\:524d\:56de\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:4ee5\:964d\:306e\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:5909\:66f4\:3092\:53cd\:6620\:3057\:3066\:3001\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0\:3057\:3066\:304f\:3060\:3055\:3044\:3002" -> "(\:81ea\:52d5\:5dee\:5206\:66f4\:65b0)"}];
     s = StringTrim[s];
     If[StringLength[s] > maxLen,
-      StringTake[s, maxLen] <> "\:2026",
+      StringTake[s, maxLen] <> "\[Ellipsis]",
       s]
   ];
 
@@ -7398,9 +7675,9 @@ iBackupTimestampPart[dirName_String] := Which[
 iBackupFileList[dir_String] :=
   FileNameTake /@ Select[FileNames["*", dir], iFileQ];
 
-(* プロンプトの要約を生成して summary.txt に保存する。
-   API 制限中は生成せず空文字を返す（summary.txt も作成しない）。
-   既存の iIsAPIErrorResponse を使ってエラー判定する。 *)
+(* \:30d7\:30ed\:30f3\:30d7\:30c8\:306e\:8981\:7d04\:3092\:751f\:6210\:3057\:3066 summary.txt \:306b\:4fdd\:5b58\:3059\:308b\:3002
+   API \:5236\:9650\:4e2d\:306f\:751f\:6210\:305b\:305a\:7a7a\:6587\:5b57\:3092\:8fd4\:3059\:ff08summary.txt \:3082\:4f5c\:6210\:3057\:306a\:3044\:ff09\:3002
+   \:65e2\:5b58\:306e iIsAPIErrorResponse \:3092\:4f7f\:3063\:3066\:30a8\:30e9\:30fc\:5224\:5b9a\:3059\:308b\:3002 *)
 iGenerateBackupSummary[dir_String] :=
   Module[{promptFile, summaryFile, prompt, queryFn, result, summary},
     summaryFile = FileNameJoin[{dir, "summary.txt"}];
@@ -7409,51 +7686,51 @@ iGenerateBackupSummary[dir_String] :=
     If[!FileExistsQ[promptFile], Return[""]];
     prompt = Quiet @ Import[promptFile, "Text"];
     If[!StringQ[prompt] || prompt === "", Return[""]];
-    (* Claude API で要約生成 *)
+    (* Claude API \:3067\:8981\:7d04\:751f\:6210 *)
     queryFn = Quiet @ Check[ClaudeCode`Private`iClaudeQueryRaw, $Failed];
     If[queryFn === $Failed || !MatchQ[queryFn, _Symbol],
-      Return[""]];  (* API 利用不可: summary.txt を作らず従来表示に任せる *)
+      Return[""]];  (* API \:5229\:7528\:4e0d\:53ef: summary.txt \:3092\:4f5c\:3089\:305a\:5f93\:6765\:8868\:793a\:306b\:4efb\:305b\:308b *)
     result = Quiet @ Check[queryFn[
       iLanguageInstruction["summary"] <>
       "Output ONLY the summary, nothing else. No quotes.\n\n" <>
       StringTake[prompt, UpTo[1000]]], $Failed];
-    (* iIsAPIErrorResponse でエラー・制限レスポンスをチェック *)
+    (* iIsAPIErrorResponse \:3067\:30a8\:30e9\:30fc\:30fb\:5236\:9650\:30ec\:30b9\:30dd\:30f3\:30b9\:3092\:30c1\:30a7\:30c3\:30af *)
     If[iIsAPIErrorResponse[result],
-      Return[""]];  (* 制限中: summary.txt を作らない *)
+      Return[""]];  (* \:5236\:9650\:4e2d: summary.txt \:3092\:4f5c\:3089\:306a\:3044 *)
     summary = StringTrim[result];
-    If[StringLength[summary] > 200, Return[""]];  (* 異常に長い応答も除外 *)
+    If[StringLength[summary] > 200, Return[""]];  (* \:7570\:5e38\:306b\:9577\:3044\:5fdc\:7b54\:3082\:9664\:5916 *)
     Quiet @ Export[summaryFile, summary, "Text"];
     summary
   ];
 
-(* ClaudeBackupDataset 起動時に要約ファイルを検査・一括生成。
-   壊れた summary.txt（limit エラーが保存されたもの）も削除する。
-   最初の API 呼び出しで limit に達したら以降の生成をすべてスキップする。 *)
+(* ClaudeBackupDataset \:8d77\:52d5\:6642\:306b\:8981\:7d04\:30d5\:30a1\:30a4\:30eb\:3092\:691c\:67fb\:30fb\:4e00\:62ec\:751f\:6210\:3002
+   \:58ca\:308c\:305f summary.txt\:ff08limit \:30a8\:30e9\:30fc\:304c\:4fdd\:5b58\:3055\:308c\:305f\:3082\:306e\:ff09\:3082\:524a\:9664\:3059\:308b\:3002
+   \:6700\:521d\:306e API \:547c\:3073\:51fa\:3057\:3067 limit \:306b\:9054\:3057\:305f\:3089\:4ee5\:964d\:306e\:751f\:6210\:3092\:3059\:3079\:3066\:30b9\:30ad\:30c3\:30d7\:3059\:308b\:3002 *)
 iEnsureBackupSummaries[entries_List] :=
   Module[{dir, summaryFile, content, count = 0, hitLimit = False},
     Do[
       dir = entry["Directory"];
       summaryFile = FileNameJoin[{dir, "summary.txt"}];
-      (* 既存 summary.txt が壊れていたら削除 (iIsAPIErrorResponse で判定) *)
+      (* \:65e2\:5b58 summary.txt \:304c\:58ca\:308c\:3066\:3044\:305f\:3089\:524a\:9664 (iIsAPIErrorResponse \:3067\:5224\:5b9a) *)
       If[FileExistsQ[summaryFile],
         content = Quiet @ Import[summaryFile, "Text"];
         If[iIsAPIErrorResponse[content],
           Quiet @ DeleteFile[summaryFile]]];
-      (* limit に達していたら以降の生成をスキップ *)
+      (* limit \:306b\:9054\:3057\:3066\:3044\:305f\:3089\:4ee5\:964d\:306e\:751f\:6210\:3092\:30b9\:30ad\:30c3\:30d7 *)
       If[hitLimit, Continue[]];
-      (* summary.txt がなく prompt.txt がある場合に生成を試みる *)
+      (* summary.txt \:304c\:306a\:304f prompt.txt \:304c\:3042\:308b\:5834\:5408\:306b\:751f\:6210\:3092\:8a66\:307f\:308b *)
       If[!FileExistsQ[summaryFile] && entry["HasPrompt"],
         Module[{result},
           result = iGenerateBackupSummary[dir];
           If[result === "",
-            (* 空文字が返った = API 失敗/制限 → 以降すべてスキップ *)
+            (* \:7a7a\:6587\:5b57\:304c\:8fd4\:3063\:305f = API \:5931\:6557/\:5236\:9650 \[RightArrow] \:4ee5\:964d\:3059\:3079\:3066\:30b9\:30ad\:30c3\:30d7 *)
             hitLimit = True,
             count++]]],
       {entry, entries}];
     count
   ];
 
-(* 全バックアップエントリを取得（指定パッケージ） *)
+(* \:5168\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30a8\:30f3\:30c8\:30ea\:3092\:53d6\:5f97\:ff08\:6307\:5b9a\:30d1\:30c3\:30b1\:30fc\:30b8\:ff09 *)
 iAllBackupEntries[packageName_String] :=
   Module[{bdir, sessionDirs, dirName, btype},
     bdir = backupDir[packageName];
@@ -7471,7 +7748,7 @@ iAllBackupEntries[packageName_String] :=
         "Directory" -> dir,
         "Files"     -> iBackupFileList[dir],
         "Prompt"    -> Module[{sf, pf, pt},
-          (* summary.txt を優先、なければ prompt.txt *)
+          (* summary.txt \:3092\:512a\:5148\:3001\:306a\:3051\:308c\:3070 prompt.txt *)
           sf = FileNameJoin[{dir, "summary.txt"}];
           If[FileExistsQ[sf],
             pt = Quiet @ Import[sf, "Text"];
@@ -7497,25 +7774,25 @@ iAllBackupEntriesAll[] :=
   ];
 
 (* ============================================================
-   安全なバックアップ削除:
-   差分チェーンの中間ノードを削除するとき、後続の .cdiff / .unchanged が
-   参照先を失って復元不能になることを防ぐ。
-   削除前に後続の依存を .cz (ベースライン) に変換し自己完結させる。
+   \:5b89\:5168\:306a\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:524a\:9664:
+   \:5dee\:5206\:30c1\:30a7\:30fc\:30f3\:306e\:4e2d\:9593\:30ce\:30fc\:30c9\:3092\:524a\:9664\:3059\:308b\:3068\:304d\:3001\:5f8c\:7d9a\:306e .cdiff / .unchanged \:304c
+   \:53c2\:7167\:5148\:3092\:5931\:3063\:3066\:5fa9\:5143\:4e0d\:80fd\:306b\:306a\:308b\:3053\:3068\:3092\:9632\:3050\:3002
+   \:524a\:9664\:524d\:306b\:5f8c\:7d9a\:306e\:4f9d\:5b58\:3092 .cz (\:30d9\:30fc\:30b9\:30e9\:30a4\:30f3) \:306b\:5909\:63db\:3057\:81ea\:5df1\:5b8c\:7d50\:3055\:305b\:308b\:3002
    ============================================================ *)
 
-(* パッケージバックアップの安全削除。
-   packageName が "" の場合はチェーン解決をスキップ（生ファイルのみの場合）。 *)
+(* \:30d1\:30c3\:30b1\:30fc\:30b8\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306e\:5b89\:5168\:524a\:9664\:3002
+   packageName \:304c "" \:306e\:5834\:5408\:306f\:30c1\:30a7\:30fc\:30f3\:89e3\:6c7a\:3092\:30b9\:30ad\:30c3\:30d7\:ff08\:751f\:30d5\:30a1\:30a4\:30eb\:306e\:307f\:306e\:5834\:5408\:ff09\:3002 *)
 iSafeDeleteBackupDir[dir_String, packageName_String:""] :=
   Module[{parentDir, dirName, allDirs, laterDirs, resolved = 0},
     If[!DirectoryQ[dir], Return[$Failed]];
     parentDir = DirectoryName[dir];
     dirName = FileNameTake[dir, -1];
-    (* 同じ history 内の全ディレクトリを取得 *)
+    (* \:540c\:3058 history \:5185\:306e\:5168\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3092\:53d6\:5f97 *)
     allDirs = SortBy[Select[FileNames["*", parentDir, {1}], DirectoryQ],
       FileNameTake[#, -1] &];
-    (* 削除対象より後のディレクトリ *)
+    (* \:524a\:9664\:5bfe\:8c61\:3088\:308a\:5f8c\:306e\:30c7\:30a3\:30ec\:30af\:30c8\:30ea *)
     laterDirs = Select[allDirs, FileNameTake[#, -1] > dirName &];
-    (* 後続ディレクトリで dirName を参照する .cdiff / .unchanged を検索・解決 *)
+    (* \:5f8c\:7d9a\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3067 dirName \:3092\:53c2\:7167\:3059\:308b .cdiff / .unchanged \:3092\:691c\:7d22\:30fb\:89e3\:6c7a *)
     Scan[Function[laterDir,
       Module[{allFiles},
         allFiles = Select[FileNames["*", laterDir],
@@ -7525,24 +7802,24 @@ iSafeDeleteBackupDir[dir_String, packageName_String:""] :=
           Module[{refContent, refDirName, baseName, fullContent, czPath},
             refContent = Quiet @ Check[Import[refFile, "String"], ""];
             If[!StringQ[refContent] || refContent === "", Return[]];
-            (* 参照先ディレクトリ名を抽出 *)
+            (* \:53c2\:7167\:5148\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:540d\:3092\:62bd\:51fa *)
             refDirName = If[StringEndsQ[FileNameTake[refFile], ".unchanged"],
               StringTrim[refContent],
-              (* .cdiff の場合: Uncompress して {prevDirName, alignment} の第1要素 *)
+              (* .cdiff \:306e\:5834\:5408: Uncompress \:3057\:3066 {prevDirName, alignment} \:306e\:7b2c1\:8981\:7d20 *)
               Module[{data},
                 data = Quiet @ Check[Uncompress[refContent], $Failed];
                 If[MatchQ[data, {_String, _List}], data[[1]], ""]]];
-            (* このファイルが削除対象ディレクトリを参照しているか *)
+            (* \:3053\:306e\:30d5\:30a1\:30a4\:30eb\:304c\:524a\:9664\:5bfe\:8c61\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3092\:53c2\:7167\:3057\:3066\:3044\:308b\:304b *)
             If[refDirName === dirName,
-              (* ファイル名を復元 (.cdiff/.unchanged を除去) *)
+              (* \:30d5\:30a1\:30a4\:30eb\:540d\:3092\:5fa9\:5143 (.cdiff/.unchanged \:3092\:9664\:53bb) *)
               baseName = StringReplace[FileNameTake[refFile],
                 {".cdiff" -> "", ".unchanged" -> ""}];
-              (* フルコンテンツを復元して .cz に変換 *)
+              (* \:30d5\:30eb\:30b3\:30f3\:30c6\:30f3\:30c4\:3092\:5fa9\:5143\:3057\:3066 .cz \:306b\:5909\:63db *)
               If[packageName =!= "",
                 fullContent = iLoadBackupFile[laterDir, baseName, packageName],
-                (* packageName なし: 直接復元を試みる *)
+                (* packageName \:306a\:3057: \:76f4\:63a5\:5fa9\:5143\:3092\:8a66\:307f\:308b *)
                 fullContent = If[StringEndsQ[FileNameTake[refFile], ".unchanged"],
-                  (* unchanged: 元のディレクトリから直接読む *)
+                  (* unchanged: \:5143\:306e\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304b\:3089\:76f4\:63a5\:8aad\:3080 *)
                   Module[{origPath = FileNameJoin[{parentDir, dirName, baseName}]},
                     If[FileExistsQ[origPath], Import[origPath, "Text"], $Failed]],
                   $Failed]];
@@ -7558,7 +7835,7 @@ iSafeDeleteBackupDir[dir_String, packageName_String:""] :=
           ]], allFiles]
       ]], laterDirs];
     If[resolved > 0,
-      Print["  \:2713 " <> ToString[resolved] <> " \:500b\:306e\:4f9d\:5b58\:30d5\:30a1\:30a4\:30eb\:3092\:30d9\:30fc\:30b9\:30e9\:30a4\:30f3\:306b\:5909\:63db\:3057\:307e\:3057\:305f\:3002"]];
+      Print["  \[Checkmark] " <> ToString[resolved] <> " \:500b\:306e\:4f9d\:5b58\:30d5\:30a1\:30a4\:30eb\:3092\:30d9\:30fc\:30b9\:30e9\:30a4\:30f3\:306b\:5909\:63db\:3057\:307e\:3057\:305f\:3002"]];
     DeleteDirectory[dir, DeleteContents -> True];
     dir
   ];
@@ -7577,7 +7854,7 @@ iBackupReview[packageName_String, dir_String, btype_String] :=
       "\n\:30d5\:30a1\:30a4\:30eb\:6570: " <> ToString[Length[files]] <>
       "\n\:30d5\:30a1\:30a4\:30eb: " <> StringRiffle[files, ", "],
       "Text"]];
-    (* .wl データがあれば現在との差分を表示 (.wl / .cz / .cdiff 対応) *)
+    (* .wl \:30c7\:30fc\:30bf\:304c\:3042\:308c\:3070\:73fe\:5728\:3068\:306e\:5dee\:5206\:3092\:8868\:793a (.wl / .cz / .cdiff \:5bfe\:5fdc) *)
     currentFile = iPackageSourceFile[packageName];
     backupCode = iLoadBackupWl[dir, packageName];
     If[StringQ[backupCode] && FileExistsQ[currentFile],
@@ -7604,7 +7881,7 @@ iBackupReview[packageName_String, dir_String, btype_String] :=
           AppendTo[cells, Cell[
             "\n--- prompt.txt ---\n" <> StringTake[promptText, UpTo[2000]],
             "Program"]]]]];
-    (* .md ファイルがあれば一覧表示 (.md / .cz / .cdiff / .unchanged 対応) *)
+    (* .md \:30d5\:30a1\:30a4\:30eb\:304c\:3042\:308c\:3070\:4e00\:89a7\:8868\:793a (.md / .cz / .cdiff / .unchanged \:5bfe\:5fdc) *)
     Module[{mdNames, mdInfo},
       mdNames = iListRestorableFiles[dir, ".md"];
       If[Length[mdNames] > 0,
@@ -7613,7 +7890,7 @@ iBackupReview[packageName_String, dir_String, btype_String] :=
             fmt = Which[
               FileExistsQ[FileNameJoin[{dir, fn}]], "raw",
               FileExistsQ[FileNameJoin[{dir, fn <> ".unchanged"}]], "=",
-              FileExistsQ[FileNameJoin[{dir, fn <> ".cdiff"}]], "\:0394",
+              FileExistsQ[FileNameJoin[{dir, fn <> ".cdiff"}]], "\[CapitalDelta]",
               FileExistsQ[FileNameJoin[{dir, fn <> ".cz"}]], "cz",
               True, "?"];
             fn <> " [" <> fmt <> "]"
@@ -7650,7 +7927,7 @@ iBackupReview[packageName_String, dir_String, btype_String] :=
 iBackupPull[packageName_String, dir_String] :=
   Module[{nb, destFile, result = <||>, restoredSource, newSz, oldSz},
     nb = EvaluationNotebook[];
-    (* .wl ファイルの復元 (レガシー .wl / .cz / .cdiff すべて対応) *)
+    (* .wl \:30d5\:30a1\:30a4\:30eb\:306e\:5fa9\:5143 (\:30ec\:30ac\:30b7\:30fc .wl / .cz / .cdiff \:3059\:3079\:3066\:5bfe\:5fdc) *)
     destFile = iPackageSourceFile[packageName];
     restoredSource = iLoadBackupWl[dir, packageName];
     If[StringQ[restoredSource],
@@ -7660,27 +7937,27 @@ iBackupPull[packageName_String, dir_String] :=
         nbPrint[nb, "\:26a0 \:30ef\:30fc\:30cb\:30f3\:30b0: \:5fa9\:5143\:30c7\:30fc\:30bf(" <> ToString[newSz] <>
           " chars)\:304c\:73fe\:5728(" <> ToString[oldSz] <>
           " bytes)\:306e50%\:672a\:6e80!"]];
-      (* 書き込み先ディレクトリを確保 *)
+      (* \:66f8\:304d\:8fbc\:307f\:5148\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3092\:78ba\:4fdd *)
       Module[{destDir = DirectoryName[destFile]},
         If[!DirectoryQ[destDir],
           Quiet @ CreateDirectory[destDir, CreateIntermediateDirectories -> True]]];
-      (* 書き込み: BinaryWrite → Export フォールバック *)
+      (* \:66f8\:304d\:8fbc\:307f: BinaryWrite \[RightArrow] Export \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af *)
       If[Quiet @ Check[
             Module[{strm},
               strm = OpenWrite[destFile, BinaryFormat -> True];
               If[Head[strm] =!= OutputStream,
-                (* OpenWrite 失敗 → Export でフォールバック *)
+                (* OpenWrite \:5931\:6557 \[RightArrow] Export \:3067\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af *)
                 Export[destFile, restoredSource, "Text", CharacterEncoding -> "UTF-8"];
                 True,
                 BinaryWrite[strm, ToCharacterCode[restoredSource, "UTF-8"]];
                 Close[strm]; True]], False],
-        nbPrint[nb, iL["\:5fa9\:5143\:3057\:307e\:3057\:305f: ", "Restored: "] <> dir <> "\n\:2192 " <> destFile];
+        nbPrint[nb, iL["\:5fa9\:5143\:3057\:307e\:3057\:305f: ", "Restored: "] <> dir <> "\n\[RightArrow] " <> destFile];
         Quiet @ Block[{$CharacterEncoding = "UTF-8"}, Get[destFile]];
         nbPrint[nb, iL["\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:518d\:30ed\:30fc\:30c9\:3057\:307e\:3057\:305f\:3002", "Package reloaded."]];
         AssociateTo[result, "WL" -> destFile],
         nbPrint[nb, iL["\:8b66\:544a: .wl \:306e\:66f8\:304d\:8fbc\:307f\:5931\:6557\:3002\:5bfe\:8c61: ", "Warning: .wl write failed: "] <> destFile]],
       nbPrint[nb, iL["\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306b .wl \:30c7\:30fc\:30bf\:304c\:3042\:308a\:307e\:305b\:3093\:3002", "No .wl data in backup."]]];
-    (* .md ファイルの復元（.md / .cz / .cdiff / .unchanged すべて対応） *)
+    (* .md \:30d5\:30a1\:30a4\:30eb\:306e\:5fa9\:5143\:ff08.md / .cz / .cdiff / .unchanged \:3059\:3079\:3066\:5bfe\:5fdc\:ff09 *)
     Module[{mdNames, docsDir2, restoredCount = 0},
       mdNames = iListRestorableFiles[dir, ".md"];
       If[Length[mdNames] > 0,
@@ -7695,13 +7972,13 @@ iBackupPull[packageName_String, dir_String] :=
                   strm2 = OpenWrite[dest, BinaryFormat -> True];
                   BinaryWrite[strm2, ToCharacterCode[content, "UTF-8"]];
                   Close[strm2], Null];
-                nbPrint[nb, iL["\:5fa9\:5143: ", "Restored: "] <> mdName <> " \:2192 " <> dest];
+                nbPrint[nb, iL["\:5fa9\:5143: ", "Restored: "] <> mdName <> " \[RightArrow] " <> dest];
                 restoredCount++,
                 nbPrint[nb, iL["\:8b66\:544a: ", "Warning: "] <> mdName <> iL[" \:306e\:5fa9\:5143\:306b\:5931\:6557", " restore failed"]]]]],
             mdNames];
           If[restoredCount > 0, AssociateTo[result, "MD" -> restoredCount]],
           nbPrint[nb, iL["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093: ", "Document directory does not exist: "] <> docsDir2]]]];
-    (* doc_options.json の復元 *)
+    (* doc_options.json \:306e\:5fa9\:5143 *)
     Module[{docOptsContent, docOptsDest, refDir, strm3},
       docOptsContent = iLoadBackupFile[dir, "doc_options.json", packageName];
       If[StringQ[docOptsContent],
@@ -7713,9 +7990,9 @@ iBackupPull[packageName_String, dir_String] :=
           strm3 = OpenWrite[docOptsDest, BinaryFormat -> True];
           BinaryWrite[strm3, ToCharacterCode[docOptsContent, "UTF-8"]];
           Close[strm3], Null];
-        nbPrint[nb, iL["\:5fa9\:5143: ", "Restored: "] <> "doc_options.json \:2192 " <> docOptsDest];
+        nbPrint[nb, iL["\:5fa9\:5143: ", "Restored: "] <> "doc_options.json \[RightArrow] " <> docOptsDest];
         AssociateTo[result, "DocOptions" -> docOptsDest]]];
-    (* バイナリファイル（画像等）の復元: バックアップ内の画像を docs/ に直接コピー *)
+    (* \:30d0\:30a4\:30ca\:30ea\:30d5\:30a1\:30a4\:30eb\:ff08\:753b\:50cf\:7b49\:ff09\:306e\:5fa9\:5143: \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5185\:306e\:753b\:50cf\:3092 docs/ \:306b\:76f4\:63a5\:30b3\:30d4\:30fc *)
     Module[{binFiles, docsDir3, binCount = 0},
       binFiles = Select[FileNames["*", dir, Infinity],
         iFileQ[#] && iIsBinaryFile[#] &];
@@ -7731,7 +8008,7 @@ iBackupPull[packageName_String, dir_String] :=
               If[subDir3 =!= "" && !DirectoryQ[subDir3],
                 Quiet @ CreateDirectory[subDir3, CreateIntermediateDirectories -> True]];
               Quiet @ CopyFile[binFile, dest3, OverwriteTarget -> True];
-              nbPrint[nb, iL["\:5fa9\:5143: ", "Restored: "] <> relPath <> " \:2192 " <> dest3];
+              nbPrint[nb, iL["\:5fa9\:5143: ", "Restored: "] <> relPath <> " \[RightArrow] " <> dest3];
               binCount++]],
           binFiles];
           If[binCount > 0, AssociateTo[result, "BinaryFiles" -> binCount]]]]];
@@ -7739,9 +8016,9 @@ iBackupPull[packageName_String, dir_String] :=
   ];
 
 (* ============================================================
-   バックアップ用ローカルスナップショット管理
-   ClaudeBackupDataset / ClaudeDirectiveBackupDataset の起動時に
-   現在の作業ファイルを保存し、Pull で巻き戻した後に復元可能にする。
+   \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:7528\:30ed\:30fc\:30ab\:30eb\:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:7ba1\:7406
+   ClaudeBackupDataset / ClaudeDirectiveBackupDataset \:306e\:8d77\:52d5\:6642\:306b
+   \:73fe\:5728\:306e\:4f5c\:696d\:30d5\:30a1\:30a4\:30eb\:3092\:4fdd\:5b58\:3057\:3001Pull \:3067\:5dfb\:304d\:623b\:3057\:305f\:5f8c\:306b\:5fa9\:5143\:53ef\:80fd\:306b\:3059\:308b\:3002
    ============================================================ *)
 
 iBackupSnapshotDir[packageName_String] :=
@@ -7751,7 +8028,7 @@ iBackupSnapshotDir[packageName_String] :=
 iBackupSnapshotHashPath[packageName_String] :=
   FileNameJoin[{iBackupSnapshotDir[packageName], "_snapshot_hashes.json"}];
 
-(* パッケージのバックアップ対象ファイルを収集してスナップショットに保存 *)
+(* \:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5bfe\:8c61\:30d5\:30a1\:30a4\:30eb\:3092\:53ce\:96c6\:3057\:3066\:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:306b\:4fdd\:5b58 *)
 iSaveBackupSnapshot[packageName_String] :=
   Module[{snapDir, pkgDir, srcFile, docsDir, hashes = <||>, dst},
     snapDir = iBackupSnapshotDir[packageName];
@@ -7759,13 +8036,13 @@ iSaveBackupSnapshot[packageName_String] :=
       Quiet @ DeleteDirectory[snapDir, DeleteContents -> True]];
     Quiet @ CreateDirectory[snapDir, CreateIntermediateDirectories -> True];
     pkgDir = Global`$packageDirectory;
-    (* .wl ファイル *)
+    (* .wl \:30d5\:30a1\:30a4\:30eb *)
     srcFile = iPackageSourceFile[packageName];
     If[FileExistsQ[srcFile],
       dst = FileNameJoin[{snapDir, FileNameTake[srcFile]}];
       Quiet @ CopyFile[srcFile, dst, OverwriteTarget -> True];
       hashes[FileNameTake[srcFile]] = Quiet @ Check[FileHash[srcFile, "SHA256", "HexString"], ""]];
-    (* _info/docs/ 内のファイル *)
+    (* _info/docs/ \:5185\:306e\:30d5\:30a1\:30a4\:30eb *)
     docsDir = FileNameJoin[{iInfoDir[packageName], "docs"}];
     If[DirectoryQ[docsDir],
       Module[{allFiles, relPath, dstF},
@@ -7778,7 +8055,7 @@ iSaveBackupSnapshot[packageName_String] :=
           Quiet @ CopyFile[f, dstF, OverwriteTarget -> True];
           hashes[relPath] = Quiet @ Check[FileHash[f, "SHA256", "HexString"], ""],
           {f, allFiles}]]];
-    (* doc_options.json のスナップショット *)
+    (* doc_options.json \:306e\:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8 *)
     Module[{docOptsFile = iDocOptionsPath[packageName], dstOpts},
       If[FileExistsQ[docOptsFile],
         dstOpts = FileNameJoin[{snapDir, "doc_options.json"}];
@@ -7789,24 +8066,24 @@ iSaveBackupSnapshot[packageName_String] :=
       "SnapshotDir" -> snapDir, "HashedFiles" -> Length[hashes]|>
   ];
 
-(* スナップショットからパッケージファイルを復元 *)
+(* \:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:304b\:3089\:30d1\:30c3\:30b1\:30fc\:30b8\:30d5\:30a1\:30a4\:30eb\:3092\:5fa9\:5143 *)
 iRestoreBackupSnapshot[packageName_String] :=
   Module[{snapDir, pkgDir, srcFile, docsDir, allFiles, relPath, dst,
           restored = 0, nb},
     snapDir = iBackupSnapshotDir[packageName];
     If[!DirectoryQ[snapDir],
-      Return[Failure["NoSnapshot", <|"Message" -> "スナップショットなし"|>]]];
+      Return[Failure["NoSnapshot", <|"Message" -> "\:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:306a\:3057"|>]]];
     nb = Quiet[EvaluationNotebook[]];
     pkgDir = Global`$packageDirectory;
-    (* .wl ファイルの復元 *)
+    (* .wl \:30d5\:30a1\:30a4\:30eb\:306e\:5fa9\:5143 *)
     srcFile = FileNameJoin[{snapDir, packageName <> ".wl"}];
     If[FileExistsQ[srcFile],
       dst = iPackageSourceFile[packageName];
       Quiet @ CopyFile[srcFile, dst, OverwriteTarget -> True];
       Quiet @ Block[{$CharacterEncoding = "UTF-8"}, Get[dst]];
-      nbPrint[nb, iL["復元: ", "Restored: "] <> FileNameTake[dst]];
+      nbPrint[nb, iL["\:5fa9\:5143: ", "Restored: "] <> FileNameTake[dst]];
       restored++];
-    (* Paclet 形式の場合もチェック *)
+    (* Paclet \:5f62\:5f0f\:306e\:5834\:5408\:3082\:30c1\:30a7\:30c3\:30af *)
     If[iPacletQ[packageName],
       Module[{kernelFile},
         kernelFile = FileNameJoin[{snapDir, packageName <> ".wl"}];
@@ -7814,7 +8091,7 @@ iRestoreBackupSnapshot[packageName_String] :=
           dst = iPackageSourceFile[packageName];
           Quiet @ CopyFile[kernelFile, dst, OverwriteTarget -> True];
           Quiet @ Block[{$CharacterEncoding = "UTF-8"}, Get[dst]]]]];
-    (* docs ファイルの復元 *)
+    (* docs \:30d5\:30a1\:30a4\:30eb\:306e\:5fa9\:5143 *)
     docsDir = FileNameJoin[{iInfoDir[packageName], "docs"}];
     Module[{snapDocs},
       snapDocs = FileNameJoin[{snapDir, "docs"}];
@@ -7826,10 +8103,10 @@ iRestoreBackupSnapshot[packageName_String] :=
           dst = FileNameJoin[{docsDir, relPath}];
           Quiet @ CreateDirectory[DirectoryName[dst], CreateIntermediateDirectories -> True];
           Quiet @ CopyFile[f, dst, OverwriteTarget -> True];
-          nbPrint[nb, iL["復元: docs/", "Restored: docs/"] <> relPath];
+          nbPrint[nb, iL["\:5fa9\:5143: docs/", "Restored: docs/"] <> relPath];
           restored++,
           {f, allFiles}]]];
-    (* doc_options.json の復元 *)
+    (* doc_options.json \:306e\:5fa9\:5143 *)
     Module[{snapDocOpts = FileNameJoin[{snapDir, "doc_options.json"}], refDir},
       If[FileExistsQ[snapDocOpts],
         refDir = iReferencesDir[packageName];
@@ -7843,7 +8120,7 @@ iRestoreBackupSnapshot[packageName_String] :=
       "FilesRestored" -> restored|>
   ];
 
-(* スナップショットと現在のファイルのハッシュを比較して変更ファイルを検出 *)
+(* \:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:3068\:73fe\:5728\:306e\:30d5\:30a1\:30a4\:30eb\:306e\:30cf\:30c3\:30b7\:30e5\:3092\:6bd4\:8f03\:3057\:3066\:5909\:66f4\:30d5\:30a1\:30a4\:30eb\:3092\:691c\:51fa *)
 iDetectBackupChanges[packageName_String] :=
   Module[{snapDir, hashPath, savedHashes, changedFiles = {},
           srcFile, currentHash, savedHash, docsDir},
@@ -7852,14 +8129,14 @@ iDetectBackupChanges[packageName_String] :=
     hashPath = iBackupSnapshotHashPath[packageName];
     savedHashes = Quiet @ Check[Import[hashPath, "RawJSON"], <||>];
     If[!AssociationQ[savedHashes], savedHashes = <||>];
-    (* .wl ファイル *)
+    (* .wl \:30d5\:30a1\:30a4\:30eb *)
     srcFile = iPackageSourceFile[packageName];
     If[FileExistsQ[srcFile],
       currentHash = Quiet @ Check[FileHash[srcFile, "SHA256", "HexString"], ""];
       savedHash = Lookup[savedHashes, FileNameTake[srcFile], None];
       If[savedHash === None || currentHash =!= savedHash,
         AppendTo[changedFiles, FileNameTake[srcFile]]]];
-    (* docs ファイル *)
+    (* docs \:30d5\:30a1\:30a4\:30eb *)
     docsDir = FileNameJoin[{iInfoDir[packageName], "docs"}];
     If[DirectoryQ[docsDir],
       Module[{allFiles, relPath},
@@ -7875,11 +8152,11 @@ iDetectBackupChanges[packageName_String] :=
     changedFiles
   ];
 
-(* 指定パッケージのバックアップ履歴を Grid で表示 *)
+(* \:6307\:5b9a\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:3092 Grid \:3067\:8868\:793a *)
 ClaudeBackupDataset[packageName_String] :=
   Module[{entries, gridRows, header, localRow, pn = packageName,
           outputTag, warningTag, gridResult, snapDir},
-    (* 起動時: スナップショット保存 *)
+    (* \:8d77\:52d5\:6642: \:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:4fdd\:5b58 *)
     snapDir = iBackupSnapshotDir[packageName];
     If[DirectoryQ[snapDir],
       Quiet @ DeleteDirectory[snapDir, DeleteContents -> True]];
@@ -7887,57 +8164,57 @@ ClaudeBackupDataset[packageName_String] :=
     entries = Reverse[iAllBackupEntries[packageName]];
     If[Length[entries] === 0,
       Print[iL["\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:306a\:3057: ", "No backup history: "] <> packageName]; Return[{}]];
-    (* 要約ファイルがないエントリの要約を一括生成 *)
+    (* \:8981\:7d04\:30d5\:30a1\:30a4\:30eb\:304c\:306a\:3044\:30a8\:30f3\:30c8\:30ea\:306e\:8981\:7d04\:3092\:4e00\:62ec\:751f\:6210 *)
     iEnsureBackupSummaries[entries];
-    (* 要約生成後にエントリを再読み込み *)
+    (* \:8981\:7d04\:751f\:6210\:5f8c\:306b\:30a8\:30f3\:30c8\:30ea\:3092\:518d\:8aad\:307f\:8fbc\:307f *)
     entries = Reverse[iAllBackupEntries[packageName]];
     outputTag = "ClaudeBackupDataset$" <> packageName <> "$output";
     warningTag = "ClaudeBackupDataset$" <> packageName <> "$warning";
     header = {Style["#", Bold], Style["Timestamp", Bold],
       Style["Type", Bold], Style[iL["\:6307\:793a", "Instruction"], Bold], Style["Actions", Bold]};
-    (* #0 行: ローカル最新版 *)
+    (* #0 \:884c: \:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248 *)
     localRow = {
       Style[0, Bold, RGBColor[0, 0.5, 0]],
       Style["local", FontFamily -> "Courier", FontColor -> RGBColor[0, 0.5, 0]],
-      "ローカル最新版",
-      "(スナップショット保存済み)",
+      "\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248",
+      "(\:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:4fdd\:5b58\:6e08\:307f)",
       With[{pkg = pn, oTag = outputTag, wTag = warningTag},
         Row[{
           Button["Pull",
             Module[{newerFiles, msg, nb, outputIndices, outputIdx, cells},
               nb = Quiet[EvaluationNotebook[]];
               If[!DirectoryQ[iBackupSnapshotDir[pkg]],
-                Print[iL["スナップショットが存在しません。", "Snapshot does not exist."]],
+                Print[iL["\:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:304c\:5b58\:5728\:3057\:307e\:305b\:3093\:3002", "Snapshot does not exist."]],
                 newerFiles = iDetectBackupChanges[pkg];
                 If[Length[newerFiles] > 0,
-                  msg = "以下の " <> ToString[Length[newerFiles]] <>
-                    " ファイルがスナップショットから変更されています:\n\n" <>
+                  msg = "\:4ee5\:4e0b\:306e " <> ToString[Length[newerFiles]] <>
+                    " \:30d5\:30a1\:30a4\:30eb\:304c\:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:304b\:3089\:5909\:66f4\:3055\:308c\:3066\:3044\:307e\:3059:\n\n" <>
                     StringRiffle[Take[newerFiles, UpTo[10]], "\n"] <>
                     If[Length[newerFiles] > 10,
-                      "\n... 他 " <> ToString[Length[newerFiles] - 10] <> " ファイル", ""] <>
-                    "\n\nローカル最新版で上書きすると、これらの変更は失われます。";
+                      "\n... \:4ed6 " <> ToString[Length[newerFiles] - 10] <> " \:30d5\:30a1\:30a4\:30eb", ""] <>
+                    "\n\n\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:3067\:4e0a\:66f8\:304d\:3059\:308b\:3068\:3001\:3053\:308c\:3089\:306e\:5909\:66f4\:306f\:5931\:308f\:308c\:307e\:3059\:3002";
                   NBAccess`NBDeleteCellsByTag[nb, wTag];
                   outputIndices = NBAccess`NBCellIndicesByTag[nb, oTag];
                   If[Length[outputIndices] > 0,
                     NBAccess`NBMoveAfterCell[nb, Last[outputIndices]],
                     Quiet[SelectionMove[EvaluationCell[], After, Cell]]];
                   cells = Cell[CellGroupData[{
-                    Cell[iL["\:26a0 ローカル最新版への復元", "\:26a0 Restore to local latest"], "Subsubsection",
+                    Cell[iL["\:26a0 \:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:3078\:306e\:5fa9\:5143", "\:26a0 Restore to local latest"], "Subsubsection",
                       CellTags -> {wTag}],
                     Cell[msg, "Text"],
                     Cell[BoxData[ToBoxes[Row[{
-                      Button[iL["すべてローカル最新版に置き換える", "Replace all with local latest"],
+                      Button[iL["\:3059\:3079\:3066\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:306b\:7f6e\:304d\:63db\:3048\:308b", "Replace all with local latest"],
                         Module[{res, nb2},
                           nb2 = Quiet[EvaluationNotebook[]];
                           res = iRestoreBackupSnapshot[pkg];
                           If[!FailureQ[res],
-                            Print[iL["ローカル最新版に復元: ", "Restored to local latest: "] <>
-                              ToString[res["FilesRestored"]] <> " ファイル"],
+                            Print[iL["\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:306b\:5fa9\:5143: ", "Restored to local latest: "] <>
+                              ToString[res["FilesRestored"]] <> " \:30d5\:30a1\:30a4\:30eb"],
                             Print[res]];
                           NBAccess`NBDeleteCellsByTag[nb2, wTag]],
                         Method -> "Queued"],
                       Spacer[20],
-                      Button[iL["キャンセル", "Cancel"],
+                      Button[iL["\:30ad\:30e3\:30f3\:30bb\:30eb", "Cancel"],
                         Module[{nb2},
                           nb2 = Quiet[EvaluationNotebook[]];
                           NBAccess`NBDeleteCellsByTag[nb2, wTag]],
@@ -7945,15 +8222,15 @@ ClaudeBackupDataset[packageName_String] :=
                     }]]], "Output"]
                   }, Open]];
                   NotebookWrite[nb, cells],
-                  (* 変更なし *)
-                  If[ChoiceDialog[iL["ローカル最新版に復元しますか？", "Restore to local latest?"]],
+                  (* \:5909\:66f4\:306a\:3057 *)
+                  If[ChoiceDialog[iL["\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:306b\:5fa9\:5143\:3057\:307e\:3059\:304b\:ff1f", "Restore to local latest?"]],
                     Module[{res},
                       res = iRestoreBackupSnapshot[pkg];
                       If[!FailureQ[res],
-                        Print[iL["ローカル最新版に復元: ", "Restored to local latest: "] <>
-                          ToString[res["FilesRestored"]] <> " ファイル"],
+                        Print[iL["\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:306b\:5fa9\:5143: ", "Restored to local latest: "] <>
+                          ToString[res["FilesRestored"]] <> " \:30d5\:30a1\:30a4\:30eb"],
                         Print[res]]],
-                    Print[iL["キャンセルしました。", "Cancelled."]]]
+                    Print[iL["\:30ad\:30e3\:30f3\:30bb\:30eb\:3057\:307e\:3057\:305f\:3002", "Cancelled."]]]
                 ]]],
             Method -> "Queued", ImageSize -> {52, 22}]
         }, Spacer[3]]]
@@ -8007,7 +8284,7 @@ ClaudeBackupDataset[packageName_String] :=
       CellTags -> {outputTag}]];
   ];
 
-(* 全パッケージのバックアップ履歴を Grid で表示 *)
+(* \:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:3092 Grid \:3067\:8868\:793a *)
 ClaudeBackupDataset[] :=
   Module[{entries, gridRows, header, outputTag, gridResult},
     entries = Reverse[iAllBackupEntriesAll[]];
@@ -8067,20 +8344,20 @@ ClaudeBackupDataset[] :=
   ];
 
 (* ============================================================
-   バックアップ履歴マイグレーション:
-   既存の生 .wl バックアップを差分形式 (.wl.cz / .wl.cdiff) に変換し、
-   history フォルダの容量を大幅に削減する。
+   \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:30de\:30a4\:30b0\:30ec\:30fc\:30b7\:30e7\:30f3:
+   \:65e2\:5b58\:306e\:751f .wl \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:5dee\:5206\:5f62\:5f0f (.wl.cz / .wl.cdiff) \:306b\:5909\:63db\:3057\:3001
+   history \:30d5\:30a9\:30eb\:30c0\:306e\:5bb9\:91cf\:3092\:5927\:5e45\:306b\:524a\:6e1b\:3059\:308b\:3002
    ============================================================ *)
 
-(* 変換済みバックアップファイルか判定 (拡張子ベース) *)
+(* \:5909\:63db\:6e08\:307f\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30d5\:30a1\:30a4\:30eb\:304b\:5224\:5b9a (\:62e1\:5f35\:5b50\:30d9\:30fc\:30b9) *)
 iIsConvertedBackupFile[fn_String] :=
   StringEndsQ[fn, ".cz"] || StringEndsQ[fn, ".cdiff"] || StringEndsQ[fn, ".unchanged"];
 
 Options[ClaudeMigrateBackupHistory] = {DryRun -> False};
 
-(* 既存バックアップ内の全テキストファイル (.wl / .md 等) を
-   差分形式 (.cz / .cdiff / .unchanged) に変換し容量を削減する。
-   各ファイルの履歴を個別に追跡し、未変更ファイルは .unchanged で参照。 *)
+(* \:65e2\:5b58\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5185\:306e\:5168\:30c6\:30ad\:30b9\:30c8\:30d5\:30a1\:30a4\:30eb (.wl / .md \:7b49) \:3092
+   \:5dee\:5206\:5f62\:5f0f (.cz / .cdiff / .unchanged) \:306b\:5909\:63db\:3057\:5bb9\:91cf\:3092\:524a\:6e1b\:3059\:308b\:3002
+   \:5404\:30d5\:30a1\:30a4\:30eb\:306e\:5c65\:6b74\:3092\:500b\:5225\:306b\:8ffd\:8de1\:3057\:3001\:672a\:5909\:66f4\:30d5\:30a1\:30a4\:30eb\:306f .unchanged \:3067\:53c2\:7167\:3002 *)
 ClaudeMigrateBackupHistory[packageName_String, opts:OptionsPattern[]] :=
   Module[{bdir, allDirs, dryRun, results = {},
           totalOldBytes = 0, totalNewBytes = 0,
@@ -8092,11 +8369,11 @@ ClaudeMigrateBackupHistory[packageName_String, opts:OptionsPattern[]] :=
       Print["\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093: " <> bdir];
       Return[<||>]];
     metaFiles = {"prompt.txt", "summary.txt"};
-    (* 全バックアップディレクトリを時系列順 *)
+    (* \:5168\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3092\:6642\:7cfb\:5217\:9806 *)
     allDirs = SortBy[
       Select[FileNames["*", bdir, {1}], DirectoryQ],
       FileNameTake[#, -1] &];
-    (* 生テキストファイルを含むディレクトリのみ *)
+    (* \:751f\:30c6\:30ad\:30b9\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:542b\:3080\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306e\:307f *)
     allDirs = Select[allDirs, Function[dir,
       AnyTrue[Select[FileNames["*", dir], iFileQ], Function[f,
         Module[{fn = FileNameTake[f]},
@@ -8111,7 +8388,7 @@ ClaudeMigrateBackupHistory[packageName_String, opts:OptionsPattern[]] :=
     Do[
       Module[{dirName, rawFiles, dirOldBytes = 0, dirNewBytes = 0, fileResults = {}},
         dirName = FileNameTake[dir, -1];
-        (* 生テキストファイルを収集 (メタファイル・既変換済みを除外) *)
+        (* \:751f\:30c6\:30ad\:30b9\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:53ce\:96c6 (\:30e1\:30bf\:30d5\:30a1\:30a4\:30eb\:30fb\:65e2\:5909\:63db\:6e08\:307f\:3092\:9664\:5916) *)
         rawFiles = Select[FileNames["*", dir],
           Function[f, iFileQ[f] &&
             !MemberQ[metaFiles, FileNameTake[f]] &&
@@ -8136,7 +8413,7 @@ ClaudeMigrateBackupHistory[packageName_String, opts:OptionsPattern[]] :=
             prevContent = Lookup[prevContents, fn, None];
             prevDN = Lookup[prevDirNames, fn, None];
             Which[
-              (* 初回 or pre_ or ベースライン間隔 → ベースライン *)
+              (* \:521d\:56de or pre_ or \:30d9\:30fc\:30b9\:30e9\:30a4\:30f3\:9593\:9694 \[RightArrow] \:30d9\:30fc\:30b9\:30e9\:30a4\:30f3 *)
               prevContent === None ||
                 StringStartsQ[dirName, "pre_"] ||
                 Mod[baselineCount, $iBackupBaselineInterval] === 0,
@@ -8145,16 +8422,16 @@ ClaudeMigrateBackupHistory[packageName_String, opts:OptionsPattern[]] :=
                   Export[czPath, Compress[content], "String"];
                   newBytes = FileByteCount[czPath],
                   newBytes = StringLength[Compress[content]]],
-              (* 内容同一 → .unchanged *)
+              (* \:5185\:5bb9\:540c\:4e00 \[RightArrow] .unchanged *)
               content === prevContent,
                 action = "unchanged";
-                (* 1ホップ解決: 前回が .unchanged なら前回の参照先を引き継ぐ *)
+                (* 1\:30db\:30c3\:30d7\:89e3\:6c7a: \:524d\:56de\:304c .unchanged \:306a\:3089\:524d\:56de\:306e\:53c2\:7167\:5148\:3092\:5f15\:304d\:7d99\:3050 *)
                 targetDN = prevDN;
                 If[!dryRun,
                   Export[unchangedPath, targetDN, "String"];
                   newBytes = FileByteCount[unchangedPath],
                   newBytes = StringLength[targetDN]],
-              (* 差分 *)
+              (* \:5dee\:5206 *)
               True,
                 alignment = Quiet @ Check[
                   SequenceAlignment[
@@ -8176,19 +8453,19 @@ ClaudeMigrateBackupHistory[packageName_String, opts:OptionsPattern[]] :=
             ];
             dirNewBytes += newBytes;
             AppendTo[fileResults, fn -> action];
-            (* 検証後に元ファイル削除 *)
+            (* \:691c\:8a3c\:5f8c\:306b\:5143\:30d5\:30a1\:30a4\:30eb\:524a\:9664 *)
             If[!dryRun,
               Module[{verify},
                 verify = iLoadBackupFile[dir, fn, packageName];
                 If[StringQ[verify] && StringLength[verify] > 0,
                   DeleteFile[filePath],
-                  (* 検証失敗 → 新ファイル削除 *)
+                  (* \:691c\:8a3c\:5931\:6557 \[RightArrow] \:65b0\:30d5\:30a1\:30a4\:30eb\:524a\:9664 *)
                   Quiet @ If[FileExistsQ[czPath], DeleteFile[czPath]];
                   Quiet @ If[FileExistsQ[cdiffPath], DeleteFile[cdiffPath]];
                   Quiet @ If[FileExistsQ[unchangedPath], DeleteFile[unchangedPath]];
                   Print["    \:26a0 " <> fn <> ": \:691c\:8a3c\:5931\:6557\:3001\:5143\:30d5\:30a1\:30a4\:30eb\:4fdd\:6301"];
                   action = "verify-failed"]]];
-            (* 追跡を更新: unchanged の場合は prevDirNames を変えない *)
+            (* \:8ffd\:8de1\:3092\:66f4\:65b0: unchanged \:306e\:5834\:5408\:306f prevDirNames \:3092\:5909\:3048\:306a\:3044 *)
             prevContents[fn] = content;
             If[action =!= "unchanged", prevDirNames[fn] = dirName]
           ],
@@ -8196,11 +8473,11 @@ ClaudeMigrateBackupHistory[packageName_String, opts:OptionsPattern[]] :=
         baselineCount++;
         totalOldBytes += dirOldBytes;
         totalNewBytes += dirNewBytes;
-        (* ディレクトリ単位の表示 *)
+        (* \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:5358\:4f4d\:306e\:8868\:793a *)
         Module[{summary},
           summary = Tally[Values[fileResults]];
           Print["  " <> dirName <> ": " <>
-            ToString[dirOldBytes] <> " \:2192 " <> ToString[dirNewBytes] <>
+            ToString[dirOldBytes] <> " \[RightArrow] " <> ToString[dirNewBytes] <>
             " bytes (" <> ToString[Round[100. dirNewBytes / Max[dirOldBytes, 1]]] <>
             "%)  " <> StringRiffle[
               (ToString[#[[2]]] <> #[[1]]) & /@ summary, " "]]];
@@ -8210,7 +8487,7 @@ ClaudeMigrateBackupHistory[packageName_String, opts:OptionsPattern[]] :=
       ],
       {dir, allDirs}];
     Print["\n", Style["\:5b8c\:4e86", Bold]];
-    Print["\:5408\:8a08: " <> ToString[totalOldBytes] <> " \:2192 " <> ToString[totalNewBytes] <>
+    Print["\:5408\:8a08: " <> ToString[totalOldBytes] <> " \[RightArrow] " <> ToString[totalNewBytes] <>
       " bytes (" <> ToString[Round[100. totalNewBytes / Max[totalOldBytes, 1]]] <> "%)"];
     Print["\:524a\:6e1b: " <> ToString[totalOldBytes - totalNewBytes] <> " bytes (" <>
       ToString[Round[100. (totalOldBytes - totalNewBytes) / Max[totalOldBytes, 1]]] <> "%)"];
@@ -8221,7 +8498,7 @@ ClaudeMigrateBackupHistory[packageName_String, opts:OptionsPattern[]] :=
       "Details" -> results|>
   ];
 
-(* 全パッケージ版 *)
+(* \:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:7248 *)
 ClaudeMigrateBackupHistory[opts:OptionsPattern[]] :=
   Module[{pkgDir, allPkgs, results = <||>},
     pkgDir = Global`$packageDirectory;
@@ -8243,7 +8520,7 @@ ClaudeMigrateBackupHistory[opts:OptionsPattern[]] :=
   ];
 
 (* ==============================================================
-   関数単位抽出: ファイル内の各関数定義を Association に分解
+   \:95a2\:6570\:5358\:4f4d\:62bd\:51fa: \:30d5\:30a1\:30a4\:30eb\:5185\:306e\:5404\:95a2\:6570\:5b9a\:7fa9\:3092 Association \:306b\:5206\:89e3
    ============================================================== *)
 iExtractFunctions[code_String] :=
   Module[{lines, blocks, current, funcName, nameRe},
@@ -8268,14 +8545,14 @@ iExtractFunctions[code_String] :=
   ];
 
 (* \:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:542b\:307e\:308c\:308b\:95a2\:6570\:540d\:3092\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30a8\:30af\:30b9\:30dd\:30fc\:30c8\:540d\:4e00\:89a7\:3068\:7167\:5c04\:3057\:3066\:63a8\:5b9a *)
-(* \:65e5\:672c\:8a9e\:30ad\:30fc\:30ef\:30fc\:30c9 \:2192 \:95a2\:9023\:95a2\:6570\:30b0\:30eb\:30fc\:30d7\:306e\:30de\:30c3\:30d4\:30f3\:30b0\:3082\:4f7f\:7528 *)
+(* \:65e5\:672c\:8a9e\:30ad\:30fc\:30ef\:30fc\:30c9 \[RightArrow] \:95a2\:9023\:95a2\:6570\:30b0\:30eb\:30fc\:30d7\:306e\:30de\:30c3\:30d4\:30f3\:30b0\:3082\:4f7f\:7528 *)
 iGuessTargetFunctions[prompt_String, allFuncNames_List] :=
   Module[{words, hits, kwMap, kwHits},
     (* \:82f1\:8a9e\:95a2\:6570\:540d\:306e\:76f4\:63a5\:30de\:30c3\:30c1 *)
     words = StringCases[prompt, RegularExpression["[a-zA-Z\\$][a-zA-Z0-9\\$]+"]];
     hits  = Select[allFuncNames, MemberQ[words, #] &];
 
-    (* \:65e5\:672c\:8a9e\:30ad\:30fc\:30ef\:30fc\:30c9 \:2192 \:95a2\:9023\:95a2\:6570\:30b0\:30eb\:30fc\:30d7 *)
+    (* \:65e5\:672c\:8a9e\:30ad\:30fc\:30ef\:30fc\:30c9 \[RightArrow] \:95a2\:9023\:95a2\:6570\:30b0\:30eb\:30fc\:30d7 *)
     kwMap = {
       {"\:6a5f\:5bc6", "Confidential", "confidential", "NonConfidential", "\:89e3\:9664"} ->
         {"Confidential", "NonConfidential", "MarkConfidential", "UnmarkConfidential",
@@ -8365,19 +8642,19 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
   imgDirs = packagePromptNorm["imageDirs"];
   timestamp = DateString[Now, {"Year","Month","Day","_","Hour24","Minute","Second"}];
 
-  (* セクションヘッダーを入力セルの直前に挿入 *)
+  (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
   iWriteSectionHeaderBeforeEvalCell[nb,
-    "\:25b6 ClaudeCreatePackage: " <> packageName <>
+    "\[FilledRightTriangle] ClaudeCreatePackage: " <> packageName <>
     " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
 
   bdir      = backupDir[packageName];
   sessionDir = FileNameJoin[{bdir, timestamp}];
   CreateDirectory[sessionDir, CreateIntermediateDirectories -> True];
 
-  (* design / references フォルダ作成 *)
+  (* design / references \:30d5\:30a9\:30eb\:30c0\:4f5c\:6210 *)
   Quiet @ CreateDirectory[iDesignDir[packageName], CreateIntermediateDirectories -> True];
   Quiet @ CreateDirectory[iReferencesDir[packageName], CreateIntermediateDirectories -> True];
-  (* デザインテンプレートをコピーして name/prompt を挿入 *)
+  (* \:30c7\:30b6\:30a4\:30f3\:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:3092\:30b3\:30d4\:30fc\:3057\:3066 name/prompt \:3092\:633f\:5165 *)
   Module[{tmpl, designNb},
     tmpl = FileNameJoin[{Global`$packageDirectory, "Templates", "design_template.nb"}];
     designNb = FileNameJoin[{iDesignDir[packageName], packageName <> "_design.nb"}];
@@ -8390,7 +8667,7 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
     "You are an expert Wolfram Language / Mathematica programmer.\n" <>
     "CRITICAL INSTRUCTION: Do NOT write any files. Do NOT use any file-writing tools.\n" <>
     "You MUST output the complete package source code to stdout, wrapped in markers.\n\n" <>
-    (* サンドイッチ構造: 仕様概要を冒頭に配置 *)
+    (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:4ed5\:69d8\:6982\:8981\:3092\:5192\:982d\:306b\:914d\:7f6e *)
     iTaskOverviewBlock["Create package `" <> packageName <> ".wl`: " <> packagePromptNorm["text"]] <>
     "Your response MUST start with " <> beginMark <> " on the very first line.\n" <>
     "Do NOT write any text before " <> beginMark <> ".\n" <>
@@ -8409,7 +8686,7 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
     "Output format (MANDATORY):\n" <>
     beginMark <> "\n<complete package source code here>\n" <> endMark <> "\n" <>
     "(optional brief explanation after the end marker)\n\n" <>
-    (* サンドイッチ構造: 仕様詳細を末尾に再掲 *)
+    (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:4ed5\:69d8\:8a73\:7d30\:3092\:672b\:5c3e\:306b\:518d\:63b2 *)
     iTaskDetailBlock["SPECIFICATION (FULL)", packagePromptNorm["text"]];
 
   iSaveSessionMedia[sessionDir, prompt, imgDirs];
@@ -8425,7 +8702,7 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
             $iJobActiveNb = None;
             NBAccess`NBAbortJob[jid, "Claude \:547c\:3073\:51fa\:3057\:30a8\:30e9\:30fc"];
             Return[]];
-          (* API エラー/制限メッセージの早期検出 — ファイル破損防止 *)
+          (* API \:30a8\:30e9\:30fc/\:5236\:9650\:30e1\:30c3\:30bb\:30fc\:30b8\:306e\:65e9\:671f\:691c\:51fa \[LongDash] \:30d5\:30a1\:30a4\:30eb\:7834\:640d\:9632\:6b62 *)
           If[iIsAPIErrorResponse[response],
             $iJobActiveNb = None;
             NBAccess`NBAbortJob[jid,
@@ -8469,7 +8746,7 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
             Block[{Print = Function[{args}, nbPrint[nb2, args]]},
               Quiet @ Get[sf]];
             nbPrint[nb2, iL["\:30ed\:30fc\:30c9\:3057\:307e\:3057\:305f\:3002", "Loaded."]];
-            (* api.md を自動生成 *)
+            (* api.md \:3092\:81ea\:52d5\:751f\:6210 *)
             iAutoUpdateApiMd[nb2, pn],
             nbPrint[nb2, iL["\:8b66\:544a: \:66f8\:304d\:8fbc\:307f\:5931\:6557\:3002\:624b\:52d5\:3067\:30b3\:30d4\:30fc\:3057\:3066\:304f\:3060\:3055\:3044:\n", "Warning: Write failed. Copy manually:\n"] <>
               "  " <> newWlFile]];
@@ -8483,13 +8760,13 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
 
 Options[ClaudeUpdatePackage] = {TargetFunctions -> Automatic, StartTime -> Now, Fallback -> False, "UpdateApiMd" -> False};
 
-(* ContinueUpdate 用: 直前の ClaudeUpdatePackage 呼び出し情報を保持 *)
+(* ContinueUpdate \:7528: \:76f4\:524d\:306e ClaudeUpdatePackage \:547c\:3073\:51fa\:3057\:60c5\:5831\:3092\:4fdd\:6301 *)
 If[!AssociationQ[$iLastUpdateInfo], $iLastUpdateInfo = <||>];
-$iContinueUpdateFlag = False;  (* ContinueUpdate から呼ばれた場合に True *)
+$iContinueUpdateFlag = False;  (* ContinueUpdate \:304b\:3089\:547c\:3070\:308c\:305f\:5834\:5408\:306b True *)
 
 ClaudeUpdatePackage[packageName_String, updatePrompt_, opts:OptionsPattern[]] := (
   $currentUseFallback = TrueQ[OptionValue[Fallback]];
-  (* ContinueUpdate 用に呼び出し情報を記録 *)
+  (* ContinueUpdate \:7528\:306b\:547c\:3073\:51fa\:3057\:60c5\:5831\:3092\:8a18\:9332 *)
   $iLastUpdateInfo = <|
     "packageName" -> packageName,
     "prompt" -> updatePrompt,
@@ -8521,7 +8798,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
   (* \:6392\:4ed6\:30ed\:30c3\:30af: \:540c\:4e00\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:4e26\:5217\:66f4\:65b0\:3092\:9632\:6b62 *)
   If[!iAcquirePackageLock[packageName, nb], Return[$Failed]];
 
-  (* Phase 3: サブグラフ記録開始 *)
+  (* Phase 3: \:30b5\:30d6\:30b0\:30e9\:30d5\:8a18\:9332\:958b\:59cb *)
   Quiet @ iLLMGraphBeginSubgraph[nb, iSessionTag[], packageName];
 
   (* references \:30d5\:30a9\:30eb\:30c0\:3092\:53c2\:7167\:53ef\:80fd\:306b\:3059\:308b *)
@@ -8531,7 +8808,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
   If[TrueQ[$iContinueUpdateFlag],
     (* ContinueUpdate: \:30dc\:30bf\:30f3\:30bb\:30eb\:306e\:76f4\:5f8c\:ff08\:73fe\:5728\:4f4d\:7f6e\:ff09\:306b\:30d8\:30c3\:30c0\:30fc\:3068\:30a2\:30f3\:30ab\:30fc\:3092\:914d\:7f6e *)
     NotebookWrite[nb, Cell[
-      "\:25b6 ContinueUpdate: " <> packageName <>
+      "\[FilledRightTriangle] ContinueUpdate: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")",
       "Subsubsection", CellGroupingRules -> {"SectionGrouping", 68}], After];
     continueAnchorTag = "continue-anchor-" <> ToString[UnixTime[]] <> "-" <> ToString[RandomInteger[99999]];
@@ -8540,7 +8817,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
     jobId = None,
     (* \:901a\:5e38: EvaluationCell \:3092\:57fa\:6e96 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
-      "\:25b6 ClaudeUpdatePackage: " <> packageName <>
+      "\[FilledRightTriangle] ClaudeUpdatePackage: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
     jobId = NBAccess`NBBeginJobAtEvalCell[nb]
   ];
@@ -8554,7 +8831,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
     If[TrueQ[$iContinueUpdateFlag], "_continue", ""];
   bdir        = backupDir[packageName];
 
-  (* \:2500\:2500 \:6bce\:56de\:306e\:4e8b\:524d\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:ff08\:5fc5\:305a\:5b9f\:884c\:ff09\:2500\:2500 *)
+  (* \[HorizontalLine]\[HorizontalLine] \:6bce\:56de\:306e\:4e8b\:524d\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:ff08\:5fc5\:305a\:5b9f\:884c\:ff09\[HorizontalLine]\[HorizontalLine] *)
   Module[{preDir},
     preDir = FileNameJoin[{bdir, "pre_" <> timestamp}];
     CreateDirectory[preDir, CreateIntermediateDirectories -> True];
@@ -8600,18 +8877,18 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
   prompt =
     "You are an expert Wolfram Language / Mathematica programmer.\n" <>
     "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n\n" <>
-    (* サンドイッチ構造: タスク概要を冒頭に配置 *)
+    (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:30bf\:30b9\:30af\:6982\:8981\:3092\:5192\:982d\:306b\:914d\:7f6e *)
     iTaskOverviewBlock["INSTRUCTION: " <> updatePromptNorm["userText"]] <>
     iLoadPackageHistory[bdir, packageName] <>
     If[iLoadPackageHistory[bdir, packageName] =!= "", "\n", ""] <>
     If[Length[targets] === 0,
-      (* targets未判定: ファイル全体を送信する場合 *)
+      (* targets\:672a\:5224\:5b9a: \:30d5\:30a1\:30a4\:30eb\:5168\:4f53\:3092\:9001\:4fe1\:3059\:308b\:5834\:5408 *)
       "Below is the COMPLETE source of the Mathematica package `" <> packageName <> ".wl`.\n" <>
       "Modify ONLY the functions that need to change according to the instruction.\n" <>
       "Return ONLY the modified function definitions (not the entire file).\n" <>
       "IMPORTANT: Do NOT return the entire file. Return ONLY the functions you actually changed.\n" <>
       "All unchanged functions will be preserved automatically by the merge system.\n",
-      (* targets判定済み: 選択した関数のみ送信 *)
+      (* targets\:5224\:5b9a\:6e08\:307f: \:9078\:629e\:3057\:305f\:95a2\:6570\:306e\:307f\:9001\:4fe1 *)
       "Below are selected function definitions from the Mathematica package `" <> packageName <> ".wl`.\n" <>
       "Modify them according to the instruction. Return ONLY the modified functions.\n"
     ] <>
@@ -8630,7 +8907,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
       "CURRENT FUNCTIONS:\n"
     ] <>
     beginMark <> "\n" <> ToString[targetCode] <> "\n" <> endMark <> "\n\n" <>
-    (* サンドイッチ構造: タスク詳細を末尾に再掲 *)
+    (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:30bf\:30b9\:30af\:8a73\:7d30\:3092\:672b\:5c3e\:306b\:518d\:63b2 *)
     iTaskDetailBlock["INSTRUCTION (FULL)", iExpandSymbolRefs[updatePromptNorm["userText"]]];
 
   iSaveSessionMedia[sessionDir, prompt, imgDirs];
@@ -8648,21 +8925,21 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
           retryN=$iUpdateRetryCount},
       Function[response,
         Module[{newFuncs, newCode, newWlFile, validationErrors = {}},
-          (* アンカーの直後に出力を配置 *)
+          (* \:30a2\:30f3\:30ab\:30fc\:306e\:76f4\:5f8c\:306b\:51fa\:529b\:3092\:914d\:7f6e *)
           If[jid =!= None, NBAccess`NBJobMoveToAnchor[jid],
-            (* ContinueUpdate: anchor tag で位置指定 *)
+            (* ContinueUpdate: anchor tag \:3067\:4f4d\:7f6e\:6307\:5b9a *)
             If[StringQ[cat], Quiet[
               NotebookFind[nb2, cat, All, CellTags];
               SelectionMove[nb2, After, Cell]]]];
           $iJobActiveNb = nb2;
-          (* コールバック完了時に必ずロック解放するラッパー *)
+          (* \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:5b8c\:4e86\:6642\:306b\:5fc5\:305a\:30ed\:30c3\:30af\:89e3\:653e\:3059\:308b\:30e9\:30c3\:30d1\:30fc *)
           Internal`WithLocalSettings[Null,
 
           Export[FileNameJoin[{sd, "response.txt"}], response, "Text"];
-          (* Phase 3: LLM応答到着 *)
+          (* Phase 3: LLM\:5fdc\:7b54\:5230\:7740 *)
           Quiet @ iLLMGraphLogSubStepEnd["Completed",
             ToString[StringLength[response]] <> " chars"];
-          (* ContinueUpdate 用: レスポンスとセッションDirを記録 *)
+          (* ContinueUpdate \:7528: \:30ec\:30b9\:30dd\:30f3\:30b9\:3068\:30bb\:30c3\:30b7\:30e7\:30f3Dir\:3092\:8a18\:9332 *)
           If[AssociationQ[$iLastUpdateInfo] && Lookup[$iLastUpdateInfo, "packageName", ""] === pn,
             AssociateTo[$iLastUpdateInfo, {
               "response" -> response,
@@ -8671,7 +8948,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
             }]];
           If[StringStartsQ[response, "Error (ExitCode="] || StringStartsQ[response, "Error:"],
             nbPrint[nb2, iL["Claude \:547c\:3073\:51fa\:3057\:30a8\:30e9\:30fc:\n", "Claude call error:\n"] <> response]; Return[]];
-          (* API エラー/制限メッセージの早期検出 — ファイル破損防止 *)
+          (* API \:30a8\:30e9\:30fc/\:5236\:9650\:30e1\:30c3\:30bb\:30fc\:30b8\:306e\:65e9\:671f\:691c\:51fa \[LongDash] \:30d5\:30a1\:30a4\:30eb\:7834\:640d\:9632\:6b62 *)
           If[iIsAPIErrorResponse[response],
             nbPrint[nb2, Style["\:26d4 API \:30a8\:30e9\:30fc\:307e\:305f\:306f\:5229\:7528\:5236\:9650\:3092\:691c\:51fa\:3002\:30d1\:30c3\:30b1\:30fc\:30b8\:306f\:66f4\:65b0\:3055\:308c\:307e\:305b\:3093\:3002\n" <>
               StringTake[response, UpTo[200]], Bold, FontColor -> RGBColor[0.8, 0, 0]]];
@@ -8685,7 +8962,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
               codeBlocks = StringCases[response,
                 RegularExpression["```(?:mathematica|wolfram)?\n([\\s\\S]*?)```"] :> "$1"];
               If[Length[codeBlocks] > 0,
-                nbPrint[nb2, "\:30c7\:30ea\:30df\:30bf\:306a\:3057 \:2192 \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:304b\:3089\:62bd\:51fa (" <>
+                nbPrint[nb2, "\:30c7\:30ea\:30df\:30bf\:306a\:3057 \[RightArrow] \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:304b\:3089\:62bd\:51fa (" <>
                   ToString[Length[codeBlocks]] <> " \:30d6\:30ed\:30c3\:30af)"];
                 newFuncs = {StringJoin[Riffle[codeBlocks, "\n\n"]]},
                 nbPrint[nb2, "\:30a8\:30e9\:30fc: \:30c7\:30ea\:30df\:30bf\:3082\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:3082\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002response.txt: " <>
@@ -8695,27 +8972,27 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
           ];
           newFuncs = First[newFuncs];
 
-          (* Phase 3: コード抽出完了 *)
+          (* Phase 3: \:30b3\:30fc\:30c9\:62bd\:51fa\:5b8c\:4e86 *)
           Quiet @ iLLMGraphLogSubStep["extract-code", "Local",
             ToString[StringLength[newFuncs]] <> " chars extracted"];
           Quiet @ iLLMGraphLogSubStepStart["merge", "Local", packageName];
 
-          (* --- マージロジック (targets の有無にかかわらず常にマージを試みる) --- *)
+          (* --- \:30de\:30fc\:30b8\:30ed\:30b8\:30c3\:30af (targets \:306e\:6709\:7121\:306b\:304b\:304b\:308f\:3089\:305a\:5e38\:306b\:30de\:30fc\:30b8\:3092\:8a66\:307f\:308b) --- *)
           newCode = Module[{code = origCode, updBlks, mergedCount = 0,
                             newOnlyFuncs = {}, respIsFullFile},
             If[jb =!= "", code = StringReplace[code, jb -> jp, 1]];
             updBlks = iExtractFunctions[newFuncs];
 
-            (* レスポンスが全ファイルか部分か判定: BeginPackage を含むなら全ファイル *)
+            (* \:30ec\:30b9\:30dd\:30f3\:30b9\:304c\:5168\:30d5\:30a1\:30a4\:30eb\:304b\:90e8\:5206\:304b\:5224\:5b9a: BeginPackage \:3092\:542b\:3080\:306a\:3089\:5168\:30d5\:30a1\:30a4\:30eb *)
             respIsFullFile = StringContainsQ[newFuncs, "BeginPackage["] &&
                              StringContainsQ[newFuncs, "EndPackage["] &&
                              StringLength[newFuncs] > StringLength[origCode] * 0.7;
 
             If[respIsFullFile && Length[tgts] === 0,
-              (* Claude が全ファイルを返した場合: そのまま採用 *)
+              (* Claude \:304c\:5168\:30d5\:30a1\:30a4\:30eb\:3092\:8fd4\:3057\:305f\:5834\:5408: \:305d\:306e\:307e\:307e\:63a1\:7528 *)
               nbPrint[nb2, "\:30ec\:30b9\:30dd\:30f3\:30b9\:306f\:5b8c\:5168\:306a\:30d5\:30a1\:30a4\:30eb\:3067\:3059\:3002\:305d\:306e\:307e\:307e\:63a1\:7528\:3057\:307e\:3059\:3002"];
               code = If[jb =!= "", StringReplace[newFuncs, jp -> jb, 1], newFuncs],
-              (* 部分的なレスポンス: 関数単位でマージ *)
+              (* \:90e8\:5206\:7684\:306a\:30ec\:30b9\:30dd\:30f3\:30b9: \:95a2\:6570\:5358\:4f4d\:3067\:30de\:30fc\:30b8 *)
               Scan[Function[fn,
                 Module[{oldDef, newDef},
                   oldDef = Lookup[blks, fn, ""];
@@ -8723,13 +9000,13 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
                   If[oldDef =!= "" && newDef =!= "",
                     code = StringReplace[code, oldDef -> newDef, 1];
                     mergedCount++,
-                    (* 元コードに無い新関数 *)
+                    (* \:5143\:30b3\:30fc\:30c9\:306b\:7121\:3044\:65b0\:95a2\:6570 *)
                     If[oldDef === "" && newDef =!= "",
                       AppendTo[newOnlyFuncs, fn]]
                   ]
                 ]
               ], Keys[updBlks]];
-              (* 新規関数があれば EndPackage[] の直前に挿入 *)
+              (* \:65b0\:898f\:95a2\:6570\:304c\:3042\:308c\:3070 EndPackage[] \:306e\:76f4\:524d\:306b\:633f\:5165 *)
               If[Length[newOnlyFuncs] > 0,
                 Module[{insertCode},
                   insertCode = StringJoin[
@@ -8744,7 +9021,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
               If[mergedCount > 0,
                 nbPrint[nb2, "\:30de\:30fc\:30b8\:5b8c\:4e86: " <> ToString[mergedCount] <>
                   " \:500b\:306e\:95a2\:6570\:3092\:66f4\:65b0"],
-                (* マージできなかった場合の警告（新規関数追加のみの場合は偽陽性なので除外） *)
+                (* \:30de\:30fc\:30b8\:3067\:304d\:306a\:304b\:3063\:305f\:5834\:5408\:306e\:8b66\:544a\:ff08\:65b0\:898f\:95a2\:6570\:8ffd\:52a0\:306e\:307f\:306e\:5834\:5408\:306f\:507d\:967d\:6027\:306a\:306e\:3067\:9664\:5916\:ff09 *)
                 If[Length[Keys[updBlks]] > 0 && mergedCount === 0 && Length[newOnlyFuncs] === 0,
                   nbPrint[nb2, Style[
                     "\:26a0 \:30de\:30fc\:30b8\:5931\:6557: \:30ec\:30b9\:30dd\:30f3\:30b9\:306e\:95a2\:6570\:304c\:5143\:30b3\:30fc\:30c9\:306b\:5bfe\:5fdc\:3057\:307e\:305b\:3093\:3067\:3057\:305f\:3002\n" <>
@@ -8756,7 +9033,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
             code
           ];
 
-          (* Phase 3: マージ完了 *)
+          (* Phase 3: \:30de\:30fc\:30b8\:5b8c\:4e86 *)
           Quiet @ iLLMGraphLogSubStepEnd["Completed",
             ToString[StringLength[newCode]] <> " chars"];
 
@@ -8786,7 +9063,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
               AppendTo[validationErrors, "EndPackage[] \:304c\:6b20\:843d"]];
           ];
 
-          (* Phase 3: 検証完了 *)
+          (* Phase 3: \:691c\:8a3c\:5b8c\:4e86 *)
           Quiet @ iLLMGraphLogSubStep["validate", "Local",
             If[Length[validationErrors] > 0,
               "FAILED: " <> StringRiffle[validationErrors, "; "],
@@ -8801,7 +9078,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
           nbPrint[nb2, iL["\:65b0\:30d0\:30fc\:30b8\:30e7\:30f3\:3092\:4fdd\:5b58: ", "Saved new version: "] <> newWlFile];
 
           If[Length[validationErrors] > 0,
-            (* 安全検証失敗: 自動リトライ可能なら試行 *)
+            (* \:5b89\:5168\:691c\:8a3c\:5931\:6557: \:81ea\:52d5\:30ea\:30c8\:30e9\:30a4\:53ef\:80fd\:306a\:3089\:8a66\:884c *)
             If[retryN < $ClaudeUpdateAutoRetryMax,
               nbPrint[nb2, Style[
                 "\:26d4 \:5b89\:5168\:691c\:8a3c\:5931\:6557\:3002\:81ea\:52d5\:30ea\:30c8\:30e9\:30a4\:3067\:4fee\:6b63\:3092\:8a66\:307f\:307e\:3059\:3002\n" <>
@@ -8810,9 +9087,9 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
               iScheduleUpdateAutoRetry[nb2, pn, origInstr, response,
                 validationErrors, retryN, pbf, sf];
               Return[],
-              (* リトライ上限に達した場合: 従来通りブロック *)
+              (* \:30ea\:30c8\:30e9\:30a4\:4e0a\:9650\:306b\:9054\:3057\:305f\:5834\:5408: \:5f93\:6765\:901a\:308a\:30d6\:30ed\:30c3\:30af *)
               nbPrint[nb2,
-                "\:26d4 \:5b89\:5168\:691c\:8a3c\:5931\:6557 \:2014 \:30d1\:30c3\:30b1\:30fc\:30b8\:3078\:306e\:4e0a\:66f8\:304d\:3092\:30d6\:30ed\:30c3\:30af\:3057\:307e\:3057\:305f\:3002\n" <>
+                "\:26d4 \:5b89\:5168\:691c\:8a3c\:5931\:6557 \[LongDash] \:30d1\:30c3\:30b1\:30fc\:30b8\:3078\:306e\:4e0a\:66f8\:304d\:3092\:30d6\:30ed\:30c3\:30af\:3057\:307e\:3057\:305f\:3002\n" <>
                 StringJoin[("  \:274c " <> # <> "\n") & /@ validationErrors] <>
                 "\n\:65b0\:30d0\:30fc\:30b8\:30e7\:30f3: " <> newWlFile <>
                 "\n\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:304b\:3089\:5fa9\:5143\:53ef\:80fd\:3067\:3059\:3002" <>
@@ -8825,11 +9102,11 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
                 False] && FileExistsQ[sf],
             Quiet @ iLLMGraphLogSubStep["write-file", "Local", sf];
             nbPrint[nb2, iL["\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:66f4\:65b0\:3057\:307e\:3057\:305f: ", "Package updated: "] <> sf];
-            (* iGetWithErrorCapture でリロードし、エラーを検出 *)
+            (* iGetWithErrorCapture \:3067\:30ea\:30ed\:30fc\:30c9\:3057\:3001\:30a8\:30e9\:30fc\:3092\:691c\:51fa *)
             Module[{loadResult},
               loadResult = iGetWithErrorCapture[nb2, sf];
               If[loadResult["hasErrors"],
-                (* リロードエラー検出: 自動リトライ可能か判定 *)
+                (* \:30ea\:30ed\:30fc\:30c9\:30a8\:30e9\:30fc\:691c\:51fa: \:81ea\:52d5\:30ea\:30c8\:30e9\:30a4\:53ef\:80fd\:304b\:5224\:5b9a *)
                 Quiet @ iLLMGraphLogSubStep["reload", "Local", "Failed: reload errors"];
                 nbPrint[nb2, Style[
                   iL["\:26a0 \:30ea\:30ed\:30fc\:30c9\:6642\:306b\:30a8\:30e9\:30fc\:304c\:691c\:51fa\:3055\:308c\:307e\:3057\:305f\:3002",
@@ -8838,7 +9115,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
                 If[retryN < $ClaudeUpdateAutoRetryMax,
                   iScheduleUpdateAutoRetry[nb2, pn, origInstr, response,
                     loadResult["messages"], retryN, pbf, sf],
-                  (* リトライ上限: エラー表示のみ *)
+                  (* \:30ea\:30c8\:30e9\:30a4\:4e0a\:9650: \:30a8\:30e9\:30fc\:8868\:793a\:306e\:307f *)
                   nbPrint[nb2, iL[
                     "\:26d4 \:81ea\:52d5\:30ea\:30c8\:30e9\:30a4\:4e0a\:9650 (" <> ToString[$ClaudeUpdateAutoRetryMax] <>
                     " \:56de) \:306b\:9054\:3057\:307e\:3057\:305f\:3002\:624b\:52d5\:3067\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
@@ -8846,10 +9123,10 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
                     ") reached. Please fix manually."]];
                   $iContinueUpdateFlag = False;
                   iWriteUpdateCompletionMessage[nb2, pn, doUpdateApi]],
-                (* リロード成功 *)
+                (* \:30ea\:30ed\:30fc\:30c9\:6210\:529f *)
                 nbPrint[nb2, iL["\:518d\:30ed\:30fc\:30c9\:3057\:307e\:3057\:305f\:3002", "Reloaded."]];
                 Quiet @ iLLMGraphLogSubStep["reload", "Local", "Success"];
-                $iUpdateRetryCount = 0; (* リトライカウンタをリセット *)
+                $iUpdateRetryCount = 0; (* \:30ea\:30c8\:30e9\:30a4\:30ab\:30a6\:30f3\:30bf\:3092\:30ea\:30bb\:30c3\:30c8 *)
                 With[{afterEnd2 = StringTrim[Last[StringSplit[response, em, 2], ""]]},
                   If[afterEnd2 =!= "", nbPrint[nb2, afterEnd2]]];
                 (* api.md \:3092\:81ea\:52d5\:66f4\:65b0: \:30aa\:30f3\:306a\:3089\:81ea\:52d5\:5b9f\:884c *)
@@ -8865,9 +9142,9 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
           $iContinueUpdateFlag = False;
           $iJobActiveNb = None;
           If[jid =!= None, NBAccess`NBEndJob[jid]];
-          (* ロック解放を最優先 — 後続の処理が失敗してもロックは必ず解放 *)
+          (* \:30ed\:30c3\:30af\:89e3\:653e\:3092\:6700\:512a\:5148 \[LongDash] \:5f8c\:7d9a\:306e\:51e6\:7406\:304c\:5931\:6557\:3057\:3066\:3082\:30ed\:30c3\:30af\:306f\:5fc5\:305a\:89e3\:653e *)
           iReleasePackageLock[pn];
-          (* Phase 3: サブグラフ記録終了 (ロック解放後に実行) *)
+          (* Phase 3: \:30b5\:30d6\:30b0\:30e9\:30d5\:8a18\:9332\:7d42\:4e86 (\:30ed\:30c3\:30af\:89e3\:653e\:5f8c\:306b\:5b9f\:884c) *)
           Quiet @ iLLMGraphEndSubgraph[
             If[Length[validationErrors] > 0, "Failed", "Completed"]]]
         ]
@@ -8877,15 +9154,15 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
   ]];
 
 (* ============================================================
-   ClaudeUpdatePackage 自動リトライ:
-   リロード後のエラー (noctx, sntx 等) を検出し、
-   バックアップから復元して ContinueUpdate で自動修正する。
+   ClaudeUpdatePackage \:81ea\:52d5\:30ea\:30c8\:30e9\:30a4:
+   \:30ea\:30ed\:30fc\:30c9\:5f8c\:306e\:30a8\:30e9\:30fc (noctx, sntx \:7b49) \:3092\:691c\:51fa\:3057\:3001
+   \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:304b\:3089\:5fa9\:5143\:3057\:3066 ContinueUpdate \:3067\:81ea\:52d5\:4fee\:6b63\:3059\:308b\:3002
    ============================================================ *)
 
-(* Get 実行時のエラーをキャプチャ *)
-(* 注意: Quiet @ Check は Quiet がメッセージを Check より先に吸収するため
-   エラー検出が不可能になる。Check のみ使用し、メッセージは
-   Internal`HandlerBlock で捕捉する。 *)
+(* Get \:5b9f\:884c\:6642\:306e\:30a8\:30e9\:30fc\:3092\:30ad\:30e3\:30d7\:30c1\:30e3 *)
+(* \:6ce8\:610f: Quiet @ Check \:306f Quiet \:304c\:30e1\:30c3\:30bb\:30fc\:30b8\:3092 Check \:3088\:308a\:5148\:306b\:5438\:53ce\:3059\:308b\:305f\:3081
+   \:30a8\:30e9\:30fc\:691c\:51fa\:304c\:4e0d\:53ef\:80fd\:306b\:306a\:308b\:3002Check \:306e\:307f\:4f7f\:7528\:3057\:3001\:30e1\:30c3\:30bb\:30fc\:30b8\:306f
+   Internal`HandlerBlock \:3067\:6355\:6349\:3059\:308b\:3002 *)
 iGetWithErrorCapture[nb_NotebookObject, file_String] :=
   Module[{msgs = {}, result},
     Internal`HandlerBlock[
@@ -8899,17 +9176,17 @@ iGetWithErrorCapture[nb_NotebookObject, file_String] :=
           "noctx" | "sntx" | "syntax" | "noopen" | "General::"] &])|>
   ];
 
-(* 自動リトライをスケジュール *)
+(* \:81ea\:52d5\:30ea\:30c8\:30e9\:30a4\:3092\:30b9\:30b1\:30b8\:30e5\:30fc\:30eb *)
 iScheduleUpdateAutoRetry[nb_NotebookObject, packageName_String,
     origInstruction_String, response_String, errorMsgs_List,
     retryCount_Integer, backupFile_String, destFile_String] :=
   Module[{errorContext, retryPrompt},
-    (* バックアップから元ファイルを復元 *)
+    (* \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:304b\:3089\:5143\:30d5\:30a1\:30a4\:30eb\:3092\:5fa9\:5143 *)
     If[FileExistsQ[backupFile],
       Quiet[CopyFile[backupFile, destFile, OverwriteTarget -> True]];
       Quiet @ Block[{$CharacterEncoding = "UTF-8"}, Get[destFile]];
       nbPrint[nb, iL["\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:304b\:3089\:5fa9\:5143\:3057\:307e\:3057\:305f\:3002", "Restored from backup."]]];
-    (* エラーコンテキストを構築 *)
+    (* \:30a8\:30e9\:30fc\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3092\:69cb\:7bc9 *)
     errorContext = StringJoin[
       ("  - " <> # <> "\n") & /@ Take[errorMsgs, UpTo[10]]];
     retryPrompt =
@@ -8927,12 +9204,12 @@ iScheduleUpdateAutoRetry[nb_NotebookObject, packageName_String,
       ToString[retryCount + 1] <> "/" <> ToString[$ClaudeUpdateAutoRetryMax] <>
       iL[") \:3092\:958b\:59cb\:3057\:307e\:3059...", ") starting..."],
       Bold, FontColor -> RGBColor[0.8, 0.4, 0]]];
-    (* リトライカウントを更新 *)
+    (* \:30ea\:30c8\:30e9\:30a4\:30ab\:30a6\:30f3\:30c8\:3092\:66f4\:65b0 *)
     $iUpdateRetryCount = retryCount + 1;
     $iContinueUpdateFlag = True;
-    (* ScheduledTask で遅延実行: ロック解放後に ContinueUpdate を呼ぶ。
-       SessionSubmit + ScheduledTask で1回限りの遅延実行にする。
-       RunScheduledTask は周期実行のため使わない。 *)
+    (* ScheduledTask \:3067\:9045\:5ef6\:5b9f\:884c: \:30ed\:30c3\:30af\:89e3\:653e\:5f8c\:306b ContinueUpdate \:3092\:547c\:3076\:3002
+       SessionSubmit + ScheduledTask \:30671\:56de\:9650\:308a\:306e\:9045\:5ef6\:5b9f\:884c\:306b\:3059\:308b\:3002
+       RunScheduledTask \:306f\:5468\:671f\:5b9f\:884c\:306e\:305f\:3081\:4f7f\:308f\:306a\:3044\:3002 *)
     $iRetryTargetNotebook = nb;
     With[{nb2 = nb, pn2 = packageName, rp2 = retryPrompt},
       SessionSubmit[ScheduledTask[
@@ -8976,7 +9253,7 @@ ClaudeRestorePackage[packageName_String] :=
     ];
     If[Quiet @ Check[(CopyFile[latestFile, destFile, OverwriteTarget -> True]; True),
           False] && FileExistsQ[destFile],
-      nbPrint[nb, "\:5fa9\:5143\:3057\:307e\:3057\:305f: " <> latestFile <> "\n\:2192 " <> destFile];
+      nbPrint[nb, "\:5fa9\:5143\:3057\:307e\:3057\:305f: " <> latestFile <> "\n\[RightArrow] " <> destFile];
       Quiet @ Get[destFile]; nbPrint[nb, iL["\:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:518d\:30ed\:30fc\:30c9\:3057\:307e\:3057\:305f\:3002", "Package reloaded."]],
       nbPrint[nb, iL["\:8b66\:544a: \:66f8\:304d\:8fbc\:307f\:5931\:6557\:3002\:624b\:52d5\:3067\:30b3\:30d4\:30fc\:3057\:3066\:304f\:3060\:3055\:3044:\n", "Warning: Write failed. Copy manually:\n"] <>
         "  \:5143: " <> latestFile <> "\n  \:5148: " <> destFile]]
@@ -9001,7 +9278,7 @@ $iDocQueue := {
     "- All .wl packages are stored DIRECTLY in $packageDirectory (not in subdirectories).\n" <>
     "- $Path must include $packageDirectory itself, NOT package-specific subdirectories.\n" <>
     "- CORRECT: AppendTo[$Path, $packageDirectory]\n" <>
-    "- WRONG: AppendTo[$Path, \"C:\\\\path\\\\to\\\\PackageName\"] — this is INCORRECT.\n" <>
+    "- WRONG: AppendTo[$Path, \"C:\\\\path\\\\to\\\\PackageName\"] \[LongDash] this is INCORRECT.\n" <>
     "- The development environment assumes UTF-8. Show this loading pattern:\n" <>
     "  Block[{$CharacterEncoding = \"UTF-8\"},\n" <>
     "    Needs[\"PackageName`\", \"PackageName.wl\"]];\n" <>
@@ -9026,7 +9303,7 @@ $iDocQueue := {
     "CRITICAL FORMAT RULES (token-efficient, high density):\n" <>
     "- Minimize blank lines: only 1 before ## section headings. No blank lines between function entries.\n" <>
     "- Do NOT use --- separators between entries.\n" <>
-    "- Do NOT use bold labels like **引数:** or **戻り値:**.\n" <>
+    "- Do NOT use bold labels like **\:5f15\:6570:** or **\:623b\:308a\:5024:**.\n" <>
     "- Do NOT add usage examples for trivial functions (e.g. getters with obvious signatures).\n" <>
     "- Only add examples for functions with complex options or non-obvious usage patterns.\n\n" <>
     iLanguageInstruction["plain"] <> "\n" <>
@@ -9035,17 +9312,17 @@ $iDocQueue := {
     "\:578b: Type, \:521d\:671f\:5024: value\n" <>
     "\:8aac\:660e\:6587 (1\:884c)\n\n" <>
     "FORMAT for simple functions (no options):\n" <>
-    "### FuncName[arg1, arg2] \:2192 ReturnType\n" <>
+    "### FuncName[arg1, arg2] \[RightArrow] ReturnType\n" <>
     "\:8aac\:660e\:6587 (1\:884c)\n\n" <>
     "FORMAT for functions with options:\n" <>
     "### FuncName[arg1, arg2, opts]\n" <>
     "\:8aac\:660e\:6587 (1\:884c)\n" <>
-    "\:2192 ReturnType (\:69cb\:9020\:306e\:8aac\:660e\:304c\:5fc5\:8981\:306a\:3089\:8ffd\:8a18)\n" <>
+    "\[RightArrow] ReturnType (\:69cb\:9020\:306e\:8aac\:660e\:304c\:5fc5\:8981\:306a\:3089\:8ffd\:8a18)\n" <>
     "Options: Opt1 -> Default1 (\:8aac\:660e), Opt2 -> Default2 (\:8aac\:660e)\n\n" <>
     "FORMAT for complex functions (example needed):\n" <>
     "### FuncName[arg1, opts]\n" <>
     "\:8aac\:660e\:6587\n" <>
-    "\:2192 <|\"Key1\" -> ..., \"Key2\" -> ...|>\n" <>
+    "\[RightArrow] <|\"Key1\" -> ..., \"Key2\" -> ...|>\n" <>
     "Options: Opt1 -> Default1 (\:8aac\:660e), Opt2 -> Default2 (\:8aac\:660e)\n" <>
     "\:4f8b: FuncName[\"pkg\", \"msg\", Branch -> \"dev\"]\n\n" <>
     "STRUCTURE:\n" <>
@@ -9067,15 +9344,15 @@ $iDocQueue := {
     "SPECIAL_README_WITH_OVERVIEW"}
 };
 
-(* ドキュメント応答のクリーンアップ:
-   1. コードフェンスを除去
-   2. LLM が付ける前置きテキスト（「以下が setup.md の内容です」等）を除去 *)
+(* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:5fdc\:7b54\:306e\:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7:
+   1. \:30b3\:30fc\:30c9\:30d5\:30a7\:30f3\:30b9\:3092\:9664\:53bb
+   2. LLM \:304c\:4ed8\:3051\:308b\:524d\:7f6e\:304d\:30c6\:30ad\:30b9\:30c8\:ff08\:300c\:4ee5\:4e0b\:304c setup.md \:306e\:5185\:5bb9\:3067\:3059\:300d\:7b49\:ff09\:3092\:9664\:53bb *)
 iCleanDocResponse[response_String] :=
   Module[{s = response, pos},
-    (* コードフェンスの除去 *)
+    (* \:30b3\:30fc\:30c9\:30d5\:30a7\:30f3\:30b9\:306e\:9664\:53bb *)
     s = StringReplace[s, RegularExpression["^```(?:markdown|md)?\\s*\n"] -> ""];
     s = StringReplace[s, RegularExpression["\n```\\s*$"] -> ""];
-    (* 前置き除去: 最初の # または --- の前のテキストを削除 *)
+    (* \:524d\:7f6e\:304d\:9664\:53bb: \:6700\:521d\:306e # \:307e\:305f\:306f --- \:306e\:524d\:306e\:30c6\:30ad\:30b9\:30c8\:3092\:524a\:9664 *)
     If[!StringStartsQ[StringTrim[s], "#" | "---"],
       pos = StringPosition[s, RegularExpression["(?m)^(#|---)"], 1];
       If[Length[pos] > 0,
@@ -9084,36 +9361,36 @@ iCleanDocResponse[response_String] :=
   ];
 
 (* ============================================================
-   ドキュメント応答の正当性検証 (ポジティブ検証方式)
-   エラーメッセージのパターンマッチではなく、
-   「正しいドキュメント内容か」をポジティブに検証する。
+   \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:5fdc\:7b54\:306e\:6b63\:5f53\:6027\:691c\:8a3c (\:30dd\:30b8\:30c6\:30a3\:30d6\:691c\:8a3c\:65b9\:5f0f)
+   \:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8\:306e\:30d1\:30bf\:30fc\:30f3\:30de\:30c3\:30c1\:3067\:306f\:306a\:304f\:3001
+   \:300c\:6b63\:3057\:3044\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:5185\:5bb9\:304b\:300d\:3092\:30dd\:30b8\:30c6\:30a3\:30d6\:306b\:691c\:8a3c\:3059\:308b\:3002
    ============================================================ *)
 
-(* ドキュメントとして有効な応答かを検証する。
-   True を返す場合のみファイル書き込みを許可する。 *)
+(* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3068\:3057\:3066\:6709\:52b9\:306a\:5fdc\:7b54\:304b\:3092\:691c\:8a3c\:3059\:308b\:3002
+   True \:3092\:8fd4\:3059\:5834\:5408\:306e\:307f\:30d5\:30a1\:30a4\:30eb\:66f8\:304d\:8fbc\:307f\:3092\:8a31\:53ef\:3059\:308b\:3002 *)
 iIsValidDocContent[response_String] :=
   Module[{cleaned, trimmed},
-    (* 非文字列または空 → 無効 *)
+    (* \:975e\:6587\:5b57\:5217\:307e\:305f\:306f\:7a7a \[RightArrow] \:7121\:52b9 *)
     If[!StringQ[response] || StringTrim[response] === "", Return[False]];
-    (* 明示的なエラーメッセージ → 無効 *)
+    (* \:660e\:793a\:7684\:306a\:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8 \[RightArrow] \:7121\:52b9 *)
     If[StringStartsQ[response, "Error"], Return[False]];
-    (* クリーンアップ後に検証 *)
+    (* \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7\:5f8c\:306b\:691c\:8a3c *)
     cleaned = iCleanDocResponse[response];
     trimmed = StringTrim[cleaned];
-    (* 最低限のサイズ要件: 正常なドキュメントは少なくとも 100 文字 *)
+    (* \:6700\:4f4e\:9650\:306e\:30b5\:30a4\:30ba\:8981\:4ef6: \:6b63\:5e38\:306a\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:5c11\:306a\:304f\:3068\:3082 100 \:6587\:5b57 *)
     If[StringLength[trimmed] < 100, Return[False]];
-    (* Markdown ヘッダーまたはフロントマター(---) で始まる *)
+    (* Markdown \:30d8\:30c3\:30c0\:30fc\:307e\:305f\:306f\:30d5\:30ed\:30f3\:30c8\:30de\:30bf\:30fc(---) \:3067\:59cb\:307e\:308b *)
     If[StringStartsQ[trimmed, "#" | "---"], Return[True]];
-    (* Markdown ヘッダーを含む (先頭以外にある場合) *)
+    (* Markdown \:30d8\:30c3\:30c0\:30fc\:3092\:542b\:3080 (\:5148\:982d\:4ee5\:5916\:306b\:3042\:308b\:5834\:5408) *)
     If[StringContainsQ[cleaned, RegularExpression["(?m)^#{1,3} "]], Return[True]];
-    (* いずれにも該当しない → 無効 (エラーメッセージの可能性大) *)
+    (* \:3044\:305a\:308c\:306b\:3082\:8a72\:5f53\:3057\:306a\:3044 \[RightArrow] \:7121\:52b9 (\:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8\:306e\:53ef\:80fd\:6027\:5927) *)
     False
   ];
 
 iIsValidDocContent[_] := False;
 
-(* 安全なドキュメント書き込み: 検証 → クリーンアップ → 書き込み。
-   無効な応答の場合はファイルを一切変更せず $Failed を返す。 *)
+(* \:5b89\:5168\:306a\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f8\:304d\:8fbc\:307f: \:691c\:8a3c \[RightArrow] \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7 \[RightArrow] \:66f8\:304d\:8fbc\:307f\:3002
+   \:7121\:52b9\:306a\:5fdc\:7b54\:306e\:5834\:5408\:306f\:30d5\:30a1\:30a4\:30eb\:3092\:4e00\:5207\:5909\:66f4\:305b\:305a $Failed \:3092\:8fd4\:3059\:3002 *)
 iSafeWriteDoc[destPath_String, response_String] :=
   Module[{cleaned},
     If[!iIsValidDocContent[response],
@@ -9123,40 +9400,40 @@ iSafeWriteDoc[destPath_String, response_String] :=
     destPath
   ];
 
-(* 3引数版: 更新時のファイル破損防止ガード付き。
-   packageName を使って (1) サイズ退行 (2) タイトル整合性 を検証する。 *)
+(* 3\:5f15\:6570\:7248: \:66f4\:65b0\:6642\:306e\:30d5\:30a1\:30a4\:30eb\:7834\:640d\:9632\:6b62\:30ac\:30fc\:30c9\:4ed8\:304d\:3002
+   packageName \:3092\:4f7f\:3063\:3066 (1) \:30b5\:30a4\:30ba\:9000\:884c (2) \:30bf\:30a4\:30c8\:30eb\:6574\:5408\:6027 \:3092\:691c\:8a3c\:3059\:308b\:3002 *)
 iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
   Module[{cleaned, existingContent, existingLen, newLen, docFileName,
           existingTitle, newTitle},
-    (* 基本的なコンテンツ検証 *)
+    (* \:57fa\:672c\:7684\:306a\:30b3\:30f3\:30c6\:30f3\:30c4\:691c\:8a3c *)
     If[!iIsValidDocContent[response],
       Return[$Failed]];
     cleaned = iCleanDocResponse[response];
     docFileName = FileNameTake[destPath];
-    (* === ガード1: サイズ退行チェック === *)
-    (* 既存ファイルが存在する場合、新しい内容が既存の 40% 未満なら拒否 *)
+    (* === \:30ac\:30fc\:30c91: \:30b5\:30a4\:30ba\:9000\:884c\:30c1\:30a7\:30c3\:30af === *)
+    (* \:65e2\:5b58\:30d5\:30a1\:30a4\:30eb\:304c\:5b58\:5728\:3059\:308b\:5834\:5408\:3001\:65b0\:3057\:3044\:5185\:5bb9\:304c\:65e2\:5b58\:306e 40% \:672a\:6e80\:306a\:3089\:62d2\:5426 *)
     If[FileExistsQ[destPath],
       existingContent = Quiet @ Check[Import[destPath, "Text"], ""];
       If[StringQ[existingContent] && StringLength[existingContent] > 200,
         existingLen = StringLength[existingContent];
         newLen = StringLength[StringTrim[cleaned]];
         If[newLen < existingLen * 0.4,
-          Print[iL["⚠ iSafeWriteDoc: サイズ退行を検出 (", "⚠ iSafeWriteDoc: Size regression detected ("] <> docFileName <> "): " <>
-            ToString[existingLen] <> " → " <> ToString[newLen] <>
-            " 文字 (" <> ToString[Round[100. newLen / existingLen]] <> "%)。書き込みを拒否しました。"];
+          Print[iL["\:26a0 iSafeWriteDoc: \:30b5\:30a4\:30ba\:9000\:884c\:3092\:691c\:51fa (", "\:26a0 iSafeWriteDoc: Size regression detected ("] <> docFileName <> "): " <>
+            ToString[existingLen] <> " \[RightArrow] " <> ToString[newLen] <>
+            " \:6587\:5b57 (" <> ToString[Round[100. newLen / existingLen]] <> "%)\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
           Return[$Failed]
         ]
       ]
     ];
-    (* === ガード2: タイトル整合性チェック (README.md のみ) === *)
-    (* README.md の先頭 # タイトルがパッケージ名と完全に異なる場合は拒否 *)
+    (* === \:30ac\:30fc\:30c92: \:30bf\:30a4\:30c8\:30eb\:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af (README.md \:306e\:307f) === *)
+    (* README.md \:306e\:5148\:982d # \:30bf\:30a4\:30c8\:30eb\:304c\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3068\:5b8c\:5168\:306b\:7570\:306a\:308b\:5834\:5408\:306f\:62d2\:5426 *)
     If[docFileName === "README.md",
       newTitle = iExtractDocTitle[cleaned];
       If[StringQ[newTitle] && StringLength[newTitle] > 0,
         If[!StringContainsQ[ToLowerCase[newTitle], ToLowerCase[packageName]],
-          Print[iL["⚠ iSafeWriteDoc: タイトル不整合を検出 (README.md): ", "⚠ iSafeWriteDoc: Title mismatch detected (README.md): "] <>
-            "期待=\"" <> packageName <> "\", 実際=\"" <> newTitle <>
-            "\"。書き込みを拒否しました。"];
+          Print[iL["\:26a0 iSafeWriteDoc: \:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408\:3092\:691c\:51fa (README.md): ", "\:26a0 iSafeWriteDoc: Title mismatch detected (README.md): "] <>
+            "\:671f\:5f85=\"" <> packageName <> "\", \:5b9f\:969b=\"" <> newTitle <>
+            "\"\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
           Return[$Failed]
         ]
       ]
@@ -9165,7 +9442,7 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
     destPath
   ];
 
-(* ドキュメントの先頭 # タイトル行を抽出する補助関数 *)
+(* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306e\:5148\:982d # \:30bf\:30a4\:30c8\:30eb\:884c\:3092\:62bd\:51fa\:3059\:308b\:88dc\:52a9\:95a2\:6570 *)
 iExtractDocTitle[content_String] :=
   Module[{match},
     match = StringCases[content,
@@ -9176,12 +9453,12 @@ iExtractDocTitle[content_String] :=
     ]
   ];
 
-(* 後方互換エイリアス *)
+(* \:5f8c\:65b9\:4e92\:63db\:30a8\:30a4\:30ea\:30a2\:30b9 *)
 iIsDocLimitError[response_String] := !iIsValidDocContent[response];
 
-(* README.md 用の特別プロンプトを構築: 他ドキュメントの内容を読み込んで概要生成 *)
+(* README.md \:7528\:306e\:7279\:5225\:30d7\:30ed\:30f3\:30d7\:30c8\:3092\:69cb\:7bc9: \:4ed6\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306e\:5185\:5bb9\:3092\:8aad\:307f\:8fbc\:3093\:3067\:6982\:8981\:751f\:6210 *)
 
-(* 参考文献・デモ動画情報をプロンプト用テキストに変換 *)
+(* \:53c2\:8003\:6587\:732e\:30fb\:30c7\:30e2\:52d5\:753b\:60c5\:5831\:3092\:30d7\:30ed\:30f3\:30d7\:30c8\:7528\:30c6\:30ad\:30b9\:30c8\:306b\:5909\:63db *)
 iDocBuildRefSection[packageName_String] :=
   Module[{refs, demos, result = ""},
     refs = Replace[iDocGet[packageName, "References"], Except[_List] -> {}];
@@ -9205,7 +9482,7 @@ iDocBuildRefSection[packageName_String] :=
     result
   ];
 
-(* 指示文テキストを生成用プロンプトに変換 *)
+(* \:6307\:793a\:6587\:30c6\:30ad\:30b9\:30c8\:3092\:751f\:6210\:7528\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:5909\:63db *)
 iDocGlobalInstructionPrompt[packageName_String] :=
   Module[{instr = iDocGet[packageName, "GlobalInstruction"]},
     If[StringQ[instr] && StringTrim[instr] =!= "",
@@ -9216,7 +9493,7 @@ iDocGlobalInstructionPrompt[packageName_String] :=
     ]
   ];
 
-(* $packageDirectory 内の全パッケージの GitHub URL 一覧をプロンプト用に構築 *)
+(* $packageDirectory \:5185\:306e\:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:306e GitHub URL \:4e00\:89a7\:3092\:30d7\:30ed\:30f3\:30d7\:30c8\:7528\:306b\:69cb\:7bc9 *)
 iBuildGitHubLinksContext[] :=
   Module[{urls, lines},
     urls = Quiet @ Check[GitHubREST`GitHubPackageURLs[], <||>];
@@ -9228,23 +9505,23 @@ iBuildGitHubLinksContext[] :=
           Nothing]],
       urls];
     If[Length[lines] === 0, Return[""]];
-    "\n=== GITHUB REPOSITORY URLs (CRITICAL — use ONLY these URLs) ===\n" <>
+    "\n=== GITHUB REPOSITORY URLs (CRITICAL \[LongDash] use ONLY these URLs) ===\n" <>
     "CRITICAL RULE: When the documentation mentions ANY package by name as a dependency\n" <>
     "or related package, you MUST use the exact URL from the list below.\n" <>
     "NEVER fabricate, guess, or invent GitHub URLs. URLs like github.com/imai-laboratory/...\n" <>
     "or github.com/username/PackageName are WRONG unless listed below.\n" <>
-    "If a package is NOT in this list, do NOT create a link — just mention the name as plain text.\n\n" <>
+    "If a package is NOT in this list, do NOT create a link \[LongDash] just mention the name as plain text.\n\n" <>
     StringRiffle[lines, "\n"] <> "\n\n"
   ];
 
 
-(* _info/design/ フォルダの設計メモを読み込む (README の設計思想セクション用) *)
+(* _info/design/ \:30d5\:30a9\:30eb\:30c0\:306e\:8a2d\:8a08\:30e1\:30e2\:3092\:8aad\:307f\:8fbc\:3080 (README \:306e\:8a2d\:8a08\:601d\:60f3\:30bb\:30af\:30b7\:30e7\:30f3\:7528) *)
 iReadDesignMemos[packageName_String] :=
   Module[{pkgDir, designDir, files, content},
     pkgDir = Global`$packageDirectory;
     designDir = FileNameJoin[{pkgDir, packageName <> "_info", "design"}];
     If[!DirectoryQ[designDir],
-      (* Paclet 形式も試す *)
+      (* Paclet \:5f62\:5f0f\:3082\:8a66\:3059 *)
       designDir = FileNameJoin[{pkgDir, packageName, "design"}]];
     If[!DirectoryQ[designDir], Return[""]];
     files = FileNames[{"*.md", "*.txt", "*.wl"}, designDir];
@@ -9253,61 +9530,61 @@ iReadDesignMemos[packageName_String] :=
       ("--- design/" <> FileNameTake[#] <> " ---\n" <>
        StringTake[Quiet @ Check[Import[#, "Text"], ""], UpTo[2000]] <>
        "\n\n") & /@ Take[files, UpTo[5]]];
-    "\n=== DESIGN MEMOS (low priority reference for '設計思想' section) ===\n" <>
+    "\n=== DESIGN MEMOS (low priority reference for '\:8a2d\:8a08\:601d\:60f3' section) ===\n" <>
     "These are informal design notes. Use them ONLY to supplement the\n" <>
     "documentation and source code. Priority: docs > code > these memos.\n" <>
     content
   ];
 
-(* ドキュメント生成用モデルオーバーライド: $ClaudeDocModel が設定されていればそちらを使用 *)
+(* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:7528\:30e2\:30c7\:30eb\:30aa\:30fc\:30d0\:30fc\:30e9\:30a4\:30c9: $ClaudeDocModel \:304c\:8a2d\:5b9a\:3055\:308c\:3066\:3044\:308c\:3070\:305d\:3061\:3089\:3092\:4f7f\:7528 *)
 iDocModelOverride[] :=
   If[StringQ[$ClaudeDocModel] && $ClaudeDocModel =!= "",
     $ClaudeDocModel, $ClaudeModel];
 
-(* 更新指示が狭いスコープ（ライセンス・免責・謝辞のみ）かを判定 *)
+(* \:66f4\:65b0\:6307\:793a\:304c\:72ed\:3044\:30b9\:30b3\:30fc\:30d7\:ff08\:30e9\:30a4\:30bb\:30f3\:30b9\:30fb\:514d\:8cac\:30fb\:8b1d\:8f9e\:306e\:307f\:ff09\:304b\:3092\:5224\:5b9a *)
 iIsNarrowScopeInstruction[instruction_String] :=
   AnyTrue[{"\:30e9\:30a4\:30bb\:30f3\:30b9", "License", "\:514d\:8cac", "Disclaimer", "\:8b1d\:8f9e", "Acknowledgment"},
     StringContainsQ[instruction, #, IgnoreCase -> True] &] &&
   !AnyTrue[{"\:95a2\:6570", "API", "\:6a5f\:80fd", "\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb", "\:4f7f\:3044\:65b9", "\:4f8b"},
     StringContainsQ[instruction, #, IgnoreCase -> True] &];
 
-(* 差分が小さい場合のコンパクトなソースコンテキスト生成 *)
+(* \:5dee\:5206\:304c\:5c0f\:3055\:3044\:5834\:5408\:306e\:30b3\:30f3\:30d1\:30af\:30c8\:306a\:30bd\:30fc\:30b9\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:751f\:6210 *)
 iCompactSourceForUpdate[sourceCode_String, split_Association, docFile_String,
     diffText_String] :=
   Module[{diffLineCount, added, removed},
-    (* 差分行数を推定 *)
+    (* \:5dee\:5206\:884c\:6570\:3092\:63a8\:5b9a *)
     added = StringCount[diffText, "\n", Overlaps -> False];
-    (* 差分が小さい（< 200行）場合はチャンク化ソースで十分 *)
+    (* \:5dee\:5206\:304c\:5c0f\:3055\:3044\:ff08< 200\:884c\:ff09\:5834\:5408\:306f\:30c1\:30e3\:30f3\:30af\:5316\:30bd\:30fc\:30b9\:3067\:5341\:5206 *)
     If[added < 200 && docFile =!= "api.md",
       iBuildChunkedSource[split, docFile],
-      (* api.md または大きな差分: フルソースだがチャンク化 *)
+      (* api.md \:307e\:305f\:306f\:5927\:304d\:306a\:5dee\:5206: \:30d5\:30eb\:30bd\:30fc\:30b9\:3060\:304c\:30c1\:30e3\:30f3\:30af\:5316 *)
       iBuildChunkedSource[split, docFile]
     ]
   ];
 
-(* 謝辞セクションのプロンプト *)
+(* \:8b1d\:8f9e\:30bb\:30af\:30b7\:30e7\:30f3\:306e\:30d7\:30ed\:30f3\:30d7\:30c8 *)
 iDocBuildAcknowledgmentsPrompt[packageName_String] :=
   Module[{items},
     items = Replace[iDocGet[packageName, "Acknowledgments"], Except[_List] -> {}];
     If[Length[items] === 0, Return[""]];
-    "\n=== ACKNOWLEDGMENTS SECTION (add BEFORE 免責事項 in README.md) ===\n" <>
-    "Add a '## 謝辞' section in README.md, placed BEFORE 免責事項.\n" <>
+    "\n=== ACKNOWLEDGMENTS SECTION (add BEFORE \:514d\:8cac\:4e8b\:9805 in README.md) ===\n" <>
+    "Add a '## \:8b1d\:8f9e' section in README.md, placed BEFORE \:514d\:8cac\:4e8b\:9805.\n" <>
     "Include the following acknowledgments:\n" <>
     StringRiffle["- " <> ToString[#] & /@ items, "\n"] <> "\n" <>
     "Write each item as a clear, natural sentence.\n"
   ];
 
-(* 免責事項セクションのプロンプト *)
+(* \:514d\:8cac\:4e8b\:9805\:30bb\:30af\:30b7\:30e7\:30f3\:306e\:30d7\:30ed\:30f3\:30d7\:30c8 *)
 iDocBuildDisclaimerPrompt[packageName_String] :=
   Module[{extras, base},
-    base = "本ソフトウェアは \"as is\"（現状有姿）で提供されており、明示・黙示を問わずいかなる保証もありません。\n" <>
-      "本ソフトウェアの使用または使用不能から生じるいかなる損害についても責任を負いません。\n" <>
-      "今後の動作保証のための更新が行われるとは限りません。\n" <>
-      "本ソフトウェアとドキュメントはほぼすべてが生成AIによって生成されたものです。\n" <>
-      "Windows 11上での実行を想定しており、MacOS, LinuxのMathematicaでの動作検証は一切していません(生成AIの処理で対応可能と想定されます)。";
+    base = "\:672c\:30bd\:30d5\:30c8\:30a6\:30a7\:30a2\:306f \"as is\"\:ff08\:73fe\:72b6\:6709\:59ff\:ff09\:3067\:63d0\:4f9b\:3055\:308c\:3066\:304a\:308a\:3001\:660e\:793a\:30fb\:9ed9\:793a\:3092\:554f\:308f\:305a\:3044\:304b\:306a\:308b\:4fdd\:8a3c\:3082\:3042\:308a\:307e\:305b\:3093\:3002\n" <>
+      "\:672c\:30bd\:30d5\:30c8\:30a6\:30a7\:30a2\:306e\:4f7f\:7528\:307e\:305f\:306f\:4f7f\:7528\:4e0d\:80fd\:304b\:3089\:751f\:3058\:308b\:3044\:304b\:306a\:308b\:640d\:5bb3\:306b\:3064\:3044\:3066\:3082\:8cac\:4efb\:3092\:8ca0\:3044\:307e\:305b\:3093\:3002\n" <>
+      "\:4eca\:5f8c\:306e\:52d5\:4f5c\:4fdd\:8a3c\:306e\:305f\:3081\:306e\:66f4\:65b0\:304c\:884c\:308f\:308c\:308b\:3068\:306f\:9650\:308a\:307e\:305b\:3093\:3002\n" <>
+      "\:672c\:30bd\:30d5\:30c8\:30a6\:30a7\:30a2\:3068\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:307b\:307c\:3059\:3079\:3066\:304c\:751f\:6210AI\:306b\:3088\:3063\:3066\:751f\:6210\:3055\:308c\:305f\:3082\:306e\:3067\:3059\:3002\n" <>
+      "Windows 11\:4e0a\:3067\:306e\:5b9f\:884c\:3092\:60f3\:5b9a\:3057\:3066\:304a\:308a\:3001MacOS, Linux\:306eMathematica\:3067\:306e\:52d5\:4f5c\:691c\:8a3c\:306f\:4e00\:5207\:3057\:3066\:3044\:307e\:305b\:3093(\:751f\:6210AI\:306e\:51e6\:7406\:3067\:5bfe\:5fdc\:53ef\:80fd\:3068\:60f3\:5b9a\:3055\:308c\:307e\:3059)\:3002";
     extras = Replace[iDocGet[packageName, "Disclaimer"], Except[_List] -> {}];
-    "\n=== DISCLAIMER SECTION (add AFTER 謝辞 if present, BEFORE ライセンス in README.md) ===\n" <>
-    "Add a '## 免責事項' section in README.md with this text:\n" <>
+    "\n=== DISCLAIMER SECTION (add AFTER \:8b1d\:8f9e if present, BEFORE \:30e9\:30a4\:30bb\:30f3\:30b9 in README.md) ===\n" <>
+    "Add a '## \:514d\:8cac\:4e8b\:9805' section in README.md with this text:\n" <>
     base <> "\n" <>
     If[Length[extras] > 0,
       "Additionally, rephrase and add these items:\n" <>
@@ -9316,31 +9593,31 @@ iDocBuildDisclaimerPrompt[packageName_String] :=
     ]
   ];
 
-(* ライセンスセクションのプロンプト *)
+(* \:30e9\:30a4\:30bb\:30f3\:30b9\:30bb\:30af\:30b7\:30e7\:30f3\:306e\:30d7\:30ed\:30f3\:30d7\:30c8 *)
 iDocBuildLicensePrompt[packageName_String] :=
   Module[{holder, licText, yearStr, createdYear, currentYear, docLicense},
     docLicense = iDocGet[packageName, "License"];
-    (* License オプションに文字列が指定されていればそれを使用 *)
+    (* License \:30aa\:30d7\:30b7\:30e7\:30f3\:306b\:6587\:5b57\:5217\:304c\:6307\:5b9a\:3055\:308c\:3066\:3044\:308c\:3070\:305d\:308c\:3092\:4f7f\:7528 *)
     If[StringQ[docLicense] && StringTrim[docLicense] =!= "",
       Return[
-        "\n=== LICENSE SECTION (MUST add at the very end of README.md, after 免責事項) ===\n" <>
+        "\n=== LICENSE SECTION (MUST add at the very end of README.md, after \:514d\:8cac\:4e8b\:9805) ===\n" <>
         "Add a '## \:30e9\:30a4\:30bb\:30f3\:30b9' section.\n" <>
         "CRITICAL: The license text below is a LEGAL document. Copy it VERBATIM.\n" <>
         "Do NOT translate, paraphrase, or modify any wording.\n" <>
         "Insert the following text exactly as-is:\n\n" <>
         "```\n" <> docLicense <> "\n```\n"]];
-    (* $GitHubLicenseHolder を取得 *)
+    (* $GitHubLicenseHolder \:3092\:53d6\:5f97 *)
     holder = Quiet @ Check[GitHubREST`$GitHubLicenseHolder, ""];
     If[!StringQ[holder] || StringTrim[holder] === "",
-      (* 名前が空 → 警告を出してライセンスは挿入しない *)
+      (* \:540d\:524d\:304c\:7a7a \[RightArrow] \:8b66\:544a\:3092\:51fa\:3057\:3066\:30e9\:30a4\:30bb\:30f3\:30b9\:306f\:633f\:5165\:3057\:306a\:3044 *)
       Print[Style["\:8b66\:544a: $GitHubLicenseHolder \:304c\:8a2d\:5b9a\:3055\:308c\:3066\:3044\:306a\:3044\:305f\:3081\:3001\:30e9\:30a4\:30bb\:30f3\:30b9\:30bb\:30af\:30b7\:30e7\:30f3\:306f\:633f\:5165\:3055\:308c\:307e\:305b\:3093\:3002\n" <>
         "$GitHubLicenseHolder = \"Your Name\" \:3092\:8a2d\:5b9a\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
         FontColor -> RGBColor[0.8, 0.4, 0]]];
       Return[""]];
-    (* 年の範囲を計算 *)
+    (* \:5e74\:306e\:7bc4\:56f2\:3092\:8a08\:7b97 *)
     currentYear = DateString[Now, "Year"];
-    (* リポジトリ作成年を推定: ドキュメントフォルダの作成日 or 現在年 *)
-    createdYear = currentYear;  (* デフォルト *)
+    (* \:30ea\:30dd\:30b8\:30c8\:30ea\:4f5c\:6210\:5e74\:3092\:63a8\:5b9a: \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a9\:30eb\:30c0\:306e\:4f5c\:6210\:65e5 or \:73fe\:5728\:5e74 *)
+    createdYear = currentYear;  (* \:30c7\:30d5\:30a9\:30eb\:30c8 *)
     yearStr = If[createdYear === currentYear,
       currentYear,
       createdYear <> "-" <> currentYear];
@@ -9371,14 +9648,14 @@ iDocBuildLicensePrompt[packageName_String] :=
     "Do NOT change the holder name or license text.\n"
   ];
 
-(* 図の挿入指示をプロンプトに追加。
-   docFile に対応する figures のみをフィルタして返す。
+(* \:56f3\:306e\:633f\:5165\:6307\:793a\:3092\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:8ffd\:52a0\:3002
+   docFile \:306b\:5bfe\:5fdc\:3059\:308b figures \:306e\:307f\:3092\:30d5\:30a3\:30eb\:30bf\:3057\:3066\:8fd4\:3059\:3002
    figures: {{targetDocs, filename, description}, ...} *)
 iDocBuildFiguresPrompt[packageName_String, docFile_String] :=
   Module[{figures, matching, prompt = ""},
     figures = Replace[iDocGet[packageName, "Figures"], Except[_List] -> {}];
     If[Length[figures] === 0, Return[""]];
-    (* このドキュメントを対象に含む figure のみ選択 *)
+    (* \:3053\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:5bfe\:8c61\:306b\:542b\:3080 figure \:306e\:307f\:9078\:629e *)
     matching = Select[figures, Function[entry,
       ListQ[entry] && Length[entry] >= 3 &&
       ListQ[entry[[1]]] && MemberQ[entry[[1]], docFile]]];
@@ -9418,7 +9695,7 @@ iBuildReadmePrompt[sourceCode_String, packageName_String, outDir_String] :=
     "   - Installation instructions:\n" <>
     "     CRITICAL $Path rule: All .wl packages reside DIRECTLY in $packageDirectory.\n" <>
     "     $Path must include $packageDirectory itself. CORRECT: AppendTo[$Path, $packageDirectory]\n" <>
-    "     WRONG: AppendTo[$Path, \"C:\\\\path\\\\to\\\\PackageName\"] — NEVER use package-specific paths.\n" <>
+    "     WRONG: AppendTo[$Path, \"C:\\\\path\\\\to\\\\PackageName\"] \[LongDash] NEVER use package-specific paths.\n" <>
     "     If using claudecode, $Path is set automatically.\n" <>
     "     MUST include this UTF-8 loading pattern:\n" <>
     "     Block[{$CharacterEncoding = \"UTF-8\"},\n" <>
@@ -9516,7 +9793,7 @@ $iDocSectionKW = <|
   "setup.md" -> {"\:521d\:671f\:5316", iL["\:30c7\:30a3\:30ec\:30af\:30c8\:30ea", "Directories"], "node-pty"},
   "user_manual.md" -> {"\:30b3\:30a2\:547c\:3073\:51fa\:3057", "\:975e\:540c\:671f", "\:30d1\:30ec\:30c3\:30c8", "\:30bb\:30c3\:30b7\:30e7\:30f3",
                         "\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6", "Web", "Mathematica"},
-  "api.md" -> All,  (* 全セクション: API リファレンスは全関数を網羅する必要がある *)
+  "api.md" -> All,  (* \:5168\:30bb\:30af\:30b7\:30e7\:30f3: API \:30ea\:30d5\:30a1\:30ec\:30f3\:30b9\:306f\:5168\:95a2\:6570\:3092\:7db2\:7f85\:3059\:308b\:5fc5\:8981\:304c\:3042\:308b *)
   "examples/example.md" -> {"\:30b3\:30a2\:547c\:3073\:51fa\:3057", "\:30bb\:30c3\:30b7\:30e7\:30f3", "Web"},
   "README.md" -> {}
 |>;
@@ -9528,8 +9805,8 @@ iBuildChunkedSource[split_Association, docFile_String] :=
     secs = split["sections"];
     maxC = $ClaudeDocMaxChunkChars;
     kws = Lookup[$iDocSectionKW, docFile, {}];
-    (* All → 全セクション選択 (api.md 等)、{} → セクションなし (README等)、
-       リスト → キーワードマッチでフィルタ *)
+    (* All \[RightArrow] \:5168\:30bb\:30af\:30b7\:30e7\:30f3\:9078\:629e (api.md \:7b49)\:3001{} \[RightArrow] \:30bb\:30af\:30b7\:30e7\:30f3\:306a\:3057 (README\:7b49)\:3001
+       \:30ea\:30b9\:30c8 \[RightArrow] \:30ad\:30fc\:30ef\:30fc\:30c9\:30de\:30c3\:30c1\:3067\:30d5\:30a3\:30eb\:30bf *)
     selIdx = Which[
       kws === All, Range[Length[secs]],
       kws === {} || !ListQ[kws], {},
@@ -9561,7 +9838,7 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
   Module[{spec, outFile, docTitle, promptTemplate, fullPrompt, subDir,
           split, chunked},
     If[idx > Length[queue],
-      (* ドキュメントオプションを永続化 *)
+      (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:6c38\:7d9a\:5316 *)
       iSaveDocOptions[packageName];
       nbPrint[nb, "\:2705 \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306e\:751f\:6210\:304c\:5b8c\:4e86\:3057\:307e\:3057\:305f\:3002\n\:51fa\:529b\:5148: " <> outDir];
       Return[]];
@@ -9571,22 +9848,22 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     If[!DirectoryQ[subDir],
       CreateDirectory[subDir, CreateIntermediateDirectories -> True]];
     If[retryCount > 0,
-      nbPrint[nb, "\:2500 [" <> ToString[idx] <> "/" <> ToString[Length[queue]] <>
+      nbPrint[nb, "\[HorizontalLine] [" <> ToString[idx] <> "/" <> ToString[Length[queue]] <>
         "] " <> docTitle <> " \:30ea\:30c8\:30e9\:30a4 " <> ToString[retryCount] <> "/" <>
         ToString[$ClaudeDocMaxRetries]],
-      nbPrint[nb, "\:2500 [" <> ToString[idx] <> "/" <> ToString[Length[queue]] <>
+      nbPrint[nb, "\[HorizontalLine] [" <> ToString[idx] <> "/" <> ToString[Length[queue]] <>
         "] " <> docTitle <> " (" <> outFile <> ") \:3092\:751f\:6210\:4e2d..."]];
     (* \:30bd\:30fc\:30b9\:5206\:5272 (\:30ad\:30e3\:30c3\:30b7\:30e5\:518d\:5229\:7528) *)
     split = If[splitCache =!= <||>, splitCache, iSplitSource[sourceCode]];
     chunked = iBuildChunkedSource[split, outFile];
     nbPrint[nb, "  (\:30bd\:30fc\:30b9 " <> ToString[StringLength[sourceCode]] <>
-      " \:2192 \:30c1\:30e3\:30f3\:30af " <> ToString[StringLength[chunked]] <> " chars)"];
+      " \[RightArrow] \:30c1\:30e3\:30f3\:30af " <> ToString[StringLength[chunked]] <> " chars)"];
     fullPrompt = If[promptTemplate === "SPECIAL_README_WITH_OVERVIEW",
       iBuildReadmePrompt[sourceCode, packageName, outDir],
       "You are an expert Wolfram Language / Mathematica documentation writer.\n" <>
       "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n" <>
       "You are documenting the package \"" <> packageName <> "\".\n\n" <>
-      (* サンドイッチ構造: タスク概要を冒頭に配置 *)
+      (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:30bf\:30b9\:30af\:6982\:8981\:3092\:5192\:982d\:306b\:914d\:7f6e *)
       iTaskOverviewBlock["Generate " <> docTitle <> " (" <> outFile <> ") for package " <> packageName] <>
       "CRITICAL RULE: \:8b1d\:8f9e (Acknowledgments), \:514d\:8cac\:4e8b\:9805 (Disclaimer) and \:30e9\:30a4\:30bb\:30f3\:30b9 (License) sections MUST ONLY exist in README.md.\n" <>
       "Do NOT add any \:8b1d\:8f9e, \:514d\:8cac\:4e8b\:9805 or \:30e9\:30a4\:30bb\:30f3\:30b9 section to this file.\n\n" <>
@@ -9594,16 +9871,16 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       iBuildGitHubLinksContext[] <>
       promptTemplate <> "\n\n" <>
       "=== PACKAGE SOURCE CODE (chunked) ===\n" <> chunked <> "\n\n" <>
-      (* サンドイッチ構造: 出力指示を末尾に配置 *)
+      (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:51fa\:529b\:6307\:793a\:3092\:672b\:5c3e\:306b\:914d\:7f6e *)
       "=== OUTPUT INSTRUCTION (generate " <> outFile <> " now) ===\n" <>
       "Output ONLY the Markdown content directly as your response text.\n" <>
       "Do NOT wrap in code fences. Do NOT ask for file permissions.\n" <>
       "Do NOT include ===BEGIN=== / ===END=== markers.\n"
     ];
-    (* ドキュメント生成用モデルでクエリ実行。
-       $ClaudeModel はバッチファイル生成時にのみ参照されるため、
-       iClaudeQueryAsyncWithProgress から戻った直後に復元する。
-       コールバック内での復元は不要（非同期中に他の操作と干渉するため）。 *)
+    (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:7528\:30e2\:30c7\:30eb\:3067\:30af\:30a8\:30ea\:5b9f\:884c\:3002
+       $ClaudeModel \:306f\:30d0\:30c3\:30c1\:30d5\:30a1\:30a4\:30eb\:751f\:6210\:6642\:306b\:306e\:307f\:53c2\:7167\:3055\:308c\:308b\:305f\:3081\:3001
+       iClaudeQueryAsyncWithProgress \:304b\:3089\:623b\:3063\:305f\:76f4\:5f8c\:306b\:5fa9\:5143\:3059\:308b\:3002
+       \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:5185\:3067\:306e\:5fa9\:5143\:306f\:4e0d\:8981\:ff08\:975e\:540c\:671f\:4e2d\:306b\:4ed6\:306e\:64cd\:4f5c\:3068\:5e72\:6e09\:3059\:308b\:305f\:3081\:ff09\:3002 *)
     Module[{savedModel = $ClaudeModel},
     $ClaudeModel = iDocModelOverride[];
     iClaudeQueryAsyncWithProgress[fullPrompt,
@@ -9615,9 +9892,9 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
             destPath = FileNameJoin[{od, of}];
             writeResult = iSafeWriteDoc[destPath, response];
             If[writeResult =!= $Failed,
-              nbPrint[nb2, "  \:2713 " <> dt <> " \:2192 " <> of];
+              nbPrint[nb2, "  \[Checkmark] " <> dt <> " \[RightArrow] " <> of];
               iGenDocNext[sc, pn, nb2, od, q, i + 1, 0, sp],
-              (* 無効な応答: リトライまたは中断 *)
+              (* \:7121\:52b9\:306a\:5fdc\:7b54: \:30ea\:30c8\:30e9\:30a4\:307e\:305f\:306f\:4e2d\:65ad *)
               nbPrint[nb2, "  \:2717 " <> dt <> " \:306e\:751f\:6210\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54): " <>
                 StringTake[ToString[response], UpTo[200]]];
               If[rc < $ClaudeDocMaxRetries,
@@ -9649,37 +9926,37 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
   ];
 
 (* ============================================================
-   ドキュメント生成の継続判定: 既存ファイルの整合性チェック
+   \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:306e\:7d99\:7d9a\:5224\:5b9a: \:65e2\:5b58\:30d5\:30a1\:30a4\:30eb\:306e\:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af
    ============================================================ *)
 
-(* docs 内の既存ファイルが有効かどうかを判定:
-   - docs 内ファイルの日時
-   - 最新 history/*_documentupdate の日時
-   - ソースファイルの更新日時
-   を比較し、作りかけ (= ソースより古い docs, または documentupdate より新しいソースがある) を検出 *)
+(* docs \:5185\:306e\:65e2\:5b58\:30d5\:30a1\:30a4\:30eb\:304c\:6709\:52b9\:304b\:3069\:3046\:304b\:3092\:5224\:5b9a:
+   - docs \:5185\:30d5\:30a1\:30a4\:30eb\:306e\:65e5\:6642
+   - \:6700\:65b0 history/*_documentupdate \:306e\:65e5\:6642
+   - \:30bd\:30fc\:30b9\:30d5\:30a1\:30a4\:30eb\:306e\:66f4\:65b0\:65e5\:6642
+   \:3092\:6bd4\:8f03\:3057\:3001\:4f5c\:308a\:304b\:3051 (= \:30bd\:30fc\:30b9\:3088\:308a\:53e4\:3044 docs, \:307e\:305f\:306f documentupdate \:3088\:308a\:65b0\:3057\:3044\:30bd\:30fc\:30b9\:304c\:3042\:308b) \:3092\:691c\:51fa *)
 iCheckDocResumption[packageName_String, outDir_String, srcFile_String] :=
   Module[{existingDocs, srcTime, latestBackup, backupTime,
           allQueueFiles, missingFiles, validFiles},
-    (* ソースの最終更新時刻 *)
+    (* \:30bd\:30fc\:30b9\:306e\:6700\:7d42\:66f4\:65b0\:6642\:523b *)
     srcTime = Quiet @ Check[AbsoluteTime[FileDate[srcFile]], 0];
-    (* 最新の _documentupdate バックアップ *)
+    (* \:6700\:65b0\:306e _documentupdate \:30d0\:30c3\:30af\:30a2\:30c3\:30d7 *)
     latestBackup = iFindLatestDocBackup[packageName];
     backupTime = If[StringQ[latestBackup] && DirectoryQ[latestBackup],
       Max[Quiet @ Check[AbsoluteTime[FileDate[#]], 0] & /@
         FileNames["*", latestBackup]],
       0];
-    (* キュー内の全ファイル名 *)
+    (* \:30ad\:30e5\:30fc\:5185\:306e\:5168\:30d5\:30a1\:30a4\:30eb\:540d *)
     allQueueFiles = $iDocQueue[[All, 1]];
-    (* 既存の docs ファイル *)
+    (* \:65e2\:5b58\:306e docs \:30d5\:30a1\:30a4\:30eb *)
     existingDocs = Select[allQueueFiles,
       FileExistsQ[FileNameJoin[{outDir, #}]] &];
     missingFiles = Complement[allQueueFiles, existingDocs];
-    (* 既存ファイルが backupTime 以降に作成され、かつソースより新しくない場合は
-       ソース変更後の新規生成とみなす *)
+    (* \:65e2\:5b58\:30d5\:30a1\:30a4\:30eb\:304c backupTime \:4ee5\:964d\:306b\:4f5c\:6210\:3055\:308c\:3001\:304b\:3064\:30bd\:30fc\:30b9\:3088\:308a\:65b0\:3057\:304f\:306a\:3044\:5834\:5408\:306f
+       \:30bd\:30fc\:30b9\:5909\:66f4\:5f8c\:306e\:65b0\:898f\:751f\:6210\:3068\:307f\:306a\:3059 *)
     validFiles = If[backupTime > 0 && srcTime > backupTime,
-      (* ソースが documentupdate より新しい → 全ファイル再生成必要 *)
+      (* \:30bd\:30fc\:30b9\:304c documentupdate \:3088\:308a\:65b0\:3057\:3044 \[RightArrow] \:5168\:30d5\:30a1\:30a4\:30eb\:518d\:751f\:6210\:5fc5\:8981 *)
       {},
-      (* ソースが documentupdate 以前 → 既存ファイルはそのまま使える *)
+      (* \:30bd\:30fc\:30b9\:304c documentupdate \:4ee5\:524d \[RightArrow] \:65e2\:5b58\:30d5\:30a1\:30a4\:30eb\:306f\:305d\:306e\:307e\:307e\:4f7f\:3048\:308b *)
       existingDocs
     ];
     <|"valid" -> validFiles,
@@ -9710,7 +9987,7 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       Replace[OptionValue[License], Except[_String] -> ""],
       instruction];
   ];
-  (* 永続化されたオプションをマージ *)
+  (* \:6c38\:7d9a\:5316\:3055\:308c\:305f\:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:30de\:30fc\:30b8 *)
   iLoadAndMergeDocOptions[packageName];
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, sourceCode, outDir, pkgDir, bdir, histDir, timestamp,
@@ -9736,7 +10013,7 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     If[!StringQ[sourceCode] || StringTrim[sourceCode] === "",
       nbPrint[nb, iL["\:30a8\:30e9\:30fc: \:30d5\:30a1\:30a4\:30eb\:3092\:8aad\:307f\:8fbc\:3081\:307e\:305b\:3093: ", "Error: Cannot read file: "] <> srcFile];
       Return[$Failed]];
-    (* references フォルダを参照可能にする *)
+    (* references \:30d5\:30a9\:30eb\:30c0\:3092\:53c2\:7167\:53ef\:80fd\:306b\:3059\:308b *)
     iEnsureReferencesAccessible[packageName];
     (* \:51fa\:529b\:30c7\:30a3\:30ec\:30af\:30c8\:30ea *)
     If[FileExistsQ[FileNameJoin[{pkgDir, packageName, "PacletInfo.wl"}]],
@@ -9749,16 +10026,16 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       CreateDirectory[FileNameJoin[{outDir, "examples"}],
         CreateIntermediateDirectories -> True]];
 
-    (* ===== 継続判定: 作りかけのドキュメントがあるか ===== *)
+    (* ===== \:7d99\:7d9a\:5224\:5b9a: \:4f5c\:308a\:304b\:3051\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304c\:3042\:308b\:304b ===== *)
     resumeInfo = iCheckDocResumption[packageName, outDir, srcFile];
 
-    (* セクションヘッダーを入力セルの直前に挿入 *)
+    (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
-      "\:25b6 ClaudeCreateDocumentation: " <> packageName <>
+      "\[FilledRightTriangle] ClaudeCreateDocumentation: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
 
     If[resumeInfo["isResumption"] && !resumeInfo["sourceModified"],
-      (* 作りかけ → 既存ファイルを保持し、未生成分のみ生成 *)
+      (* \:4f5c\:308a\:304b\:3051 \[RightArrow] \:65e2\:5b58\:30d5\:30a1\:30a4\:30eb\:3092\:4fdd\:6301\:3057\:3001\:672a\:751f\:6210\:5206\:306e\:307f\:751f\:6210 *)
       filteredQueue = Select[$iDocQueue,
         !MemberQ[resumeInfo["valid"], #[[1]]] &];
       nbPrint[nb, Style[iL["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:7d9a\:884c: ", "Doc generation continued: "] <> packageName, Bold]];
@@ -9768,7 +10045,7 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
         StringRiffle[filteredQueue[[All, 1]], ", "]];
       nbPrint[nb, "\:30bd\:30fc\:30b9: " <> srcFile <>
         " (" <> ToString[StringLength[sourceCode]] <> " chars)\n"],
-      (* 新規 or ソース変更後 → 全ファイル生成 *)
+      (* \:65b0\:898f or \:30bd\:30fc\:30b9\:5909\:66f4\:5f8c \[RightArrow] \:5168\:30d5\:30a1\:30a4\:30eb\:751f\:6210 *)
       filteredQueue = $iDocQueue;
       (* \:5c65\:6b74\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: _documentupdate \:4ed8\:304d\:30d5\:30a9\:30eb\:30c0\:306b .wl \:3068 docs \:3092\:4fdd\:5b58 *)
       bdir = backupDir[packageName];
@@ -9780,7 +10057,7 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
         Scan[Function[f,
           Quiet[iSaveBackupFileRelative[histDir, f, outDir, packageName]]],
           Select[FileNames["*", outDir, Infinity], iFileQ]]];
-      (* doc_options.json もバックアップ *)
+      (* doc_options.json \:3082\:30d0\:30c3\:30af\:30a2\:30c3\:30d7 *)
       Module[{docOptsFile = iDocOptionsPath[packageName]},
         If[FileExistsQ[docOptsFile],
           Quiet[iSaveBackupFile[histDir, docOptsFile, packageName]]]];
@@ -9852,7 +10129,7 @@ iPackageDocsContext[task_String] :=
         "NBAccess" -> {"NBAccess", "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30bb\:30eb", "\:6a5f\:5bc6\:30bb\:30eb",
           "Confidential", "TaggingRules", "CellEpilog"}
       };
-      (* 外部パッケージが $ClaudePackageKeywordMap に登録したキーワードをマージ *)
+      (* \:5916\:90e8\:30d1\:30c3\:30b1\:30fc\:30b8\:304c $ClaudePackageKeywordMap \:306b\:767b\:9332\:3057\:305f\:30ad\:30fc\:30ef\:30fc\:30c9\:3092\:30de\:30fc\:30b8 *)
       extMap = If[AssociationQ[$ClaudePackageKeywordMap],
         Normal[$ClaudePackageKeywordMap], {}];
       kwMap = Join[kwMap, extMap];
@@ -9905,9 +10182,9 @@ iPackageDocsContext[task_String] :=
    ============================================================ *)
 
 (* \:66f4\:65b0\:6307\:793a\:304b\:3089\:8a72\:5f53\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:81ea\:52d5\:5224\:5b9a *)
-(* README.md を常にリストの最後に移動する。
-   README.md は他のドキュメントの内容を参照して概要を構成するため、
-   必ず全ドキュメント生成/更新後に最後に処理する必要がある。 *)
+(* README.md \:3092\:5e38\:306b\:30ea\:30b9\:30c8\:306e\:6700\:5f8c\:306b\:79fb\:52d5\:3059\:308b\:3002
+   README.md \:306f\:4ed6\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306e\:5185\:5bb9\:3092\:53c2\:7167\:3057\:3066\:6982\:8981\:3092\:69cb\:6210\:3059\:308b\:305f\:3081\:3001
+   \:5fc5\:305a\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210/\:66f4\:65b0\:5f8c\:306b\:6700\:5f8c\:306b\:51e6\:7406\:3059\:308b\:5fc5\:8981\:304c\:3042\:308b\:3002 *)
 iEnsureReadmeLast[docs_List] :=
   Module[{withoutReadme, hasReadme},
     hasReadme = MemberQ[docs, "README.md"];
@@ -9934,7 +10211,7 @@ iGuessTargetDocs[instruction_String, docsDir_String, skipExistCheck_:False] :=
          AnyTrue[keywords, StringContainsQ[instruction, #, IgnoreCase -> True] &],
         AppendTo[hits, docFile]],
     {docFile, Keys[$iDocKeywords]}, {keywords, {$iDocKeywords[docFile]}}];
-    (* 該当なしなら警告して README.md のみを対象にする（全ファイル更新を防止） *)
+    (* \:8a72\:5f53\:306a\:3057\:306a\:3089\:8b66\:544a\:3057\:3066 README.md \:306e\:307f\:3092\:5bfe\:8c61\:306b\:3059\:308b\:ff08\:5168\:30d5\:30a1\:30a4\:30eb\:66f4\:65b0\:3092\:9632\:6b62\:ff09 *)
     If[Length[hits] === 0,
       Print[Style["\:8b66\:544a: \:66f4\:65b0\:5bfe\:8c61\:3092\:81ea\:52d5\:5224\:5b9a\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002README.md \:306e\:307f\:66f4\:65b0\:3057\:307e\:3059\:3002\n" <>
         "\:5168\:30d5\:30a1\:30a4\:30eb\:3092\:66f4\:65b0\:3059\:308b\:306b\:306f 1\:5f15\:6570\:7248 ClaudeUpdateDocumentation[\"pkg\"] \:3092\:4f7f\:7528\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
@@ -9958,9 +10235,9 @@ iFindLatestDocBackup[packageName_String] :=
 iComputeSourceDiff[oldFile_String, newFile_String] :=
   Module[{oldLines, newLines, added = {}, removed = {}, oldText},
     If[!FileExistsQ[newFile], Return["(\:65b0\:30d5\:30a1\:30a4\:30eb\:306a\:3057)"]];
-    (* 旧ファイル: .wl → .wl.cz → .wl.cdiff の順で試行 *)
+    (* \:65e7\:30d5\:30a1\:30a4\:30eb: .wl \[RightArrow] .wl.cz \[RightArrow] .wl.cdiff \:306e\:9806\:3067\:8a66\:884c *)
     oldText = iLoadBackupWlFromPath[oldFile];
-    If[!StringQ[oldText], Return["(\:65e7\:30d5\:30a1\:30a4\:30eb\:306a\:3057 \:2014 \:5168\:4f53\:304c\:65b0\:898f)"]];
+    If[!StringQ[oldText], Return["(\:65e7\:30d5\:30a1\:30a4\:30eb\:306a\:3057 \[LongDash] \:5168\:4f53\:304c\:65b0\:898f)"]];
     oldLines = StringSplit[oldText, "\n"];
     newLines = StringSplit[Import[newFile, "Text"], "\n"];
     added = Complement[newLines, oldLines];
@@ -9974,19 +10251,19 @@ iComputeSourceDiff[oldFile_String, newFile_String] :=
     ]
   ];
 
-(* パスベースで生ファイル / .cz / .unchanged / .cdiff のいずれかからテキストを読み込む。
-   oldFile は従来の生ファイルパスとして渡される前提。
-   パス内のディレクトリ構造からパッケージ名を推定し iLoadBackupFile に委譲する。 *)
+(* \:30d1\:30b9\:30d9\:30fc\:30b9\:3067\:751f\:30d5\:30a1\:30a4\:30eb / .cz / .unchanged / .cdiff \:306e\:3044\:305a\:308c\:304b\:304b\:3089\:30c6\:30ad\:30b9\:30c8\:3092\:8aad\:307f\:8fbc\:3080\:3002
+   oldFile \:306f\:5f93\:6765\:306e\:751f\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:3068\:3057\:3066\:6e21\:3055\:308c\:308b\:524d\:63d0\:3002
+   \:30d1\:30b9\:5185\:306e\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:69cb\:9020\:304b\:3089\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:63a8\:5b9a\:3057 iLoadBackupFile \:306b\:59d4\:8b72\:3059\:308b\:3002 *)
 iLoadBackupWlFromPath[filePath_String] :=
   Module[{dir, fileName, bdir, packageName, histParts},
     If[FileExistsQ[filePath], Return[Quiet @ Check[Import[filePath, "Text"], $Failed]]];
     If[FileExistsQ[filePath <> ".cz"],
       Return[Quiet @ Check[Uncompress[Import[filePath <> ".cz", "String"]], $Failed]]];
-    (* .unchanged / .cdiff は iLoadBackupFile 経由で復元 *)
+    (* .unchanged / .cdiff \:306f iLoadBackupFile \:7d4c\:7531\:3067\:5fa9\:5143 *)
     If[FileExistsQ[filePath <> ".unchanged"] || FileExistsQ[filePath <> ".cdiff"],
       dir = DirectoryName[filePath];
       fileName = FileNameTake[filePath];
-      (* dir が backupDir[pkg] のサブディレクトリならパッケージ名を推定 *)
+      (* dir \:304c backupDir[pkg] \:306e\:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306a\:3089\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:63a8\:5b9a *)
       histParts = FileNameSplit[dir];
       packageName = If[Length[histParts] >= 2 &&
           histParts[[-2]] === "history",
@@ -10009,7 +10286,7 @@ iCreateDocUpdateBackup[packageName_String, srcFile_String, docsDir_String,
       Scan[Function[f,
         Quiet[iSaveBackupFileRelative[histDir, f, docsDir, packageName]]],
         Select[FileNames["*", docsDir, Infinity], iFileQ]]];
-    (* doc_options.json もバックアップ *)
+    (* doc_options.json \:3082\:30d0\:30c3\:30af\:30a2\:30c3\:30d7 *)
     Module[{docOptsFile = iDocOptionsPath[packageName]},
       If[FileExistsQ[docOptsFile],
         Quiet[iSaveBackupFile[histDir, docOptsFile, packageName]]]];
@@ -10025,8 +10302,8 @@ iCreateDocUpdateBackup[packageName_String, srcFile_String, docsDir_String,
 Options[ClaudeUpdateDocumentation] = {
   Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {},
   Acknowledgments -> {}, License -> "",
-  TargetFiles -> Automatic,  (* Automatic=自動判定, {"api.md"} 等でファイル指定 *)
-  Mode -> "Update"           (* "Update"=既存を更新, "Create"=新規作成（既存内容を無視） *)
+  TargetFiles -> Automatic,  (* Automatic=\:81ea\:52d5\:5224\:5b9a, {"api.md"} \:7b49\:3067\:30d5\:30a1\:30a4\:30eb\:6307\:5b9a *)
+  Mode -> "Update"           (* "Update"=\:65e2\:5b58\:3092\:66f4\:65b0, "Create"=\:65b0\:898f\:4f5c\:6210\:ff08\:65e2\:5b58\:5185\:5bb9\:3092\:7121\:8996\:ff09 *)
 };
 
 (* 1\:5f15\:6570\:7248: \:524d\:56de _documentupdate \:4ee5\:964d\:306e\:5909\:66f4\:3092\:81ea\:52d5\:691c\:51fa\:3057\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0 *)
@@ -10038,7 +10315,7 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     Replace[OptionValue[Disclaimer], Except[_List] -> {}],
     Replace[OptionValue[Acknowledgments], Except[_List] -> {}],
     Replace[OptionValue[License], Except[_String] -> ""]];
-  (* 永続化されたオプションをマージ *)
+  (* \:6c38\:7d9a\:5316\:3055\:308c\:305f\:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:30de\:30fc\:30b8 *)
   iLoadAndMergeDocOptions[packageName];
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, sourceCode, docsDir, pkgDir, allDocs,
@@ -10061,7 +10338,7 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     If[!StringQ[sourceCode],
       nbPrint[nb, iL["\:30a8\:30e9\:30fc: \:30bd\:30fc\:30b9\:3092\:8aad\:307f\:8fbc\:3081\:307e\:305b\:3093: ", "Error: Cannot read source: "] <> srcFile];
       Return[$Failed]];
-    (* references フォルダを参照可能にする *)
+    (* references \:30d5\:30a9\:30eb\:30c0\:3092\:53c2\:7167\:53ef\:80fd\:306b\:3059\:308b *)
     iEnsureReferencesAccessible[packageName];
     docsDir = iPackageDocsDir[packageName];
     If[!DirectoryQ[docsDir],
@@ -10081,37 +10358,37 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
       nbPrint[nb, "\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306b\:5909\:66f4\:304c\:3042\:308a\:307e\:305b\:3093\:3002\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:6700\:65b0\:3067\:3059\:3002"];
       Return[]];
     (* \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:5bfe\:8c61\:306b\:3059\:308b *)
-    (* 全ドキュメントファイルを対象にする (サブディレクトリ含む)
-       ルートと docs/ 等に同名ファイルがある場合はルートを優先 *)
+    (* \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:5bfe\:8c61\:306b\:3059\:308b (\:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:542b\:3080)
+       \:30eb\:30fc\:30c8\:3068 docs/ \:7b49\:306b\:540c\:540d\:30d5\:30a1\:30a4\:30eb\:304c\:3042\:308b\:5834\:5408\:306f\:30eb\:30fc\:30c8\:3092\:512a\:5148 *)
     allDocs = Module[{rootDocs, subDocs, rootNames, tf},
-      (* TargetFiles オプションが指定されていればそれを使用 *)
+      (* TargetFiles \:30aa\:30d7\:30b7\:30e7\:30f3\:304c\:6307\:5b9a\:3055\:308c\:3066\:3044\:308c\:3070\:305d\:308c\:3092\:4f7f\:7528 *)
       tf = OptionValue[TargetFiles];
       If[ListQ[tf] && Length[tf] > 0,
         Return[iEnsureReadmeLast[tf], Module]];
       If[StringQ[tf] && tf =!= "",
         Return[{tf}, Module]];
-      (* Automatic: 全ファイルを検出 *)
+      (* Automatic: \:5168\:30d5\:30a1\:30a4\:30eb\:3092\:691c\:51fa *)
       rootDocs = FileNameTake /@ FileNames["*.md", docsDir];
       rootNames = rootDocs;
-      (* examples/ などのサブディレクトリ内の .md *)
+      (* examples/ \:306a\:3069\:306e\:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:5185\:306e .md *)
       subDocs = Module[{subFiles},
         subFiles = FileNames["*.md", docsDir, 2];
         subFiles = Select[subFiles, DirectoryName[#] =!= docsDir &];
         (FileNameTake[DirectoryName[#], -1] <> "/" <> FileNameTake[#]) & /@ subFiles];
-      (* サブディレクトリのファイルがルートと同名なら除外 *)
+      (* \:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306e\:30d5\:30a1\:30a4\:30eb\:304c\:30eb\:30fc\:30c8\:3068\:540c\:540d\:306a\:3089\:9664\:5916 *)
       subDocs = Select[subDocs, !MemberQ[rootNames, FileNameTake[#]] &];
       DeleteDuplicates[Join[rootDocs, subDocs]]
     ];
-    (* README.md は他のドキュメント参照のため必ず最後 *)
+    (* README.md \:306f\:4ed6\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:53c2\:7167\:306e\:305f\:3081\:5fc5\:305a\:6700\:5f8c *)
     allDocs = iEnsureReadmeLast[allDocs];
     If[Length[allDocs] === 0,
       nbPrint[nb, iL["\:30a8\:30e9\:30fc: \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002", "Error: Document file not found."]];
       Return[$Failed]];
     autoInstruction = "\:524d\:56de\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:4ee5\:964d\:306e\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:5909\:66f4\:3092\:53cd\:6620\:3057\:3066\:3001\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0\:3057\:3066\:304f\:3060\:3055\:3044\:3002" <>
       "\:8ffd\:52a0\:3055\:308c\:305f\:95a2\:6570\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:306e\:8aac\:660e\:3092\:8ffd\:52a0\:3057\:3001\:524a\:9664\:3055\:308c\:305f\:3082\:306e\:306e\:8aac\:660e\:3092\:524a\:9664\:3059\:308b\:3053\:3068\:3002";
-    (* セクションヘッダーを入力セルの直前に挿入 *)
+    (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
-      "\:25b6 ClaudeUpdateDocumentation: " <> packageName <>
+      "\[FilledRightTriangle] ClaudeUpdateDocumentation: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
     nbPrint[nb, Style[iL["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:81ea\:52d5\:66f4\:65b0\:958b\:59cb: ", "Auto doc update started: "] <> packageName, Bold]];
     nbPrint[nb, iL["\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Previous backup: "] <> prevBackup];
@@ -10140,7 +10417,7 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       instruction,
       explicitDemos || explicitRefs];
   ];
-  (* 永続化されたオプションをマージ *)
+  (* \:6c38\:7d9a\:5316\:3055\:308c\:305f\:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:30de\:30fc\:30b8 *)
   iLoadAndMergeDocOptions[packageName];
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, sourceCode, docsDir, pkgDir, targetDocs,
@@ -10150,10 +10427,10 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     If[!StringQ[pkgDir] || pkgDir === "",
       nbPrint[nb, iL["\:30a8\:30e9\:30fc: $packageDirectory \:304c\:8a2d\:5b9a\:3055\:308c\:3066\:3044\:307e\:305b\:3093\:3002", "Error: $packageDirectory is not set."]];
       Return[$Failed]];
-    (* ノートブックコンテキストを取得してinstructionに付加（ドキュメント更新では控えめに） *)
+    (* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3092\:53d6\:5f97\:3057\:3066instruction\:306b\:4ed8\:52a0\:ff08\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:3067\:306f\:63a7\:3048\:3081\:306b\:ff09 *)
     nbCtx = Quiet @ Check[iCaptureNotebookContext[nb, 0], ""];
     enrichedInstruction = If[StringQ[nbCtx] && StringLength[nbCtx] > 0,
-      instruction <> "\n\n=== ノートブックコンテキスト（上での議論）===\n" <>
+      instruction <> "\n\n=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:ff08\:4e0a\:3067\:306e\:8b70\:8ad6\:ff09===\n" <>
       StringTake[nbCtx, UpTo[2000]] <> "\n",
       instruction];
     pkgDir = Global`$packageDirectory;
@@ -10173,7 +10450,7 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     If[!StringQ[sourceCode],
       nbPrint[nb, iL["\:30a8\:30e9\:30fc: \:30bd\:30fc\:30b9\:3092\:8aad\:307f\:8fbc\:3081\:307e\:305b\:3093: ", "Error: Cannot read source: "] <> srcFile];
       Return[$Failed]];
-    (* references フォルダを参照可能にする *)
+    (* references \:30d5\:30a9\:30eb\:30c0\:3092\:53c2\:7167\:53ef\:80fd\:306b\:3059\:308b *)
     iEnsureReferencesAccessible[packageName];
     docsDir = iPackageDocsDir[packageName];
     If[!DirectoryQ[docsDir],
@@ -10186,21 +10463,21 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       prevSrcFile = FileNameJoin[{prevBackup, FileNameTake[srcFile]}];
       nbPrint[nb, iL["\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Previous backup: "] <> prevBackup];
       iComputeSourceDiff[prevSrcFile, srcFile],
-      "(\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306a\:3057 \:2014 \:5168\:30bd\:30fc\:30b9\:3092\:53c2\:7167)"];
-    (* Mode を先に解決 *)
+      "(\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306a\:3057 \[LongDash] \:5168\:30bd\:30fc\:30b9\:3092\:53c2\:7167)"];
+    (* Mode \:3092\:5148\:306b\:89e3\:6c7a *)
     Module[{mode = Replace[OptionValue[ClaudeUpdateDocumentation, {opts}, Mode],
               Except["Create" | "Update"] -> "Update"],
             tf = OptionValue[ClaudeUpdateDocumentation, {opts}, TargetFiles]},
-    (* TargetFiles が明示的に指定されていればそれを使用 *)
+    (* TargetFiles \:304c\:660e\:793a\:7684\:306b\:6307\:5b9a\:3055\:308c\:3066\:3044\:308c\:3070\:305d\:308c\:3092\:4f7f\:7528 *)
     targetDocs = If[ListQ[tf] && Length[tf] > 0,
       nbPrint[nb, "TargetFiles \:6307\:5b9a: " <> StringRiffle[tf, ", "]];
       iEnsureReadmeLast[tf],
       If[StringQ[tf] && tf =!= "",
         nbPrint[nb, "TargetFiles \:6307\:5b9a: " <> tf];
         {tf},
-        (* 自動判定: Create モードならファイル存在チェックをスキップ *)
+        (* \:81ea\:52d5\:5224\:5b9a: Create \:30e2\:30fc\:30c9\:306a\:3089\:30d5\:30a1\:30a4\:30eb\:5b58\:5728\:30c1\:30a7\:30c3\:30af\:3092\:30b9\:30ad\:30c3\:30d7 *)
         iGuessTargetDocs[instruction, docsDir, mode === "Create"]]];
-    (* 今回の呼び出しで Demos/References が明示的に渡された場合のみ README.md を強制追加 *)
+    (* \:4eca\:56de\:306e\:547c\:3073\:51fa\:3057\:3067 Demos/References \:304c\:660e\:793a\:7684\:306b\:6e21\:3055\:308c\:305f\:5834\:5408\:306e\:307f README.md \:3092\:5f37\:5236\:8ffd\:52a0 *)
     If[TrueQ[iDocGet[packageName, "ExplicitDemosOrRefs"]] &&
        !MemberQ[targetDocs, "README.md"] &&
        FileExistsQ[FileNameJoin[{docsDir, "README.md"}]],
@@ -10208,9 +10485,9 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     If[Length[targetDocs] === 0,
       nbPrint[nb, "\:30a8\:30e9\:30fc: \:66f4\:65b0\:5bfe\:8c61\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
       Return[$Failed]];
-    (* セクションヘッダーを入力セルの直前に挿入 *)
+    (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
-      "\:25b6 ClaudeUpdateDocumentation: " <> packageName <>
+      "\[FilledRightTriangle] ClaudeUpdateDocumentation: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
     nbPrint[nb, Style[iL["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:958b\:59cb: ", "Doc update started: "] <> packageName <>
       If[mode === "Create", " [\:65b0\:898f\:4f5c\:6210\:30e2\:30fc\:30c9]", ""], Bold]];
@@ -10225,11 +10502,11 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     ] (* end Module mode *)
   ]]);
 
-(* ドキュメントを順次更新する再帰関数 (差分対応版・トークン節約版) *)
+(* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:9806\:6b21\:66f4\:65b0\:3059\:308b\:518d\:5e30\:95a2\:6570 (\:5dee\:5206\:5bfe\:5fdc\:7248\:30fb\:30c8\:30fc\:30af\:30f3\:7bc0\:7d04\:7248) *)
 
-(* リスト入力版: {"指示", Image, Image, ...} の形式で画像付きドキュメント更新
-   Image オブジェクトは docs/ に保存され、マークダウンで参照される。
-   Anthropic API 経由でマルチモーダル送信される。 *)
+(* \:30ea\:30b9\:30c8\:5165\:529b\:7248: {"\:6307\:793a", Image, Image, ...} \:306e\:5f62\:5f0f\:3067\:753b\:50cf\:4ed8\:304d\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0
+   Image \:30aa\:30d6\:30b8\:30a7\:30af\:30c8\:306f docs/ \:306b\:4fdd\:5b58\:3055\:308c\:3001\:30de\:30fc\:30af\:30c0\:30a6\:30f3\:3067\:53c2\:7167\:3055\:308c\:308b\:3002
+   Anthropic API \:7d4c\:7531\:3067\:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb\:9001\:4fe1\:3055\:308c\:308b\:3002 *)
 ClaudeUpdateDocumentation[packageName_String, items_List, opts:OptionsPattern[]] :=
   Module[{texts = {}, images = {}, imgIdx = 0, docsDir, imgName, imgPath, mediaFiles = {},
           targetFiles, figEntries = {}},
@@ -10239,14 +10516,14 @@ ClaudeUpdateDocumentation[packageName_String, items_List, opts:OptionsPattern[]]
       Return[$Failed]];
     If[!DirectoryQ[docsDir],
       Quiet @ CreateDirectory[docsDir, CreateIntermediateDirectories -> True]];
-    (* TargetFiles を取得（図の登録先として使用） *)
+    (* TargetFiles \:3092\:53d6\:5f97\:ff08\:56f3\:306e\:767b\:9332\:5148\:3068\:3057\:3066\:4f7f\:7528\:ff09 *)
     targetFiles = OptionValue[ClaudeUpdateDocumentation, {opts}, TargetFiles];
     targetFiles = Which[
       ListQ[targetFiles] && Length[targetFiles] > 0, targetFiles,
       StringQ[targetFiles] && targetFiles =!= "", {targetFiles},
-      True, {"user_manual.md", "README.md"}  (* デフォルト: 主要ドキュメント *)
+      True, {"user_manual.md", "README.md"}  (* \:30c7\:30d5\:30a9\:30eb\:30c8: \:4e3b\:8981\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8 *)
     ];
-    (* リスト要素を分類: String → テキスト, Image → docs/ に保存 + figures 登録 *)
+    (* \:30ea\:30b9\:30c8\:8981\:7d20\:3092\:5206\:985e: String \[RightArrow] \:30c6\:30ad\:30b9\:30c8, Image \[RightArrow] docs/ \:306b\:4fdd\:5b58 + figures \:767b\:9332 *)
     Scan[Function[item,
       Which[
         StringQ[item], AppendTo[texts, item],
@@ -10258,12 +10535,12 @@ ClaudeUpdateDocumentation[packageName_String, items_List, opts:OptionsPattern[]]
           Export[imgPath, item, "PNG"];
           AppendTo[images, <|"name" -> imgName, "path" -> imgPath|>];
           AppendTo[mediaFiles, <|"path" -> imgPath, "mediaType" -> "image/png"|>];
-          (* 図の説明はテキスト指示から推定。暫定的に "Attached image N" *)
+          (* \:56f3\:306e\:8aac\:660e\:306f\:30c6\:30ad\:30b9\:30c8\:6307\:793a\:304b\:3089\:63a8\:5b9a\:3002\:66ab\:5b9a\:7684\:306b "Attached image N" *)
           AppendTo[figEntries, {targetFiles, imgName,
             "Attached image " <> ToString[imgIdx]}];
           AppendTo[texts,
             "\n[Attached image " <> ToString[imgIdx] <> ": " <> imgName <>
-            " \:2014 saved to docs/ folder. " <>
+            " \[LongDash] saved to docs/ folder. " <>
             "Use ![description](" <> imgName <> ") in the markdown to reference it.]\n"],
         True, AppendTo[texts, ToString[item, InputForm]]
       ]
@@ -10271,18 +10548,18 @@ ClaudeUpdateDocumentation[packageName_String, items_List, opts:OptionsPattern[]]
     If[Length[texts] === 0,
       Print["Error: no instruction text found in the list."];
       Return[$Failed]];
-    (* テキスト指示の最初の文を各図の説明に使う *)
+    (* \:30c6\:30ad\:30b9\:30c8\:6307\:793a\:306e\:6700\:521d\:306e\:6587\:3092\:5404\:56f3\:306e\:8aac\:660e\:306b\:4f7f\:3046 *)
     Module[{desc = StringTake[First[Select[texts, StringLength[#] > 5 &], ""], UpTo[100]]},
       figEntries = MapIndexed[Function[{entry, idx},
         {entry[[1]], entry[[2]],
          If[Length[figEntries] === 1, desc,
            desc <> " (" <> ToString[First[idx]] <> ")"]}],
       figEntries]];
-    (* 画像保存の通知 *)
+    (* \:753b\:50cf\:4fdd\:5b58\:306e\:901a\:77e5 *)
     If[Length[images] > 0,
       Print["Saved " <> ToString[Length[images]] <> " image(s) to " <> docsDir <> ":"];
       Scan[Function[img, Print["  " <> img["name"]]], images]];
-    (* figures を $iDocState に登録 (既存と結合) *)
+    (* figures \:3092 $iDocState \:306b\:767b\:9332 (\:65e2\:5b58\:3068\:7d50\:5408) *)
     If[Length[figEntries] > 0,
       Module[{state = Lookup[$iDocState, packageName, <||>], existing},
         If[!AssociationQ[state], state = <||>];
@@ -10291,13 +10568,13 @@ ClaudeUpdateDocumentation[packageName_String, items_List, opts:OptionsPattern[]]
           Join[existing, figEntries],
           Function[e, If[ListQ[e] && Length[e] >= 2, e[[2]], e]]];
         $iDocState[packageName] = state]];
-    (* mediaFiles をパッケージ内変数に一時保存 *)
+    (* mediaFiles \:3092\:30d1\:30c3\:30b1\:30fc\:30b8\:5185\:5909\:6570\:306b\:4e00\:6642\:4fdd\:5b58 *)
     $iDocMediaFiles = mediaFiles;
-    (* String 版を呼び出し *)
+    (* String \:7248\:3092\:547c\:3073\:51fa\:3057 *)
     ClaudeUpdateDocumentation[packageName, StringJoin[Riffle[texts, "\n"]], opts]
   ];
 
-(* ドキュメントを順次更新する再帰関数 (差分対応版・トークン節約版) *)
+(* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:9806\:6b21\:66f4\:65b0\:3059\:308b\:518d\:5e30\:95a2\:6570 (\:5dee\:5206\:5bfe\:5fdc\:7248\:30fb\:30c8\:30fc\:30af\:30f3\:7bc0\:7d04\:7248) *)
 iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     docsDir_String, instruction_String, targetDocs_List, idx_Integer,
     diffText_String:"", srcFile_String:"", splitCache_Association:<||>,
@@ -10306,46 +10583,46 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
           split, chunkedSource, narrowQ, savedModel, isReadme, isApi,
           promptParts, useInstruction},
     If[idx > Length[targetDocs],
-      (* 全ドキュメント更新完了 → バックアップ作成 *)
+      (* \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:5b8c\:4e86 \[RightArrow] \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:4f5c\:6210 *)
       If[StringQ[srcFile] && srcFile =!= "",
         histDir = iCreateDocUpdateBackup[packageName, srcFile, docsDir, instruction];
         nbPrint[nb, iL["\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Backup: "] <> histDir]];
-      (* ドキュメントオプションを永続化 *)
+      (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:6c38\:7d9a\:5316 *)
       iSaveDocOptions[packageName];
       nbPrint[nb, iL["\:2705 \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:304c\:5b8c\:4e86\:3057\:307e\:3057\:305f\:3002", "\:2705 Document update complete."]];
       Return[]];
     docFile = targetDocs[[idx]];
     docPath = FileNameJoin[{docsDir, docFile}];
-    (* Mode -> "Create" なら既存内容を無視して新規作成 *)
+    (* Mode -> "Create" \:306a\:3089\:65e2\:5b58\:5185\:5bb9\:3092\:7121\:8996\:3057\:3066\:65b0\:898f\:4f5c\:6210 *)
     currentContent = If[mode === "Create", "",
       If[FileExistsQ[docPath], Import[docPath, "Text"], ""]];
     isReadme = (docFile === "README.md");
     isApi = (docFile === "api.md");
     narrowQ = iIsNarrowScopeInstruction[instruction];
 
-    (* api.md にはノートブックコンテキストは不要 → 除去 *)
+    (* api.md \:306b\:306f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306f\:4e0d\:8981 \[RightArrow] \:9664\:53bb *)
     useInstruction = If[isApi,
       StringReplace[instruction,
-        RegularExpression["(?s)\n\n=== ノートブックコンテキスト.*$"] -> ""],
+        RegularExpression["(?s)\n\n=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8.*$"] -> ""],
       instruction];
 
-    (* === ドキュメント種別ごとのプロンプト構築 ===
-       api.md:        ソースコードのみ（差分・ノートブックコンテキスト不要）
-       user_manual/setup/examples: ソースコード + 差分 + ノートブックコンテキスト
-       README.md:     ソースコード不要。兄弟ドキュメント(api/manual/setup)の内容から生成 *)
+    (* === \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:7a2e\:5225\:3054\:3068\:306e\:30d7\:30ed\:30f3\:30d7\:30c8\:69cb\:7bc9 ===
+       api.md:        \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306e\:307f\:ff08\:5dee\:5206\:30fb\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:4e0d\:8981\:ff09
+       user_manual/setup/examples: \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9 + \:5dee\:5206 + \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8
+       README.md:     \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:4e0d\:8981\:3002\:5144\:5f1f\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8(api/manual/setup)\:306e\:5185\:5bb9\:304b\:3089\:751f\:6210 *)
 
     promptParts = {
       "You are an expert Wolfram Language / Mathematica documentation writer.\n",
       "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n",
       "You are " <> If[isApi, "generating", "updating"] <>
         " the documentation for package \"" <> packageName <> "\"\n\n",
-      (* サンドイッチ構造: タスク概要を冒頭に配置 *)
+      (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:30bf\:30b9\:30af\:6982\:8981\:3092\:5192\:982d\:306b\:914d\:7f6e *)
       iTaskOverviewBlock[
         If[isApi, "Generate api.md (LLM-optimized API reference) from source code",
           "Update " <> docFile <> ": " <> useInstruction]]
     };
 
-    (* --- api.md 専用指示: ソースコードのみから生成、LLM消費向け --- *)
+    (* --- api.md \:5c02\:7528\:6307\:793a: \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306e\:307f\:304b\:3089\:751f\:6210\:3001LLM\:6d88\:8cbb\:5411\:3051 --- *)
     If[isApi,
       AppendTo[promptParts,
         "CRITICAL: This is an LLM-optimized API reference. NOT for human reading.\n" <>
@@ -10357,16 +10634,16 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         "- Do NOT use --- separators. Do NOT use bold labels like **\:5f15\:6570:**.\n" <>
         "- Do NOT add usage examples for trivial functions.\n" <>
         "- Only add examples for complex options or non-obvious patterns.\n" <>
-        "- FORMAT for simple functions: ### FuncName[args] \:2192 ReturnType\\n\:8aac\:660e(1\:884c)\n" <>
-        "- FORMAT for option functions: ### FuncName[args, opts]\\n\:8aac\:660e\\n\:2192 ReturnType\\nOptions: Opt1 -> Def1 (\:8aac\:660e), ...\n" <>
+        "- FORMAT for simple functions: ### FuncName[args] \[RightArrow] ReturnType\\n\:8aac\:660e(1\:884c)\n" <>
+        "- FORMAT for option functions: ### FuncName[args, opts]\\n\:8aac\:660e\\n\[RightArrow] ReturnType\\nOptions: Opt1 -> Def1 (\:8aac\:660e), ...\n" <>
         "- FORMAT for complex functions: add \:4f8b: FuncName[...] line\n" <>
         "- FORMAT for variables: ### $Var\\n\:578b: Type, \:521d\:671f\:5024: val\\n\:8aac\:660e\n\n" <>
         "List ALL public functions and ALL options. Completeness is critical.\n\n"],
-      (* --- 非 api.md の通常指示 --- *)
+      (* --- \:975e api.md \:306e\:901a\:5e38\:6307\:793a --- *)
       AppendTo[promptParts,
         "UPDATE INSTRUCTION:\n" <> useInstruction <> "\n\n"]];
 
-    (* --- 差分: api.md と README.md には不要 --- *)
+    (* --- \:5dee\:5206: api.md \:3068 README.md \:306b\:306f\:4e0d\:8981 --- *)
     If[!isApi && !isReadme &&
        StringQ[diffText] && diffText =!= "" && diffText =!= "(\:5909\:66f4\:306a\:3057)",
       AppendTo[promptParts,
@@ -10374,19 +10651,19 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         "Focus your updates on these changed parts.\n" <>
         diffText <> "\n\n"]];
 
-    (* --- 現在のドキュメント: api.md 以外にのみ送信 ---
-       api.md はソースコードのみから生成する。過去の api.md を参照すると
-       古い情報が残存したり、LLM が既存構造を保持しようとして不完全になる *)
+    (* --- \:73fe\:5728\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8: api.md \:4ee5\:5916\:306b\:306e\:307f\:9001\:4fe1 ---
+       api.md \:306f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306e\:307f\:304b\:3089\:751f\:6210\:3059\:308b\:3002\:904e\:53bb\:306e api.md \:3092\:53c2\:7167\:3059\:308b\:3068
+       \:53e4\:3044\:60c5\:5831\:304c\:6b8b\:5b58\:3057\:305f\:308a\:3001LLM \:304c\:65e2\:5b58\:69cb\:9020\:3092\:4fdd\:6301\:3057\:3088\:3046\:3068\:3057\:3066\:4e0d\:5b8c\:5168\:306b\:306a\:308b *)
     If[!isApi,
       AppendTo[promptParts,
         "CURRENT DOCUMENT (" <> docFile <> "):\n" <>
         If[StringQ[currentContent] && currentContent =!= "",
           currentContent, "(empty)"] <> "\n\n"]];
 
-    (* --- README.md: 兄弟ドキュメントから生成（ソースコード不要） --- *)
+    (* --- README.md: \:5144\:5f1f\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304b\:3089\:751f\:6210\:ff08\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:4e0d\:8981\:ff09 --- *)
     If[isReadme,
       If[narrowQ,
-        AppendTo[promptParts, "(Sibling documentation files omitted \:2014 narrow-scope update)\n"],
+        AppendTo[promptParts, "(Sibling documentation files omitted \[LongDash] narrow-scope update)\n"],
         Module[{siblingDocs, siblingContent = ""},
           siblingDocs = DeleteDuplicates @ Join[
             FileNames["*.md", docsDir],
@@ -10412,29 +10689,29 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         iDocBuildLicensePrompt[packageName]]
     ];
 
-    (* --- api.md / user_manual / setup / examples: ソースコード添付 --- *)
+    (* --- api.md / user_manual / setup / examples: \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:6dfb\:4ed8 --- *)
     If[!isReadme,
       split = If[splitCache =!= <||>, splitCache, iSplitSource[sourceCode]];
       chunkedSource = iBuildChunkedSource[split, docFile];
       AppendTo[promptParts,
         "PACKAGE SOURCE CODE (chunked for token efficiency):\n" <> chunkedSource <> "\n\n"];
-      (* README 以外でもリンク捏造防止のため URL リストを提供 *)
+      (* README \:4ee5\:5916\:3067\:3082\:30ea\:30f3\:30af\:634f\:9020\:9632\:6b62\:306e\:305f\:3081 URL \:30ea\:30b9\:30c8\:3092\:63d0\:4f9b *)
       AppendTo[promptParts,
         iBuildGitHubLinksContext[] <>
         "\nCRITICAL RULE: \:8b1d\:8f9e (Acknowledgments), \:514d\:8cac\:4e8b\:9805 (Disclaimer) and \:30e9\:30a4\:30bb\:30f3\:30b9 (License) sections MUST ONLY exist in README.md.\n" <>
         "Do NOT add, create, or keep any \:8b1d\:8f9e, \:514d\:8cac\:4e8b\:9805 or \:30e9\:30a4\:30bb\:30f3\:30b9 section in this file.\n" <>
         "If this file currently contains such sections, REMOVE them entirely.\n\n"],
-      (* README はソースコード不添付 *)
+      (* README \:306f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:4e0d\:6dfb\:4ed8 *)
       chunkedSource = "(README.md \:306f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:4e0d\:8981)"
     ];
 
-    (* --- 図の挿入指示: api.md 以外で対象図がある場合 --- *)
+    (* --- \:56f3\:306e\:633f\:5165\:6307\:793a: api.md \:4ee5\:5916\:3067\:5bfe\:8c61\:56f3\:304c\:3042\:308b\:5834\:5408 --- *)
     If[!isApi,
       Module[{figPrompt = iDocBuildFiguresPrompt[packageName, docFile]},
         If[StringQ[figPrompt] && figPrompt =!= "",
           AppendTo[promptParts, figPrompt]]]];
 
-    (* --- 出力指示 --- *)
+    (* --- \:51fa\:529b\:6307\:793a --- *)
     AppendTo[promptParts,
       "Output the COMPLETE updated document directly as your response text. "];
     If[isApi,
@@ -10446,8 +10723,8 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         "- Do NOT use --- separators. Do NOT use bold labels like **\:5f15\:6570:**.\n" <>
         "- Do NOT add usage examples for trivial functions.\n" <>
         "- Only add examples for complex options or non-obvious patterns.\n" <>
-        "- Simple functions: ### FuncName[args] \:2192 ReturnType\\n\:8aac\:660e(1\:884c)\n" <>
-        "- Option functions: ### FuncName[args, opts]\\n\:8aac\:660e\\n\:2192 ReturnType\\nOptions: Opt1 -> Def1 (\:8aac\:660e), ...\n" <>
+        "- Simple functions: ### FuncName[args] \[RightArrow] ReturnType\\n\:8aac\:660e(1\:884c)\n" <>
+        "- Option functions: ### FuncName[args, opts]\\n\:8aac\:660e\\n\[RightArrow] ReturnType\\nOptions: Opt1 -> Def1 (\:8aac\:660e), ...\n" <>
         "- Variables: ### $Var\\n\:578b: Type, \:521d\:671f\:5024: val\\n\:8aac\:660e\n" <>
         "- List ALL public functions and ALL options. Completeness is critical.\n"],
       AppendTo[promptParts, iLanguageInstruction["polite"]]
@@ -10460,22 +10737,22 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       AppendTo[promptParts,
         "CRITICAL: README.md is a HIGH-LEVEL OVERVIEW document updated LAST.\n" <>
         If[!narrowQ,
-          "You have access to the OTHER DOCUMENTATION FILES above \:2014 they were just updated.\n" <>
+          "You have access to the OTHER DOCUMENTATION FILES above \[LongDash] they were just updated.\n" <>
           "Use them to construct an accurate, comprehensive overview.\n" <>
           "Do NOT include source code details. Summarize features from the documentation files.\n\n",
           "This is a narrow-scope update. Focus only on the specific section mentioned in the instruction.\n\n"] <>
         "MANDATORY STRUCTURE (in this order):\n" <>
-        "1. # \:30d1\:30c3\:30b1\:30fc\:30b8\:540d \:2014 \:8a2d\:8a08\:601d\:60f3\:3068\:5b9f\:88c5\:306e\:6982\:8981\n" <>
+        "1. # \:30d1\:30c3\:30b1\:30fc\:30b8\:540d \[LongDash] \:8a2d\:8a08\:601d\:60f3\:3068\:5b9f\:88c5\:306e\:6982\:8981\n" <>
         "2. ## \:8a73\:7d30\:8aac\:660e containing:\n" <>
         "   - \:52d5\:4f5c\:74b0\:5883 (OS, Mathematica version, external tools)\n" <>
         "   - \:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\n" <>
         "   - \:30af\:30a4\:30c3\:30af\:30b9\:30bf\:30fc\:30c8 (minimal working example)\n" <>
         "   - \:4e3b\:306a\:6a5f\:80fd (feature list with brief descriptions)\n" <>
         "   - \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:4e00\:89a7 (links to setup.md, user_manual.md, api.md, examples/)\n" <>
-        "3. ## \:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2 \:2014 Demo URLs and usage examples go HERE (section name MUST be '\:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2')\n" <>
-        "4. ## \:8b1d\:8f9e (ONLY if Acknowledgments are provided \:2014 omit entirely if none)\n" <>
+        "3. ## \:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2 \[LongDash] Demo URLs and usage examples go HERE (section name MUST be '\:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2')\n" <>
+        "4. ## \:8b1d\:8f9e (ONLY if Acknowledgments are provided \[LongDash] omit entirely if none)\n" <>
         "5. ## \:514d\:8cac\:4e8b\:9805\n" <>
-        "6. ## \:30e9\:30a4\:30bb\:30f3\:30b9 (if present \:2014 MUST be last)\n\n" <>
+        "6. ## \:30e9\:30a4\:30bb\:30f3\:30b9 (if present \[LongDash] MUST be last)\n\n" <>
         "RULES:\n" <>
         "- Do NOT copy detailed API descriptions from other docs. Keep it high-level.\n" <>
         "- Do NOT append raw instruction text, prompt fragments, or update notes.\n" <>
@@ -10483,7 +10760,7 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         "- Preserve the existing design philosophy narrative.\n" <>
         "- Update feature lists and function counts to match the latest source.\n"]];
 
-    (* サンドイッチ構造: タスク詳細を末尾に再掲 *)
+    (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:30bf\:30b9\:30af\:8a73\:7d30\:3092\:672b\:5c3e\:306b\:518d\:63b2 *)
     If[!isApi,
       AppendTo[promptParts,
         "\n" <> iTaskDetailBlock[
@@ -10492,20 +10769,20 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
 
     fullPrompt = StringJoin[promptParts];
 
-    (* プロンプト健全性チェック *)
+    (* \:30d7\:30ed\:30f3\:30d7\:30c8\:5065\:5168\:6027\:30c1\:30a7\:30c3\:30af *)
     If[!StringQ[fullPrompt] || StringLength[fullPrompt] < 100,
       nbPrint[nb, "\:26a0 \:30d7\:30ed\:30f3\:30d7\:30c8\:69cb\:7bc9\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3059\:3002"];
       iUpdateDocNext[sourceCode, packageName, nb, docsDir, instruction,
         targetDocs, idx + 1, diffText, srcFile, split, mode, docMediaFiles];
       Return[]];
 
-    nbPrint[nb, "\:2500 [" <> ToString[idx] <> "/" <> ToString[Length[targetDocs]] <>
+    nbPrint[nb, "\[HorizontalLine] [" <> ToString[idx] <> "/" <> ToString[Length[targetDocs]] <>
       "] " <> docFile <> " \:3092\:66f4\:65b0\:4e2d... (\:30d7\:30ed\:30f3\:30d7\:30c8: " <>
       ToString[StringLength[fullPrompt]] <> " chars, parts: " <>
       ToString[Length[promptParts]] <> ", \:30e2\:30c7\:30eb: " <>
       iDocModelOverride[] <> ")"];
 
-    (* ドキュメント生成用モデルでクエリ実行 *)
+    (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:7528\:30e2\:30c7\:30eb\:3067\:30af\:30a8\:30ea\:5b9f\:884c *)
     savedModel = $ClaudeModel;
     $ClaudeModel = iDocModelOverride[];
     Module[{docCallback =
@@ -10517,7 +10794,7 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
           Module[{writeResult},
             writeResult = iSafeWriteDoc[dp, response, pn];
             If[writeResult =!= $Failed,
-              nbPrint[nb2, "  \:2713 " <> df <> " \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
+              nbPrint[nb2, "  \[Checkmark] " <> df <> " \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
               nbPrint[nb2, "  \:2717 " <> df <> " \:306e\:66f4\:65b0\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408/\:30b5\:30a4\:30ba\:9000\:884c): " <>
                 StringTake[ToString[response], UpTo[200]]]
             ];
@@ -10526,10 +10803,10 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         ]
       ]},
       If[Length[docMediaFiles] > 0,
-        (* 画像付き: Anthropic API 経由でマルチモーダル送信 *)
+        (* \:753b\:50cf\:4ed8\:304d: Anthropic API \:7d4c\:7531\:3067\:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb\:9001\:4fe1 *)
         iStartFallbackAsync[fullPrompt, nb, docCallback,
           {{"anthropic", iDocModelOverride[]}}, 1, "", Automatic, docMediaFiles],
-        (* 画像なし: 従来パス *)
+        (* \:753b\:50cf\:306a\:3057: \:5f93\:6765\:30d1\:30b9 *)
         iClaudeQueryAsyncWithProgress[fullPrompt, docCallback, nb]
       ]
     ];
@@ -10538,15 +10815,15 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
 
 
 (* ============================================================
-   api.md 自動更新: ClaudeUpdatePackage/ClaudeCreatePackage 後に
-   api.md だけを自動再生成する。他のドキュメントは更新しない。
+   api.md \:81ea\:52d5\:66f4\:65b0: ClaudeUpdatePackage/ClaudeCreatePackage \:5f8c\:306b
+   api.md \:3060\:3051\:3092\:81ea\:52d5\:518d\:751f\:6210\:3059\:308b\:3002\:4ed6\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:66f4\:65b0\:3057\:306a\:3044\:3002
    ============================================================ *)
 
 iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
   Module[{docsDir, apiFile, srcFile, sourceCode, prompt},
     docsDir = iPackageDocsDir[packageName];
     If[!StringQ[docsDir], Return[]];
-    (* docs ディレクトリがなければ作成 *)
+    (* docs \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:306a\:3051\:308c\:3070\:4f5c\:6210 *)
     If[!DirectoryQ[docsDir],
       Quiet @ CreateDirectory[docsDir, CreateIntermediateDirectories -> True]];
     apiFile = FileNameJoin[{docsDir, "api.md"}];
@@ -10567,18 +10844,18 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
       "- Do NOT use --- separators. Do NOT use bold labels like **\:5f15\:6570:**.\n" <>
       "- Do NOT add usage examples for trivial functions.\n" <>
       "- Only add examples for complex options or non-obvious patterns.\n\n" <>
-      "FORMAT for simple functions: ### FuncName[args] \:2192 ReturnType\\n\:8aac\:660e(1\:884c)\n" <>
-      "FORMAT for option functions: ### FuncName[args, opts]\\n\:8aac\:660e\\n\:2192 ReturnType\\nOptions: Opt1 -> Def1 (\:8aac\:660e), ...\n" <>
+      "FORMAT for simple functions: ### FuncName[args] \[RightArrow] ReturnType\\n\:8aac\:660e(1\:884c)\n" <>
+      "FORMAT for option functions: ### FuncName[args, opts]\\n\:8aac\:660e\\n\[RightArrow] ReturnType\\nOptions: Opt1 -> Def1 (\:8aac\:660e), ...\n" <>
       "FORMAT for complex functions: add \:4f8b: FuncName[...] line\n" <>
       "FORMAT for variables: ### $Var\\n\:578b: Type, \:521d\:671f\:5024: val\\n\:8aac\:660e\n\n" <>
       "List ALL public functions and ALL options. Completeness is critical.\n" <>
       "Format: Markdown. Output the COMPLETE document directly as your response text.\n" <>
       "Do NOT wrap in code fences. Do NOT include markers. Do NOT ask for file permissions.\n\n" <>
-      (* api.md は過去の内容を参照せず、ソースコードのみから生成する。
-         既存 api.md を送ると古い情報が残存し不完全になるため。 *)
+      (* api.md \:306f\:904e\:53bb\:306e\:5185\:5bb9\:3092\:53c2\:7167\:305b\:305a\:3001\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306e\:307f\:304b\:3089\:751f\:6210\:3059\:308b\:3002
+         \:65e2\:5b58 api.md \:3092\:9001\:308b\:3068\:53e4\:3044\:60c5\:5831\:304c\:6b8b\:5b58\:3057\:4e0d\:5b8c\:5168\:306b\:306a\:308b\:305f\:3081\:3002 *)
       "PACKAGE SOURCE CODE:\n" <>
       iBuildChunkedSource[iSplitSource[sourceCode], "api.md"];
-    nbPrint[nb, "\:2500 api.md \:3092\:81ea\:52d5\:66f4\:65b0\:4e2d... (\:30e2\:30c7\:30eb: " <> iDocModelOverride[] <> ")"];
+    nbPrint[nb, "\[HorizontalLine] api.md \:3092\:81ea\:52d5\:66f4\:65b0\:4e2d... (\:30e2\:30c7\:30eb: " <> iDocModelOverride[] <> ")"];
     Module[{savedModel = $ClaudeModel},
     $ClaudeModel = iDocModelOverride[];
     iClaudeQueryAsyncWithProgress[prompt,
@@ -10587,7 +10864,7 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
           Module[{writeResult},
             writeResult = iSafeWriteDoc[af, response, pn];
             If[writeResult =!= $Failed,
-              nbPrint[nb2, "  \:2713 " <> pn <> " \:306e api.md \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
+              nbPrint[nb2, "  \[Checkmark] " <> pn <> " \:306e api.md \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
               nbPrint[nb2, "  \:2717 api.md \:306e\:81ea\:52d5\:66f4\:65b0\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408/\:30b5\:30a4\:30ba\:9000\:884c): " <>
                 StringTake[ToString[response], UpTo[100]]]
             ]]
@@ -10599,7 +10876,7 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
   ];
 
 (* ============================================================
-   Paclet \:5909\:63db: \:5358\:4e00 .wl \:30d5\:30a1\:30a4\:30eb \:2192 Paclet \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:69cb\:9020
+   Paclet \:5909\:63db: \:5358\:4e00 .wl \:30d5\:30a1\:30a4\:30eb \[RightArrow] Paclet \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:69cb\:9020
    ============================================================ *)
 
 (* .wl \:30d5\:30a1\:30a4\:30eb\:304b\:3089\:516c\:958b\:30b7\:30f3\:30dc\:30eb\:3068 usage \:3092\:62bd\:51fa *)
@@ -10787,7 +11064,7 @@ iGenerateSpecMD[packageName_String, publicSymbols_Association, code_String] :=
       "```\n\n" <>
       "## 5. \:5909\:66f4\:5c65\:6b74\n\n" <>
       "- " <> DateString[Now, {"Year", "-", "Month", "-", "Day"}] <>
-      " v1.0.0 \:2014 Paclet \:5f62\:5f0f\:3067\:521d\:7248\:4f5c\:6210\n";
+      " v1.0.0 \[LongDash] Paclet \:5f62\:5f0f\:3067\:521d\:7248\:4f5c\:6210\n";
 
     header <> toc <> funcSections <> footer
   ];
@@ -10809,9 +11086,9 @@ ClaudeConvertToPaclet[packageName_String] :=
     code = Import[srcFile, "Text"];
     publicSymbols = iExtractPublicSymbols[code];
 
-    (* セクションヘッダーを入力セルの直前に挿入 *)
+    (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
-      "\:25b6 ClaudeConvertToPaclet: " <> packageName <>
+      "\[FilledRightTriangle] ClaudeConvertToPaclet: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
 
     nbPrint[nb, "\:516c\:958b\:30b7\:30f3\:30dc\:30eb: " <> ToString[Length[publicSymbols]] <> " \:500b\:691c\:51fa"];
@@ -10846,10 +11123,10 @@ ClaudeConvertToPaclet[packageName_String] :=
     iExportUTF8[FileNameJoin[{kernelDir, "init.wl"}],
       iGenerateKernelInit[packageName]];
 
-    (* Kernel/packageName.wl \:2190 \:5143\:306e .wl \:3092\:30b3\:30d4\:30fc *)
+    (* Kernel/packageName.wl \[LeftArrow] \:5143\:306e .wl \:3092\:30b3\:30d4\:30fc *)
     CopyFile[srcFile, FileNameJoin[{kernelDir, packageName <> ".wl"}]];
 
-    (* Documentation/English/Guides/Overview.nb \:2190 Notebook \:5f0f\:3067\:30a8\:30af\:30b9\:30dd\:30fc\:30c8 *)
+    (* Documentation/English/Guides/Overview.nb \[LeftArrow] Notebook \:5f0f\:3067\:30a8\:30af\:30b9\:30dd\:30fc\:30c8 *)
     Export[FileNameJoin[{guidesDir, packageName <> "Overview.nb"}],
       iGenerateGuideNB[packageName, publicSymbols]];
 
@@ -10857,7 +11134,7 @@ ClaudeConvertToPaclet[packageName_String] :=
     iExportUTF8[FileNameJoin[{pacletDir, "README.md"}],
       iGenerateReadme[packageName, publicSymbols]];
 
-    (* Docs/spec.md \:2014 \:8a73\:7d30\:4ed5\:69d8\:66f8 *)
+    (* Docs/spec.md \[LongDash] \:8a73\:7d30\:4ed5\:69d8\:66f8 *)
     iExportUTF8[FileNameJoin[{docsDir, "spec.md"}],
       iGenerateSpecMD[packageName, publicSymbols, code]];
 
@@ -10909,7 +11186,7 @@ iRelativePath[fullPath_String, baseDir_String] :=
     If[Length[fullParts] > Length[baseParts] &&
        Take[fullParts, Length[baseParts]] === baseParts,
       FileNameJoin[Drop[fullParts, Length[baseParts]]],
-      fullPath  (* baseDir が前方一致しない場合はそのまま返す *)
+      fullPath  (* baseDir \:304c\:524d\:65b9\:4e00\:81f4\:3057\:306a\:3044\:5834\:5408\:306f\:305d\:306e\:307e\:307e\:8fd4\:3059 *)
     ]
   ];
 
@@ -11114,7 +11391,7 @@ iDirectiveBackupPull[dir_String] :=
   ];
 
 (* ============================================================
-   ディレクティブ用ローカルスナップショット管理
+   \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:7528\:30ed\:30fc\:30ab\:30eb\:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:7ba1\:7406
    ============================================================ *)
 
 iDirectiveSnapshotDir[] :=
@@ -11152,7 +11429,7 @@ iRestoreDirectiveSnapshot[] :=
   Module[{snapDir, srcDir, allFiles, relPath, dst, restored = 0, nb},
     snapDir = iDirectiveSnapshotDir[];
     If[!DirectoryQ[snapDir],
-      Return[Failure["NoSnapshot", <|"Message" -> "スナップショットなし"|>]]];
+      Return[Failure["NoSnapshot", <|"Message" -> "\:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:306a\:3057"|>]]];
     srcDir = iDirectivesSourceDir[];
     If[srcDir === $Failed, Return[$Failed]];
     nb = Quiet[EvaluationNotebook[]];
@@ -11164,10 +11441,10 @@ iRestoreDirectiveSnapshot[] :=
       dst = FileNameJoin[{srcDir, relPath}];
       Quiet @ CreateDirectory[DirectoryName[dst], CreateIntermediateDirectories -> True];
       Quiet @ CopyFile[f, dst, OverwriteTarget -> True];
-      nbPrint[nb, iL["復元: ", "Restored: "] <> relPath];
+      nbPrint[nb, iL["\:5fa9\:5143: ", "Restored: "] <> relPath];
       restored++,
       {f, allFiles}];
-    nbPrint[nb, iL["完了: ", "Done: "] <> ToString[restored] <> iL[" ファイルを復元しました。", " file(s) restored."]];
+    nbPrint[nb, iL["\:5b8c\:4e86: ", "Done: "] <> ToString[restored] <> iL[" \:30d5\:30a1\:30a4\:30eb\:3092\:5fa9\:5143\:3057\:307e\:3057\:305f\:3002", " file(s) restored."]];
     <|"Action" -> "RestoreDirectiveSnapshot", "FilesRestored" -> restored|>
   ];
 
@@ -11194,11 +11471,11 @@ iDetectDirectiveChanges[] :=
     changedFiles
   ];
 
-(* ディレクティブ履歴を Grid で表示 *)
+(* \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:5c65\:6b74\:3092 Grid \:3067\:8868\:793a *)
 ClaudeDirectiveBackupDataset[] :=
   Module[{entries, gridRows, header, localRow, outputTag, warningTag,
           gridResult, snapDir},
-    (* 起動時: スナップショット保存 *)
+    (* \:8d77\:52d5\:6642: \:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:4fdd\:5b58 *)
     snapDir = iDirectiveSnapshotDir[];
     If[DirectoryQ[snapDir],
       Quiet @ DeleteDirectory[snapDir, DeleteContents -> True]];
@@ -11210,49 +11487,49 @@ ClaudeDirectiveBackupDataset[] :=
     warningTag = "ClaudeDirectiveBackupDataset$warning";
     header = {Style["#", Bold], Style["Timestamp", Bold],
       Style[iL["\:6307\:793a", "Instruction"], Bold], Style["\:30d5\:30a1\:30a4\:30eb", Bold], Style["Actions", Bold]};
-    (* #0 行: ローカル最新版 *)
+    (* #0 \:884c: \:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248 *)
     localRow = {
       Style[0, Bold, RGBColor[0, 0.5, 0]],
       Style["local", FontFamily -> "Courier", FontColor -> RGBColor[0, 0.5, 0]],
-      "(スナップショット保存済み)",
-      "ローカル最新版",
+      "(\:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:4fdd\:5b58\:6e08\:307f)",
+      "\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248",
       With[{oTag = outputTag, wTag = warningTag},
         Row[{
           Button["Pull",
             Module[{newerFiles, msg, nb, outputIndices, outputIdx, cells},
               nb = Quiet[EvaluationNotebook[]];
               If[!DirectoryQ[iDirectiveSnapshotDir[]],
-                Print[iL["スナップショットが存在しません。", "Snapshot does not exist."]],
+                Print[iL["\:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:304c\:5b58\:5728\:3057\:307e\:305b\:3093\:3002", "Snapshot does not exist."]],
                 newerFiles = iDetectDirectiveChanges[];
                 If[Length[newerFiles] > 0,
-                  msg = "以下の " <> ToString[Length[newerFiles]] <>
-                    " ファイルがスナップショットから変更されています:\n\n" <>
+                  msg = "\:4ee5\:4e0b\:306e " <> ToString[Length[newerFiles]] <>
+                    " \:30d5\:30a1\:30a4\:30eb\:304c\:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:304b\:3089\:5909\:66f4\:3055\:308c\:3066\:3044\:307e\:3059:\n\n" <>
                     StringRiffle[Take[newerFiles, UpTo[10]], "\n"] <>
                     If[Length[newerFiles] > 10,
-                      "\n... 他 " <> ToString[Length[newerFiles] - 10] <> " ファイル", ""] <>
-                    "\n\nローカル最新版で上書きすると、これらの変更は失われます。";
+                      "\n... \:4ed6 " <> ToString[Length[newerFiles] - 10] <> " \:30d5\:30a1\:30a4\:30eb", ""] <>
+                    "\n\n\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:3067\:4e0a\:66f8\:304d\:3059\:308b\:3068\:3001\:3053\:308c\:3089\:306e\:5909\:66f4\:306f\:5931\:308f\:308c\:307e\:3059\:3002";
                   NBAccess`NBDeleteCellsByTag[nb, wTag];
                   outputIndices = NBAccess`NBCellIndicesByTag[nb, oTag];
                   If[Length[outputIndices] > 0,
                     NBAccess`NBMoveAfterCell[nb, Last[outputIndices]],
                     Quiet[SelectionMove[EvaluationCell[], After, Cell]]];
                   cells = Cell[CellGroupData[{
-                    Cell[iL["\:26a0 ローカル最新版への復元", "\:26a0 Restore to local latest"], "Subsubsection",
+                    Cell[iL["\:26a0 \:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:3078\:306e\:5fa9\:5143", "\:26a0 Restore to local latest"], "Subsubsection",
                       CellTags -> {wTag}],
                     Cell[msg, "Text"],
                     Cell[BoxData[ToBoxes[Row[{
-                      Button[iL["すべてローカル最新版に置き換える", "Replace all with local latest"],
+                      Button[iL["\:3059\:3079\:3066\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:306b\:7f6e\:304d\:63db\:3048\:308b", "Replace all with local latest"],
                         Module[{res, nb2},
                           nb2 = Quiet[EvaluationNotebook[]];
                           res = iRestoreDirectiveSnapshot[];
                           If[!FailureQ[res],
-                            Print[iL["ローカル最新版に復元: ", "Restored to local latest: "] <>
-                              ToString[res["FilesRestored"]] <> " ファイル"],
+                            Print[iL["\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:306b\:5fa9\:5143: ", "Restored to local latest: "] <>
+                              ToString[res["FilesRestored"]] <> " \:30d5\:30a1\:30a4\:30eb"],
                             Print[res]];
                           NBAccess`NBDeleteCellsByTag[nb2, wTag]],
                         Method -> "Queued"],
                       Spacer[20],
-                      Button[iL["キャンセル", "Cancel"],
+                      Button[iL["\:30ad\:30e3\:30f3\:30bb\:30eb", "Cancel"],
                         Module[{nb2},
                           nb2 = Quiet[EvaluationNotebook[]];
                           NBAccess`NBDeleteCellsByTag[nb2, wTag]],
@@ -11260,15 +11537,15 @@ ClaudeDirectiveBackupDataset[] :=
                     }]]], "Output"]
                   }, Open]];
                   NotebookWrite[nb, cells],
-                  (* 変更なし *)
-                  If[ChoiceDialog[iL["ローカル最新版に復元しますか？", "Restore to local latest?"]],
+                  (* \:5909\:66f4\:306a\:3057 *)
+                  If[ChoiceDialog[iL["\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:306b\:5fa9\:5143\:3057\:307e\:3059\:304b\:ff1f", "Restore to local latest?"]],
                     Module[{res},
                       res = iRestoreDirectiveSnapshot[];
                       If[!FailureQ[res],
-                        Print[iL["ローカル最新版に復元: ", "Restored to local latest: "] <>
-                          ToString[res["FilesRestored"]] <> " ファイル"],
+                        Print[iL["\:30ed\:30fc\:30ab\:30eb\:6700\:65b0\:7248\:306b\:5fa9\:5143: ", "Restored to local latest: "] <>
+                          ToString[res["FilesRestored"]] <> " \:30d5\:30a1\:30a4\:30eb"],
                         Print[res]]],
-                    Print[iL["キャンセルしました。", "Cancelled."]]]
+                    Print[iL["\:30ad\:30e3\:30f3\:30bb\:30eb\:3057\:307e\:3057\:305f\:3002", "Cancelled."]]]
                 ]]],
             Method -> "Queued", ImageSize -> {52, 22}]
         }, Spacer[3]]]
@@ -11330,8 +11607,8 @@ ClaudeDirectiveBackupDataset[] :=
       CellTags -> {outputTag}]];
   ];
 
-(* --- ディレクティブのインストール: コピーは自動化されたため不要 --- *)
-(* 旧 install-claude-directives.wl は不要 *)
+(* --- \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:306e\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb: \:30b3\:30d4\:30fc\:306f\:81ea\:52d5\:5316\:3055\:308c\:305f\:305f\:3081\:4e0d\:8981 --- *)
+(* \:65e7 install-claude-directives.wl \:306f\:4e0d\:8981 *)
 
 iRunInstallClaudeDirectives[] := Null;
 
@@ -11350,27 +11627,27 @@ Your job:\n\
 7. NEVER output meta-commentary such as 'The rule already exists', 'No change needed', or any explanation about your decision. Output ONLY the directive text itself.\n\
 8. If an equivalent rule already exists, output a refined/improved version that replaces or extends it.\n\n";
 
-(* --- ディレクティブ書き込みガード ---
-   iSafeWriteDirective: ドキュメントの iSafeWriteDoc と同様、
-   サイズ退行・内容置換を検出してファイル破損を防止する。
+(* --- \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:66f8\:304d\:8fbc\:307f\:30ac\:30fc\:30c9 ---
+   iSafeWriteDirective: \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306e iSafeWriteDoc \:3068\:540c\:69d8\:3001
+   \:30b5\:30a4\:30ba\:9000\:884c\:30fb\:5185\:5bb9\:7f6e\:63db\:3092\:691c\:51fa\:3057\:3066\:30d5\:30a1\:30a4\:30eb\:7834\:640d\:3092\:9632\:6b62\:3059\:308b\:3002
    
-   検証項目:
-   1. サイズ退行: 既存の 40% 未満に縮小 → 拒否
-   2. タイトル保持: CLAUDE.md の先頭 # タイトルが変わっていたら → 拒否
-   3. SKILL.md のスキル名保持: name: 行が消滅 → 拒否
+   \:691c\:8a3c\:9805\:76ee:
+   1. \:30b5\:30a4\:30ba\:9000\:884c: \:65e2\:5b58\:306e 40% \:672a\:6e80\:306b\:7e2e\:5c0f \[RightArrow] \:62d2\:5426
+   2. \:30bf\:30a4\:30c8\:30eb\:4fdd\:6301: CLAUDE.md \:306e\:5148\:982d # \:30bf\:30a4\:30c8\:30eb\:304c\:5909\:308f\:3063\:3066\:3044\:305f\:3089 \[RightArrow] \:62d2\:5426
+   3. SKILL.md \:306e\:30b9\:30ad\:30eb\:540d\:4fdd\:6301: name: \:884c\:304c\:6d88\:6ec5 \[RightArrow] \:62d2\:5426
    
-   action が "append" の場合は既存に追記するだけなのでガード不要。
-   Return: True (書き込み成功) / $Failed (拒否) *)
+   action \:304c "append" \:306e\:5834\:5408\:306f\:65e2\:5b58\:306b\:8ffd\:8a18\:3059\:308b\:3060\:3051\:306a\:306e\:3067\:30ac\:30fc\:30c9\:4e0d\:8981\:3002
+   Return: True (\:66f8\:304d\:8fbc\:307f\:6210\:529f) / $Failed (\:62d2\:5426) *)
 iSafeWriteDirective[fullPath_String, content_String, action_String:"replace"] :=
   Module[{existing, existingLen, newLen, fileName, existingTitle, newTitle,
           existingSkillName, newSkillName},
     fileName = FileNameTake[fullPath];
-    (* append の場合はそのまま書き込み *)
+    (* append \:306e\:5834\:5408\:306f\:305d\:306e\:307e\:307e\:66f8\:304d\:8fbc\:307f *)
     If[action === "append" && FileExistsQ[fullPath],
       Module[{old = Import[fullPath, "Text"]},
         Export[fullPath, old <> "\n" <> content, "Text"]];
       Return[True]];
-    (* === ガード1: サイズ退行チェック === *)
+    (* === \:30ac\:30fc\:30c91: \:30b5\:30a4\:30ba\:9000\:884c\:30c1\:30a7\:30c3\:30af === *)
     If[FileExistsQ[fullPath],
       existing = Quiet @ Check[Import[fullPath, "Text"], ""];
       If[StringQ[existing] && StringLength[existing] > 100,
@@ -11378,10 +11655,10 @@ iSafeWriteDirective[fullPath_String, content_String, action_String:"replace"] :=
         newLen = StringLength[StringTrim[content]];
         If[newLen < existingLen * 0.4,
           Print["  \:26a0 iSafeWriteDirective: \:30b5\:30a4\:30ba\:9000\:884c\:3092\:691c\:51fa (" <> fileName <> "): " <>
-            ToString[existingLen] <> " \:2192 " <> ToString[newLen] <>
+            ToString[existingLen] <> " \[RightArrow] " <> ToString[newLen] <>
             " \:6587\:5b57 (" <> ToString[Round[100. newLen / existingLen]] <> "%)\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
           Return[$Failed]]]];
-    (* === ガード2: CLAUDE.md タイトル整合性 === *)
+    (* === \:30ac\:30fc\:30c92: CLAUDE.md \:30bf\:30a4\:30c8\:30eb\:6574\:5408\:6027 === *)
     If[fileName === "CLAUDE.md" && FileExistsQ[fullPath],
       existing = Quiet @ Check[Import[fullPath, "Text"], ""];
       If[StringQ[existing],
@@ -11391,9 +11668,9 @@ iSafeWriteDirective[fullPath_String, content_String, action_String:"replace"] :=
            StringQ[newTitle] && StringLength[newTitle] > 0 &&
            ToLowerCase[existingTitle] =!= ToLowerCase[newTitle],
           Print["  \:26a0 iSafeWriteDirective: CLAUDE.md \:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408: \"" <>
-            existingTitle <> "\" \:2192 \"" <> newTitle <> "\"\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
+            existingTitle <> "\" \[RightArrow] \"" <> newTitle <> "\"\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
           Return[$Failed]]]];
-    (* === ガード3: SKILL.md のスキル名保持 === *)
+    (* === \:30ac\:30fc\:30c93: SKILL.md \:306e\:30b9\:30ad\:30eb\:540d\:4fdd\:6301 === *)
     If[fileName === "SKILL.md" && FileExistsQ[fullPath],
       existing = Quiet @ Check[Import[fullPath, "Text"], ""];
       If[StringQ[existing],
@@ -11405,14 +11682,14 @@ iSafeWriteDirective[fullPath_String, content_String, action_String:"replace"] :=
            StringLength[newSkillName] > 0 &&
            StringTrim[existingSkillName] =!= StringTrim[newSkillName],
           Print["  \:26a0 iSafeWriteDirective: SKILL.md \:540d\:524d\:4e0d\:6574\:5408: \"" <>
-            existingSkillName <> "\" \:2192 \"" <> newSkillName <> "\"\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
+            existingSkillName <> "\" \[RightArrow] \"" <> newSkillName <> "\"\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
           Return[$Failed]]]];
-    (* すべてのガードを通過 → 書き込み *)
+    (* \:3059\:3079\:3066\:306e\:30ac\:30fc\:30c9\:3092\:901a\:904e \[RightArrow] \:66f8\:304d\:8fbc\:307f *)
     Export[fullPath, content, "Text"];
     True
   ];
 
-(* --- メイン関数 --- *)
+(* --- \:30e1\:30a4\:30f3\:95a2\:6570 --- *)
 
 ClaudeAddDirective::nosrc = "Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002";
 ClaudeAddDirective::nofile = "\:30bf\:30fc\:30b2\:30c3\:30c8\:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: `1`";
@@ -11449,9 +11726,9 @@ ClaudeAddDirective[target_String, description_String, OptionsPattern[]] :=
       Print[refined]; Return[$Failed]];
 
     (* \:78ba\:8a8d\:8868\:793a *)
-    Print["\n\:2500\:2500\:2500 \:8ffd\:52a0\:3059\:308b\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6 (" <> target <> ") \:2500\:2500\:2500"];
+    Print["\n\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:8ffd\:52a0\:3059\:308b\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6 (" <> target <> ") \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]"];
     Print[refined];
-    Print["\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500\:2500"];
+    Print["\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]"];
 
     If[dryRunQ,
       Print[iL["[DryRun] \:30d5\:30a1\:30a4\:30eb\:306f\:5909\:66f4\:3055\:308c\:307e\:305b\:3093\:3002", "[DryRun] No files changed."]];
@@ -11481,7 +11758,7 @@ ClaudeAddDirective[target_String, description_String, OptionsPattern[]] :=
     ];
     Print[iL["[OK] \:30d5\:30a1\:30a4\:30eb\:3092\:66f4\:65b0: ", "[OK] File updated: "] <> filePath];
 
-    (* 6. ディレクティブを $ClaudeWorkingDirectory へコピー *)
+    (* 6. \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092 $ClaudeWorkingDirectory \:3078\:30b3\:30d4\:30fc *)
     Print[iL["[Install] ClaudeUpdateDirective[] \:3092\:5b9f\:884c\:4e2d...", "[Install] Running ClaudeUpdateDirective[]..."]];
     installResult = iRunInstallClaudeDirectives[];
 
@@ -11506,9 +11783,9 @@ ClaudeRestoreDirective[target_String] :=
 
     (* \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:5fa9\:5143 *)
     CopyFile[backupFile, filePath, OverwriteTarget -> True];
-    Print["[OK] \:5fa9\:5143\:3057\:307e\:3057\:305f: " <> backupFile <> "\n\:2192 " <> filePath];
+    Print["[OK] \:5fa9\:5143\:3057\:307e\:3057\:305f: " <> backupFile <> "\n\[RightArrow] " <> filePath];
 
-    (* ディレクティブを $ClaudeWorkingDirectory へコピー *)
+    (* \:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:3092 $ClaudeWorkingDirectory \:3078\:30b3\:30d4\:30fc *)
     Print[iL["[Install] ClaudeUpdateDirective[] \:3092\:5b9f\:884c\:4e2d...", "[Install] Running ClaudeUpdateDirective[]..."]];
     installResult = iRunInstallClaudeDirectives[];
 
@@ -11565,16 +11842,16 @@ ClaudeListDirectives[] :=
   ];
 
 (* ============================================================
-   ClaudeSyncDirectives: 外部ディレクトリから Claude Directives への同期
-   dir 側の方が新しいファイル、または dir にだけ存在するファイルをコピーする。
-   Claude Directives 側にしかないファイルは何もしない。
+   ClaudeSyncDirectives: \:5916\:90e8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304b\:3089 Claude Directives \:3078\:306e\:540c\:671f
+   dir \:5074\:306e\:65b9\:304c\:65b0\:3057\:3044\:30d5\:30a1\:30a4\:30eb\:3001\:307e\:305f\:306f dir \:306b\:3060\:3051\:5b58\:5728\:3059\:308b\:30d5\:30a1\:30a4\:30eb\:3092\:30b3\:30d4\:30fc\:3059\:308b\:3002
+   Claude Directives \:5074\:306b\:3057\:304b\:306a\:3044\:30d5\:30a1\:30a4\:30eb\:306f\:4f55\:3082\:3057\:306a\:3044\:3002
    ============================================================ *)
 
 ClaudeSyncDirectives[dir_String] :=
   With[{nb = Quiet[EvaluationNotebook[]]},
   Module[{srcDir, dirNorm, dirFiles, relPaths, copied = {}, skipped = 0,
           dirPath, dstPath, dstDir, workDir, dotClaude, dotPath, dotDir},
-    (* Claude Directives ソースフォルダを取得 *)
+    (* Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:3092\:53d6\:5f97 *)
     srcDir = iDirectivesSourceDir[];
     If[srcDir === $Failed,
       nbPrint[nb, iL["\:26a0 Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002", "\:26a0 Claude Directives source folder not found."]];
@@ -11582,12 +11859,12 @@ ClaudeSyncDirectives[dir_String] :=
     If[!DirectoryQ[dir],
       nbPrint[nb, "\:26a0 \:6307\:5b9a\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093: " <> dir];
       Return[$Failed]];
-    (* dir を正規化 (末尾セパレータ等を統一) *)
+    (* dir \:3092\:6b63\:898f\:5316 (\:672b\:5c3e\:30bb\:30d1\:30ec\:30fc\:30bf\:7b49\:3092\:7d71\:4e00) *)
     dirNorm = FileNameJoin[FileNameSplit[dir]];
-    (* dir 内の全ファイルを再帰取得し、相対パスを計算 *)
+    (* dir \:5185\:306e\:5168\:30d5\:30a1\:30a4\:30eb\:3092\:518d\:5e30\:53d6\:5f97\:3057\:3001\:76f8\:5bfe\:30d1\:30b9\:3092\:8a08\:7b97 *)
     dirFiles = FileNames["*", dirNorm, Infinity];
     dirFiles = Select[dirFiles, !DirectoryQ[#] &];
-    (* .directive-backups や隠しフォルダは除外 *)
+    (* .directive-backups \:3084\:96a0\:3057\:30d5\:30a9\:30eb\:30c0\:306f\:9664\:5916 *)
     dirFiles = Select[dirFiles,
       !MemberQ[FileNameSplit[#], s_String /; (StringStartsQ[s, "."] || s === ".directive-backups")] &];
     relPaths = iRelativePath[#, dirNorm] & /@ dirFiles;
@@ -11599,7 +11876,7 @@ ClaudeSyncDirectives[dir_String] :=
     nbPrint[nb, "  \:691c\:67fb\:5bfe\:8c61: " <> ToString[Length[relPaths]] <> " \:30d5\:30a1\:30a4\:30eb" <>
       " | \:30b3\:30d4\:30fc\:5148\:65e2\:5b58: " <> ToString[Length[Select[FileNames["*", srcDir, Infinity], !DirectoryQ[#] &]]] <> " \:30d5\:30a1\:30a4\:30eb"];
 
-    (* 作業ディレクトリの .claude にもコピーするための準備 *)
+    (* \:4f5c\:696d\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306e .claude \:306b\:3082\:30b3\:30d4\:30fc\:3059\:308b\:305f\:3081\:306e\:6e96\:5099 *)
     workDir = iEnsureClaudeWorkingDirectory[];
     dotClaude = FileNameJoin[{workDir, ".claude"}];
 
@@ -11607,24 +11884,24 @@ ClaudeSyncDirectives[dir_String] :=
       dirPath = FileNameJoin[Flatten[{dirNorm, FileNameSplit[rel]}]];
       dstPath = FileNameJoin[Flatten[{srcDir, FileNameSplit[rel]}]];
       If[FileExistsQ[dstPath],
-        (* 両方に存在: ファイル内容を比較 (日時はOS/コピー操作で信頼できない) *)
+        (* \:4e21\:65b9\:306b\:5b58\:5728: \:30d5\:30a1\:30a4\:30eb\:5185\:5bb9\:3092\:6bd4\:8f03 (\:65e5\:6642\:306fOS/\:30b3\:30d4\:30fc\:64cd\:4f5c\:3067\:4fe1\:983c\:3067\:304d\:306a\:3044) *)
         If[FileHash[dirPath, "SHA256"] =!= FileHash[dstPath, "SHA256"],
-          (* 内容が異なる: コピー *)
+          (* \:5185\:5bb9\:304c\:7570\:306a\:308b: \:30b3\:30d4\:30fc *)
           dstDir = DirectoryName[dstPath];
           If[!DirectoryQ[dstDir],
             Quiet @ CreateDirectory[dstDir, CreateIntermediateDirectories -> True]];
           Quiet @ CopyFile[dirPath, dstPath, OverwriteTarget -> True];
           AppendTo[copied, rel <> " (\:66f4\:65b0)"],
-          (* 内容が同一: スキップ *)
+          (* \:5185\:5bb9\:304c\:540c\:4e00: \:30b9\:30ad\:30c3\:30d7 *)
           skipped++],
-        (* dir にだけ存在: 新規コピー *)
+        (* dir \:306b\:3060\:3051\:5b58\:5728: \:65b0\:898f\:30b3\:30d4\:30fc *)
         dstDir = DirectoryName[dstPath];
         If[!DirectoryQ[dstDir],
           Quiet @ CreateDirectory[dstDir, CreateIntermediateDirectories -> True]];
         Quiet @ CopyFile[dirPath, dstPath];
         AppendTo[copied, rel <> " (\:65b0\:898f)"]
       ];
-      (* .claude にもコピー *)
+      (* .claude \:306b\:3082\:30b3\:30d4\:30fc *)
       If[MemberQ[copied, rel <> " (\:66f4\:65b0)"] || MemberQ[copied, rel <> " (\:65b0\:898f)"],
         dotPath = FileNameJoin[Flatten[{dotClaude, FileNameSplit[rel]}]];
         dotDir = DirectoryName[dotPath];
@@ -11633,18 +11910,18 @@ ClaudeSyncDirectives[dir_String] :=
         Quiet @ CopyFile[dirPath, dotPath, OverwriteTarget -> True]],
       {rel, relPaths}];
 
-    (* 結果表示 *)
+    (* \:7d50\:679c\:8868\:793a *)
     If[Length[copied] > 0,
       iLoadClaudeMD[];
       nbPrint[nb, "\:2705 \:30b3\:30d4\:30fc\:3057\:305f\:30d5\:30a1\:30a4\:30eb (" <> ToString[Length[copied]] <> " \:4ef6):"];
-      Do[nbPrint[nb, "  \:2022 " <> f], {f, copied}],
+      Do[nbPrint[nb, "  \[Bullet] " <> f], {f, copied}],
       nbPrint[nb, "\:2705 \:66f4\:65b0\:304c\:5fc5\:8981\:306a\:30d5\:30a1\:30a4\:30eb\:306f\:3042\:308a\:307e\:305b\:3093\:3067\:3057\:305f\:3002"]];
     If[skipped > 0,
-      nbPrint[nb, "  (\:30b9\:30ad\:30c3\:30d7: " <> ToString[skipped] <> " \:30d5\:30a1\:30a4\:30eb \:2014 \:5185\:5bb9\:540c\:4e00)"]];
+      nbPrint[nb, "  (\:30b9\:30ad\:30c3\:30d7: " <> ToString[skipped] <> " \:30d5\:30a1\:30a4\:30eb \[LongDash] \:5185\:5bb9\:540c\:4e00)"]];
     copied
   ]];
 
-(* Claude Directives ソースから作業ディレクトリへ全ファイルをコピーする *)
+(* Claude Directives \:30bd\:30fc\:30b9\:304b\:3089\:4f5c\:696d\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3078\:5168\:30d5\:30a1\:30a4\:30eb\:3092\:30b3\:30d4\:30fc\:3059\:308b *)
 ClaudeUpdateDirective[] :=
   Module[{srcDir, nb},
     nb = Quiet[InputNotebook[]];
@@ -11653,23 +11930,23 @@ ClaudeUpdateDirective[] :=
       nbPrint[nb, iL["\:26a0 Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002", "\:26a0 Claude Directives source folder not found."]];
       Return[$Failed]];
     iLoadClaudeMD[];
-    (* セクションヘッダーを入力セルの直前に挿入 *)
+    (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
-      "\:25b6 ClaudeUpdateDirective (" <>
+      "\[FilledRightTriangle] ClaudeUpdateDirective (" <>
       DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
     nbPrint[nb, "[ClaudeUpdateDirective] \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3068\:306e\:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af\:3092\:958b\:59cb..."];
     iCheckAndFixDirectiveConsistency[nb, srcDir]
   ];
 
-(* ソースコードとディレクティブの整合性チェック・自動修正
-   基盤パッケージ (claudecode.wl, github.wl, NBAccess.wl) の公開関数・オプションを
-   ソースコードから抽出し、CLAUDE.md/rules/skills との不整合を Claude に修正させる。 *)
+(* \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3068\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:306e\:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af\:30fb\:81ea\:52d5\:4fee\:6b63
+   \:57fa\:76e4\:30d1\:30c3\:30b1\:30fc\:30b8 (claudecode.wl, github.wl, NBAccess.wl) \:306e\:516c\:958b\:95a2\:6570\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:3092
+   \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:304b\:3089\:62bd\:51fa\:3057\:3001CLAUDE.md/rules/skills \:3068\:306e\:4e0d\:6574\:5408\:3092 Claude \:306b\:4fee\:6b63\:3055\:305b\:308b\:3002 *)
 iCheckAndFixDirectiveConsistency[nb_NotebookObject, srcDir_String] :=
   Module[{pkgDir, sourceFiles, sourceSummaries, directiveContents,
           allFiles, prompt, response, parsed, files, path, action, content,
           fullPath, dir, updated = 0, workDir, dotClaude},
     pkgDir = Global`$packageDirectory;
-    (* 基盤パッケージのソースから公開関数・オプションを抽出 *)
+    (* \:57fa\:76e4\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30bd\:30fc\:30b9\:304b\:3089\:516c\:958b\:95a2\:6570\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:62bd\:51fa *)
     sourceFiles = {
       {"claudecode", FileNameJoin[{pkgDir, "claudecode.wl"}]},
       {"github", FileNameJoin[{pkgDir, "github.wl"}]},
@@ -11681,10 +11958,10 @@ iCheckAndFixDirectiveConsistency[nb_NotebookObject, srcDir_String] :=
           If[!FileExistsQ[file], "",
             code = Quiet @ Import[file, "Text"];
             If[!StringQ[code], "",
-              (* usage 宣言から公開関数名を抽出 *)
+              (* usage \:5ba3\:8a00\:304b\:3089\:516c\:958b\:95a2\:6570\:540d\:3092\:62bd\:51fa *)
               usages = StringCases[code,
                 RegularExpression["(\\w+)::usage\\s*="] :> "$1"];
-              (* Options 宣言を抽出 *)
+              (* Options \:5ba3\:8a00\:3092\:62bd\:51fa *)
               opts = StringCases[code,
                 RegularExpression["Options\\[(\\w+)\\]\\s*=\\s*\\{([^}]+)\\}"] :>
                   {"$1", "$2"}];
@@ -11696,7 +11973,7 @@ iCheckAndFixDirectiveConsistency[nb_NotebookObject, srcDir_String] :=
     If[StringLength[sourceSummaries] < 50,
       nbPrint[nb, "  \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3059\:3002"];
       Return[]];
-    (* 現在のディレクティブ内容を収集 *)
+    (* \:73fe\:5728\:306e\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:5185\:5bb9\:3092\:53ce\:96c6 *)
     allFiles = Join[
       If[FileExistsQ[FileNameJoin[{srcDir, "CLAUDE.md"}]],
         {{"CLAUDE.md", Import[FileNameJoin[{srcDir, "CLAUDE.md"}], "Text"]}}, {}],
@@ -11707,7 +11984,7 @@ iCheckAndFixDirectiveConsistency[nb_NotebookObject, srcDir_String] :=
     ];
     directiveContents = StringJoin[
       ("--- " <> #[[1]] <> " ---\n" <> #[[2]] <> "\n\n") & /@ allFiles];
-    (* Claude に不整合を検出・修正させる *)
+    (* Claude \:306b\:4e0d\:6574\:5408\:3092\:691c\:51fa\:30fb\:4fee\:6b63\:3055\:305b\:308b *)
     prompt = $directiveUpdatePrompt <>
       "INSTRUCTION:\n" <>
       "Check the consistency between the source code public API and the directive files.\n" <>
@@ -11726,15 +12003,15 @@ iCheckAndFixDirectiveConsistency[nb_NotebookObject, srcDir_String] :=
     If[iIsAPIErrorResponse[response],
       nbPrint[nb, "  \:26a0 API \:30a8\:30e9\:30fc\:306e\:305f\:3081\:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3057\:305f\:3002"];
       Return[]];
-    (* デリミタ形式パース *)
+    (* \:30c7\:30ea\:30df\:30bf\:5f62\:5f0f\:30d1\:30fc\:30b9 *)
     If[StringContainsQ[response, "NO_CHANGES_NEEDED"],
-      nbPrint[nb, iL["  \:2713 \:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af\:5b8c\:4e86: \:4e0d\:6574\:5408\:306a\:3057\:3002", "  \:2713 Consistency check passed."]];
+      nbPrint[nb, iL["  \[Checkmark] \:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af\:5b8c\:4e86: \:4e0d\:6574\:5408\:306a\:3057\:3002", "  \[Checkmark] Consistency check passed."]];
       Return[]];
     files = iParseDelimitedFileBlocks[response];
     If[Length[files] === 0,
       nbPrint[nb, iL["  \:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af\:5b8c\:4e86: \:4e0d\:6574\:5408\:306a\:3057\:3002", "  Consistency check passed."]];
       Return[]];
-    (* 修正を適用 *)
+    (* \:4fee\:6b63\:3092\:9069\:7528 *)
     workDir = iEnsureClaudeWorkingDirectory[];
     dotClaude = FileNameJoin[{workDir, ".claude"}];
     Do[
@@ -11742,17 +12019,17 @@ iCheckAndFixDirectiveConsistency[nb_NotebookObject, srcDir_String] :=
       action = Lookup[f, "action", "replace"];
       content = Lookup[f, "content", ""];
       If[path === "" || content === "", Continue[]];
-      (* ソースディレクトリに書き込み *)
+      (* \:30bd\:30fc\:30b9\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306b\:66f8\:304d\:8fbc\:307f *)
       fullPath = FileNameJoin[{srcDir, path}];
       dir = DirectoryName[fullPath];
       If[!DirectoryQ[dir],
         Quiet @ CreateDirectory[dir, CreateIntermediateDirectories -> True]];
-      (* ガード付き書き込み (append/replace 両対応) *)
+      (* \:30ac\:30fc\:30c9\:4ed8\:304d\:66f8\:304d\:8fbc\:307f (append/replace \:4e21\:5bfe\:5fdc) *)
       If[iSafeWriteDirective[fullPath, content, action] === $Failed,
         nbPrint[nb, iL["  \:2717 \:30ac\:30fc\:30c9\:306b\:3088\:308a\:66f8\:304d\:8fbc\:307f\:62d2\:5426: ", "  \:2717 Write rejected by guard: "] <> path];
         Continue[]];
-      nbPrint[nb, "  \:2713 \:4fee\:6b63: " <> path];
-      (* .claude にもコピー *)
+      nbPrint[nb, "  \[Checkmark] \:4fee\:6b63: " <> path];
+      (* .claude \:306b\:3082\:30b3\:30d4\:30fc *)
       Module[{dotPath = FileNameJoin[{dotClaude, path}], dotDir},
         dotDir = DirectoryName[dotPath];
         If[!DirectoryQ[dotDir],
@@ -11765,9 +12042,9 @@ iCheckAndFixDirectiveConsistency[nb_NotebookObject, srcDir_String] :=
       nbPrint[nb, "  \:6574\:5408\:6027\:4fee\:6b63\:5b8c\:4e86: " <> ToString[updated] <> " \:30d5\:30a1\:30a4\:30eb\:3092\:66f4\:65b0\:3057\:307e\:3057\:305f\:3002"]]
   ];
 
-(* テキスト指示によるディレクティブ更新 *)
+(* \:30c6\:30ad\:30b9\:30c8\:6307\:793a\:306b\:3088\:308b\:30c7\:30a3\:30ec\:30af\:30c6\:30a3\:30d6\:66f4\:65b0 *)
 
-(* JSON 文字列値の中の生改行/タブだけをエスケープする (構造的改行はそのまま) *)
+(* JSON \:6587\:5b57\:5217\:5024\:306e\:4e2d\:306e\:751f\:6539\:884c/\:30bf\:30d6\:3060\:3051\:3092\:30a8\:30b9\:30b1\:30fc\:30d7\:3059\:308b (\:69cb\:9020\:7684\:6539\:884c\:306f\:305d\:306e\:307e\:307e) *)
 iRepairJSONStringLiterals[json_String] :=
   Module[{chars, n, result, inStr = False, i, ch, prev = ""},
     chars = Characters[json];
@@ -11788,7 +12065,7 @@ iRepairJSONStringLiterals[json_String] :=
     StringJoin[Internal`BagPart[result, All]]
   ];
 
-(* デリミタ形式のファイルブロックをパースする *)
+(* \:30c7\:30ea\:30df\:30bf\:5f62\:5f0f\:306e\:30d5\:30a1\:30a4\:30eb\:30d6\:30ed\:30c3\:30af\:3092\:30d1\:30fc\:30b9\:3059\:308b *)
 (* <<<FILE: path>>> / <<<ACTION: action>>> / content / <<<END_FILE>>> *)
 iParseDelimitedFileBlocks[response_String] :=
   Module[{blocks, result = {}, i, block, lines, pathVal, actionVal,
@@ -11816,7 +12093,7 @@ iParseDelimitedFileBlocks[response_String] :=
           contentLines = If[headersDone < Length[lines],
             lines[[headersDone + 1 ;;]],
             {}];
-          (* 先頭末尾の空行を除去 *)
+          (* \:5148\:982d\:672b\:5c3e\:306e\:7a7a\:884c\:3092\:9664\:53bb *)
           While[Length[contentLines] > 0 && StringTrim[First[contentLines]] === "",
             contentLines = Rest[contentLines]];
           While[Length[contentLines] > 0 && StringTrim[Last[contentLines]] === "",
@@ -11862,19 +12139,19 @@ ClaudeUpdateDirective[text_String] :=
       nbPrint[nb, iL["\:26a0 Claude Directives \:30bd\:30fc\:30b9\:30d5\:30a9\:30eb\:30c0\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002", "\:26a0 Claude Directives source folder not found."]];
       Return[$Failed]];
 
-    (* セクションヘッダーを入力セルの直前に挿入 *)
+    (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
-      "\:25b6 ClaudeUpdateDirective (" <>
+      "\[FilledRightTriangle] ClaudeUpdateDirective (" <>
       DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
 
-    (* ノートブックコンテキストを取得して指示に付加 *)
+    (* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3092\:53d6\:5f97\:3057\:3066\:6307\:793a\:306b\:4ed8\:52a0 *)
     nbCtx = Quiet @ Check[iCaptureNotebookContext[nb, 0], ""];
     enrichedText = If[StringQ[nbCtx] && StringLength[nbCtx] > 0,
-      text <> "\n\n=== ノートブックコンテキスト（上での議論）===\n" <>
+      text <> "\n\n=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:ff08\:4e0a\:3067\:306e\:8b70\:8ad6\:ff09===\n" <>
       StringTake[nbCtx, UpTo[8000]] <> "\n",
       text];
 
-    (* 現在の全ファイル内容を収集 *)
+    (* \:73fe\:5728\:306e\:5168\:30d5\:30a1\:30a4\:30eb\:5185\:5bb9\:3092\:53ce\:96c6 *)
     allFiles = Join[
       If[FileExistsQ[FileNameJoin[{srcDir, "README.md"}]],
         {FileNameJoin[{srcDir, "README.md"}]}, {}],
@@ -11893,9 +12170,9 @@ ClaudeUpdateDirective[text_String] :=
       "=== USER INSTRUCTION ===\n" <> enrichedText <> "\n\n" <>
       "=== CURRENT FILES ===\n" <> fileContents;
 
-    nbPrint[nb, "[ClaudeUpdateDirective] Claude \:3067\:6307\:793a\:3092\:89e3\:6790\:4e2d\:2026"];
+    nbPrint[nb, "[ClaudeUpdateDirective] Claude \:3067\:6307\:793a\:3092\:89e3\:6790\:4e2d\[Ellipsis]"];
 
-    (* API 経由で解析 *)
+    (* API \:7d4c\:7531\:3067\:89e3\:6790 *)
     response = Module[{apiKey, provider = "anthropic",
         model = $iModelSonnet},
       apiKey = Quiet[NBAccess`NBGetAPIKey[provider,
@@ -11908,7 +12185,7 @@ ClaudeUpdateDirective[text_String] :=
       nbPrint[nb, iL["\:26a0 Claude API \:5fdc\:7b54\:306e\:53d6\:5f97\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002", "\:26a0 Failed to get Claude API response."]];
       Return[$Failed]];
 
-    (* デリミタ形式をパース *)
+    (* \:30c7\:30ea\:30df\:30bf\:5f62\:5f0f\:3092\:30d1\:30fc\:30b9 *)
     files = iParseDelimitedFileBlocks[response];
     If[!ListQ[files] || Length[files] === 0,
       nbPrint[nb, iL["\:26a0 \:5fdc\:7b54\:306e\:30d1\:30fc\:30b9\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002", "\:26a0 Failed to parse response."]];
@@ -11926,7 +12203,7 @@ ClaudeUpdateDirective[text_String] :=
       If[StringQ[histDir],
         nbPrint[nb, iL["\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Backup: "] <> histDir]]];
 
-    (* ファイルを書き込み *)
+    (* \:30d5\:30a1\:30a4\:30eb\:3092\:66f8\:304d\:8fbc\:307f *)
     Do[
       path    = Lookup[fe, "path", ""];
       action  = Lookup[fe, "action", "replace"];
@@ -11936,7 +12213,7 @@ ClaudeUpdateDirective[text_String] :=
       dir = DirectoryName[fullPath];
       If[!DirectoryQ[dir],
         CreateDirectory[dir, CreateIntermediateDirectories -> True]];
-      (* ガード付き書き込み *)
+      (* \:30ac\:30fc\:30c9\:4ed8\:304d\:66f8\:304d\:8fbc\:307f *)
       If[iSafeWriteDirective[fullPath, content, action] === $Failed,
         nbPrint[nb, iL["  \:2717 \:30ac\:30fc\:30c9\:306b\:3088\:308a\:66f8\:304d\:8fbc\:307f\:62d2\:5426: ", "  \:2717 Write rejected by guard: "] <> path];
         Continue[]];
@@ -12029,7 +12306,7 @@ ClaudeRestoreSession[name_String] := Module[{nb, tag, hdr, hist, parentTag},
    \:30bb\:30c3\:30b7\:30e7\:30f3\:4e00\:89a7\:30fb\:524a\:9664\:30fb\:5c65\:6b74\:8868\:793a
    ============================================================ *)
 
-(* TaggingRules から "history" で始まるキーを全取得 → NBAccess 履歴DB経由 *)
+(* TaggingRules \:304b\:3089 "history" \:3067\:59cb\:307e\:308b\:30ad\:30fc\:3092\:5168\:53d6\:5f97 \[RightArrow] NBAccess \:5c65\:6b74DB\:7d4c\:7531 *)
 iAllSessionTags[nb_NotebookObject] :=
   NBAccess`NBHistoryListTags[nb, "history"];
 
@@ -12101,78 +12378,126 @@ ClaudeShowHistory[name_String] := Module[{nb, tag},
 ];
 
 (* ============================================================
-   セッションアタッチメント API
-   セッションに参考資料ファイルをアタッチし、
-   ClaudeQuery/ClaudeEval 時に自動的に Read 指示を注入する。
+   \:30bb\:30c3\:30b7\:30e7\:30f3\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8 API
+   \:30bb\:30c3\:30b7\:30e7\:30f3\:306b\:53c2\:8003\:8cc7\:6599\:30d5\:30a1\:30a4\:30eb\:3092\:30a2\:30bf\:30c3\:30c1\:3057\:3001
+   ClaudeQuery/ClaudeEval \:6642\:306b\:81ea\:52d5\:7684\:306b Read \:6307\:793a\:3092\:6ce8\:5165\:3059\:308b\:3002
    ============================================================ *)
 
 ClaudeAttach::notfound = "\:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: `1`";
 
-(* デフォルトセッションにアタッチ *)
-ClaudeAttach[path_String] := Module[{nb, tag, norm, atts},
+(* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306b\:30a2\:30bf\:30c3\:30c1 *)
+(* === \:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:30ad\:30e3\:30c3\:30b7\:30e5 ===
+   ClaudeAttach \:3067\:6dfb\:4ed8\:3055\:308c\:305f\:30d5\:30a1\:30a4\:30eb\:3092 $packageDirectory/claude_attachments/ \:306b\:30b3\:30d4\:30fc\:3059\:308b\:3002
+   \:3053\:308c\:306b\:3088\:308a Claude Code CLI \:304c\:30d5\:30a1\:30a4\:30eb\:306b\:30a2\:30af\:30bb\:30b9\:3067\:304d\:308b\:3088\:3046\:306b\:306a\:308b\:3002
+   $packageDirectory \:306f $ClaudeAccessibleDirs \:306b\:65e2\:306b\:542b\:307e\:308c\:3066\:3044\:308b\:3002
+   \:30d5\:30a1\:30a4\:30eb\:540d: \:5143\:30d5\:30a1\:30a4\:30eb\:540d.\:30cf\:30c3\:30b7\:30e58\:6841.\:62e1\:5f35\:5b50 *)
+
+iAttachmentCacheDir[] := Module[{dir},
+  dir = FileNameJoin[{Global`$packageDirectory, "claude_attachments"}];
+  If[!DirectoryQ[dir], Quiet[CreateDirectory[dir]]];
+  dir
+];
+
+iCacheAttachment[origPath_String] := Module[{dir, ext, base, hashStr, cachedName, cachedPath},
+  dir = iAttachmentCacheDir[];
+  ext = FileExtension[origPath];
+  base = FileBaseName[origPath];
+  hashStr = IntegerString[Hash[origPath, "SHA256"], 16, 8];
+  cachedName = base <> "." <> hashStr <> If[ext =!= "", "." <> ext, ""];
+  cachedPath = FileNameJoin[{dir, cachedName}];
+  (* \:65e2\:306b\:30ad\:30e3\:30c3\:30b7\:30e5\:6e08\:307f\:306a\:3089\:4e0a\:66f8\:304d\:30b3\:30d4\:30fc\:ff08\:5143\:30d5\:30a1\:30a4\:30eb\:304c\:66f4\:65b0\:3055\:308c\:3066\:3044\:308b\:53ef\:80fd\:6027\:ff09 *)
+  Quiet[CopyFile[origPath, cachedPath, OverwriteTarget -> True]];
+  If[FileExistsQ[cachedPath], cachedPath, origPath]
+];
+
+ClaudeAttach[path_String] := Module[{nb, tag, norm, cached, atts},
   nb = EvaluationNotebook[];
   tag = iSessionTag[];
   norm = ExpandFileName[path];
   If[!FileExistsQ[norm],
     Message[ClaudeAttach::notfound, norm]; Return[$Failed]];
-  atts = NBAccess`NBHistoryAddAttachment[nb, tag, norm];
+  (* \:30ad\:30e3\:30c3\:30b7\:30e5: $packageDirectory \:914d\:4e0b\:306b\:30b3\:30d4\:30fc\:3057\:3066 CLI \:304c\:30a2\:30af\:30bb\:30b9\:53ef\:80fd\:306b\:3059\:308b *)
+  cached = iCacheAttachment[norm];
+  atts = NBAccess`NBHistoryAddAttachment[nb, tag, cached];
   Print[iL["\:30a2\:30bf\:30c3\:30c1: ", "Attached: "] <> FileNameTake[norm] <>
     "  (\:5408\:8a08 " <> ToString[Length[atts]] <> " \:30d5\:30a1\:30a4\:30eb)"];
   atts
 ];
 
-(* セッション指定でアタッチ *)
-ClaudeAttach[session_Association, path_String] := Module[{nb, tag, norm, atts},
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:6307\:5b9a\:3067\:30a2\:30bf\:30c3\:30c1 *)
+ClaudeAttach[session_Association, path_String] := Module[{nb, tag, norm, cached, atts},
   nb = session["Notebook"];
   tag = session["SessionTag"];
   norm = ExpandFileName[path];
   If[!FileExistsQ[norm],
     Message[ClaudeAttach::notfound, norm]; Return[$Failed]];
-  atts = NBAccess`NBHistoryAddAttachment[nb, tag, norm];
+  cached = iCacheAttachment[norm];
+  atts = NBAccess`NBHistoryAddAttachment[nb, tag, cached];
   Print[iL["\:30a2\:30bf\:30c3\:30c1: ", "Attached: "] <> FileNameTake[norm] <>
     "  (\:5408\:8a08 " <> ToString[Length[atts]] <> " \:30d5\:30a1\:30a4\:30eb)"];
   atts
 ];
 
-(* デフォルトセッションからデタッチ *)
-ClaudeDetach[path_String] := Module[{nb, tag, atts},
+(* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:304b\:3089\:30c7\:30bf\:30c3\:30c1 *)
+ClaudeDetach[path_String] := Module[{nb, tag, norm, cached, atts},
   nb = EvaluationNotebook[];
   tag = iSessionTag[];
-  atts = NBAccess`NBHistoryRemoveAttachment[nb, tag, ExpandFileName[path]];
+  norm = ExpandFileName[path];
+  (* \:30ad\:30e3\:30c3\:30b7\:30e5\:30d1\:30b9\:3067\:524a\:9664\:ff08\:30a2\:30bf\:30c3\:30c1\:6642\:306b\:30ad\:30e3\:30c3\:30b7\:30e5\:30d1\:30b9\:3067\:4fdd\:5b58\:3057\:3066\:3044\:308b\:305f\:3081\:ff09 *)
+  cached = Module[{dir, ext, base, hashStr},
+    dir = iAttachmentCacheDir[];
+    ext = FileExtension[norm]; base = FileBaseName[norm];
+    hashStr = IntegerString[Hash[norm, "SHA256"], 16, 8];
+    FileNameJoin[{dir, base <> "." <> hashStr <> If[ext =!= "", "." <> ext, ""]}]];
+  atts = NBAccess`NBHistoryRemoveAttachment[nb, tag, cached];
+  (* \:30ad\:30e3\:30c3\:30b7\:30e5\:30d5\:30a1\:30a4\:30eb\:3082\:524a\:9664 *)
+  If[FileExistsQ[cached], Quiet[DeleteFile[cached]]];
   Print[iL["\:30c7\:30bf\:30c3\:30c1: ", "Detached: "] <> FileNameTake[path] <>
     "  (\:6b8b\:308a " <> ToString[Length[atts]] <> " \:30d5\:30a1\:30a4\:30eb)"];
   atts
 ];
 
-(* セッション指定でデタッチ *)
-ClaudeDetach[session_Association, path_String] := Module[{nb, tag, atts},
+(* \:30bb\:30c3\:30b7\:30e7\:30f3\:6307\:5b9a\:3067\:30c7\:30bf\:30c3\:30c1 *)
+ClaudeDetach[session_Association, path_String] := Module[{nb, tag, norm, cached, atts},
   nb = session["Notebook"];
   tag = session["SessionTag"];
-  atts = NBAccess`NBHistoryRemoveAttachment[nb, tag, ExpandFileName[path]];
+  norm = ExpandFileName[path];
+  cached = Module[{dir, ext, base, hashStr},
+    dir = iAttachmentCacheDir[];
+    ext = FileExtension[norm]; base = FileBaseName[norm];
+    hashStr = IntegerString[Hash[norm, "SHA256"], 16, 8];
+    FileNameJoin[{dir, base <> "." <> hashStr <> If[ext =!= "", "." <> ext, ""]}]];
+  atts = NBAccess`NBHistoryRemoveAttachment[nb, tag, cached];
+  If[FileExistsQ[cached], Quiet[DeleteFile[cached]]];
   Print[iL["\:30c7\:30bf\:30c3\:30c1: ", "Detached: "] <> FileNameTake[path] <>
     "  (\:6b8b\:308a " <> ToString[Length[atts]] <> " \:30d5\:30a1\:30a4\:30eb)"];
   atts
 ];
 
-(* アタッチメント一覧 *)
+(* \:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:4e00\:89a7 *)
 ClaudeAttachments[] :=
   NBAccess`NBHistoryGetAttachments[EvaluationNotebook[], iSessionTag[]];
 
 ClaudeAttachments[session_Association] :=
   NBAccess`NBHistoryGetAttachments[session["Notebook"], session["SessionTag"]];
 
-(* 全クリア *)
+(* \:5168\:30af\:30ea\:30a2 *)
 ClearAttachments[] := (
+  (* \:30ad\:30e3\:30c3\:30b7\:30e5\:30d5\:30a1\:30a4\:30eb\:3092\:524a\:9664 *)
+  Module[{atts = NBAccess`NBHistoryGetAttachments[EvaluationNotebook[], iSessionTag[]]},
+    If[ListQ[atts], Scan[Function[f, If[FileExistsQ[f], Quiet[DeleteFile[f]]]], atts]]];
   NBAccess`NBHistoryClearAttachments[EvaluationNotebook[], iSessionTag[]];
   Print[iL["\:5168\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:3092\:30af\:30ea\:30a2\:3057\:307e\:3057\:305f\:3002", "All attachments cleared."]];
 );
 
 ClearAttachments[session_Association] := (
+  Module[{atts = NBAccess`NBHistoryGetAttachments[session["Notebook"], session["SessionTag"]]},
+    If[ListQ[atts], Scan[Function[f, If[FileExistsQ[f], Quiet[DeleteFile[f]]]], atts]]];
   NBAccess`NBHistoryClearAttachments[session["Notebook"], session["SessionTag"]];
   Print[iL["\:5168\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:3092\:30af\:30ea\:30a2\:3057\:307e\:3057\:305f\:3002", "All attachments cleared."]];
 );
 
-(* 履歴エントリの再出力: テキスト + コードセルをノートブックに書き込む *)
+(* \:5c65\:6b74\:30a8\:30f3\:30c8\:30ea\:306e\:518d\:51fa\:529b: \:30c6\:30ad\:30b9\:30c8 + \:30b3\:30fc\:30c9\:30bb\:30eb\:3092\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:66f8\:304d\:8fbc\:3080 *)
 iHistoryReplay[nb_NotebookObject, entry_Association] :=
   Module[{response, textOnly, blocks, step, task},
     step     = Lookup[entry, "step", "?"];
@@ -12187,7 +12512,7 @@ iHistoryReplay[nb_NotebookObject, entry_Association] :=
     blocks = iWriteResponseBlocks[nb, response, True];
   ];
 
-(* 履歴エントリの詳細表示: fullPrompt + response をすべて Print *)
+(* \:5c65\:6b74\:30a8\:30f3\:30c8\:30ea\:306e\:8a73\:7d30\:8868\:793a: fullPrompt + response \:3092\:3059\:3079\:3066 Print *)
 iHistoryDetail[entry_Association] :=
   Module[{step, task, fullPrompt, response, code, timeStr},
     step       = Lookup[entry, "step", "?"];
@@ -12199,7 +12524,7 @@ iHistoryDetail[entry_Association] :=
       If[NumericQ[t] && t > 0,
         DateString[t, {"Year","/","Month","/","Day"," ","Hour24",":","Minute",":","Second"}],
         "-"]];
-    Print[Style["\:2500\:2500\:2500 \:30b9\:30c6\:30c3\:30d7 " <> ToString[step] <> " \:8a73\:7d30 \:2500\:2500\:2500", Bold, 14, RGBColor[0.2, 0.3, 0.6]]];
+    Print[Style["\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:30b9\:30c6\:30c3\:30d7 " <> ToString[step] <> " \:8a73\:7d30 \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]", Bold, 14, RGBColor[0.2, 0.3, 0.6]]];
     Print[Style[iL["\:6642\:523b: ", "Time: "], Bold], timeStr];
     Print[Style["\:6307\:793a: ", Bold], task];
     Print[""];
@@ -12207,7 +12532,7 @@ iHistoryDetail[entry_Association] :=
       Print[Style[iL["\:9001\:4fe1\:30d7\:30ed\:30f3\:30d7\:30c8\:5168\:4f53:", "Full prompt:"], Bold]];
       Print[fullPrompt];
       Print[""],
-      (* fullPrompt が保存されていない古いエントリの場合 *)
+      (* fullPrompt \:304c\:4fdd\:5b58\:3055\:308c\:3066\:3044\:306a\:3044\:53e4\:3044\:30a8\:30f3\:30c8\:30ea\:306e\:5834\:5408 *)
       Print[Style["(\:9001\:4fe1\:30d7\:30ed\:30f3\:30d7\:30c8\:306f\:3053\:306e\:30a8\:30f3\:30c8\:30ea\:306b\:306f\:4fdd\:5b58\:3055\:308c\:3066\:3044\:307e\:305b\:3093)", Italic, GrayLevel[0.5]]];
       Print[""]
     ];
@@ -12219,21 +12544,21 @@ iHistoryDetail[entry_Association] :=
       Print[code]];
   ];
 
-(* 履歴表示の内部実装 *)
-(* 差分ボタン用の内部ヘルパー: 指定フィールドの生データを Print *)
+(* \:5c65\:6b74\:8868\:793a\:306e\:5185\:90e8\:5b9f\:88c5 *)
+(* \:5dee\:5206\:30dc\:30bf\:30f3\:7528\:306e\:5185\:90e8\:30d8\:30eb\:30d1\:30fc: \:6307\:5b9a\:30d5\:30a3\:30fc\:30eb\:30c9\:306e\:751f\:30c7\:30fc\:30bf\:3092 Print *)
 iShowDiffField[nb_NotebookObject, tag_String, stepIdx_Integer,
     stepNum_, fieldName_String, color_] :=
   Module[{raw, entry, val},
     raw = NBAccess`NBHistoryEntriesWithInherit[nb, tag, Decompress -> False];
     If[stepIdx > Length[raw],
-      Print[iL["(データなし)", "(no data)"]]; Return[]];
+      Print[iL["(\:30c7\:30fc\:30bf\:306a\:3057)", "(no data)"]]; Return[]];
     entry = raw[[stepIdx]];
-    val = Lookup[entry, fieldName, "(なし)"];
+    val = Lookup[entry, fieldName, "(\:306a\:3057)"];
     Print[Style["\[LongDash]\[LongDash]\[LongDash] Step " <> ToString[stepNum] <>
       " " <> fieldName <> " \[LongDash]\[LongDash]\[LongDash]",
       Bold, 12, color]];
     If[StringQ[val],
-      Print[Style[iL["(平文)", "(plaintext)"], Italic, GrayLevel[0.5]]],
+      Print[Style[iL["(\:5e73\:6587)", "(plaintext)"], Italic, GrayLevel[0.5]]],
       Print[val]]
   ];
 
@@ -12295,7 +12620,7 @@ iShowHistoryImpl[nb_NotebookObject, tag_String] :=
       ],
       fullHist
     ];
-    (* Step 降順（最新が上）で表示 *)
+    (* Step \:964d\:9806\:ff08\:6700\:65b0\:304c\:4e0a\:ff09\:3067\:8868\:793a *)
     Dataset[Reverse[rows]]
   ];
 
@@ -12309,8 +12634,8 @@ SetAttributes[iClaudePaletteButton, HoldRest];
 iClaudePaletteButton[label_String, color_, action_] :=
   Button[
     Style[label, Bold, 10, White],
-    (* アクション実行後、フォーカスをノートブックに明示的に戻す。
-       これにより IME 入力位置がパレットに移動する問題を防止 *)
+    (* \:30a2\:30af\:30b7\:30e7\:30f3\:5b9f\:884c\:5f8c\:3001\:30d5\:30a9\:30fc\:30ab\:30b9\:3092\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:660e\:793a\:7684\:306b\:623b\:3059\:3002
+       \:3053\:308c\:306b\:3088\:308a IME \:5165\:529b\:4f4d\:7f6e\:304c\:30d1\:30ec\:30c3\:30c8\:306b\:79fb\:52d5\:3059\:308b\:554f\:984c\:3092\:9632\:6b62 *)
     CompoundExpression[action,
       With[{inb = InputNotebook[]},
         If[Head[inb] === NotebookObject,
@@ -12323,8 +12648,8 @@ iClaudePaletteButton[label_String, color_, action_] :=
   ];
 
 (* \:9078\:629e\:4e2d\:306e\:30bb\:30eb\:3092\:53d6\:5f97\:ff08\:30d1\:30ec\:30c3\:30c8\:304b\:3089\:306e\:547c\:3073\:51fa\:3057\:306b\:5bfe\:5fdc\:ff09 *)
-(* \:30bb\:30eb\:30d6\:30e9\:30b1\:30c3\:30c8\:9078\:629e \:2192 SelectedCells
-   \:30ab\:30fc\:30bd\:30eb\:304c\:30bb\:30eb\:5185 \:2192 EvaluationCell / SelectedNotebook \:306e\:30bb\:30eb *)
+(* \:30bb\:30eb\:30d6\:30e9\:30b1\:30c3\:30c8\:9078\:629e \[RightArrow] SelectedCells
+   \:30ab\:30fc\:30bd\:30eb\:304c\:30bb\:30eb\:5185 \[RightArrow] EvaluationCell / SelectedNotebook \:306e\:30bb\:30eb *)
 iSelectedCellIndices[] :=
   Module[{nb},
     nb = Quiet[InputNotebook[]];
@@ -12332,7 +12657,7 @@ iSelectedCellIndices[] :=
     {nb, NBAccess`NBSelectedCellIndices[nb]}
   ];
 
-(* \:2500\:2500\:2500 \:6a5f\:5bc6\:64cd\:4f5c \:2500\:2500\:2500 *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:6a5f\:5bc6\:64cd\:4f5c \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 iMarkSelectedConfidential[] :=
   Module[{nbAndIdxs, nb, idxs},
@@ -12350,7 +12675,7 @@ iUnmarkSelectedConfidential[] :=
     idxs = nbAndIdxs[[2]];
     If[Head[nb] === NotebookObject && Length[idxs] > 0,
       Scan[UnmarkConfidential[nb, #] &, idxs];
-      (* 依存関係を再評価して伝搬 *)
+      (* \:4f9d\:5b58\:95a2\:4fc2\:3092\:518d\:8a55\:4fa1\:3057\:3066\:4f1d\:642c *)
       ScanConfidentialCells[nb]]
   ];
 iScanAndReport[] :=
@@ -12361,7 +12686,7 @@ iScanAndReport[] :=
     ScanConfidentialCells[nb]
   ];
 
-(* \:2500\:2500\:2500 \:30bb\:30eb\:53ce\:96c6\:30d8\:30eb\:30d1\:30fc\:ff08\:30d1\:30ec\:30c3\:30c8\:30dc\:30bf\:30f3\:7528\:ff09 \:2500\:2500\:2500 *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:30bb\:30eb\:53ce\:96c6\:30d8\:30eb\:30d1\:30fc\:ff08\:30d1\:30ec\:30c3\:30c8\:30dc\:30bf\:30f3\:7528\:ff09 \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 (* \:9078\:629e\:30bb\:30eb\:ff08\:307e\:305f\:306f\:5168\:30bb\:30eb\:ff09\:304b\:3089\:30c6\:30ad\:30b9\:30c8\:3068\:753b\:50cf\:3092\:53ce\:96c6\:3057 iNormalizePrompt \:4e92\:63db\:30ea\:30b9\:30c8\:3092\:8fd4\:3059
    skipPrivacyFilter: True \:306e\:5834\:5408\:3001\:30e6\:30fc\:30b6\:30fc\:304c\:660e\:793a\:7684\:306b\:9078\:629e\:3057\:305f\:30bb\:30eb\:306f\:6a5f\:5bc6\:30d5\:30a3\:30eb\:30bf\:3092\:30d0\:30a4\:30d1\:30b9\:3059\:308b *)
@@ -12376,9 +12701,9 @@ iCollectCellContent[nb_NotebookObject, cellIndices_List, skipPrivacyFilter_:Fals
       (* \:30bb\:30eb\:30b9\:30bf\:30a4\:30eb\:3092\:53d6\:5f97\:3057\:3066\:30e9\:30d9\:30eb\:4ed8\:304d\:3067\:53ce\:96c6 *)
       style = Quiet[NBAccess`NBCellStyle[nb, cellIdx]];
       If[!StringQ[style], style = "Unknown"];
-      (* NBCellToText を優先使用（cellToText より堅牢） *)
+      (* NBCellToText \:3092\:512a\:5148\:4f7f\:7528\:ff08cellToText \:3088\:308a\:5805\:7262\:ff09 *)
       text = Quiet[NBAccess`NBCellToText[nb, cellIdx]];
-      (* フォールバック: NotebookRead + ToString *)
+      (* \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af: NotebookRead + ToString *)
       cellData = Quiet[NBAccess`NBCellRead[nb, cellIdx]];
       If[!StringQ[text] || StringTrim[text] === "",
         If[cellData =!= $Failed && cellData =!= {},
@@ -12389,7 +12714,7 @@ iCollectCellContent[nb_NotebookObject, cellIndices_List, skipPrivacyFilter_:Fals
       If[StringQ[text] && StringLength[StringTrim[text]] > 0,
         AppendTo[items,
           "[" <> style <> "] " <> StringTrim[text]]];
-      (* 画像を含むセルはラスタライズ — 構造判定は NBAccess に委譲 *)
+      (* \:753b\:50cf\:3092\:542b\:3080\:30bb\:30eb\:306f\:30e9\:30b9\:30bf\:30e9\:30a4\:30ba \[LongDash] \:69cb\:9020\:5224\:5b9a\:306f NBAccess \:306b\:59d4\:8b72 *)
       If[NBAccess`NBCellHasImage[cellData],
         If[!DirectoryQ[tmpDir],
           CreateDirectory[tmpDir, CreateIntermediateDirectories -> True]];
@@ -12405,27 +12730,27 @@ iCollectCellContent[nb_NotebookObject, cellIndices_List, skipPrivacyFilter_:Fals
 
 (* \:30d1\:30ec\:30c3\:30c8\:304b\:3089\:547c\:3070\:308c\:308b: \:9078\:629e\:30bb\:30eb\:ff08\:306a\:3051\:308c\:3070\:5168\:30bb\:30eb\:ff09\:3067 ClaudeEval \:3092\:5b9f\:884c
    \:30e6\:30fc\:30b6\:30fc\:306b\:6307\:793a\:3092\:5165\:529b\:3055\:305b\:3001\:9078\:629e\:30bb\:30eb\:306e\:5185\:5bb9\:3092\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3068\:3057\:3066\:6dfb\:4ed8\:3059\:308b *)
-(* パレットから呼ばれても正しいユーザーノートブックを返すヘルパー。
-   InputNotebook[] がパレット自体を返す場合は Notebooks[] から探す。 *)
+(* \:30d1\:30ec\:30c3\:30c8\:304b\:3089\:547c\:3070\:308c\:3066\:3082\:6b63\:3057\:3044\:30e6\:30fc\:30b6\:30fc\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3092\:8fd4\:3059\:30d8\:30eb\:30d1\:30fc\:3002
+   InputNotebook[] \:304c\:30d1\:30ec\:30c3\:30c8\:81ea\:4f53\:3092\:8fd4\:3059\:5834\:5408\:306f Notebooks[] \:304b\:3089\:63a2\:3059\:3002 *)
 iUserNotebook[] :=
   Module[{nb = Quiet[InputNotebook[]], nbs},
     If[Head[nb] === NotebookObject &&
        Quiet[CurrentValue[nb, WindowClickSelect]] =!= False,
       Return[nb]];
-    (* InputNotebook がパレットの場合: 最近使用のユーザーノートブックを探す *)
+    (* InputNotebook \:304c\:30d1\:30ec\:30c3\:30c8\:306e\:5834\:5408: \:6700\:8fd1\:4f7f\:7528\:306e\:30e6\:30fc\:30b6\:30fc\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3092\:63a2\:3059 *)
     nbs = Select[Notebooks[],
       Quiet[CurrentValue[#, WindowClickSelect]] =!= False &&
       !TrueQ[Quiet[CurrentValue[#, Saveable] === False && CurrentValue[#, WindowFloating]]] &];
     If[Length[nbs] > 0, First[nbs], nb]
   ];
 
-(* カーソル位置のセルインデックスを取得（パレットから呼ばれることを前提）。
-   セルブラケット選択がなくても、カーソルがあるセルを返す。 *)
+(* \:30ab\:30fc\:30bd\:30eb\:4f4d\:7f6e\:306e\:30bb\:30eb\:30a4\:30f3\:30c7\:30c3\:30af\:30b9\:3092\:53d6\:5f97\:ff08\:30d1\:30ec\:30c3\:30c8\:304b\:3089\:547c\:3070\:308c\:308b\:3053\:3068\:3092\:524d\:63d0\:ff09\:3002
+   \:30bb\:30eb\:30d6\:30e9\:30b1\:30c3\:30c8\:9078\:629e\:304c\:306a\:304f\:3066\:3082\:3001\:30ab\:30fc\:30bd\:30eb\:304c\:3042\:308b\:30bb\:30eb\:3092\:8fd4\:3059\:3002 *)
 iGetCursorCellIndex[nb_NotebookObject] :=
   Module[{allCells, curCell, pos},
     allCells = Quiet[Cells[nb]];
     If[!ListQ[allCells] || Length[allCells] === 0, Return[0]];
-    (* カーソル位置のセルを取得: セル全体を選択→取得→元に戻す *)
+    (* \:30ab\:30fc\:30bd\:30eb\:4f4d\:7f6e\:306e\:30bb\:30eb\:3092\:53d6\:5f97: \:30bb\:30eb\:5168\:4f53\:3092\:9078\:629e\[RightArrow]\:53d6\:5f97\[RightArrow]\:5143\:306b\:623b\:3059 *)
     Quiet[SelectionMove[nb, All, Cell]];
     curCell = Quiet[SelectedCells[nb]];
     Quiet[SelectionMove[nb, After, CellContents]];
@@ -12439,7 +12764,7 @@ iRunClaudeEvalFromCells[] :=
     nb = iUserNotebook[];
     If[Head[nb] =!= NotebookObject, Return[$Failed]];
     NBAccess`NBInvalidateCellsCache[nb];
-    (* まずセルブラケット選択を試み、なければカーソル位置のセルを使う *)
+    (* \:307e\:305a\:30bb\:30eb\:30d6\:30e9\:30b1\:30c3\:30c8\:9078\:629e\:3092\:8a66\:307f\:3001\:306a\:3051\:308c\:3070\:30ab\:30fc\:30bd\:30eb\:4f4d\:7f6e\:306e\:30bb\:30eb\:3092\:4f7f\:3046 *)
     cellIndices = NBAccess`NBSelectedCellIndices[nb];
     If[Length[cellIndices] === 0,
       curIdx = iGetCursorCellIndex[nb];
@@ -12533,7 +12858,7 @@ iRunClaudeSpecFromCells[] :=
     iClaudeSpecImpl[nb, iSessionTag[], norm["text"], norm["imageDirs"]]
   ];
 
-(* \:2500\:2500\:2500 ClaudeQuery / ClaudeEval \:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:633f\:5165 \:2500\:2500\:2500 *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] ClaudeQuery / ClaudeEval \:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:633f\:5165 \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 iInsertClaudeQueryTemplate[] :=
   With[{nb = InputNotebook[], os = iPaletteOptionsString[]},
@@ -12559,21 +12884,21 @@ iInsertContinueEvalTemplate[] :=
 iStripContinueEvalGuidance[text_String] :=
   Module[{t = text},
     t = StringReplace[t, {
-      RegularExpression["(?ms)^.*完了。コードを実行して確認し、必要なら.*ContinueEval.*$"] -> "",
+      RegularExpression["(?ms)^.*\:5b8c\:4e86\:3002\:30b3\:30fc\:30c9\:3092\:5b9f\:884c\:3057\:3066\:78ba\:8a8d\:3057\:3001\:5fc5\:8981\:306a\:3089.*ContinueEval.*$"] -> "",
       RegularExpression["(?m)^\\s*ContinueEval\\[\\]\\s*$"] -> "",
-      RegularExpression["(?m)^\\s*【ステップ\\s*[0-9]+】[^\\n]*$"] -> ""
+      RegularExpression["(?m)^\\s*\:3010\:30b9\:30c6\:30c3\:30d7\\s*[0-9]+\:3011[^\\n]*$"] -> ""
     }];
     StringTrim[t]
   ];
 
 iWriteContinueEvalButton[nb_NotebookObject, autoEvaluate_:True, callerOpts_Association:<||>] :=
   Module[{optsStr, defaultCEOpts, allOpts, nonDefaults},
-    (* ContinueEval のデフォルト: AutoEvaluate->True, WebSearch->True 等。
-       autoEvaluate が False の場合（ClaudeQuery経路等）、
-       ContinueEval にも AutoEvaluate->False を渡す必要がある。 *)
+    (* ContinueEval \:306e\:30c7\:30d5\:30a9\:30eb\:30c8: AutoEvaluate->True, WebSearch->True \:7b49\:3002
+       autoEvaluate \:304c False \:306e\:5834\:5408\:ff08ClaudeQuery\:7d4c\:8def\:7b49\:ff09\:3001
+       ContinueEval \:306b\:3082 AutoEvaluate->False \:3092\:6e21\:3059\:5fc5\:8981\:304c\:3042\:308b\:3002 *)
     defaultCEOpts = <|"Fallback" -> False, "WebSearch" -> True,
       "Model" -> Automatic, "AutoEvaluate" -> True, "Timeout" -> Automatic|>;
-    (* callerOpts に AutoEvaluate が未指定なら autoEvaluate 引数から補完 *)
+    (* callerOpts \:306b AutoEvaluate \:304c\:672a\:6307\:5b9a\:306a\:3089 autoEvaluate \:5f15\:6570\:304b\:3089\:88dc\:5b8c *)
     allOpts = Join[
       If[!TrueQ[autoEvaluate] && !KeyExistsQ[callerOpts, "AutoEvaluate"],
         <|"AutoEvaluate" -> False|>, <||>],
@@ -12615,13 +12940,13 @@ iWriteContinueEvalButton[nb_NotebookObject, autoEvaluate_:True, callerOpts_Assoc
     ]
   ];
 
-(* ClaudeUpdatePackage 完了メッセージ:
-   ContinueUpdate[] ハイパーリンク + api.md 更新リンク (自動更新オフ時) *)
+(* ClaudeUpdatePackage \:5b8c\:4e86\:30e1\:30c3\:30bb\:30fc\:30b8:
+   ContinueUpdate[] \:30cf\:30a4\:30d1\:30fc\:30ea\:30f3\:30af + api.md \:66f4\:65b0\:30ea\:30f3\:30af (\:81ea\:52d5\:66f4\:65b0\:30aa\:30d5\:6642) *)
 iWriteUpdateCompletionMessage[nb_NotebookObject, packageName_String,
     apiMdAlreadyUpdated_:False] :=
   Module[{textParts},
     textParts = {
-      "完了。コードを実行して確認し、必要なら ",
+      "\:5b8c\:4e86\:3002\:30b3\:30fc\:30c9\:3092\:5b9f\:884c\:3057\:3066\:78ba\:8a8d\:3057\:3001\:5fc5\:8981\:306a\:3089 ",
       ButtonBox["ContinueUpdate",
         BaseStyle -> "Hyperlink",
         ButtonFunction :> Module[{target = InputNotebook[]},
@@ -12630,13 +12955,13 @@ iWriteUpdateCompletionMessage[nb_NotebookObject, packageName_String,
           SelectionMove[target, Previous, Cell];
           SelectionMove[target, All, CellContents]],
         Evaluator -> Automatic, Method -> "Queued"],
-      "[] で継続できます。"
+      "[] \:3067\:7d99\:7d9a\:3067\:304d\:307e\:3059\:3002"
     };
-    (* api.md 自動更新がオフの場合: 更新リンクを追加 *)
+    (* api.md \:81ea\:52d5\:66f4\:65b0\:304c\:30aa\:30d5\:306e\:5834\:5408: \:66f4\:65b0\:30ea\:30f3\:30af\:3092\:8ffd\:52a0 *)
     If[!TrueQ[apiMdAlreadyUpdated],
       AppendTo[textParts, "  "];
       AppendTo[textParts,
-        ButtonBox["api.md を更新",
+        ButtonBox["api.md \:3092\:66f4\:65b0",
           BaseStyle -> "Hyperlink",
           ButtonFunction :> Module[{target = InputNotebook[]},
             iAutoUpdateApiMd[target, packageName]],
@@ -12647,7 +12972,7 @@ iWriteUpdateCompletionMessage[nb_NotebookObject, packageName_String,
         CellTags -> {"claudecode-notice"}]]
   ];
 
-(* \:2500\:2500\:2500 \:6a5f\:5bc6\:5909\:6570\:4e00\:89a7 \:2500\:2500\:2500 *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:6a5f\:5bc6\:5909\:6570\:4e00\:89a7 \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 iShowConfidentialVars[] :=
   Module[{nb, nCells, directVars, depVars, allVars},
@@ -12685,17 +13010,17 @@ iShowConfidentialVars[] :=
     ]
   ];
 
-(* \:2500\:2500\:2500 \:30e1\:30a4\:30f3\:30d1\:30ec\:30c3\:30c8 \:2500\:2500\:2500 *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:30e1\:30a4\:30f3\:30d1\:30ec\:30c3\:30c8 \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 ShowClaudePalette[] := (
   If[$claudePalette =!= None, Quiet@NotebookClose[$claudePalette]];
   Quiet[iInstallCellEpilog[InputNotebook[]]];
-  (* 現在のノートブックから設定を読み込み *)
+  (* \:73fe\:5728\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304b\:3089\:8a2d\:5b9a\:3092\:8aad\:307f\:8fbc\:307f *)
   Quiet[iLoadPaletteSettings[InputNotebook[]]];
   $claudePalette = CreatePalette[
     DynamicModule[{lastNb = InputNotebook[]},
     Dynamic[
-      (* フォアグラウンドノートブックが切り替わったら設定を再読込 *)
+      (* \:30d5\:30a9\:30a2\:30b0\:30e9\:30a6\:30f3\:30c9\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304c\:5207\:308a\:66ff\:308f\:3063\:305f\:3089\:8a2d\:5b9a\:3092\:518d\:8aad\:8fbc *)
       Module[{curNb = InputNotebook[]},
         If[Head[curNb] === NotebookObject && curNb =!= lastNb,
           lastNb = curNb;
@@ -12703,7 +13028,7 @@ ShowClaudePalette[] := (
     Column[{
       Style["Claude Code", Bold, 11, RGBColor[0.2, 0.3, 0.6]],
 
-      (* \:2500\:2500 \:6a5f\:5bc6\:30bb\:30eb\:7ba1\:7406 \:2500\:2500 *)
+      (* \[HorizontalLine]\[HorizontalLine] \:6a5f\:5bc6\:30bb\:30eb\:7ba1\:7406 \[HorizontalLine]\[HorizontalLine] *)
       Style[iL[" \:6a5f\:5bc6\:30bb\:30eb", " Confidential"], Bold, 8, GrayLevel[0.3]],
       iClaudePaletteButton[iL["\[WarningSign] \:6a5f\:5bc6\:30de\:30fc\:30af", "\[WarningSign] Mark"],
         RGBColor[0.75, 0.15, 0.15],
@@ -12716,7 +13041,7 @@ ShowClaudePalette[] := (
         iScanAndReport[]],
       Spacer[2],
 
-      (* \:2500\:2500 Claude \:64cd\:4f5c \:2500\:2500 *)
+      (* \[HorizontalLine]\[HorizontalLine] Claude \:64cd\:4f5c \[HorizontalLine]\[HorizontalLine] *)
       Style[" Claude", Bold, 8, GrayLevel[0.3]],
       iClaudePaletteButton["\[RightPointer] ClaudeQuery",
         RGBColor[0.25, 0.45, 0.7],
@@ -12724,10 +13049,10 @@ ShowClaudePalette[] := (
       iClaudePaletteButton["\[FilledRightTriangle] ClaudeEval",
         RGBColor[0.2, 0.55, 0.35],
         iInsertClaudeEvalTemplate[]],
-      iClaudePaletteButton[iL["\[RightTriangleBar] \:9078\:629e\:2192Query", "\[RightTriangleBar] Sel\:2192Query"],
+      iClaudePaletteButton[iL["\[RightTriangleBar] \:9078\:629e\[RightArrow]Query", "\[RightTriangleBar] Sel\[RightArrow]Query"],
         RGBColor[0.2, 0.38, 0.65],
         iRunClaudeQueryFromCells[]],
-      iClaudePaletteButton[iL["\[RightTriangleBar] \:9078\:629e\:2192Eval", "\[RightTriangleBar] Sel\:2192Eval"],
+      iClaudePaletteButton[iL["\[RightTriangleBar] \:9078\:629e\[RightArrow]Eval", "\[RightTriangleBar] Sel\[RightArrow]Eval"],
         RGBColor[0.15, 0.45, 0.30],
         iRunClaudeEvalFromCells[]],
       iClaudePaletteButton[iL["\[FilledDiamond] \:4ed5\:69d8\:751f\:6210", "\[FilledDiamond] Spec"],
@@ -12739,7 +13064,7 @@ ShowClaudePalette[] := (
          SetSelectedNotebook[InputNotebook[]])],
       Spacer[2],
 
-      (* \:2500\:2500 \:8a2d\:5b9a \:2500\:2500 *)
+      (* \[HorizontalLine]\[HorizontalLine] \:8a2d\:5b9a \[HorizontalLine]\[HorizontalLine] *)
       Style[iL[" \:8a2d\:5b9a", " Settings"], Bold, 8, GrayLevel[0.3]],
       Dynamic[
         Button[
@@ -12787,7 +13112,7 @@ ShowClaudePalette[] := (
           Appearance -> "Frameless"]],
       Spacer[2],
 
-      (* \:2500\:2500 \:30bb\:30c3\:30b7\:30e7\:30f3 \:2500\:2500 *)
+      (* \[HorizontalLine]\[HorizontalLine] \:30bb\:30c3\:30b7\:30e7\:30f3 \[HorizontalLine]\[HorizontalLine] *)
       Style[iL[" \:30bb\:30c3\:30b7\:30e7\:30f3", " Sessions"], Bold, 8, GrayLevel[0.3]],
       iClaudePaletteButton[iL["\[FilledSmallSquare] \:5c65\:6b74\:8868\:793a", "\[FilledSmallSquare] History"],
         RGBColor[0.45, 0.45, 0.55],
@@ -12801,7 +13126,7 @@ ShowClaudePalette[] := (
             RowBox[{"ClaudeListSessions", "[", "]"}]]]],
       Spacer[2],
 
-      (* \:2500\:2500 \:30b9\:30c6\:30fc\:30bf\:30b9 \:2500\:2500 *)
+      (* \[HorizontalLine]\[HorizontalLine] \:30b9\:30c6\:30fc\:30bf\:30b9 \[HorizontalLine]\[HorizontalLine] *)
       Dynamic[
         With[{nb = InputNotebook[]},
           Style[
@@ -12845,11 +13170,11 @@ AddToPalettesMenu[paletteData : {{_String, _String} ..}] :=
     temp /. tempFunction -> FrontEndExecute];
 
 (* ============================================================
-   Claude Code CLI スラッシュコマンド実行
-   全コマンドを CLI サブコマンド・内部データ・組み込みテキストで処理。
+   Claude Code CLI \:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9\:5b9f\:884c
+   \:5168\:30b3\:30de\:30f3\:30c9\:3092 CLI \:30b5\:30d6\:30b3\:30de\:30f3\:30c9\:30fb\:5185\:90e8\:30c7\:30fc\:30bf\:30fb\:7d44\:307f\:8fbc\:307f\:30c6\:30ad\:30b9\:30c8\:3067\:51e6\:7406\:3002
    ============================================================ *)
 
-(* CLI サブコマンドとして実行 (引数リスト版) *)
+(* CLI \:30b5\:30d6\:30b3\:30de\:30f3\:30c9\:3068\:3057\:3066\:5b9f\:884c (\:5f15\:6570\:30ea\:30b9\:30c8\:7248) *)
 iRunClaudeSubcommand[args_List] :=
   Module[{batFile, outFile, ts, strm, bc, workDir, res, raw},
     ts = ToString[UnixTime[]] <> "x" <> ToString[RandomInteger[99999]];
@@ -12878,7 +13203,7 @@ iRunClaudeSubcommand[args_List] :=
     cleanOutput[stripANSI[raw]]
   ];
 
-(* /permissions: settings.json + CLI フラグから権限情報を構築 *)
+(* /permissions: settings.json + CLI \:30d5\:30e9\:30b0\:304b\:3089\:6a29\:9650\:60c5\:5831\:3092\:69cb\:7bc9 *)
 iGetPermissionsInfo[] :=
   Module[{workDir, settingsFile, json, perms, allow, deny, result},
     workDir = iClaudeWorkingDirectory[];
@@ -12909,7 +13234,7 @@ iGetPermissionsInfo[] :=
     result
   ];
 
-(* /model: 現在のモデル情報 *)
+(* /model: \:73fe\:5728\:306e\:30e2\:30c7\:30eb\:60c5\:5831 *)
 iGetModelInfo[] :=
   "=== Claude Code Model ===\n\n" <>
   "$ClaudeModel: " <> If[$ClaudeModel === "", iL["(Claude Code \:30c7\:30d5\:30a9\:30eb\:30c8)", "(Claude Code default)"], $ClaudeModel] <> "\n" <>
@@ -12923,27 +13248,27 @@ iGetModelInfo[] :=
 (* /help *)
 $iSlashHelpText =
   "Claude Code \:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9\:4e00\:89a7 (ClaudeCommand \:3067\:5229\:7528\:53ef\:80fd):\n\n" <>
-  "  /help              \:2192 \:3053\:306e\:30d8\:30eb\:30d7\:3092\:8868\:793a\n" <>
-  "  /version           \:2192 Claude Code \:306e\:30d0\:30fc\:30b8\:30e7\:30f3 (CLI)\n" <>
-  "  /config            \:2192 \:8a2d\:5b9a\:4e00\:89a7 (CLI)\n" <>
-  "  /doctor            \:2192 \:74b0\:5883\:8a3a\:65ad (CLI)\n" <>
-  "  /login             \:2192 \:30ed\:30b0\:30a4\:30f3 (CLI)\n" <>
-  "  /logout            \:2192 \:30ed\:30b0\:30a2\:30a6\:30c8 (CLI)\n" <>
-  "  /status            \:2192 \:8a8d\:8a3c\:72b6\:614b (CLI)\n" <>
-  "  /permissions       \:2192 \:30d5\:30a1\:30a4\:30eb\:30a2\:30af\:30bb\:30b9\:6a29\:9650 (settings.json \:304b\:3089\:53d6\:5f97)\n" <>
-  "  /model             \:2192 \:30e2\:30c7\:30eb\:60c5\:5831 (\:5185\:90e8\:5909\:6570\:304b\:3089\:53d6\:5f97)\n" <>
-  "  /clear             \:2192 \:5bfe\:8a71\:30e2\:30fc\:30c9\:5c02\:7528\n" <>
-  "  /compact           \:2192 \:5bfe\:8a71\:30e2\:30fc\:30c9\:5c02\:7528\n" <>
-  "  /cost              \:2192 \:5bfe\:8a71\:30e2\:30fc\:30c9\:5c02\:7528\n" <>
+  "  /help              \[RightArrow] \:3053\:306e\:30d8\:30eb\:30d7\:3092\:8868\:793a\n" <>
+  "  /version           \[RightArrow] Claude Code \:306e\:30d0\:30fc\:30b8\:30e7\:30f3 (CLI)\n" <>
+  "  /config            \[RightArrow] \:8a2d\:5b9a\:4e00\:89a7 (CLI)\n" <>
+  "  /doctor            \[RightArrow] \:74b0\:5883\:8a3a\:65ad (CLI)\n" <>
+  "  /login             \[RightArrow] \:30ed\:30b0\:30a4\:30f3 (CLI)\n" <>
+  "  /logout            \[RightArrow] \:30ed\:30b0\:30a2\:30a6\:30c8 (CLI)\n" <>
+  "  /status            \[RightArrow] \:8a8d\:8a3c\:72b6\:614b (CLI)\n" <>
+  "  /permissions       \[RightArrow] \:30d5\:30a1\:30a4\:30eb\:30a2\:30af\:30bb\:30b9\:6a29\:9650 (settings.json \:304b\:3089\:53d6\:5f97)\n" <>
+  "  /model             \[RightArrow] \:30e2\:30c7\:30eb\:60c5\:5831 (\:5185\:90e8\:5909\:6570\:304b\:3089\:53d6\:5f97)\n" <>
+  "  /clear             \[RightArrow] \:5bfe\:8a71\:30e2\:30fc\:30c9\:5c02\:7528\n" <>
+  "  /compact           \[RightArrow] \:5bfe\:8a71\:30e2\:30fc\:30c9\:5c02\:7528\n" <>
+  "  /cost              \[RightArrow] \:5bfe\:8a71\:30e2\:30fc\:30c9\:5c02\:7528\n" <>
   "\nCLI \:30b5\:30d6\:30b3\:30de\:30f3\:30c9 (\:30b9\:30e9\:30c3\:30b7\:30e5\:306a\:3057\:3067\:3082\:5b9f\:884c\:53ef):\n" <>
-  "  config list         \:2192 \:8a2d\:5b9a\:4e00\:89a7\n" <>
-  "  config set KEY VAL  \:2192 \:8a2d\:5b9a\:5909\:66f4\n" <>
-  "  auth status         \:2192 \:8a8d\:8a3c\:72b6\:614b\n" <>
-  "  doctor              \:2192 \:74b0\:5883\:8a3a\:65ad\n" <>
-  "  --version           \:2192 \:30d0\:30fc\:30b8\:30e7\:30f3\:8868\:793a\n" <>
-  "  --help              \:2192 CLI \:30d8\:30eb\:30d7";
+  "  config list         \[RightArrow] \:8a2d\:5b9a\:4e00\:89a7\n" <>
+  "  config set KEY VAL  \[RightArrow] \:8a2d\:5b9a\:5909\:66f4\n" <>
+  "  auth status         \[RightArrow] \:8a8d\:8a3c\:72b6\:614b\n" <>
+  "  doctor              \[RightArrow] \:74b0\:5883\:8a3a\:65ad\n" <>
+  "  --version           \[RightArrow] \:30d0\:30fc\:30b8\:30e7\:30f3\:8868\:793a\n" <>
+  "  --help              \[RightArrow] CLI \:30d8\:30eb\:30d7";
 
-(* スラッシュコマンド → CLI 等価マッピング *)
+(* \:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9 \[RightArrow] CLI \:7b49\:4fa1\:30de\:30c3\:30d4\:30f3\:30b0 *)
 $iSlashCommandMap = <|
   "/config"      -> {"config", "list"},
   "/config list" -> {"config", "list"},
@@ -12954,7 +13279,7 @@ $iSlashCommandMap = <|
   "/status"      -> {"auth", "status"}
 |>;
 
-(* 対話モード専用で未対応のコマンド *)
+(* \:5bfe\:8a71\:30e2\:30fc\:30c9\:5c02\:7528\:3067\:672a\:5bfe\:5fdc\:306e\:30b3\:30de\:30f3\:30c9 *)
 $iSessionOnlyCommands = {"/clear", "/compact", "/cost", "/rename"};
 
 ClaudeCommand[command_String] :=
@@ -12963,34 +13288,34 @@ ClaudeCommand[command_String] :=
     (* /help *)
     If[trimmed === "/help" || trimmed === "/h",
       Return[$iSlashHelpText]];
-    (* /permissions: settings.json から内部取得 *)
+    (* /permissions: settings.json \:304b\:3089\:5185\:90e8\:53d6\:5f97 *)
     If[trimmed === "/permissions",
       Return[iGetPermissionsInfo[]]];
-    (* /model: 内部変数から返す *)
+    (* /model: \:5185\:90e8\:5909\:6570\:304b\:3089\:8fd4\:3059 *)
     If[trimmed === "/model",
       Return[iGetModelInfo[]]];
-    (* 対話モード専用コマンド *)
+    (* \:5bfe\:8a71\:30e2\:30fc\:30c9\:5c02\:7528\:30b3\:30de\:30f3\:30c9 *)
     If[MemberQ[$iSessionOnlyCommands, trimmed],
       Return[trimmed <> " \:306f\:5bfe\:8a71\:30e2\:30fc\:30c9\:5c02\:7528\:30b3\:30de\:30f3\:30c9\:3067\:3059\:3002\n" <>
         "Mathematica \:304b\:3089\:306f\:5b9f\:884c\:3067\:304d\:307e\:305b\:3093\:3002\n" <>
         "\:30bf\:30fc\:30df\:30ca\:30eb\:3067 claude \:3092\:8d77\:52d5\:3057\:3066\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002"]];
-    (* 既知のスラッシュコマンド → CLI 等価コマンド *)
+    (* \:65e2\:77e5\:306e\:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9 \[RightArrow] CLI \:7b49\:4fa1\:30b3\:30de\:30f3\:30c9 *)
     mapped = Lookup[$iSlashCommandMap, trimmed, None];
     If[mapped =!= None,
       Return[iRunClaudeSubcommand[mapped]]];
-    (* 未知のスラッシュコマンド *)
+    (* \:672a\:77e5\:306e\:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9 *)
     If[StringStartsQ[trimmed, "/"],
       Return[iL["Error: \:672a\:77e5\:306e\:30b9\:30e9\:30c3\:30b7\:30e5\:30b3\:30de\:30f3\:30c9: ", "Error: Unknown slash command: "] <> trimmed <> "\n" <>
         "ClaudeCommand[\"/help\"] \:3067\:5229\:7528\:53ef\:80fd\:306a\:30b3\:30de\:30f3\:30c9\:3092\:78ba\:8a8d\:3067\:304d\:307e\:3059\:3002"]];
-    (* CLI サブコマンド → 直接実行 *)
+    (* CLI \:30b5\:30d6\:30b3\:30de\:30f3\:30c9 \[RightArrow] \:76f4\:63a5\:5b9f\:884c *)
     iRunClaudeSubcommand[StringSplit[trimmed]]
   ];
 
 (* ============================================================
-   NBAccess 分離検証・修正
+   NBAccess \:5206\:96e2\:691c\:8a3c\:30fb\:4fee\:6b63
    ============================================================ *)
 
-(* 分離検証用の内部モデルでクエリ実行 *)
+(* \:5206\:96e2\:691c\:8a3c\:7528\:306e\:5185\:90e8\:30e2\:30c7\:30eb\:3067\:30af\:30a8\:30ea\:5b9f\:884c *)
 iSeparationQuery[prompt_String] :=
   Module[{savedModel, result},
     savedModel = $ClaudeModel;
@@ -13001,15 +13326,15 @@ iSeparationQuery[prompt_String] :=
     result
   ];
 
-(* ターゲット解決: ファイルパス or パッケージ名 → {ファイルパスリスト, パッケージ名 or None} *)
+(* \:30bf\:30fc\:30b2\:30c3\:30c8\:89e3\:6c7a: \:30d5\:30a1\:30a4\:30eb\:30d1\:30b9 or \:30d1\:30c3\:30b1\:30fc\:30b8\:540d \[RightArrow] {\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:30ea\:30b9\:30c8, \:30d1\:30c3\:30b1\:30fc\:30b8\:540d or None} *)
 iResolveSeparationTarget[target_String] :=
   Module[{pkgDir = Global`$packageDirectory, files, ext},
-    (* ファイルパスの場合 *)
+    (* \:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:306e\:5834\:5408 *)
     ext = FileExtension[target];
     If[MemberQ[{"wl", "m", "nb"}, ext] && FileExistsQ[target],
       Return[{{<|"path" -> target,
                "content" -> Import[target, "Text"]|>}, None}]];
-    (* $packageDirectory 内の .wl ファイル *)
+    (* $packageDirectory \:5185\:306e .wl \:30d5\:30a1\:30a4\:30eb *)
     If[StringQ[pkgDir] && pkgDir =!= "",
       If[FileExistsQ[FileNameJoin[{pkgDir, target <> ".wl"}]],
         Return[{{<|"path" -> FileNameJoin[{pkgDir, target <> ".wl"}],
@@ -13025,7 +13350,7 @@ iResolveSeparationTarget[target_String] :=
     {{}, None}
   ];
 
-(* ドキュメントコンテキストを収集 *)
+(* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3092\:53ce\:96c6 *)
 iSeparationDocsContext[packageName_String] :=
   Module[{docsDir, docFiles},
     docsDir = iPackageDocsDir[If[StringQ[packageName], packageName, "NBAccess"]];
@@ -13041,122 +13366,122 @@ iSeparationDocsContext[packageName_String] :=
   ];
 
 (* ============================================================
-   静的パターン走査: 正規表現ベースの禁止シンボル検出
-   LLM 判定の前段で確実に違反候補を拾い、偽陰性を減らす。
+   \:9759\:7684\:30d1\:30bf\:30fc\:30f3\:8d70\:67fb: \:6b63\:898f\:8868\:73fe\:30d9\:30fc\:30b9\:306e\:7981\:6b62\:30b7\:30f3\:30dc\:30eb\:691c\:51fa
+   LLM \:5224\:5b9a\:306e\:524d\:6bb5\:3067\:78ba\:5b9f\:306b\:9055\:53cd\:5019\:88dc\:3092\:62fe\:3044\:3001\:507d\:9670\:6027\:3092\:6e1b\:3089\:3059\:3002
    ============================================================ *)
 iStaticSeparationScan[source_String, fileName_String] :=
   Module[{lines, results = {}, patterns, nbAccessWl, notebookExtWl},
-    (* NBAccess.wl / NotebookExtensions.wl 自体は検査対象外 *)
+    (* NBAccess.wl / NotebookExtensions.wl \:81ea\:4f53\:306f\:691c\:67fb\:5bfe\:8c61\:5916 *)
     nbAccessWl = StringMatchQ[fileName, "*NBAccess*", IgnoreCase -> True];
     notebookExtWl = StringMatchQ[fileName, "*NotebookExtensions*", IgnoreCase -> True];
     If[nbAccessWl || notebookExtWl, Return[{}]];
     lines = StringSplit[source, "\n"];
-    (* 禁止パターン定義: {regex, violationCategory, description} *)
+    (* \:7981\:6b62\:30d1\:30bf\:30fc\:30f3\:5b9a\:7fa9: {regex, violationCategory, description} *)
     patterns = {
-      (* --- 1. EvaluationCell / CellPrint / SetSelectedNotebook 禁止 --- *)
+      (* --- 1. EvaluationCell / CellPrint / SetSelectedNotebook \:7981\:6b62 --- *)
       {"EvaluationCell\\s*\\[", "f",
-       "EvaluationCell[] 直接使用 (NBBeginJobAtEvalCell/NBWriteAnchorAfterEvalCell/NBParentNotebookOfCurrentCell を使用)"},
+       "EvaluationCell[] \:76f4\:63a5\:4f7f\:7528 (NBBeginJobAtEvalCell/NBWriteAnchorAfterEvalCell/NBParentNotebookOfCurrentCell \:3092\:4f7f\:7528)"},
       {"CellPrint\\s*\\[", "f",
-       "CellPrint 直接使用 (NBWriteCell/NBWritePrintNotice を使用)"},
+       "CellPrint \:76f4\:63a5\:4f7f\:7528 (NBWriteCell/NBWritePrintNotice \:3092\:4f7f\:7528)"},
       {"SetSelectedNotebook\\s*\\[", "f",
-       "SetSelectedNotebook 直接使用 (NBAccess API に委譲)"},
+       "SetSelectedNotebook \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
       {"SelectedCells\\s*\\[", "f",
-       "SelectedCells 直接使用 (NBSelectedCellIndices を使用)"},
+       "SelectedCells \:76f4\:63a5\:4f7f\:7528 (NBSelectedCellIndices \:3092\:4f7f\:7528)"},
       {"ParentNotebook\\s*\\[\\s*EvaluationCell", "f",
-       "ParentNotebook[EvaluationCell[]] 直接使用 (NBParentNotebookOfCurrentCell を使用)"},
+       "ParentNotebook[EvaluationCell[]] \:76f4\:63a5\:4f7f\:7528 (NBParentNotebookOfCurrentCell \:3092\:4f7f\:7528)"},
 
-      (* --- 2. CurrentValue/SetOptions による属性直操作禁止 --- *)
+      (* --- 2. CurrentValue/SetOptions \:306b\:3088\:308b\:5c5e\:6027\:76f4\:64cd\:4f5c\:7981\:6b62 --- *)
       {"CurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*TaggingRules", "g",
-       "CurrentValue[..., TaggingRules] 直接使用 (NBCellGetTaggingRule/NBGetConfidentialTag を使用)"},
+       "CurrentValue[..., TaggingRules] \:76f4\:63a5\:4f7f\:7528 (NBCellGetTaggingRule/NBGetConfidentialTag \:3092\:4f7f\:7528)"},
       {"AbsoluteCurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*TaggingRules", "g",
-       "AbsoluteCurrentValue[..., TaggingRules] 直接使用 (NBAccess API に委譲)"},
+       "AbsoluteCurrentValue[..., TaggingRules] \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
       {"SetOptions\\s*\\[[^,]+,\\s*TaggingRules", "g",
-       "SetOptions[..., TaggingRules -> ...] 直接使用 (NBCellSetOptions を使用)"},
+       "SetOptions[..., TaggingRules -> ...] \:76f4\:63a5\:4f7f\:7528 (NBCellSetOptions \:3092\:4f7f\:7528)"},
       {"CurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*CellTags", "g",
-       "CurrentValue[..., CellTags] 直接使用 (NBCellIndicesByTag を使用)"},
+       "CurrentValue[..., CellTags] \:76f4\:63a5\:4f7f\:7528 (NBCellIndicesByTag \:3092\:4f7f\:7528)"},
       {"SetOptions\\s*\\[[^,]+,\\s*CellTags", "g",
-       "SetOptions[..., CellTags -> ...] 直接使用 (NBCellSetOptions を使用)"},
+       "SetOptions[..., CellTags -> ...] \:76f4\:63a5\:4f7f\:7528 (NBCellSetOptions \:3092\:4f7f\:7528)"},
       {"CurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*CellEpilog", "g",
-       "CurrentValue[..., CellEpilog] 直接使用 (NBInstallCellEpilog/NBCellEpilogInstalledQ を使用)"},
+       "CurrentValue[..., CellEpilog] \:76f4\:63a5\:4f7f\:7528 (NBInstallCellEpilog/NBCellEpilogInstalledQ \:3092\:4f7f\:7528)"},
       {"AbsoluteCurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*CellEpilog", "g",
-       "AbsoluteCurrentValue[..., CellEpilog] 直接使用 (NBAccess API に委譲)"},
+       "AbsoluteCurrentValue[..., CellEpilog] \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
       {"SetOptions\\s*\\[[^,]+,\\s*CellEpilog", "g",
-       "SetOptions[..., CellEpilog ...] 直接使用 (NBInstallConfidentialEpilog を使用)"},
+       "SetOptions[..., CellEpilog ...] \:76f4\:63a5\:4f7f\:7528 (NBInstallConfidentialEpilog \:3092\:4f7f\:7528)"},
       {"CurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*CellProlog", "g",
-       "CurrentValue[..., CellProlog] 直接使用 (NBAccess API に委譲)"},
+       "CurrentValue[..., CellProlog] \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
       {"SetOptions\\s*\\[[^,]+,\\s*CellProlog", "g",
-       "SetOptions[..., CellProlog ...] 直接使用 (NBAccess API に委譲)"},
+       "SetOptions[..., CellProlog ...] \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
       {"CurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*NotebookEventActions", "g",
-       "CurrentValue[..., NotebookEventActions] 直接使用 (NBAccess API に委譲)"},
+       "CurrentValue[..., NotebookEventActions] \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
       {"SetOptions\\s*\\[[^,]+,\\s*NotebookEventActions", "g",
-       "SetOptions[..., NotebookEventActions ...] 直接使用 (NBAccess API に委譲)"},
+       "SetOptions[..., NotebookEventActions ...] \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
 
-      (* --- 3. CellObject 漏洩検出 --- *)
+      (* --- 3. CellObject \:6f0f\:6d29\:691c\:51fa --- *)
       {"Cells\\s*\\[", "h",
-       "Cells[] 直接使用による CellObject 取得 (NBCellIndicesByTag/NBCellIndicesByStyle を使用)"},
+       "Cells[] \:76f4\:63a5\:4f7f\:7528\:306b\:3088\:308b CellObject \:53d6\:5f97 (NBCellIndicesByTag/NBCellIndicesByStyle \:3092\:4f7f\:7528)"},
       {"_CellObject", "h",
-       "CellObject パターン引数 (公開 API に CellObject 型を露出させない)"},
+       "CellObject \:30d1\:30bf\:30fc\:30f3\:5f15\:6570 (\:516c\:958b API \:306b CellObject \:578b\:3092\:9732\:51fa\:3055\:305b\:306a\:3044)"},
 
-      (* --- 4. FE 状態操作禁止 --- *)
+      (* --- 4. FE \:72b6\:614b\:64cd\:4f5c\:7981\:6b62 --- *)
       {"SelectionEvaluate\\s*\\[", "i",
-       "SelectionEvaluate 直接使用 (NBEvaluatePreviousCell/NBInsertAndEvaluateInput を使用)"},
+       "SelectionEvaluate \:76f4\:63a5\:4f7f\:7528 (NBEvaluatePreviousCell/NBInsertAndEvaluateInput \:3092\:4f7f\:7528)"},
       {"SelectionEvaluateCreateCell\\s*\\[", "i",
-       "SelectionEvaluateCreateCell 直接使用 (NBAccess API に委譲)"},
+       "SelectionEvaluateCreateCell \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
       {"FrontEndTokenExecute\\s*\\[", "i",
-       "FrontEndTokenExecute 直接使用 (NBAccess API に委譲)"},
+       "FrontEndTokenExecute \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
       {"SelectionMove\\s*\\[", "i",
-       "SelectionMove 直接使用 (NBMoveAfterCell を使用)"},
+       "SelectionMove \:76f4\:63a5\:4f7f\:7528 (NBMoveAfterCell \:3092\:4f7f\:7528)"},
 
-      (* --- 5. NBAccess 公開グローバルの破壊的更新 --- *)
+      (* --- 5. NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 --- *)
       {"AppendTo\\s*\\[\\s*NBAccess`", "j",
-       "AppendTo による NBAccess 公開グローバルの破壊的更新 (setter API を使用)"},
+       "AppendTo \:306b\:3088\:308b NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 (setter API \:3092\:4f7f\:7528)"},
       {"AssociateTo\\s*\\[\\s*NBAccess`", "j",
-       "AssociateTo による NBAccess 公開グローバルの破壊的更新 (setter API を使用)"},
+       "AssociateTo \:306b\:3088\:308b NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 (setter API \:3092\:4f7f\:7528)"},
       {"PrependTo\\s*\\[\\s*NBAccess`", "j",
-       "PrependTo による NBAccess 公開グローバルの破壊的更新 (setter API を使用)"},
+       "PrependTo \:306b\:3088\:308b NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 (setter API \:3092\:4f7f\:7528)"},
       {"KeyDropFrom\\s*\\[\\s*NBAccess`", "j",
-       "KeyDropFrom による NBAccess 公開グローバルの破壊的更新 (setter API を使用)"},
+       "KeyDropFrom \:306b\:3088\:308b NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 (setter API \:3092\:4f7f\:7528)"},
       {"Unset\\s*\\[\\s*NBAccess`", "j",
-       "Unset による NBAccess 公開グローバルの破壊的更新 (setter API を使用)"},
+       "Unset \:306b\:3088\:308b NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 (setter API \:3092\:4f7f\:7528)"},
       {"NBAccess`\\$NB\\w+\\s*=\\s*", "j",
-       "NBAccess 公開グローバルへの直接代入 (setter API を使用)"},
+       "NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:3078\:306e\:76f4\:63a5\:4ee3\:5165 (setter API \:3092\:4f7f\:7528)"},
       {"NBAccess`\\$NB\\w+\\[", "j",
-       "NBAccess 公開グローバルへの Part 代入の可能性 (setter API を使用)"},
+       "NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:3078\:306e Part \:4ee3\:5165\:306e\:53ef\:80fd\:6027 (setter API \:3092\:4f7f\:7528)"},
 
-      (* --- 既存ルール: NotebookWrite / NotebookRead 直接使用 --- *)
+      (* --- \:65e2\:5b58\:30eb\:30fc\:30eb: NotebookWrite / NotebookRead \:76f4\:63a5\:4f7f\:7528 --- *)
       {"NotebookWrite\\s*\\[", "b",
-       "NotebookWrite 直接使用 (NBWriteCell/NBWriteCode/NBWriteText を使用)"},
+       "NotebookWrite \:76f4\:63a5\:4f7f\:7528 (NBWriteCell/NBWriteCode/NBWriteText \:3092\:4f7f\:7528)"},
       {"NotebookRead\\s*\\[", "b",
-       "NotebookRead 直接使用 (NBCellRead を使用)"},
+       "NotebookRead \:76f4\:63a5\:4f7f\:7528 (NBCellRead \:3092\:4f7f\:7528)"},
 
-      (* --- 既存ルール: SystemCredential 直接使用 --- *)
+      (* --- \:65e2\:5b58\:30eb\:30fc\:30eb: SystemCredential \:76f4\:63a5\:4f7f\:7528 --- *)
       {"SystemCredential\\s*\\[", "a",
-       "SystemCredential 直接使用 (NBGetAPIKey を使用)"},
+       "SystemCredential \:76f4\:63a5\:4f7f\:7528 (NBGetAPIKey \:3092\:4f7f\:7528)"},
 
-      (* --- 既存ルール: NBAccess`Private` 関数呼び出し --- *)
+      (* --- \:65e2\:5b58\:30eb\:30fc\:30eb: NBAccess`Private` \:95a2\:6570\:547c\:3073\:51fa\:3057 --- *)
       {"NBAccess`Private`", "d",
-       "NBAccess`Private` 関数の直接呼び出し (公開 API を使用)"},
+       "NBAccess`Private` \:95a2\:6570\:306e\:76f4\:63a5\:547c\:3073\:51fa\:3057 (\:516c\:958b API \:3092\:4f7f\:7528)"},
 
-      (* --- CellGroupData 直構築 --- *)
+      (* --- CellGroupData \:76f4\:69cb\:7bc9 --- *)
       {"Cell\\s*\\[\\s*CellGroupData", "b",
-       "CellGroupData を伴うセルグループ直構築 (NBWriteCell に Cell[CellGroupData[...]] を渡すか専用APIを使用)"}
+       "CellGroupData \:3092\:4f34\:3046\:30bb\:30eb\:30b0\:30eb\:30fc\:30d7\:76f4\:69cb\:7bc9 (NBWriteCell \:306b Cell[CellGroupData[...]] \:3092\:6e21\:3059\:304b\:5c02\:7528API\:3092\:4f7f\:7528)"}
     };
-    (* 各行を走査 *)
+    (* \:5404\:884c\:3092\:8d70\:67fb *)
     Do[
       Module[{line, lineNum, trimmed},
         lineNum = idx;
         line = lines[[idx]];
-        (* コメント行はスキップ *)
+        (* \:30b3\:30e1\:30f3\:30c8\:884c\:306f\:30b9\:30ad\:30c3\:30d7 *)
         trimmed = StringTrim[line];
         If[StringStartsQ[trimmed, "(*"], Continue[]];
         Do[
           Module[{regex, cat, desc},
             {regex, cat, desc} = pat;
             If[StringContainsQ[line, RegularExpression[regex]],
-              (* NBAccess` API 呼び出しは許可: NBAccess`NBxxxxx[ パターン *)
+              (* NBAccess` API \:547c\:3073\:51fa\:3057\:306f\:8a31\:53ef: NBAccess`NBxxxxx[ \:30d1\:30bf\:30fc\:30f3 *)
               If[cat === "b" && StringContainsQ[line, "NBAccess`NB"],
                 Continue[]];
-              (* NBWriteCell に CellGroupData を渡すのは許可 *)
+              (* NBWriteCell \:306b CellGroupData \:3092\:6e21\:3059\:306e\:306f\:8a31\:53ef *)
               If[cat === "b" && StringContainsQ[line, RegularExpression["Cell\\s*\\[\\s*CellGroupData"]] &&
                  StringContainsQ[line, "NBAccess`NBWriteCell"],
                 Continue[]];
@@ -13174,7 +13499,7 @@ iStaticSeparationScan[source_String, fileName_String] :=
     results
   ];
 
-(* 分離チェック実行 *)
+(* \:5206\:96e2\:30c1\:30a7\:30c3\:30af\:5b9f\:884c *)
 ClaudeCheckSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
   Module[{resolved, files, pkgName, prompt, result, docsCtx, ignoreList,
           nb = Quiet[InputNotebook[]]},
@@ -13184,31 +13509,31 @@ ClaudeCheckSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :
     If[Length[files] === 0,
       Print["\:30a8\:30e9\:30fc: \:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> target];
       Return[$Failed]];
-    (* セクションヘッダーを入力セルの直前に挿入 *)
+    (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
-      "\:25b6 ClaudeCheckSeparation: " <> target <>
+      "\[FilledRightTriangle] ClaudeCheckSeparation: " <> target <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
-    (* 無視リストチェック *)
+    (* \:7121\:8996\:30ea\:30b9\:30c8\:30c1\:30a7\:30c3\:30af *)
     ignoreList = If[ListQ[NBAccess`$NBSeparationIgnoreList],
       NBAccess`$NBSeparationIgnoreList, {}];
     If[StringQ[pkgName] && MemberQ[ignoreList, pkgName],
       Print[target <> " \:306f\:5206\:96e2\:691c\:67fb\:306e\:7121\:8996\:30ea\:30b9\:30c8\:306b\:767b\:9332\:3055\:308c\:3066\:3044\:307e\:3059\:3002"];
       Return[{}]];
-    (* NBAccess ドキュメントコンテキスト *)
+    (* NBAccess \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8 *)
     docsCtx = iSeparationDocsContext["NBAccess"];
-    (* 各ファイルに対してチェック *)
+    (* \:5404\:30d5\:30a1\:30a4\:30eb\:306b\:5bfe\:3057\:3066\:30c1\:30a7\:30c3\:30af *)
     result = {};
     Do[
       Module[{fPath, fContent, checkPrompt, resp, staticHits, llmHits, merged},
         fPath = fileInfo["path"];
         fContent = fileInfo["content"];
         If[!StringQ[fContent] || StringLength[fContent] === 0, Continue[]];
-        (* 無視リストのファイルパスチェック *)
+        (* \:7121\:8996\:30ea\:30b9\:30c8\:306e\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:30c1\:30a7\:30c3\:30af *)
         If[AnyTrue[ignoreList, StringContainsQ[fPath, # <> ".wl", IgnoreCase -> True] &],
           Continue[]];
-        (* Phase 1: 静的パターン走査 *)
+        (* Phase 1: \:9759\:7684\:30d1\:30bf\:30fc\:30f3\:8d70\:67fb *)
         staticHits = iStaticSeparationScan[fContent, FileNameTake[fPath]];
-        (* Phase 2: LLM による文脈判定 *)
+        (* Phase 2: LLM \:306b\:3088\:308b\:6587\:8108\:5224\:5b9a *)
         checkPrompt =
           "You are a code auditor for Wolfram Language packages.\n" <>
           "Check the following source file for violations of the NBAccess separation principle.\n\n" <>
@@ -13272,7 +13597,7 @@ ClaudeCheckSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :
           llmHits = {<|"line" -> 0,
             "description" -> "\:30af\:30a8\:30ea\:5931\:6557: " <> ToString[resp]|>}
         ];
-        (* Phase 3: 静的走査結果と LLM 結果をマージ (重複排除) *)
+        (* Phase 3: \:9759\:7684\:8d70\:67fb\:7d50\:679c\:3068 LLM \:7d50\:679c\:3092\:30de\:30fc\:30b8 (\:91cd\:8907\:6392\:9664) *)
         merged = llmHits;
         Do[
           If[!AnyTrue[merged,
@@ -13283,9 +13608,9 @@ ClaudeCheckSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :
         AppendTo[result, <|"file" -> fPath, "violations" -> merged|>]
       ],
     {fileInfo, files}];
-    (* キャッシュに保存 *)
+    (* \:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:4fdd\:5b58 *)
     $iSeparationCheckCache[target] = result;
-    (* 表示 *)
+    (* \:8868\:793a *)
     Module[{catLabels = <|
       "a" -> "SystemCredential\:76f4\:63a5", "b" -> "\:30bb\:30eb\:76f4\:63a5\:64cd\:4f5c",
       "c" -> "CellEpilog\:76f4\:63a5", "d" -> "Private`\:547c\:3073\:51fa\:3057",
@@ -13311,7 +13636,7 @@ ClaudeCheckSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :
     result
   ];
 
-(* 分離違反の修正 *)
+(* \:5206\:96e2\:9055\:53cd\:306e\:4fee\:6b63 *)
 ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
   Module[{resolved, files, pkgName, cached, ext, timestamp,
           nb = Quiet[InputNotebook[]]},
@@ -13321,21 +13646,21 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
     If[Length[files] === 0,
       Print["\:30a8\:30e9\:30fc: \:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> target];
       Return[$Failed]];
-    (* セクションヘッダーを入力セルの直前に挿入 *)
+    (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
-      "\:25b6 ClaudeFixSeparation: " <> target <>
+      "\[FilledRightTriangle] ClaudeFixSeparation: " <> target <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
-    (* キャッシュされた検査結果を確認、なければ先に検査 *)
+    (* \:30ad\:30e3\:30c3\:30b7\:30e5\:3055\:308c\:305f\:691c\:67fb\:7d50\:679c\:3092\:78ba\:8a8d\:3001\:306a\:3051\:308c\:3070\:5148\:306b\:691c\:67fb *)
     cached = Lookup[$iSeparationCheckCache, target, None];
     If[cached === None,
       Print["\:5206\:96e2\:691c\:67fb\:3092\:5148\:306b\:5b9f\:884c\:3057\:307e\:3059..."];
       cached = ClaudeCheckSeparation[target, Fallback -> TrueQ[OptionValue[Fallback]]];
       If[cached === $Failed, Return[$Failed]]];
-    (* 違反があるか確認 *)
+    (* \:9055\:53cd\:304c\:3042\:308b\:304b\:78ba\:8a8d *)
     If[!AnyTrue[cached, Length[#["violations"]] > 0 &],
       Print["\:9055\:53cd\:306f\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3067\:3057\:305f\:3002\:4fee\:6b63\:306f\:4e0d\:8981\:3067\:3059\:3002"];
       Return[]];
-    (* ファイルパスの場合: バックアップを作成して直接修正 *)
+    (* \:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:306e\:5834\:5408: \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:4f5c\:6210\:3057\:3066\:76f4\:63a5\:4fee\:6b63 *)
     ext = FileExtension[target];
     If[MemberQ[{"wl", "m", "nb"}, ext] && FileExistsQ[target],
       Module[{backupPath, violationDesc},
@@ -13348,7 +13673,7 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
           ("L" <> ToString[Lookup[#, "line", "?"]] <> ": " <>
            Lookup[#, "description", ""] <> "\n") & /@
           Flatten[#["violations"] & /@ cached]];
-        (* ClaudeUpdatePackage 相当の修正 *)
+        (* ClaudeUpdatePackage \:76f8\:5f53\:306e\:4fee\:6b63 *)
         Module[{src, fixPrompt, fixResult},
           src = Import[target, "Text"];
           fixPrompt =
@@ -13376,13 +13701,13 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
               clean = StringReplace[fixResult, {
                 RegularExpression["^```(?:mathematica|wolfram)?\\s*\n"] -> "",
                 RegularExpression["\n```\\s*$"] -> ""}];
-              (* 全ファイルか部分的レスポンスかを判定 *)
+              (* \:5168\:30d5\:30a1\:30a4\:30eb\:304b\:90e8\:5206\:7684\:30ec\:30b9\:30dd\:30f3\:30b9\:304b\:3092\:5224\:5b9a *)
               isFullFile = StringContainsQ[clean, "BeginPackage["] &&
                            StringContainsQ[clean, "EndPackage["] &&
                            StringLength[clean] > StringLength[src] * 0.7;
               If[isFullFile,
                 finalCode = clean,
-                (* 部分的レスポンス: マージを試みる *)
+                (* \:90e8\:5206\:7684\:30ec\:30b9\:30dd\:30f3\:30b9: \:30de\:30fc\:30b8\:3092\:8a66\:307f\:308b *)
                 Module[{origBlks, updBlks, code = src, mc = 0},
                   origBlks = iExtractFunctions[src];
                   updBlks  = iExtractFunctions[clean];
@@ -13398,7 +13723,7 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
                   If[mc > 0,
                     Print["\:90e8\:5206\:30ec\:30b9\:30dd\:30f3\:30b9\:3092\:30de\:30fc\:30b8: " <> ToString[mc] <> " \:500b\:306e\:95a2\:6570\:3092\:66f4\:65b0"];
                     finalCode = code,
-                    (* マージ不能: 安全検証してからフォールバック *)
+                    (* \:30de\:30fc\:30b8\:4e0d\:80fd: \:5b89\:5168\:691c\:8a3c\:3057\:3066\:304b\:3089\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af *)
                     If[StringLength[clean] > StringLength[src] * 0.5,
                       finalCode = clean,
                       Print[Style["\:26a0 \:30ec\:30b9\:30dd\:30f3\:30b9\:304c\:5c0f\:3055\:3059\:304e\:307e\:3059\:3002\:30de\:30fc\:30b8\:3082\:5931\:6557\:3002\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3059\:3002",
@@ -13420,7 +13745,7 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
         ]
       ];
       Return[]];
-    (* パッケージ名のみの場合: ClaudeUpdatePackage を呼び出す *)
+    (* \:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:306e\:307f\:306e\:5834\:5408: ClaudeUpdatePackage \:3092\:547c\:3073\:51fa\:3059 *)
     If[StringQ[pkgName],
       Module[{violationDesc},
         violationDesc = StringJoin[
@@ -13448,20 +13773,20 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
     Print["\:30a8\:30e9\:30fc: \:4fee\:6b63\:5bfe\:8c61\:3092\:7279\:5b9a\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f: " <> target]
   ];
 
-(* ClaudeUpdatePackage のパッケージ名のみ呼び出し: 分離違反修正 *)
+(* ClaudeUpdatePackage \:306e\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:306e\:307f\:547c\:3073\:51fa\:3057: \:5206\:96e2\:9055\:53cd\:4fee\:6b63 *)
 ClaudeUpdatePackage[packageName_String] :=
   ClaudeFixSeparation[packageName];
 
 (* ============================================================
-   ClaudePrepareCommit: 前回コミット以降の変更を収集し
-   コミットメッセージ付きの GitHubRefreshAndCommit コマンドを出力
+   ClaudePrepareCommit: \:524d\:56de\:30b3\:30df\:30c3\:30c8\:4ee5\:964d\:306e\:5909\:66f4\:3092\:53ce\:96c6\:3057
+   \:30b3\:30df\:30c3\:30c8\:30e1\:30c3\:30bb\:30fc\:30b8\:4ed8\:304d\:306e GitHubRefreshAndCommit \:30b3\:30de\:30f3\:30c9\:3092\:51fa\:529b
    ============================================================ *)
 
-(* バックアップディレクトリ名のタイムスタンプを AbsoluteTime に変換 *)
+(* \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:540d\:306e\:30bf\:30a4\:30e0\:30b9\:30bf\:30f3\:30d7\:3092 AbsoluteTime \:306b\:5909\:63db *)
 iBackupDirToAbsoluteTime[dirName_String] :=
   Module[{ts, m},
     ts = iBackupTimestampPart[dirName];
-    (* YYYYMMDD_HHMMSS 形式 *)
+    (* YYYYMMDD_HHMMSS \:5f62\:5f0f *)
     m = StringCases[ts,
       RegularExpression["^(\\d{4})(\\d{2})(\\d{2})_(\\d{2})(\\d{2})(\\d{2})$"] :>
         {"$1", "$2", "$3", "$4", "$5", "$6"}];
@@ -13469,7 +13794,7 @@ iBackupDirToAbsoluteTime[dirName_String] :=
       Quiet @ AbsoluteTime[{
         StringJoin[Riffle[First[m], {"-", "-", " ", ":", ":"}]],
         {"Year", "-", "Month", "-", "Day", " ", "Hour", ":", "Minute", ":", "Second"}}],
-      (* YYYYMMDDHHMM 形式 *)
+      (* YYYYMMDDHHMM \:5f62\:5f0f *)
       m = StringCases[ts,
         RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
           {"$1", "$2", "$3", "$4", "$5"}];
@@ -13479,26 +13804,26 @@ iBackupDirToAbsoluteTime[dirName_String] :=
           {"Year", "-", "Month", "-", "Day", " ", "Hour", ":", "Minute"}}],
         0]]];
 
-(* 前回コミット以降のバックアップエントリから変更サマリーを収集 *)
+(* \:524d\:56de\:30b3\:30df\:30c3\:30c8\:4ee5\:964d\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30a8\:30f3\:30c8\:30ea\:304b\:3089\:5909\:66f4\:30b5\:30de\:30ea\:30fc\:3092\:53ce\:96c6 *)
 iCollectChangeSummaries[packageName_String, sinceTime_?NumericQ] :=
   Module[{entries, filtered, summaries = {}},
     entries = iAllBackupEntries[packageName];
-    (* sinceTime 以降のエントリをフィルタ *)
+    (* sinceTime \:4ee5\:964d\:306e\:30a8\:30f3\:30c8\:30ea\:3092\:30d5\:30a3\:30eb\:30bf *)
     filtered = Select[entries,
       iBackupDirToAbsoluteTime[#["DirName"]] > sinceTime &];
-    (* pre_ バックアップは除外（更新前の保存であり変更内容ではない） *)
+    (* pre_ \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306f\:9664\:5916\:ff08\:66f4\:65b0\:524d\:306e\:4fdd\:5b58\:3067\:3042\:308a\:5909\:66f4\:5185\:5bb9\:3067\:306f\:306a\:3044\:ff09 *)
     filtered = Select[filtered, !StringStartsQ[#["DirName"], "pre_"] &];
     Do[
       Module[{prompt = entry["Prompt"], btype = entry["Type"]},
         If[StringQ[prompt] && StringLength[StringTrim[prompt]] > 0,
           Module[{summary = StringTrim[prompt], label},
-            (* 長すぎるプロンプトは先頭を抽出 *)
+            (* \:9577\:3059\:304e\:308b\:30d7\:30ed\:30f3\:30d7\:30c8\:306f\:5148\:982d\:3092\:62bd\:51fa *)
             If[StringLength[summary] > 200,
               summary = StringTake[summary, 200]];
-            (* INSTRUCTION: 以降を抽出 *)
+            (* INSTRUCTION: \:4ee5\:964d\:3092\:62bd\:51fa *)
             summary = First[StringCases[summary,
               "INSTRUCTION: " ~~ rest__ :> rest], summary];
-            (* 定型句を除去 *)
+            (* \:5b9a\:578b\:53e5\:3092\:9664\:53bb *)
             summary = StringReplace[summary, {
               "\:524d\:56de\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:4ee5\:964d\:306e\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:5909\:66f4\:3092\:53cd\:6620\:3057\:3066\:3001\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0\:3057\:3066\:304f\:3060\:3055\:3044\:3002" ->
                 "auto-update docs"}];
@@ -13513,7 +13838,7 @@ iCollectChangeSummaries[packageName_String, sinceTime_?NumericQ] :=
     summaries
   ];
 
-(* 変更サマリーリストを "- " 付き72文字折り返しで整形 *)
+(* \:5909\:66f4\:30b5\:30de\:30ea\:30fc\:30ea\:30b9\:30c8\:3092 "- " \:4ed8\:304d72\:6587\:5b57\:6298\:308a\:8fd4\:3057\:3067\:6574\:5f62 *)
 iWrapCommitBodyLines[summaries_List] :=
   Module[{bodyLines},
     bodyLines = Map[
@@ -13531,18 +13856,18 @@ iWrapCommitBodyLines[summaries_List] :=
     StringJoin[Riffle[bodyLines, "\n"]]
   ];
 
-(* 変更サマリーリストからコミットメッセージを構築。
-   1行目: 50文字以内の要約
-   本文: 各変更を72文字折り返しで列挙 *)
+(* \:5909\:66f4\:30b5\:30de\:30ea\:30fc\:30ea\:30b9\:30c8\:304b\:3089\:30b3\:30df\:30c3\:30c8\:30e1\:30c3\:30bb\:30fc\:30b8\:3092\:69cb\:7bc9\:3002
+   1\:884c\:76ee: 50\:6587\:5b57\:4ee5\:5185\:306e\:8981\:7d04
+   \:672c\:6587: \:5404\:5909\:66f4\:309272\:6587\:5b57\:6298\:308a\:8fd4\:3057\:3067\:5217\:6319 *)
 iFormatCommitMessage[packageName_String, summaries_List] :=
   Module[{subject, body},
     If[Length[summaries] === 0,
       Return["Update " <> packageName]];
-    (* 1行目: 最初のサマリーをベースに短い要約を生成 *)
+    (* 1\:884c\:76ee: \:6700\:521d\:306e\:30b5\:30de\:30ea\:30fc\:3092\:30d9\:30fc\:30b9\:306b\:77ed\:3044\:8981\:7d04\:3092\:751f\:6210 *)
     subject = If[Length[summaries] === 1,
       summaries[[1]],
       summaries[[1]] <> " + " <> ToString[Length[summaries] - 1] <> " more"];
-    (* 50文字に収める *)
+    (* 50\:6587\:5b57\:306b\:53ce\:3081\:308b *)
     If[StringLength[subject] > 50,
       subject = StringTake[subject, 47] <> "..."];
     body = iWrapCommitBodyLines[summaries];
@@ -13556,11 +13881,11 @@ Options[ClaudePrepareCommit] = {
   DryRun -> False
 };
 
-(* 2引数版: subject を直接指定。本文は自動収集した変更点から構築。 *)
+(* 2\:5f15\:6570\:7248: subject \:3092\:76f4\:63a5\:6307\:5b9a\:3002\:672c\:6587\:306f\:81ea\:52d5\:53ce\:96c6\:3057\:305f\:5909\:66f4\:70b9\:304b\:3089\:69cb\:7bc9\:3002 *)
 ClaudePrepareCommit[packageName_String, subject_String, opts:OptionsPattern[]] :=
   iClaudePrepareCommitImpl[packageName, subject, opts];
 
-(* 1引数版: コミットメッセージも自動生成 *)
+(* 1\:5f15\:6570\:7248: \:30b3\:30df\:30c3\:30c8\:30e1\:30c3\:30bb\:30fc\:30b8\:3082\:81ea\:52d5\:751f\:6210 *)
 ClaudePrepareCommit[packageName_String, opts:OptionsPattern[]] :=
   iClaudePrepareCommitImpl[packageName, Automatic, opts];
 
@@ -13577,8 +13902,8 @@ iClaudePrepareCommitImpl[packageName_String, subjectSpec_, opts:OptionsPattern[C
       BaseBranch -> OptionValue[ClaudePrepareCommit, {opts}, BaseBranch],
       Fallback -> OptionValue[ClaudePrepareCommit, {opts}, Fallback]];
 
-    (* 最新コミットを取得 *)
-    Print[Style["\:25b6 " <> packageName <> " \:306e\:6700\:65b0\:30b3\:30df\:30c3\:30c8\:3092\:53d6\:5f97\:4e2d...", Bold]];
+    (* \:6700\:65b0\:30b3\:30df\:30c3\:30c8\:3092\:53d6\:5f97 *)
+    Print[Style["\[FilledRightTriangle] " <> packageName <> " \:306e\:6700\:65b0\:30b3\:30df\:30c3\:30c8\:3092\:53d6\:5f97\:4e2d...", Bold]];
     commits = Quiet @ GitHubREST`GitHubListCommits[packageName,
       MaxItems -> 1, ghOpts];
     If[!FailureQ[commits] && ListQ[commits] && Length[commits] > 0,
@@ -13596,19 +13921,19 @@ iClaudePrepareCommitImpl[packageName_String, subjectSpec_, opts:OptionsPattern[C
         Print["  \:65e5\:6642: ", If[StringQ[dateStr], dateStr, "(\:4e0d\:660e)"]]],
       Print["  \:30b3\:30df\:30c3\:30c8\:5c65\:6b74\:306a\:3057\:ff08\:65b0\:898f\:30ea\:30dd\:30b8\:30c8\:30ea\:ff09"]];
 
-    (* 前回コミット以降の変更サマリーを収集 *)
-    Print[Style["\:25b6 \:524d\:56de\:30b3\:30df\:30c3\:30c8\:4ee5\:964d\:306e\:5909\:66f4\:3092\:53ce\:96c6\:4e2d...", Bold]];
+    (* \:524d\:56de\:30b3\:30df\:30c3\:30c8\:4ee5\:964d\:306e\:5909\:66f4\:30b5\:30de\:30ea\:30fc\:3092\:53ce\:96c6 *)
+    Print[Style["\[FilledRightTriangle] \:524d\:56de\:30b3\:30df\:30c3\:30c8\:4ee5\:964d\:306e\:5909\:66f4\:3092\:53ce\:96c6\:4e2d...", Bold]];
     summaries = iCollectChangeSummaries[packageName, lastCommitTime];
     If[Length[summaries] === 0,
       Print["  \:5909\:66f4\:5c65\:6b74\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002" <>
         If[subjectSpec === Automatic, "\:30c7\:30d5\:30a9\:30eb\:30c8\:30e1\:30c3\:30bb\:30fc\:30b8\:3092\:4f7f\:7528\:3057\:307e\:3059\:3002", ""]],
       Print["  " <> ToString[Length[summaries]] <> " \:4ef6\:306e\:5909\:66f4\:3092\:691c\:51fa"]];
 
-    (* コミットメッセージを構築 *)
+    (* \:30b3\:30df\:30c3\:30c8\:30e1\:30c3\:30bb\:30fc\:30b8\:3092\:69cb\:7bc9 *)
     If[subjectSpec === Automatic,
-      (* 1引数版: subject も自動生成 *)
+      (* 1\:5f15\:6570\:7248: subject \:3082\:81ea\:52d5\:751f\:6210 *)
       commitMsg = iFormatCommitMessage[packageName, summaries],
-      (* 2引数版: subject はユーザー指定、本文は自動収集 *)
+      (* 2\:5f15\:6570\:7248: subject \:306f\:30e6\:30fc\:30b6\:30fc\:6307\:5b9a\:3001\:672c\:6587\:306f\:81ea\:52d5\:53ce\:96c6 *)
       If[StringLength[subjectSpec] > 50,
         Print[Style["  \:26a0 subject \:304c 50\:6587\:5b57\:3092\:8d85\:3048\:3066\:3044\:307e\:3059 (" <>
           ToString[StringLength[subjectSpec]] <> "\:6587\:5b57)\:3002git \:306e\:6163\:4f8b\:3067\:306f 50\:6587\:5b57\:4ee5\:5185\:304c\:63a8\:5968\:3067\:3059\:3002",
@@ -13619,19 +13944,19 @@ iClaudePrepareCommitImpl[packageName_String, subjectSpec_, opts:OptionsPattern[C
         subjectSpec <> "\n\n" <> body,
         subjectSpec]];
 
-    Print[Style["\:25b6 \:30b3\:30df\:30c3\:30c8\:30e1\:30c3\:30bb\:30fc\:30b8:", Bold]];
+    Print[Style["\[FilledRightTriangle] \:30b3\:30df\:30c3\:30c8\:30e1\:30c3\:30bb\:30fc\:30b8:", Bold]];
     Print[Style[commitMsg, FontFamily -> "Consolas", FontSize -> 10]];
 
     If[dryRun,
       Print["\n", Style["(DryRun: \:30b3\:30de\:30f3\:30c9\:306f\:751f\:6210\:3055\:308c\:307e\:305b\:3093)", Italic]];
       Return[commitMsg]];
 
-    (* GitHubRefreshAndCommit コマンドを Input セルとして出力 *)
+    (* GitHubRefreshAndCommit \:30b3\:30de\:30f3\:30c9\:3092 Input \:30bb\:30eb\:3068\:3057\:3066\:51fa\:529b *)
     escapedMsg = StringReplace[commitMsg, {"\\" -> "\\\\", "\"" -> "\\\"", "\n" -> "\\n"}];
     command = "GitHubRefreshAndCommit[\"" <> packageName <> "\", \"" <>
       escapedMsg <> "\"]";
     Print[""];
-    Print[Style["\:25b6 \:4ee5\:4e0b\:3092\:5b9f\:884c\:3057\:3066\:30b3\:30df\:30c3\:30c8:", Bold]];
+    Print[Style["\[FilledRightTriangle] \:4ee5\:4e0b\:3092\:5b9f\:884c\:3057\:3066\:30b3\:30df\:30c3\:30c8:", Bold]];
     NBAccess`NBWriteCell[nb, Cell[BoxData[command], "Input"]];
   ]];
 
@@ -13665,15 +13990,15 @@ iDeferOutputDeclassify[nb_NotebookObject, cellIdx_Integer, wasDependent_] :=
   ];
 
 (* ================================================================
-   パッケージ「使用」vs「更新」ガード
-   ClaudeEval のプロンプトに挿入し、パッケージ名が含まれるタスクで
-   「使う」意図のときに ClaudeUpdatePackage を生成させない。
+   \:30d1\:30c3\:30b1\:30fc\:30b8\:300c\:4f7f\:7528\:300dvs\:300c\:66f4\:65b0\:300d\:30ac\:30fc\:30c9
+   ClaudeEval \:306e\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:633f\:5165\:3057\:3001\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:304c\:542b\:307e\:308c\:308b\:30bf\:30b9\:30af\:3067
+   \:300c\:4f7f\:3046\:300d\:610f\:56f3\:306e\:3068\:304d\:306b ClaudeUpdatePackage \:3092\:751f\:6210\:3055\:305b\:306a\:3044\:3002
    ================================================================ *)
 iPackageUseGuard[task_String] :=
   Module[{pkgDir, allNames, mentioned, hasUpdateVerb, hasUseVerb, guard = ""},
     pkgDir = Global`$packageDirectory;
     If[!StringQ[pkgDir] || !DirectoryQ[pkgDir], Return[""]];
-    (* パッケージ名検出 *)
+    (* \:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:691c\:51fa *)
     allNames = Join[
       FileBaseName /@ FileNames["*.wl", pkgDir],
       FileNameTake /@ Select[FileNames["*", pkgDir],
@@ -13681,20 +14006,20 @@ iPackageUseGuard[task_String] :=
     mentioned = Select[allNames,
       StringContainsQ[task, #, IgnoreCase -> True] &];
     If[Length[mentioned] === 0, Return[""]];
-    (* 変更系動詞の検出 *)
+    (* \:5909\:66f4\:7cfb\:52d5\:8a5e\:306e\:691c\:51fa *)
     hasUpdateVerb = StringContainsQ[task,
       "\:8ffd\:52a0" | "\:4fee\:6b63" | "\:5909\:66f4" | "\:524a\:9664" | "\:66f4\:65b0" |
       "\:30d0\:30b0" | "\:76f4\:3057\:3066" | "\:76f4\:3059" | "\:6539\:5584" |
       "add" | "modify" | "fix" | "change" | "remove" | "update" | "refactor",
       IgnoreCase -> True];
-    (* 利用系動詞の検出 *)
+    (* \:5229\:7528\:7cfb\:52d5\:8a5e\:306e\:691c\:51fa *)
     hasUseVerb = StringContainsQ[task,
       "\:8a08\:7b97" | "\:5b9f\:884c" | "\:8868\:793a" | "\:4f7f\:3063\:3066" | "\:4f7f\:3046" |
       "\:3057\:3066" | "\:3092\:3057\:3066" | "\:3067\:304d\:308b" |
       "\:691c\:7d22" | "\:53d6\:5f97" | "\:5206\:6790" | "\:30d7\:30ed\:30c3\:30c8" |
       "compute" | "calculate" | "run" | "show" | "display" | "use" | "plot" | "search",
       IgnoreCase -> True];
-    (* 明確に「使う」意図で「更新する」意図ではない場合にガード挿入 *)
+    (* \:660e\:78ba\:306b\:300c\:4f7f\:3046\:300d\:610f\:56f3\:3067\:300c\:66f4\:65b0\:3059\:308b\:300d\:610f\:56f3\:3067\:306f\:306a\:3044\:5834\:5408\:306b\:30ac\:30fc\:30c9\:633f\:5165 *)
     If[hasUseVerb && !hasUpdateVerb,
       guard = "\n=== CRITICAL PACKAGE-USE GUARD ===\n" <>
         "The task mentions package(s): " <> StringRiffle[mentioned, ", "] <> ".\n" <>
@@ -13708,27 +14033,27 @@ iPackageUseGuard[task_String] :=
   ];
 
 (* ================================================================
-   Phase 3: サブグラフ記録
-   ClaudeUpdatePackage 等の内部ステップをサブステップとして記録。
-   親ノードの "SubSteps" キーに軽量イベントリストを格納。
+   Phase 3: \:30b5\:30d6\:30b0\:30e9\:30d5\:8a18\:9332
+   ClaudeUpdatePackage \:7b49\:306e\:5185\:90e8\:30b9\:30c6\:30c3\:30d7\:3092\:30b5\:30d6\:30b9\:30c6\:30c3\:30d7\:3068\:3057\:3066\:8a18\:9332\:3002
+   \:89aa\:30ce\:30fc\:30c9\:306e "SubSteps" \:30ad\:30fc\:306b\:8efd\:91cf\:30a4\:30d9\:30f3\:30c8\:30ea\:30b9\:30c8\:3092\:683c\:7d0d\:3002
 
-   サブステップ構造 (1ステップあたり ~100B):
+   \:30b5\:30d6\:30b9\:30c6\:30c3\:30d7\:69cb\:9020 (1\:30b9\:30c6\:30c3\:30d7\:3042\:305f\:308a ~100B):
      <|"Name"       -> "read-source",
        "Time"       -> AbsoluteTime[],
        "Status"     -> "Completed",  (* Processing/Completed/Failed *)
        "AccessLevel"-> "Local",
-       "Detail"     -> "Read 12345 chars"  (* 最大100文字 *)
+       "Detail"     -> "Read 12345 chars"  (* \:6700\:5927100\:6587\:5b57 *)
      |>
    ================================================================ *)
 
-(* アクティブなサブグラフ記録セッション *)
+(* \:30a2\:30af\:30c6\:30a3\:30d6\:306a\:30b5\:30d6\:30b0\:30e9\:30d5\:8a18\:9332\:30bb\:30c3\:30b7\:30e7\:30f3 *)
 $iLLMGraphSubSteps = {};
 $iLLMGraphSubGraphActive = False;
 $iLLMGraphSubGraphParentNB = None;
 $iLLMGraphSubGraphParentTag = None;
 $iLLMGraphSubGraphPackage = "";
 
-(* サブグラフ記録開始 *)
+(* \:30b5\:30d6\:30b0\:30e9\:30d5\:8a18\:9332\:958b\:59cb *)
 iLLMGraphBeginSubgraph[nb_NotebookObject, tag_String, packageName_String] := (
   $iLLMGraphSubSteps = {};
   $iLLMGraphSubGraphActive = True;
@@ -13738,7 +14063,7 @@ iLLMGraphBeginSubgraph[nb_NotebookObject, tag_String, packageName_String] := (
   iLLMGraphLogSubStep["start", "Local",
     "UpdatePackage: " <> packageName]);
 
-(* サブステップ記録 *)
+(* \:30b5\:30d6\:30b9\:30c6\:30c3\:30d7\:8a18\:9332 *)
 iLLMGraphLogSubStep[name_String, accessLevel_String, detail_String:""] :=
   If[TrueQ[$iLLMGraphSubGraphActive],
     AppendTo[$iLLMGraphSubSteps, <|
@@ -13749,7 +14074,7 @@ iLLMGraphLogSubStep[name_String, accessLevel_String, detail_String:""] :=
       "Detail"      -> StringTake[detail, UpTo[100]]
     |>]];
 
-(* 進行中マーク (LLM呼び出し開始時) *)
+(* \:9032\:884c\:4e2d\:30de\:30fc\:30af (LLM\:547c\:3073\:51fa\:3057\:958b\:59cb\:6642) *)
 iLLMGraphLogSubStepStart[name_String, accessLevel_String, detail_String:""] :=
   If[TrueQ[$iLLMGraphSubGraphActive],
     AppendTo[$iLLMGraphSubSteps, <|
@@ -13760,7 +14085,7 @@ iLLMGraphLogSubStepStart[name_String, accessLevel_String, detail_String:""] :=
       "Detail"      -> StringTake[detail, UpTo[100]]
     |>]];
 
-(* 最新サブステップの完了マーク *)
+(* \:6700\:65b0\:30b5\:30d6\:30b9\:30c6\:30c3\:30d7\:306e\:5b8c\:4e86\:30de\:30fc\:30af *)
 iLLMGraphLogSubStepEnd[status_String:"Completed", detail_String:""] :=
   If[TrueQ[$iLLMGraphSubGraphActive] && Length[$iLLMGraphSubSteps] > 0,
     Module[{last = Last[$iLLMGraphSubSteps]},
@@ -13768,7 +14093,7 @@ iLLMGraphLogSubStepEnd[status_String:"Completed", detail_String:""] :=
       If[detail =!= "", last["Detail"] = StringTake[detail, UpTo[100]]];
       $iLLMGraphSubSteps[[-1]] = last]];
 
-(* サブグラフ記録終了: 最新ノードに SubSteps を格納 *)
+(* \:30b5\:30d6\:30b0\:30e9\:30d5\:8a18\:9332\:7d42\:4e86: \:6700\:65b0\:30ce\:30fc\:30c9\:306b SubSteps \:3092\:683c\:7d0d *)
 iLLMGraphEndSubgraph[finalStatus_String:"Completed"] := Module[
   {nb, tag, graph, nodes, nodeIDs, latestID},
   If[!TrueQ[$iLLMGraphSubGraphActive], Return[]];
@@ -13785,7 +14110,7 @@ iLLMGraphEndSubgraph[finalStatus_String:"Completed"] := Module[
     $iLLMGraphSubGraphActive = False; Return[]];
 
   nodes = Lookup[graph, "Nodes", <||>];
-  (* このセッションタグに属する最新ノードを探す *)
+  (* \:3053\:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:30bf\:30b0\:306b\:5c5e\:3059\:308b\:6700\:65b0\:30ce\:30fc\:30c9\:3092\:63a2\:3059 *)
   nodeIDs = Select[Keys[nodes], StringStartsQ[#, tag <> "-"] &];
   If[Length[nodeIDs] > 0,
     latestID = Last @ SortBy[nodeIDs,
@@ -13798,7 +14123,7 @@ iLLMGraphEndSubgraph[finalStatus_String:"Completed"] := Module[
       $iLLMGraphCache = graph;
       iLLMGraphFlush[nb]]];
 
-  (* クリーンアップ *)
+  (* \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7 *)
   $iLLMGraphSubSteps = {};
   $iLLMGraphSubGraphActive = False;
   $iLLMGraphSubGraphParentNB = None;
@@ -13806,54 +14131,54 @@ iLLMGraphEndSubgraph[finalStatus_String:"Completed"] := Module[
   $iLLMGraphSubGraphPackage = "";
 ];
 
-(* iDeferOutputUnmark は後方互換のため iDeferOutputDeclassify に委譲 *)
+(* iDeferOutputUnmark \:306f\:5f8c\:65b9\:4e92\:63db\:306e\:305f\:3081 iDeferOutputDeclassify \:306b\:59d4\:8b72 *)
 
 (* ================================================================
-   Notebook LLMGraph — Phase 1a (revised): 軽量グラフ + 外部キャッシュ
+   Notebook LLMGraph \[LongDash] Phase 1a (revised): \:8efd\:91cf\:30b0\:30e9\:30d5 + \:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5
    ================================================================
-   設計原則:
-     TaggingRules には再計算プラン（グラフ構造）のみ保存。
-     fullPrompt/response/code は外部キャッシュに分離。
-     ノードあたり ~1KB 以下を目標とする。
+   \:8a2d\:8a08\:539f\:5247:
+     TaggingRules \:306b\:306f\:518d\:8a08\:7b97\:30d7\:30e9\:30f3\:ff08\:30b0\:30e9\:30d5\:69cb\:9020\:ff09\:306e\:307f\:4fdd\:5b58\:3002
+     fullPrompt/response/code \:306f\:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:5206\:96e2\:3002
+     \:30ce\:30fc\:30c9\:3042\:305f\:308a ~1KB \:4ee5\:4e0b\:3092\:76ee\:6a19\:3068\:3059\:308b\:3002
 
-   ノード分類:
-     "Orchestrator"  — ClaudeQuery/ClaudeEval 等の高レベル関数
-     "Continuation"  — ContinueEval による前セッション引き継ぎ
+   \:30ce\:30fc\:30c9\:5206\:985e:
+     "Orchestrator"  \[LongDash] ClaudeQuery/ClaudeEval \:7b49\:306e\:9ad8\:30ec\:30d9\:30eb\:95a2\:6570
+     "Continuation"  \[LongDash] ContinueEval \:306b\:3088\:308b\:524d\:30bb\:30c3\:30b7\:30e7\:30f3\:5f15\:304d\:7d99\:304e
 
-   エッジ分類:
-     "ContextInheritance" — セッション履歴コンパクション要約の伝播
-     "DataFlow"           — ノード出力→次ノード入力
-     "Fallback"           — メインモデル失敗時の代替モデル遷移
+   \:30a8\:30c3\:30b8\:5206\:985e:
+     "ContextInheritance" \[LongDash] \:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:8981\:7d04\:306e\:4f1d\:64ad
+     "DataFlow"           \[LongDash] \:30ce\:30fc\:30c9\:51fa\:529b\[RightArrow]\:6b21\:30ce\:30fc\:30c9\:5165\:529b
+     "Fallback"           \[LongDash] \:30e1\:30a4\:30f3\:30e2\:30c7\:30eb\:5931\:6557\:6642\:306e\:4ee3\:66ff\:30e2\:30c7\:30eb\:9077\:79fb
 
-   アクセスレベル:
-     "Local"      — ローカル WL 評価 (API 不要)
-     "ClaudeCode" — Claude Code CLI 経由
-     "ClaudeAPI"  — Anthropic API 直接
-     "LMStudio"   — ローカル LLM サーバー
-     "WolframLLM" — Wolfram LLMFunction/LLMSynthesize
+   \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb:
+     "Local"      \[LongDash] \:30ed\:30fc\:30ab\:30eb WL \:8a55\:4fa1 (API \:4e0d\:8981)
+     "ClaudeCode" \[LongDash] Claude Code CLI \:7d4c\:7531
+     "ClaudeAPI"  \[LongDash] Anthropic API \:76f4\:63a5
+     "LMStudio"   \[LongDash] \:30ed\:30fc\:30ab\:30eb LLM \:30b5\:30fc\:30d0\:30fc
+     "WolframLLM" \[LongDash] Wolfram LLMFunction/LLMSynthesize
 
-   ストレージ設計:
-     TaggingRules (ノードあたり ~1KB):
+   \:30b9\:30c8\:30ec\:30fc\:30b8\:8a2d\:8a08:
+     TaggingRules (\:30ce\:30fc\:30c9\:3042\:305f\:308a ~1KB):
        NodeID, NodeType, AccessLevel, Status
-       Instruction (先頭500文字)
-       ResponseSummary (300文字以内)
-       Timestamps (Created のみ)
+       Instruction (\:5148\:982d500\:6587\:5b57)
+       ResponseSummary (300\:6587\:5b57\:4ee5\:5185)
+       Timestamps (Created \:306e\:307f)
        InEdges, OutEdges
-     外部キャッシュ ($packageDirectory/llmgraph_cache/):
-       {NodeID}.wxf — fullPrompt, response, code の完全データ
-       最近N件を保持、古いものは自動削除
+     \:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5 ($packageDirectory/llmgraph_cache/):
+       {NodeID}.wxf \[LongDash] fullPrompt, response, code \:306e\:5b8c\:5168\:30c7\:30fc\:30bf
+       \:6700\:8fd1N\:4ef6\:3092\:4fdd\:6301\:3001\:53e4\:3044\:3082\:306e\:306f\:81ea\:52d5\:524a\:9664
    ================================================================ *)
 
-(* ────────────────────────────────────────────────────────
-   定数
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:5b9a\:6570
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 $iLLMGraphMaxInstructionChars = 500;
 $iLLMGraphMaxSummaryChars     = 300;
-$iLLMGraphCacheMaxEntries     = 100; (* 外部キャッシュに保持する最大エントリ数 L1+L2 合計 *)
+$iLLMGraphCacheMaxEntries     = 100; (* \:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:4fdd\:6301\:3059\:308b\:6700\:5927\:30a8\:30f3\:30c8\:30ea\:6570 L1+L2 \:5408\:8a08 *)
 
-(* ────────────────────────────────────────────────────────
-   アクセスレベル色定義 (可視化用)
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:8272\:5b9a\:7fa9 (\:53ef\:8996\:5316\:7528)
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphAccessColor["ClaudeCode"] := RGBColor[0.20, 0.50, 0.90];
 iLLMGraphAccessColor["ClaudeAPI"]  := RGBColor[0.35, 0.35, 0.95];
 iLLMGraphAccessColor["LMStudio"]   := RGBColor[0.10, 0.80, 0.30];
@@ -13861,9 +14186,9 @@ iLLMGraphAccessColor["WolframLLM"] := RGBColor[0.90, 0.50, 0.10];
 iLLMGraphAccessColor["Local"]      := GrayLevel[0.65];
 iLLMGraphAccessColor[_]            := GrayLevel[0.40];
 
-(* ────────────────────────────────────────────────────────
-   アクセスレベル推定
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:63a8\:5b9a
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphInferAccessLevel["query"]   := "ClaudeCode";
 iLLMGraphInferAccessLevel["eval"]    := "ClaudeCode";
 iLLMGraphInferAccessLevel["spec"]    := "ClaudeCode";
@@ -13873,9 +14198,9 @@ iLLMGraphInferAccessLevel["doc"]     := "ClaudeCode";
 iLLMGraphInferAccessLevel["debug"]   := "ClaudeCode";
 iLLMGraphInferAccessLevel[_]         := "ClaudeCode";
 
-(* entry Association からの AccessLevel 推定:
-   "accessLevel" キーがあればそれを PrivacySpec 数値 → 名前に変換。
-   なければ "type" から推定。 *)
+(* entry Association \:304b\:3089\:306e AccessLevel \:63a8\:5b9a:
+   "accessLevel" \:30ad\:30fc\:304c\:3042\:308c\:3070\:305d\:308c\:3092 PrivacySpec \:6570\:5024 \[RightArrow] \:540d\:524d\:306b\:5909\:63db\:3002
+   \:306a\:3051\:308c\:3070 "type" \:304b\:3089\:63a8\:5b9a\:3002 *)
 iLLMGraphInferAccessLevelFromEntry[entry_Association] :=
   Module[{al = Quiet @ Lookup[entry, "accessLevel", None]},
     Which[
@@ -13889,9 +14214,9 @@ iLLMGraphInferAccessLevelFromEntry[entry_Association] :=
   ];
 iLLMGraphInferAccessLevelFromEntry[_] := "ClaudeCode";
 
-(* ────────────────────────────────────────────────────────
-   ノードタイプ推定
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30ce\:30fc\:30c9\:30bf\:30a4\:30d7\:63a8\:5b9a
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphInferNodeType[entry_Association] :=
   Module[{t = Lookup[entry, "type", "query"],
           inst = Lookup[entry, "instruction", ""]},
@@ -13899,19 +14224,19 @@ iLLMGraphInferNodeType[entry_Association] :=
       "Continuation", "Orchestrator"]
   ];
 
-(* ────────────────────────────────────────────────────────
-   レスポンスサマリー生成 (API 不要、ローカルのみ)
-   既存の iMakeLocalSummary を活用しつつ、サイズを厳格に制限
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30ec\:30b9\:30dd\:30f3\:30b9\:30b5\:30de\:30ea\:30fc\:751f\:6210 (API \:4e0d\:8981\:3001\:30ed\:30fc\:30ab\:30eb\:306e\:307f)
+   \:65e2\:5b58\:306e iMakeLocalSummary \:3092\:6d3b\:7528\:3057\:3064\:3064\:3001\:30b5\:30a4\:30ba\:3092\:53b3\:683c\:306b\:5236\:9650
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphMakeSummary[entry_Association] :=
   Module[{resp, code, summary},
     resp = Lookup[entry, "response", ""];
     code = Lookup[entry, "code", ""];
-    (* 既にサマリーがあればそれを使う (コンパクション済みエントリ) *)
+    (* \:65e2\:306b\:30b5\:30de\:30ea\:30fc\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:4f7f\:3046 (\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:6e08\:307f\:30a8\:30f3\:30c8\:30ea) *)
     If[KeyExistsQ[entry, "summary"] && StringQ[entry["summary"]] &&
        entry["summary"] =!= "",
       Return[StringTake[entry["summary"], UpTo[$iLLMGraphMaxSummaryChars]]]];
-    (* response の先頭を要約として使用 *)
+    (* response \:306e\:5148\:982d\:3092\:8981\:7d04\:3068\:3057\:3066\:4f7f\:7528 *)
     summary = If[StringQ[resp] && resp =!= "" &&
                  resp =!= "(\:51e6\:7406\:4e2d)" && resp =!= "\:ff08\:51e6\:7406\:4e2d\:ff09",
       StringTake[resp, UpTo[$iLLMGraphMaxSummaryChars]],
@@ -13921,19 +14246,19 @@ iLLMGraphMakeSummary[entry_Association] :=
     summary
   ];
 
-(* ────────────────────────────────────────────────────────
-   外部キャッシュ: ディレクトリ管理
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5: \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:7ba1\:7406
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphCacheDir[] :=
   Module[{dir},
-    (* $packageDirectory は ClaudeCode が読めるため秘匿データを置けない。
-       $UserBaseDirectory/ClaudeCode/ は FrontEnd のみがアクセスする領域。 *)
+    (* $packageDirectory \:306f ClaudeCode \:304c\:8aad\:3081\:308b\:305f\:3081\:79d8\:533f\:30c7\:30fc\:30bf\:3092\:7f6e\:3051\:306a\:3044\:3002
+       $UserBaseDirectory/ClaudeCode/ \:306f FrontEnd \:306e\:307f\:304c\:30a2\:30af\:30bb\:30b9\:3059\:308b\:9818\:57df\:3002 *)
     dir = FileNameJoin[{$UserBaseDirectory, "ClaudeCode", "llmgraph_cache"}];
     If[!DirectoryQ[dir], Quiet @ CreateDirectory[dir, CreateIntermediateDirectories -> True]];
     dir
   ];
 
-(* キャッシュ書き込み: 重い data を外部に退避 *)
+(* \:30ad\:30e3\:30c3\:30b7\:30e5\:66f8\:304d\:8fbc\:307f: \:91cd\:3044 data \:3092\:5916\:90e8\:306b\:9000\:907f *)
 iLLMGraphCacheWrite[nodeID_String, data_Association] :=
   Module[{path},
     path = FileNameJoin[{iLLMGraphCacheDir[],
@@ -13942,7 +14267,7 @@ iLLMGraphCacheWrite[nodeID_String, data_Association] :=
     path
   ];
 
-(* キャッシュ読み込み *)
+(* \:30ad\:30e3\:30c3\:30b7\:30e5\:8aad\:307f\:8fbc\:307f *)
 iLLMGraphCacheRead[nodeID_String] :=
   Module[{path, data},
     path = FileNameJoin[{iLLMGraphCacheDir[],
@@ -13952,13 +14277,13 @@ iLLMGraphCacheRead[nodeID_String] :=
     If[AssociationQ[data], data, Missing["CacheCorrupted"]]
   ];
 
-(* キャッシュ自動クリーンアップ: 古いファイルを削除 *)
+(* \:30ad\:30e3\:30c3\:30b7\:30e5\:81ea\:52d5\:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7: \:53e4\:3044\:30d5\:30a1\:30a4\:30eb\:3092\:524a\:9664 *)
 iLLMGraphCacheCleanup[] :=
   Module[{dir, files, toDelete},
     dir = iLLMGraphCacheDir[];
     files = FileNames["*.wxf", dir];
     If[Length[files] <= $iLLMGraphCacheMaxEntries, Return[]];
-    (* 更新日時が古い順にソートし、超過分を削除 *)
+    (* \:66f4\:65b0\:65e5\:6642\:304c\:53e4\:3044\:9806\:306b\:30bd\:30fc\:30c8\:3057\:3001\:8d85\:904e\:5206\:3092\:524a\:9664 *)
     files = SortBy[files, FileDate[#, "Modification"] &];
     toDelete = Take[files, Length[files] - $iLLMGraphCacheMaxEntries];
     Quiet @ Scan[DeleteFile, toDelete];
@@ -13966,34 +14291,34 @@ iLLMGraphCacheCleanup[] :=
 
 (* ================================================================
    Phase 4a: L2 Computation Graph
-   各 L1 ノード (ClaudeEval 応答) が生成したコードブロック群を
-   L2 計算グラフとして追跡する。
+   \:5404 L1 \:30ce\:30fc\:30c9 (ClaudeEval \:5fdc\:7b54) \:304c\:751f\:6210\:3057\:305f\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:7fa4\:3092
+   L2 \:8a08\:7b97\:30b0\:30e9\:30d5\:3068\:3057\:3066\:8ffd\:8de1\:3059\:308b\:3002
 
-   L2 ノード構造 (1 ノードあたり ~300B):
-     "NodeID"       -> "history-5_L2-1"   (* L1ID_L2-ブロック番号 *)
+   L2 \:30ce\:30fc\:30c9\:69cb\:9020 (1 \:30ce\:30fc\:30c9\:3042\:305f\:308a ~300B):
+     "NodeID"       -> "history-5_L2-1"   (* L1ID_L2-\:30d6\:30ed\:30c3\:30af\:756a\:53f7 *)
      "BlockIdx"     -> 1
      "Code"         -> "data = Import[...]"
      "Status"       -> "Pending"           (* Pending | Completed | Failed *)
      "ErrorMessage" -> None
      "Time"         -> AbsoluteTime[]
-     "InEdges"      -> {}                  (* 前ブロックへの Sequential 依存 *)
+     "InEdges"      -> {}                  (* \:524d\:30d6\:30ed\:30c3\:30af\:3078\:306e Sequential \:4f9d\:5b58 *)
      "OutEdges"     -> {}
 
-   L2 グラフ構造 (外部キャッシュ {l1NodeID}_L2.wxf に保存):
+   L2 \:30b0\:30e9\:30d5\:69cb\:9020 (\:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5 {l1NodeID}_L2.wxf \:306b\:4fdd\:5b58):
      "L1NodeID"   -> "history-5"
      "CreatedAt"  -> AbsoluteTime[]
      "BlockCount" -> 3
      "Nodes"      -> <| "history-5_L2-1" -> node1, ... |>
 
-   L1 ノードへの追加フィールド:
-     "L2Ref"        -> "history-5_L2"  (* または None *)
+   L1 \:30ce\:30fc\:30c9\:3078\:306e\:8ffd\:52a0\:30d5\:30a3\:30fc\:30eb\:30c9:
+     "L2Ref"        -> "history-5_L2"  (* \:307e\:305f\:306f None *)
      "L2NodeCount"  -> 3
      "L2ErrorCount" -> 0
    ================================================================ *)
 
-(* ────────────────────────────────────────────────────────
-   L2 外部キャッシュ: 読み書き
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   L2 \:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5: \:8aad\:307f\:66f8\:304d
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphCacheWriteL2[nodeID_String, l2Graph_Association] :=
   Module[{path},
     path = FileNameJoin[{iLLMGraphCacheDir[],
@@ -14011,9 +14336,9 @@ iLLMGraphCacheReadL2[nodeID_String] :=
     If[AssociationQ[data], data, Missing["CacheCorrupted"]]
   ];
 
-(* ────────────────────────────────────────────────────────
-   L2 ノードコンストラクタ
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   L2 \:30ce\:30fc\:30c9\:30b3\:30f3\:30b9\:30c8\:30e9\:30af\:30bf
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iNewL2Node[l1NodeID_String, blockIdx_Integer, code_String] :=
   <|
     "NodeID"       -> l1NodeID <> "_L2-" <> ToString[blockIdx],
@@ -14029,10 +14354,10 @@ iNewL2Node[l1NodeID_String, blockIdx_Integer, code_String] :=
     "OutEdges"     -> {}
   |>;
 
-(* ────────────────────────────────────────────────────────
-   レスポンス文字列からコードブロックを抽出
-   iClaudeEvalImpl と同じ処理を踏襲
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30ec\:30b9\:30dd\:30f3\:30b9\:6587\:5b57\:5217\:304b\:3089\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:3092\:62bd\:51fa
+   iClaudeEvalImpl \:3068\:540c\:3058\:51e6\:7406\:3092\:8e0f\:8972
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphExtractCodeBlocks[response_String] :=
   Module[{rawBlocks},
     rawBlocks = StringCases[response,
@@ -14043,9 +14368,9 @@ iLLMGraphExtractCodeBlocks[response_String] :=
     iMergeDependentBlocks[rawBlocks]
   ];
 
-(* ────────────────────────────────────────────────────────
-   L2 グラフ構築: response → L2 グラフ
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   L2 \:30b0\:30e9\:30d5\:69cb\:7bc9: response \[RightArrow] L2 \:30b0\:30e9\:30d5
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphBuildL2[l1NodeID_String, response_String] :=
   Module[{blocks, nodes = <||>, i, node, prevID},
     blocks = Quiet @ iLLMGraphExtractCodeBlocks[response];
@@ -14053,7 +14378,7 @@ iLLMGraphBuildL2[l1NodeID_String, response_String] :=
 
     Do[
       node = iNewL2Node[l1NodeID, i, blocks[[i]]];
-      (* 前ノードに OutEdge を設定 *)
+      (* \:524d\:30ce\:30fc\:30c9\:306b OutEdge \:3092\:8a2d\:5b9a *)
       If[i > 1,
         prevID = l1NodeID <> "_L2-" <> ToString[i - 1];
         If[KeyExistsQ[nodes, prevID],
@@ -14071,20 +14396,20 @@ iLLMGraphBuildL2[l1NodeID_String, response_String] :=
     |>
   ];
 
-(* ────────────────────────────────────────────────────────
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
    iLLMGraphBuildAndCacheL2:
-   L2 グラフを構築してキャッシュし、L1 ノードを更新する。
-   iLLMGraphOnUpdate の完了フックから呼ばれる。
-   ──────────────────────────────────────────────────────── *)
+   L2 \:30b0\:30e9\:30d5\:3092\:69cb\:7bc9\:3057\:3066\:30ad\:30e3\:30c3\:30b7\:30e5\:3057\:3001L1 \:30ce\:30fc\:30c9\:3092\:66f4\:65b0\:3059\:308b\:3002
+   iLLMGraphOnUpdate \:306e\:5b8c\:4e86\:30d5\:30c3\:30af\:304b\:3089\:547c\:3070\:308c\:308b\:3002
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphBuildAndCacheL2[l1NodeID_String, response_String] :=
   Module[{l2Graph, blockCount, graph, nodes, node},
     l2Graph = Quiet @ iLLMGraphBuildL2[l1NodeID, response];
     If[!AssociationQ[l2Graph] ||
        Lookup[l2Graph, "BlockCount", 0] === 0, Return[]];
     blockCount = l2Graph["BlockCount"];
-    (* L2 キャッシュに書き出し *)
+    (* L2 \:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:66f8\:304d\:51fa\:3057 *)
     Quiet @ iLLMGraphCacheWriteL2[l1NodeID, l2Graph];
-    (* L1 ノードの L2 参照フィールドをインメモリキャッシュ経由で更新 *)
+    (* L1 \:30ce\:30fc\:30c9\:306e L2 \:53c2\:7167\:30d5\:30a3\:30fc\:30eb\:30c9\:3092\:30a4\:30f3\:30e1\:30e2\:30ea\:30ad\:30e3\:30c3\:30b7\:30e5\:7d4c\:7531\:3067\:66f4\:65b0 *)
     graph = $iLLMGraphCache;
     If[!AssociationQ[graph], Return[]];
     nodes = Lookup[graph, "Nodes", <||>];
@@ -14098,11 +14423,11 @@ iLLMGraphBuildAndCacheL2[l1NodeID_String, response_String] :=
     $iLLMGraphCache  = graph;
   ];
 
-(* ────────────────────────────────────────────────────────
-   Phase 4b: L2 ステータス手動更新
-   NBEvaluatePreviousCell の完了コールバックから将来呼び出せるよう
-   public API として用意する。
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   Phase 4b: L2 \:30b9\:30c6\:30fc\:30bf\:30b9\:624b\:52d5\:66f4\:65b0
+   NBEvaluatePreviousCell \:306e\:5b8c\:4e86\:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:304b\:3089\:5c06\:6765\:547c\:3073\:51fa\:305b\:308b\:3088\:3046
+   public API \:3068\:3057\:3066\:7528\:610f\:3059\:308b\:3002
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphUpdateL2NodeStatus[l1NodeID_String, l2NodeID_String,
                              status_String, msg_:None] :=
   Module[{l2Graph, nodes, node},
@@ -14116,7 +14441,7 @@ iLLMGraphUpdateL2NodeStatus[l1NodeID_String, l2NodeID_String,
     nodes[l2NodeID] = node;
     l2Graph["Nodes"] = nodes;
     Quiet @ iLLMGraphCacheWriteL2[l1NodeID, l2Graph];
-    (* L1 ノードの L2ErrorCount を更新 *)
+    (* L1 \:30ce\:30fc\:30c9\:306e L2ErrorCount \:3092\:66f4\:65b0 *)
     Module[{graph, l1Nodes, l1Node, errCount},
       graph = $iLLMGraphCache;
       If[!AssociationQ[graph], Return[]];
@@ -14132,10 +14457,10 @@ iLLMGraphUpdateL2NodeStatus[l1NodeID_String, l2NodeID_String,
       $iLLMGraphCache = graph];
   ];
 
-(* ────────────────────────────────────────────────────────
-   軽量ノードコンストラクタ
-   TaggingRules に保存するのはこの構造のみ
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:8efd\:91cf\:30ce\:30fc\:30c9\:30b3\:30f3\:30b9\:30c8\:30e9\:30af\:30bf
+   TaggingRules \:306b\:4fdd\:5b58\:3059\:308b\:306e\:306f\:3053\:306e\:69cb\:9020\:306e\:307f
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iNewLLMNode[nodeID_String, nodeType_String, accessLevel_String,
             fields_Association : <||>] :=
   Join[<|
@@ -14155,10 +14480,10 @@ iNewLLMNode[nodeID_String, nodeType_String, accessLevel_String,
     "L2ErrorCount"    -> 0
   |>, fields];
 
-(* ────────────────────────────────────────────────────────
-   セッション履歴エントリ → 軽量ノード変換
-   重いデータ (fullPrompt, response, code) は外部キャッシュへ
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:30a8\:30f3\:30c8\:30ea \[RightArrow] \:8efd\:91cf\:30ce\:30fc\:30c9\:5909\:63db
+   \:91cd\:3044\:30c7\:30fc\:30bf (fullPrompt, response, code) \:306f\:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5\:3078
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iHistoryEntryToNode[entry_Association, sessionTag_String,
                     idx_Integer, cacheHeavyData_:True] :=
   Module[{nodeID, nodeType, accessLevel, inEdges, inst, summary},
@@ -14166,7 +14491,7 @@ iHistoryEntryToNode[entry_Association, sessionTag_String,
     nodeType = iLLMGraphInferNodeType[entry];
     accessLevel = iLLMGraphInferAccessLevelFromEntry[entry];
 
-    (* 先行ノードからのエッジ: parentStep 指定があればそれを使用 (Fork/Join 用) *)
+    (* \:5148\:884c\:30ce\:30fc\:30c9\:304b\:3089\:306e\:30a8\:30c3\:30b8: parentStep \:6307\:5b9a\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:4f7f\:7528 (Fork/Join \:7528) *)
     inEdges = Module[{ps = Quiet @ Lookup[entry, "parentStep", None],
                        et = Quiet @ Lookup[entry, "edgeType", "ContextInheritance"]},
       If[!StringQ[et], et = "ContextInheritance"];
@@ -14177,16 +14502,16 @@ iHistoryEntryToNode[entry_Association, sessionTag_String,
              "Type" -> "ContextInheritance"|>},
           {}]]];
 
-    (* instruction を切り詰め *)
+    (* instruction \:3092\:5207\:308a\:8a70\:3081 *)
     inst = Lookup[entry, "instruction", ""];
     If[StringQ[inst],
       inst = StringTake[inst, UpTo[$iLLMGraphMaxInstructionChars]],
       inst = StringTake[ToString[inst], UpTo[$iLLMGraphMaxInstructionChars]]];
 
-    (* レスポンスサマリー生成 *)
+    (* \:30ec\:30b9\:30dd\:30f3\:30b9\:30b5\:30de\:30ea\:30fc\:751f\:6210 *)
     summary = iLLMGraphMakeSummary[entry];
 
-    (* 重いデータを外部キャッシュに書き出し *)
+    (* \:91cd\:3044\:30c7\:30fc\:30bf\:3092\:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:66f8\:304d\:51fa\:3057 *)
     If[TrueQ[cacheHeavyData],
       Module[{heavyData = <||>},
         If[KeyExistsQ[entry, "fullPrompt"],
@@ -14201,7 +14526,7 @@ iHistoryEntryToNode[entry_Association, sessionTag_String,
         If[Length[heavyData] > 0,
           Quiet @ iLLMGraphCacheWrite[nodeID, heavyData]]]];
 
-    (* 軽量ノードを返す *)
+    (* \:8efd\:91cf\:30ce\:30fc\:30c9\:3092\:8fd4\:3059 *)
     <|
       "NodeID"          -> nodeID,
       "NodeType"        -> nodeType,
@@ -14224,10 +14549,10 @@ iHistoryEntryToNode[entry_Association, sessionTag_String,
     |>
   ];
 
-(* ────────────────────────────────────────────────────────
-   バックアップディレクトリ名 → AbsoluteTime 変換
-   "20260325_143022" → AbsoluteTime[{2026,3,25,14,30,22}]
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:540d \[RightArrow] AbsoluteTime \:5909\:63db
+   "20260325_143022" \[RightArrow] AbsoluteTime[{2026,3,25,14,30,22}]
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iBackupDirNameToAbsoluteTime[dirName_String] :=
   Module[{ts, m},
     ts = iBackupTimestampPart[dirName];
@@ -14237,7 +14562,7 @@ iBackupDirNameToAbsoluteTime[dirName_String] :=
          ToExpression["$4"], ToExpression["$5"], ToExpression["$6"]}];
     If[Length[m] > 0,
       Quiet @ AbsoluteTime[First[m]],
-      (* YYYYMMDDHHMM 形式 *)
+      (* YYYYMMDDHHMM \:5f62\:5f0f *)
       m = StringCases[ts,
         RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
           {ToExpression["$1"], ToExpression["$2"], ToExpression["$3"],
@@ -14247,10 +14572,10 @@ iBackupDirNameToAbsoluteTime[dirName_String] :=
         None]]
   ];
 
-(* ────────────────────────────────────────────────────────
-   全パッケージのバックアップタイムスタンプ一覧を収集
-   戻り値: {<|"DirName"->..., "AbsTime"->..., "Package"->...|>, ...}
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30bf\:30a4\:30e0\:30b9\:30bf\:30f3\:30d7\:4e00\:89a7\:3092\:53ce\:96c6
+   \:623b\:308a\:5024: {<|"DirName"->..., "AbsTime"->..., "Package"->...|>, ...}
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iCollectBackupTimestamps[] :=
   Module[{allInfoDirs, pkgNames, result = {}},
     If[!StringQ[Global`$packageDirectory] ||
@@ -14280,10 +14605,10 @@ iCollectBackupTimestamps[] :=
     result
   ];
 
-(* ────────────────────────────────────────────────────────
-   バックアップエントリとの結合 (タイムスタンプ±30秒照合)
-   backupEntries: iCollectBackupTimestamps[] の戻り値
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:30a8\:30f3\:30c8\:30ea\:3068\:306e\:7d50\:5408 (\:30bf\:30a4\:30e0\:30b9\:30bf\:30f3\:30d7\[PlusMinus]30\:79d2\:7167\:5408)
+   backupEntries: iCollectBackupTimestamps[] \:306e\:623b\:308a\:5024
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphEnrichWithBackup[node_Association, backupEntries_List] :=
   Module[{nodeTime, matching},
     nodeTime = Lookup[node, "Time", None];
@@ -14293,15 +14618,15 @@ iLLMGraphEnrichWithBackup[node_Association, backupEntries_List] :=
        Abs[#["AbsTime"] - nodeTime] < 30.0) &];
     If[matching === {},
       node,
-      (* 最も近いものを選択 *)
+      (* \:6700\:3082\:8fd1\:3044\:3082\:306e\:3092\:9078\:629e *)
       matching = SortBy[matching, Abs[#["AbsTime"] - nodeTime] &];
       Append[node,
         "BackupRef" -> First[matching]["DirName"]]]
   ];
 
-(* ────────────────────────────────────────────────────────
-   空のノートブック LLMGraph を生成
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:7a7a\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af LLMGraph \:3092\:751f\:6210
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iNewNotebookLLMGraph[nb_] :=
   Module[{nbPath},
     nbPath = Quiet @ Replace[
@@ -14318,9 +14643,9 @@ iNewNotebookLLMGraph[nb_] :=
   ];
 iNewNotebookLLMGraph[] := iNewNotebookLLMGraph[None];
 
-(* ────────────────────────────────────────────────────────
-   既存セッション履歴からグラフを構築
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:65e2\:5b58\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:304b\:3089\:30b0\:30e9\:30d5\:3092\:69cb\:7bc9
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iBuildGraphFromHistory[nb_NotebookObject, tag_String] :=
   Module[{entries, graph, nodes, i, node, prevNodeID},
     entries = Quiet @ iSessionHistory[nb, tag];
@@ -14333,7 +14658,7 @@ iBuildGraphFromHistory[nb_NotebookObject, tag_String] :=
 
     Do[
       node = iHistoryEntryToNode[entries[[i]], tag, i];
-      (* OutEdges を前のノードに設定 *)
+      (* OutEdges \:3092\:524d\:306e\:30ce\:30fc\:30c9\:306b\:8a2d\:5b9a *)
       If[i > 1,
         prevNodeID = tag <> "-" <> ToString[i - 1];
         If[KeyExistsQ[nodes, prevNodeID],
@@ -14345,12 +14670,12 @@ iBuildGraphFromHistory[nb_NotebookObject, tag_String] :=
 
     graph["Nodes"] = nodes;
     graph["LastModified"] = AbsoluteTime[];
-    (* 構築後にキャッシュクリーンアップ *)
+    (* \:69cb\:7bc9\:5f8c\:306b\:30ad\:30e3\:30c3\:30b7\:30e5\:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7 *)
     Quiet @ iLLMGraphCacheCleanup[];
     graph
   ];
 
-(* 複数セッションタグからの構築 *)
+(* \:8907\:6570\:30bb\:30c3\:30b7\:30e7\:30f3\:30bf\:30b0\:304b\:3089\:306e\:69cb\:7bc9 *)
 iBuildGraphFromAllSessions[nb_NotebookObject] :=
   Module[{tags, graph, subGraph, allNodes = <||>, backupTs},
     tags = Quiet @ Replace[
@@ -14366,7 +14691,7 @@ iBuildGraphFromAllSessions[nb_NotebookObject] :=
       allNodes = Join[allNodes, Lookup[subGraph, "Nodes", <||>]],
     {t, tags}];
 
-    (* Phase 1b: バックアップ履歴との結合 *)
+    (* Phase 1b: \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:5c65\:6b74\:3068\:306e\:7d50\:5408 *)
     backupTs = Quiet @ iCollectBackupTimestamps[];
     If[ListQ[backupTs] && Length[backupTs] > 0,
       allNodes = Association @ KeyValueMap[
@@ -14379,10 +14704,10 @@ iBuildGraphFromAllSessions[nb_NotebookObject] :=
     graph
   ];
 
-(* ────────────────────────────────────────────────────────
-   TaggingRules への保存/読み込み
-   保存するのは軽量グラフのみ。Compress でさらに圧縮。
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   TaggingRules \:3078\:306e\:4fdd\:5b58/\:8aad\:307f\:8fbc\:307f
+   \:4fdd\:5b58\:3059\:308b\:306e\:306f\:8efd\:91cf\:30b0\:30e9\:30d5\:306e\:307f\:3002Compress \:3067\:3055\:3089\:306b\:5727\:7e2e\:3002
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iSaveNotebookLLMGraph[nb_NotebookObject, llmGraph_Association] := (
   Quiet[CurrentValue[nb,
     {TaggingRules, "claudecode", "LLMGraph"}] =
@@ -14397,30 +14722,30 @@ iLoadNotebookLLMGraph[nb_NotebookObject] :=
       iBuildGraphFromAllSessions[nb],
       Replace[Quiet @ Uncompress[raw],
         Except[_Association] :> iBuildGraphFromAllSessions[nb]]];
-    (* キャッシュにも保持 *)
+    (* \:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:3082\:4fdd\:6301 *)
     $iLLMGraphCache = graph;
     $iLLMGraphCacheNB = nb;
     graph
   ];
 
 (* ================================================================
-   Phase 2b: リアルタイムノード追加フック
-   iSessionAppend / iSessionUpdateLast から呼ばれる。
-   メモリキャッシュを使い、完了時にTaggingRulesへフラッシュする。
+   Phase 2b: \:30ea\:30a2\:30eb\:30bf\:30a4\:30e0\:30ce\:30fc\:30c9\:8ffd\:52a0\:30d5\:30c3\:30af
+   iSessionAppend / iSessionUpdateLast \:304b\:3089\:547c\:3070\:308c\:308b\:3002
+   \:30e1\:30e2\:30ea\:30ad\:30e3\:30c3\:30b7\:30e5\:3092\:4f7f\:3044\:3001\:5b8c\:4e86\:6642\:306bTaggingRules\:3078\:30d5\:30e9\:30c3\:30b7\:30e5\:3059\:308b\:3002
    ================================================================ *)
 
-(* ────────────────────────────────────────────────────────
-   メモリキャッシュ
-   Compress/Uncompress を毎回実行するのを避ける。
-   ノートブック単位でキャッシュし、完了時にフラッシュ。
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30e1\:30e2\:30ea\:30ad\:30e3\:30c3\:30b7\:30e5
+   Compress/Uncompress \:3092\:6bce\:56de\:5b9f\:884c\:3059\:308b\:306e\:3092\:907f\:3051\:308b\:3002
+   \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:5358\:4f4d\:3067\:30ad\:30e3\:30c3\:30b7\:30e5\:3057\:3001\:5b8c\:4e86\:6642\:306b\:30d5\:30e9\:30c3\:30b7\:30e5\:3002
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 $iLLMGraphCache = None;
 $iLLMGraphCacheNB = None;
 
 iLLMGraphGetCached[nb_NotebookObject] :=
   If[$iLLMGraphCacheNB === nb && AssociationQ[$iLLMGraphCache],
     $iLLMGraphCache,
-    (* キャッシュミス: iLoadNotebookLLMGraph がキャッシュも設定する *)
+    (* \:30ad\:30e3\:30c3\:30b7\:30e5\:30df\:30b9: iLoadNotebookLLMGraph \:304c\:30ad\:30e3\:30c3\:30b7\:30e5\:3082\:8a2d\:5b9a\:3059\:308b *)
     iLoadNotebookLLMGraph[nb]];
 
 iLLMGraphFlush[nb_NotebookObject] :=
@@ -14432,10 +14757,10 @@ iLLMGraphInvalidateCache[] := (
   $iLLMGraphCache = None;
   $iLLMGraphCacheNB = None);
 
-(* ────────────────────────────────────────────────────────
-   iLLMGraphOnAppend: iSessionAppend から呼ばれるフック
-   新しいエントリのノードをグラフに追加する。
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   iLLMGraphOnAppend: iSessionAppend \:304b\:3089\:547c\:3070\:308c\:308b\:30d5\:30c3\:30af
+   \:65b0\:3057\:3044\:30a8\:30f3\:30c8\:30ea\:306e\:30ce\:30fc\:30c9\:3092\:30b0\:30e9\:30d5\:306b\:8ffd\:52a0\:3059\:308b\:3002
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphOnAppend[nb_NotebookObject, tag_String, entry_Association] :=
   Module[{graph, step, nodeID, node, nodes, prevNodeID, prevStep,
           parentStep, edgeType},
@@ -14450,23 +14775,23 @@ iLLMGraphOnAppend[nb_NotebookObject, tag_String, entry_Association] :=
 
     node = iHistoryEntryToNode[entry, tag, step + 1, False];
 
-    (* parentStep: 明示指定があればそれを使う (Fork/Join 用) *)
+    (* parentStep: \:660e\:793a\:6307\:5b9a\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:4f7f\:3046 (Fork/Join \:7528) *)
     parentStep = Quiet @ Lookup[entry, "parentStep", step];
     If[!IntegerQ[parentStep], parentStep = step];
     edgeType = Quiet @ Lookup[entry, "edgeType", "ContextInheritance"];
     If[!StringQ[edgeType], edgeType = "ContextInheritance"];
     prevNodeID = tag <> "-" <> ToString[parentStep];
 
-    (* InEdges をオーバーライド *)
+    (* InEdges \:3092\:30aa\:30fc\:30d0\:30fc\:30e9\:30a4\:30c9 *)
     If[parentStep >= 1 && KeyExistsQ[nodes, prevNodeID],
       node["InEdges"] = {<|"From" -> prevNodeID, "Type" -> edgeType|>};
-      (* 親ノードの OutEdges に追加 (既存を保持して追加) *)
+      (* \:89aa\:30ce\:30fc\:30c9\:306e OutEdges \:306b\:8ffd\:52a0 (\:65e2\:5b58\:3092\:4fdd\:6301\:3057\:3066\:8ffd\:52a0) *)
       nodes[prevNodeID, "OutEdges"] =
         DeleteDuplicatesBy[
           Append[Lookup[nodes[prevNodeID], "OutEdges", {}],
             <|"To" -> nodeID, "Type" -> edgeType|>],
           #["To"] &],
-      (* parentStep=0 or 親が存在しない場合 *)
+      (* parentStep=0 or \:89aa\:304c\:5b58\:5728\:3057\:306a\:3044\:5834\:5408 *)
       If[parentStep >= 1,
         node["InEdges"] = {<|"From" -> prevNodeID, "Type" -> edgeType|>}]];
 
@@ -14481,11 +14806,11 @@ iLLMGraphOnAppend[nb_NotebookObject, tag_String, entry_Association] :=
     $iLLMGraphCache = graph;
   ];
 
-(* ────────────────────────────────────────────────────────
-   iLLMGraphOnUpdate: iSessionUpdateLast から呼ばれるフック
-   最新ノードのステータス・サマリーを更新し、
-   完了時にTaggingRulesへフラッシュ + 外部キャッシュへ書き出し。
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   iLLMGraphOnUpdate: iSessionUpdateLast \:304b\:3089\:547c\:3070\:308c\:308b\:30d5\:30c3\:30af
+   \:6700\:65b0\:30ce\:30fc\:30c9\:306e\:30b9\:30c6\:30fc\:30bf\:30b9\:30fb\:30b5\:30de\:30ea\:30fc\:3092\:66f4\:65b0\:3057\:3001
+   \:5b8c\:4e86\:6642\:306bTaggingRules\:3078\:30d5\:30e9\:30c3\:30b7\:30e5 + \:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5\:3078\:66f8\:304d\:51fa\:3057\:3002
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphOnUpdate[nb_NotebookObject, tag_String, updates_Association] :=
   Module[{graph, nodes, nodeIDs, latestNodeID, node,
           resp, code, summary, isCompleted},
@@ -14493,7 +14818,7 @@ iLLMGraphOnUpdate[nb_NotebookObject, tag_String, updates_Association] :=
     If[!AssociationQ[graph], Return[]];
 
     nodes = Lookup[graph, "Nodes", <||>];
-    (* このセッションタグに属する最新ノードを探す *)
+    (* \:3053\:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:30bf\:30b0\:306b\:5c5e\:3059\:308b\:6700\:65b0\:30ce\:30fc\:30c9\:3092\:63a2\:3059 *)
     nodeIDs = Select[Keys[nodes],
       StringStartsQ[#, tag <> "-"] &];
     If[Length[nodeIDs] === 0, Return[]];
@@ -14505,7 +14830,7 @@ iLLMGraphOnUpdate[nb_NotebookObject, tag_String, updates_Association] :=
     node = nodes[latestNodeID];
     If[!AssociationQ[node], Return[]];
 
-    (* レスポンスからサマリーを生成 *)
+    (* \:30ec\:30b9\:30dd\:30f3\:30b9\:304b\:3089\:30b5\:30de\:30ea\:30fc\:3092\:751f\:6210 *)
     resp = Lookup[updates, "response", None];
     code = Lookup[updates, "code", None];
     If[StringQ[resp] &&
@@ -14521,7 +14846,7 @@ iLLMGraphOnUpdate[nb_NotebookObject, tag_String, updates_Association] :=
     graph["LastModified"] = AbsoluteTime[];
     $iLLMGraphCache = graph;
 
-    (* 完了時: 外部キャッシュへ書き出し + L2グラフ構築 + TaggingRules フラッシュ *)
+    (* \:5b8c\:4e86\:6642: \:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5\:3078\:66f8\:304d\:51fa\:3057 + L2\:30b0\:30e9\:30d5\:69cb\:7bc9 + TaggingRules \:30d5\:30e9\:30c3\:30b7\:30e5 *)
     If[TrueQ[isCompleted],
       Module[{heavyData = <||>},
         If[StringQ[resp] && StringLength[resp] > 0,
@@ -14530,19 +14855,19 @@ iLLMGraphOnUpdate[nb_NotebookObject, tag_String, updates_Association] :=
           heavyData["code"] = code];
         If[Length[heavyData] > 0,
           Quiet @ iLLMGraphCacheWrite[latestNodeID, heavyData]]];
-      (* Phase 4a: L2グラフをレスポンスから構築してキャッシュに書き出す。
-         resp が有効な文字列で、かつ ```mathematica ブロックを含む場合のみ実行。
-         iLLMGraphBuildAndCacheL2 は $iLLMGraphCache を直接更新するため
-         必ず iLLMGraphFlush より前に呼ぶ。 *)
+      (* Phase 4a: L2\:30b0\:30e9\:30d5\:3092\:30ec\:30b9\:30dd\:30f3\:30b9\:304b\:3089\:69cb\:7bc9\:3057\:3066\:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:66f8\:304d\:51fa\:3059\:3002
+         resp \:304c\:6709\:52b9\:306a\:6587\:5b57\:5217\:3067\:3001\:304b\:3064 ```mathematica \:30d6\:30ed\:30c3\:30af\:3092\:542b\:3080\:5834\:5408\:306e\:307f\:5b9f\:884c\:3002
+         iLLMGraphBuildAndCacheL2 \:306f $iLLMGraphCache \:3092\:76f4\:63a5\:66f4\:65b0\:3059\:308b\:305f\:3081
+         \:5fc5\:305a iLLMGraphFlush \:3088\:308a\:524d\:306b\:547c\:3076\:3002 *)
       If[StringQ[resp] && StringLength[resp] > 0,
         Quiet @ iLLMGraphBuildAndCacheL2[latestNodeID, resp]];
-      (* TaggingRules にフラッシュ *)
+      (* TaggingRules \:306b\:30d5\:30e9\:30c3\:30b7\:30e5 *)
       iLLMGraphFlush[nb]];
   ];
 
-(* ────────────────────────────────────────────────────────
-   可視化ヘルパー
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:53ef\:8996\:5316\:30d8\:30eb\:30d1\:30fc
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphExtractEdges[llmGraph_Association] :=
   Module[{nodes, edges = {}},
     nodes = Lookup[llmGraph, "Nodes", <||>];
@@ -14584,9 +14909,9 @@ iLLMGraphNodeStyles[llmGraph_Association] :=
       nodes]
   ];
 
-(* ────────────────────────────────────────────────────────
-   検証
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:691c\:8a3c
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iValidateNotebookLLMGraph[llmGraph_Association, nb_NotebookObject] :=
   Module[{results = <||>, nodes, tags, totalHistoryEntries = 0,
           nodeCount, allNodeIDs, danglingEdges,
@@ -14595,7 +14920,7 @@ iValidateNotebookLLMGraph[llmGraph_Association, nb_NotebookObject] :=
     nodeCount = Length[nodes];
     allNodeIDs = Keys[nodes];
 
-    (* 1. セッション履歴エントリ数との一致 *)
+    (* 1. \:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:30a8\:30f3\:30c8\:30ea\:6570\:3068\:306e\:4e00\:81f4 *)
     tags = Lookup[llmGraph, "SessionTags", {}];
     Do[
       totalHistoryEntries += Length[
@@ -14608,7 +14933,7 @@ iValidateNotebookLLMGraph[llmGraph_Association, nb_NotebookObject] :=
       "Actual"   -> nodeCount
     |>;
 
-    (* 2. エッジ参照整合性 *)
+    (* 2. \:30a8\:30c3\:30b8\:53c2\:7167\:6574\:5408\:6027 *)
     danglingEdges = {};
     KeyValueMap[
       Function[{nid, node},
@@ -14626,7 +14951,7 @@ iValidateNotebookLLMGraph[llmGraph_Association, nb_NotebookObject] :=
       "DanglingEdges" -> danglingEdges
     |>;
 
-    (* 3. DAG 性 *)
+    (* 3. DAG \:6027 *)
     results["IsDAG"] = <|
       "Pass" -> Replace[
         Quiet @ AcyclicGraphQ[
@@ -14634,13 +14959,13 @@ iValidateNotebookLLMGraph[llmGraph_Association, nb_NotebookObject] :=
         {True -> True, _ -> (nodeCount <= 1)}]
     |>;
 
-    (* 4. ノードID 一意性 *)
+    (* 4. \:30ce\:30fc\:30c9ID \:4e00\:610f\:6027 *)
     results["UniqueNodeIDs"] = <|
       "Pass"       -> (Length[allNodeIDs] == Length[DeleteDuplicates[allNodeIDs]]),
       "Duplicates" -> Select[Tally[allNodeIDs], #[[2]] > 1 &]
     |>;
 
-    (* 5. サイズ検証: Compress 後のサイズ (実際に TaggingRules に保存される形) *)
+    (* 5. \:30b5\:30a4\:30ba\:691c\:8a3c: Compress \:5f8c\:306e\:30b5\:30a4\:30ba (\:5b9f\:969b\:306b TaggingRules \:306b\:4fdd\:5b58\:3055\:308c\:308b\:5f62) *)
     Module[{compressed, compressedSize, avgCompressed},
       compressed = Quiet @ Compress[llmGraph];
       compressedSize = If[StringQ[compressed], StringLength[compressed], 0];
@@ -14648,7 +14973,7 @@ iValidateNotebookLLMGraph[llmGraph_Association, nb_NotebookObject] :=
       avgNodeSize = If[nodeCount > 0, N[graphSize / nodeCount], 0];
       avgCompressed = If[nodeCount > 0, N[compressedSize / nodeCount], 0];
       results["SizeCheck"] = <|
-        "Pass"                -> (avgCompressed < 2000),  (* ~2KB/ノード(圧縮後)以下 *)
+        "Pass"                -> (avgCompressed < 2000),  (* ~2KB/\:30ce\:30fc\:30c9(\:5727\:7e2e\:5f8c)\:4ee5\:4e0b *)
         "TotalBytesRaw"       -> graphSize,
         "TotalBytesCompressed"-> compressedSize,
         "AvgBytesPerNode"     -> Round[avgNodeSize],
@@ -14656,15 +14981,15 @@ iValidateNotebookLLMGraph[llmGraph_Association, nb_NotebookObject] :=
         "NodeCount"           -> nodeCount
       |>];
 
-    (* 全体判定 *)
+    (* \:5168\:4f53\:5224\:5b9a *)
     results["AllPass"] = And @@
       (Lookup[#, "Pass", False] & /@ Values[results]);
     results
   ];
 
-(* ────────────────────────────────────────────────────────
-   公開 API ラッパー
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:516c\:958b API \:30e9\:30c3\:30d1\:30fc
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 NotebookLLMGraph[nb_NotebookObject] :=
   iLLMGraphGetCached[nb];
@@ -14676,7 +15001,7 @@ NotebookLLMGraphBuild[nb_NotebookObject] :=
     iLLMGraphInvalidateCache[];
     graph = iBuildGraphFromAllSessions[nb];
     iSaveNotebookLLMGraph[nb, graph];
-    (* キャッシュにも保持 *)
+    (* \:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:3082\:4fdd\:6301 *)
     $iLLMGraphCache = graph;
     $iLLMGraphCacheNB = nb;
     graph
@@ -14697,14 +15022,14 @@ NotebookLLMGraphPlot[nb_NotebookObject] :=
     If[nodeCount == 0,
       Return @ Style["\:30ce\:30fc\:30c9\:306a\:3057 (\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:304c\:7a7a)", Gray, 14]];
 
-    (* Rule 形式のエッジリスト *)
+    (* Rule \:5f62\:5f0f\:306e\:30a8\:30c3\:30b8\:30ea\:30b9\:30c8 *)
     edges = Flatten @ KeyValueMap[
       Function[{nid, node},
         Function[edge, nid -> edge["To"]] /@
           Lookup[node, "OutEdges", {}]],
       nodes];
 
-    (* VertexLabels: instruction 先頭25文字 + サブステップ/バックアップ/L2情報 *)
+    (* VertexLabels: instruction \:5148\:982d25\:6587\:5b57 + \:30b5\:30d6\:30b9\:30c6\:30c3\:30d7/\:30d0\:30c3\:30af\:30a2\:30c3\:30d7/L2\:60c5\:5831 *)
     labels = KeyValueMap[
       Function[{nid, node},
         nid -> (StringTake[Lookup[node, "Instruction", nid], UpTo[25]] <>
@@ -14713,7 +15038,7 @@ NotebookLLMGraphPlot[nb_NotebookObject] :=
             " [S" <> ToString[Length[node["SubSteps"]]] <> "]", ""] <>
           If[StringQ[Lookup[node, "BackupRef", None]],
             " [B]", ""] <>
-          (* L2 情報: ノード数とエラー数 *)
+          (* L2 \:60c5\:5831: \:30ce\:30fc\:30c9\:6570\:3068\:30a8\:30e9\:30fc\:6570 *)
           Module[{l2n = Lookup[node, "L2NodeCount", 0],
                   l2e = Lookup[node, "L2ErrorCount", 0]},
             If[IntegerQ[l2n] && l2n > 0,
@@ -14722,7 +15047,7 @@ NotebookLLMGraphPlot[nb_NotebookObject] :=
               ""]])],
       nodes];
 
-    (* VertexStyle: アクセスレベル別色、L2エラーありは赤縁取り *)
+    (* VertexStyle: \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:5225\:8272\:3001L2\:30a8\:30e9\:30fc\:3042\:308a\:306f\:8d64\:7e01\:53d6\:308a *)
     colors = KeyValueMap[
       Function[{nid, node},
         nid -> If[Lookup[node, "L2ErrorCount", 0] > 0,
@@ -14735,7 +15060,7 @@ NotebookLLMGraphPlot[nb_NotebookObject] :=
       nodes];
 
     If[edges === {},
-      (* エッジなし: 孤立ノード *)
+      (* \:30a8\:30c3\:30b8\:306a\:3057: \:5b64\:7acb\:30ce\:30fc\:30c9 *)
       Graph[Keys[nodes],
         VertexLabels -> labels,
         VertexStyle  -> colors,
@@ -14779,13 +15104,13 @@ NotebookLLMGraphValidate[nb_NotebookObject] :=
 NotebookLLMGraphValidate[] :=
   NotebookLLMGraphValidate[EvaluationNotebook[]];
 
-(* 外部キャッシュからの response 取得 *)
+(* \:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5\:304b\:3089\:306e response \:53d6\:5f97 *)
 NotebookLLMGraphFetchResponse[nb_NotebookObject, nodeID_String] :=
   iLLMGraphCacheRead[nodeID];
 NotebookLLMGraphFetchResponse[nodeID_String] :=
   NotebookLLMGraphFetchResponse[EvaluationNotebook[], nodeID];
 
-(* サブステップ履歴の表示 *)
+(* \:30b5\:30d6\:30b9\:30c6\:30c3\:30d7\:5c65\:6b74\:306e\:8868\:793a *)
 NotebookLLMGraphSubSteps[nb_NotebookObject, nodeID_String] :=
   Module[{graph, node, subSteps, ds},
     graph = iLLMGraphGetCached[nb];
@@ -14795,7 +15120,7 @@ NotebookLLMGraphSubSteps[nb_NotebookObject, nodeID_String] :=
     subSteps = Lookup[node, "SubSteps", {}];
     If[!ListQ[subSteps] || Length[subSteps] === 0,
       Return[Missing["NoSubSteps"]]];
-    (* Dataset 形式で表示 *)
+    (* Dataset \:5f62\:5f0f\:3067\:8868\:793a *)
     ds = Dataset[subSteps][All, <|
       "Step"    -> "Name",
       "Status"  -> "Status",
@@ -14817,9 +15142,9 @@ NotebookLLMGraphSubSteps[nb_NotebookObject] :=
       Lookup[graph, "Nodes", <||>],
       KeyExistsQ[#, "SubSteps"] && Length[Lookup[#, "SubSteps", {}]] > 0 &];
     If[Length[nodesWithSubs] === 0,
-      Print["SubSteps を持つノードはありません。"];
+      Print["SubSteps \:3092\:6301\:3064\:30ce\:30fc\:30c9\:306f\:3042\:308a\:307e\:305b\:3093\:3002"];
       Return[{}]];
-    Print[Style["SubSteps 付きノード:", Bold]];
+    Print[Style["SubSteps \:4ed8\:304d\:30ce\:30fc\:30c9:", Bold]];
     KeyValueMap[
       Function[{nid, node},
         Print["  ", nid, ": ",
@@ -14831,25 +15156,25 @@ NotebookLLMGraphSubSteps[nb_NotebookObject] :=
 NotebookLLMGraphSubSteps[] :=
   NotebookLLMGraphSubSteps[EvaluationNotebook[]];
 
-(* ════════════════════════════════════════════════════════
-   Phase 4a: L2 グラフ取得 公開 API
-   ════════════════════════════════════════════════════════ *)
+(* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
+   Phase 4a: L2 \:30b0\:30e9\:30d5\:53d6\:5f97 \:516c\:958b API
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
 
-(* L2 グラフを外部キャッシュから取得する *)
+(* L2 \:30b0\:30e9\:30d5\:3092\:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5\:304b\:3089\:53d6\:5f97\:3059\:308b *)
 NotebookLLMGraphFetchL2[nb_NotebookObject, nodeID_String] :=
   Module[{l2Graph},
     l2Graph = iLLMGraphCacheReadL2[nodeID];
-    If[!AssociationQ[l2Graph], Return[l2Graph]];  (* Missing[] をそのまま返す *)
+    If[!AssociationQ[l2Graph], Return[l2Graph]];  (* Missing[] \:3092\:305d\:306e\:307e\:307e\:8fd4\:3059 *)
     l2Graph
   ];
 NotebookLLMGraphFetchL2[nodeID_String] :=
   NotebookLLMGraphFetchL2[EvaluationNotebook[], nodeID];
 
-(* ════════════════════════════════════════════════════════
-   Phase 4b: エラーノード一覧 公開 API
-   ════════════════════════════════════════════════════════ *)
+(* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
+   Phase 4b: \:30a8\:30e9\:30fc\:30ce\:30fc\:30c9\:4e00\:89a7 \:516c\:958b API
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
 
-(* L2ErrorCount > 0 または Status = "Failed" の L1 ノードを Dataset で返す *)
+(* L2ErrorCount > 0 \:307e\:305f\:306f Status = "Failed" \:306e L1 \:30ce\:30fc\:30c9\:3092 Dataset \:3067\:8fd4\:3059 *)
 NotebookLLMGraphErrors[nb_NotebookObject] :=
   Module[{graph, nodes, errNodes, rows},
     graph = iLLMGraphGetCached[nb];
@@ -14879,17 +15204,17 @@ NotebookLLMGraphErrors[nb_NotebookObject] :=
 NotebookLLMGraphErrors[] :=
   NotebookLLMGraphErrors[EvaluationNotebook[]];
 
-(* ════════════════════════════════════════════════════════
-   Phase 4b: L2 ノードステータス手動更新 公開 API
-   ════════════════════════════════════════════════════════ *)
+(* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
+   Phase 4b: L2 \:30ce\:30fc\:30c9\:30b9\:30c6\:30fc\:30bf\:30b9\:624b\:52d5\:66f4\:65b0 \:516c\:958b API
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
 
-(* L2 ノードのステータスを更新し、L1 の L2ErrorCount に反映する *)
+(* L2 \:30ce\:30fc\:30c9\:306e\:30b9\:30c6\:30fc\:30bf\:30b9\:3092\:66f4\:65b0\:3057\:3001L1 \:306e L2ErrorCount \:306b\:53cd\:6620\:3059\:308b *)
 NotebookLLMGraphUpdateL2Status[nb_NotebookObject,
     l1NodeID_String, l2NodeID_String,
     status_String, msg_:None] :=
   Module[{},
     iLLMGraphUpdateL2NodeStatus[l1NodeID, l2NodeID, status, msg];
-    (* 更新後は TaggingRules にフラッシュ *)
+    (* \:66f4\:65b0\:5f8c\:306f TaggingRules \:306b\:30d5\:30e9\:30c3\:30b7\:30e5 *)
     iLLMGraphFlush[nb];
   ];
 NotebookLLMGraphUpdateL2Status[l1NodeID_String, l2NodeID_String,
@@ -14897,11 +15222,11 @@ NotebookLLMGraphUpdateL2Status[l1NodeID_String, l2NodeID_String,
   NotebookLLMGraphUpdateL2Status[EvaluationNotebook[],
     l1NodeID, l2NodeID, status, msg];
 
-(* ════════════════════════════════════════════════════════
-   Phase 4a: L2 グラフ可視化ヘルパー
-   ════════════════════════════════════════════════════════ *)
+(* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
+   Phase 4a: L2 \:30b0\:30e9\:30d5\:53ef\:8996\:5316\:30d8\:30eb\:30d1\:30fc
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
 
-(* L2 グラフを Wolfram Graph として可視化する *)
+(* L2 \:30b0\:30e9\:30d5\:3092 Wolfram Graph \:3068\:3057\:3066\:53ef\:8996\:5316\:3059\:308b *)
 NotebookLLMGraphPlotL2[nb_NotebookObject, l1NodeID_String] :=
   Module[{l2Graph, nodes, nodeCount, edges, labels, colors},
     l2Graph = iLLMGraphCacheReadL2[l1NodeID];
@@ -14957,27 +15282,27 @@ NotebookLLMGraphPlotL2[l1NodeID_String] :=
   NotebookLLMGraphPlotL2[EvaluationNotebook[], l1NodeID];
 
 
-(* ════════════════════════════════════════════════════════
-   Phase 4c: L1 再実行エンジン
-   ════════════════════════════════════════════════════════
+(* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
+   Phase 4c: L1 \:518d\:5b9f\:884c\:30a8\:30f3\:30b8\:30f3
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
 
-   設計原則:
-     - 下流ノードの無効化 (Invalidate) と再実行 (Rerun) を分離する
-     - 再実行は既存の iClaudeEvalImpl/iSessionAppend 経路を再利用する
-     - セッション履歴への書き直しはしない（履歴は不変）
-       再実行エントリは通常通り末尾に追記されるだけ
-     - DryRun: 実際の LLM 呼び出しなしで計画だけ返す
+   \:8a2d\:8a08\:539f\:5247:
+     - \:4e0b\:6d41\:30ce\:30fc\:30c9\:306e\:7121\:52b9\:5316 (Invalidate) \:3068\:518d\:5b9f\:884c (Rerun) \:3092\:5206\:96e2\:3059\:308b
+     - \:518d\:5b9f\:884c\:306f\:65e2\:5b58\:306e iClaudeEvalImpl/iSessionAppend \:7d4c\:8def\:3092\:518d\:5229\:7528\:3059\:308b
+     - \:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:3078\:306e\:66f8\:304d\:76f4\:3057\:306f\:3057\:306a\:3044\:ff08\:5c65\:6b74\:306f\:4e0d\:5909\:ff09
+       \:518d\:5b9f\:884c\:30a8\:30f3\:30c8\:30ea\:306f\:901a\:5e38\:901a\:308a\:672b\:5c3e\:306b\:8ffd\:8a18\:3055\:308c\:308b\:3060\:3051
+     - DryRun: \:5b9f\:969b\:306e LLM \:547c\:3073\:51fa\:3057\:306a\:3057\:3067\:8a08\:753b\:3060\:3051\:8fd4\:3059
 
-   ノード無効化:
-     L1 ノードの Status を "Invalidated" に設定し
-     関連する L2 キャッシュを削除する。
-     再実行後に新しい L2 グラフで上書きされる。
-   ════════════════════════════════════════════════════════ *)
+   \:30ce\:30fc\:30c9\:7121\:52b9\:5316:
+     L1 \:30ce\:30fc\:30c9\:306e Status \:3092 "Invalidated" \:306b\:8a2d\:5b9a\:3057
+     \:95a2\:9023\:3059\:308b L2 \:30ad\:30e3\:30c3\:30b7\:30e5\:3092\:524a\:9664\:3059\:308b\:3002
+     \:518d\:5b9f\:884c\:5f8c\:306b\:65b0\:3057\:3044 L2 \:30b0\:30e9\:30d5\:3067\:4e0a\:66f8\:304d\:3055\:308c\:308b\:3002
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
 
-(* ────────────────────────────────────────────────────────
-   有向グラフ上の全子孫ノード ID を収集する
-   BFS で OutEdges を辿る
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:6709\:5411\:30b0\:30e9\:30d5\:4e0a\:306e\:5168\:5b50\:5b6b\:30ce\:30fc\:30c9 ID \:3092\:53ce\:96c6\:3059\:308b
+   BFS \:3067 OutEdges \:3092\:8fbf\:308b
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphDescendants[nodes_Association, startID_String] :=
   Module[{queue = {startID}, visited = {}, nid, outs},
     While[Length[queue] > 0,
@@ -14989,14 +15314,14 @@ iLLMGraphDescendants[nodes_Association, startID_String] :=
         Function[e, Lookup[e, "To", Nothing]] /@
           Lookup[Lookup[nodes, nid, <||>], "OutEdges", {}]];
       queue = Join[queue, Complement[outs, visited]]];
-    (* startID 自身は除いて返す *)
+    (* startID \:81ea\:8eab\:306f\:9664\:3044\:3066\:8fd4\:3059 *)
     Complement[visited, {startID}]
   ];
 
-(* ────────────────────────────────────────────────────────
-   指定ノードの下流を "Invalidated" にマークし
-   対応する L2 キャッシュを削除する（内部）
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:6307\:5b9a\:30ce\:30fc\:30c9\:306e\:4e0b\:6d41\:3092 "Invalidated" \:306b\:30de\:30fc\:30af\:3057
+   \:5bfe\:5fdc\:3059\:308b L2 \:30ad\:30e3\:30c3\:30b7\:30e5\:3092\:524a\:9664\:3059\:308b\:ff08\:5185\:90e8\:ff09
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphInvalidateDownstream[nb_NotebookObject, nodeID_String] :=
   Module[{graph, nodes, descIDs, cacheDir},
     graph = iLLMGraphGetCached[nb];
@@ -15007,12 +15332,12 @@ iLLMGraphInvalidateDownstream[nb_NotebookObject, nodeID_String] :=
     Scan[
       Function[did,
         If[KeyExistsQ[nodes, did],
-          (* L1 ノードを Invalidated に *)
+          (* L1 \:30ce\:30fc\:30c9\:3092 Invalidated \:306b *)
           nodes[did, "Status"] = "Invalidated";
           nodes[did, "L2Ref"]  = None;
           nodes[did, "L2NodeCount"] = 0;
           nodes[did, "L2ErrorCount"] = 0;
-          (* L2 キャッシュ削除 *)
+          (* L2 \:30ad\:30e3\:30c3\:30b7\:30e5\:524a\:9664 *)
           Quiet @ DeleteFile[FileNameJoin[{cacheDir,
             StringReplace[did, "/" -> "_"] <> "_L2.wxf"}]]]],
       descIDs];
@@ -15020,33 +15345,33 @@ iLLMGraphInvalidateDownstream[nb_NotebookObject, nodeID_String] :=
     graph["LastModified"] = AbsoluteTime[];
     $iLLMGraphCache  = graph;
     iLLMGraphFlush[nb];
-    descIDs   (* 無効化したノード ID リストを返す *)
+    descIDs   (* \:7121\:52b9\:5316\:3057\:305f\:30ce\:30fc\:30c9 ID \:30ea\:30b9\:30c8\:3092\:8fd4\:3059 *)
   ];
 
-(* ────────────────────────────────────────────────────────
-   再実行計画の構築: 再実行すべきノード順を返す
-   指定ノード自身 + Invalidated な下流ノード（トポロジカル順）
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:518d\:5b9f\:884c\:8a08\:753b\:306e\:69cb\:7bc9: \:518d\:5b9f\:884c\:3059\:3079\:304d\:30ce\:30fc\:30c9\:9806\:3092\:8fd4\:3059
+   \:6307\:5b9a\:30ce\:30fc\:30c9\:81ea\:8eab + Invalidated \:306a\:4e0b\:6d41\:30ce\:30fc\:30c9\:ff08\:30c8\:30dd\:30ed\:30b8\:30ab\:30eb\:9806\:ff09
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphBuildRerunPlan[graph_Association, nodeID_String] :=
   Module[{nodes, allIDs, invalidIDs, plan, orderedIDs},
     nodes      = Lookup[graph, "Nodes", <||>];
     allIDs     = Keys[nodes];
-    (* 指定ノード + Invalidated ノードを対象に *)
+    (* \:6307\:5b9a\:30ce\:30fc\:30c9 + Invalidated \:30ce\:30fc\:30c9\:3092\:5bfe\:8c61\:306b *)
     invalidIDs = Select[allIDs,
       Lookup[nodes[#], "Status", ""] === "Invalidated" &];
     plan = Prepend[invalidIDs, nodeID];
     plan = DeleteDuplicates[plan];
-    (* Step 番号でソートしてトポロジカル順にする *)
+    (* Step \:756a\:53f7\:3067\:30bd\:30fc\:30c8\:3057\:3066\:30c8\:30dd\:30ed\:30b8\:30ab\:30eb\:9806\:306b\:3059\:308b *)
     orderedIDs = SortBy[plan,
       Lookup[Lookup[nodes, #, <||>], "Step", 0] &];
     orderedIDs
   ];
 
-(* ────────────────────────────────────────────────────────
-   iRerunL1Node: 指定 L1 ノードのプロンプトを再実行する
-   セッション履歴から対応するエントリを読み出し、
-   instruction を使って ClaudeEval を再構成する。
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   iRerunL1Node: \:6307\:5b9a L1 \:30ce\:30fc\:30c9\:306e\:30d7\:30ed\:30f3\:30d7\:30c8\:3092\:518d\:5b9f\:884c\:3059\:308b
+   \:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:304b\:3089\:5bfe\:5fdc\:3059\:308b\:30a8\:30f3\:30c8\:30ea\:3092\:8aad\:307f\:51fa\:3057\:3001
+   instruction \:3092\:4f7f\:3063\:3066 ClaudeEval \:3092\:518d\:69cb\:6210\:3059\:308b\:3002
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 Options[iRerunL1Node] = {
   "Model"     -> Automatic,
   "DryRun"    -> False,
@@ -15070,13 +15395,13 @@ iRerunL1Node[nb_NotebookObject, nodeID_String,
       If[verbose, Print["\:26a0\:fe0f \:30ce\:30fc\:30c9\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: ", nodeID]];
       Return[$Failed]];
 
-    (* L1 ノードの instruction を取得 *)
+    (* L1 \:30ce\:30fc\:30c9\:306e instruction \:3092\:53d6\:5f97 *)
     instruction = Lookup[node, "Instruction", ""];
     If[!StringQ[instruction] || StringTrim[instruction] === "",
       If[verbose, Print["\:26a0\:fe0f Instruction \:304c\:7a7a\:3067\:3059: ", nodeID]];
       Return[$Failed]];
 
-    (* セッションタグを節点 ID から推定 "history-N" → "history" *)
+    (* \:30bb\:30c3\:30b7\:30e7\:30f3\:30bf\:30b0\:3092\:7bc0\:70b9 ID \:304b\:3089\:63a8\:5b9a "history-N" \[RightArrow] "history" *)
     tag = StringJoin @ Most @ StringSplit[nodeID, "-"];
     If[!StringQ[tag] || tag === "",
       tag = iSessionTag[]];
@@ -15090,16 +15415,16 @@ iRerunL1Node[nb_NotebookObject, nodeID_String,
       Return[<|"NodeID" -> nodeID, "Instruction" -> instruction,
                "Tag" -> tag, "DryRun" -> True|>]];
 
-    (* 実際に再実行: ClaudeEval と同じ経路 *)
+    (* \:5b9f\:969b\:306b\:518d\:5b9f\:884c: ClaudeEval \:3068\:540c\:3058\:7d4c\:8def *)
     If[mdl === Automatic,
       iClaudeEvalImpl[nb, tag, instruction],
       iClaudeEvalImpl[nb, tag, instruction,
         {}, True, mdl, Automatic, False, Automatic]]
   ];
 
-(* ────────────────────────────────────────────────────────
-   NotebookLLMGraphRerun 公開 API
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   NotebookLLMGraphRerun \:516c\:958b API
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 NotebookLLMGraphRerun::noGraph =
   "LLMGraph \:304c\:5b58\:5728\:3057\:307e\:305b\:3093\:3002NotebookLLMGraphBuild[] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002";
 NotebookLLMGraphRerun::notFound =
@@ -15120,20 +15445,20 @@ NotebookLLMGraphRerun[nb_NotebookObject, nodeID_String,
     verbose  = TrueQ[OptionValue["Verbose"]];
     mdl      = OptionValue[Model];
 
-    (* Step 1: 下流を無効化 *)
+    (* Step 1: \:4e0b\:6d41\:3092\:7121\:52b9\:5316 *)
     invalidated = {};
     If[TrueQ[cascade],
       invalidated = iLLMGraphInvalidateDownstream[nb, nodeID];
       If[verbose && Length[invalidated] > 0,
-        Print[Style["\:2193 \:4e0b\:6d41\:7121\:52b9\:5316: ", Bold, Orange],
-          Length[invalidated], " \:30ce\:30fc\:30c9 → Invalidated"];
+        Print[Style["\[DownArrow] \:4e0b\:6d41\:7121\:52b9\:5316: ", Bold, Orange],
+          Length[invalidated], " \:30ce\:30fc\:30c9 \[RightArrow] Invalidated"];
         Scan[Print["  ", #] &, invalidated]]];
 
-    (* Step 2: 再実行計画 *)
+    (* Step 2: \:518d\:5b9f\:884c\:8a08\:753b *)
     plan = iLLMGraphBuildRerunPlan[
       iLLMGraphGetCached[nb], nodeID];
     If[verbose,
-      Print[Style["\:25b6 \:518d\:5b9f\:884c\:8a08\:753b (", Bold],
+      Print[Style["\[FilledRightTriangle] \:518d\:5b9f\:884c\:8a08\:753b (", Bold],
         Length[plan], " \:30ce\:30fc\:30c9):"];
       Scan[Print["  [", If[# === nodeID, "TARGET", "cascade"], "] ", #] &,
         plan]];
@@ -15142,10 +15467,10 @@ NotebookLLMGraphRerun[nb_NotebookObject, nodeID_String,
       Return[<|"NodeID" -> nodeID, "Plan" -> plan,
                "Invalidated" -> invalidated, "DryRun" -> True|>]];
 
-    (* Step 3: 指定ノードだけ再実行（非同期）
-       カスケード再実行は下流が依存するため一括では行わず、
-       ユーザーが ClaudeEval 完了後に順次呼び出すか ContinueEval に委ねる。
-       将来の Phase 5b で並列スケジューラが担当する。 *)
+    (* Step 3: \:6307\:5b9a\:30ce\:30fc\:30c9\:3060\:3051\:518d\:5b9f\:884c\:ff08\:975e\:540c\:671f\:ff09
+       \:30ab\:30b9\:30b1\:30fc\:30c9\:518d\:5b9f\:884c\:306f\:4e0b\:6d41\:304c\:4f9d\:5b58\:3059\:308b\:305f\:3081\:4e00\:62ec\:3067\:306f\:884c\:308f\:305a\:3001
+       \:30e6\:30fc\:30b6\:30fc\:304c ClaudeEval \:5b8c\:4e86\:5f8c\:306b\:9806\:6b21\:547c\:3073\:51fa\:3059\:304b ContinueEval \:306b\:59d4\:306d\:308b\:3002
+       \:5c06\:6765\:306e Phase 5b \:3067\:4e26\:5217\:30b9\:30b1\:30b8\:30e5\:30fc\:30e9\:304c\:62c5\:5f53\:3059\:308b\:3002 *)
     iRerunL1Node[nb, nodeID,
       "Model"   -> mdl,
       "DryRun"  -> False,
@@ -15155,14 +15480,14 @@ NotebookLLMGraphRerun[nb_NotebookObject, nodeID_String,
 NotebookLLMGraphRerun[nodeID_String, opts:OptionsPattern[]] :=
   NotebookLLMGraphRerun[EvaluationNotebook[], nodeID, opts];
 
-(* ────────────────────────────────────────────────────────
-   NotebookLLMGraphInvalidateDownstream 公開 API
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   NotebookLLMGraphInvalidateDownstream \:516c\:958b API
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 NotebookLLMGraphInvalidateDownstream[nb_NotebookObject,
                                       nodeID_String] :=
   Module[{invalidated},
     invalidated = iLLMGraphInvalidateDownstream[nb, nodeID];
-    Print[Style["\:2193 \:4e0b\:6d41\:7121\:52b9\:5316\:5b8c\:4e86: ",
+    Print[Style["\[DownArrow] \:4e0b\:6d41\:7121\:52b9\:5316\:5b8c\:4e86: ",
       Bold, Orange], Length[invalidated], " \:30ce\:30fc\:30c9"];
     invalidated
   ];
@@ -15170,30 +15495,30 @@ NotebookLLMGraphInvalidateDownstream[nodeID_String] :=
   NotebookLLMGraphInvalidateDownstream[EvaluationNotebook[], nodeID];
 
 
-(* ════════════════════════════════════════════════════════
-   Phase 5a: L0 スケジューラ基盤 — ISplittable プロトコル
-   ════════════════════════════════════════════════════════
+(* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
+   Phase 5a: L0 \:30b9\:30b1\:30b8\:30e5\:30fc\:30e9\:57fa\:76e4 \[LongDash] ISplittable \:30d7\:30ed\:30c8\:30b3\:30eb
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
 
-   WOOC'92/93 の Split-Process-Merge パターンを
-   Mathematica の Association ベースで実装する。
+   WOOC'92/93 \:306e Split-Process-Merge \:30d1\:30bf\:30fc\:30f3\:3092
+   Mathematica \:306e Association \:30d9\:30fc\:30b9\:3067\:5b9f\:88c5\:3059\:308b\:3002
 
-   ISplittable プロトコル:
-     各型について以下を登録する
-       splitFn   : obj → {chunk1, chunk2, ...}
-       mergeFn   : {result1, result2, ...} → mergedResult
-       homoTestFn: {chunk1, chunk2} → True/False (均質性判定)
+   ISplittable \:30d7\:30ed\:30c8\:30b3\:30eb:
+     \:5404\:578b\:306b\:3064\:3044\:3066\:4ee5\:4e0b\:3092\:767b\:9332\:3059\:308b
+       splitFn   : obj \[RightArrow] {chunk1, chunk2, ...}
+       mergeFn   : {result1, result2, ...} \[RightArrow] mergedResult
+       homoTestFn: {chunk1, chunk2} \[RightArrow] True/False (\:5747\:8cea\:6027\:5224\:5b9a)
 
-   スケジューラが行うこと (Phase 5b で拡張):
-     1. input を splitFn で分割
-     2. 各チャンクを routeMap に従ってプロバイダ/セッションに割り当て
-     3. 独立チャンクは並列、依存チャンクは逐次に実行
-     4. 結果を mergeFn で統合
-   ════════════════════════════════════════════════════════ *)
+   \:30b9\:30b1\:30b8\:30e5\:30fc\:30e9\:304c\:884c\:3046\:3053\:3068 (Phase 5b \:3067\:62e1\:5f35):
+     1. input \:3092 splitFn \:3067\:5206\:5272
+     2. \:5404\:30c1\:30e3\:30f3\:30af\:3092 routeMap \:306b\:5f93\:3063\:3066\:30d7\:30ed\:30d0\:30a4\:30c0/\:30bb\:30c3\:30b7\:30e7\:30f3\:306b\:5272\:308a\:5f53\:3066
+     3. \:72ec\:7acb\:30c1\:30e3\:30f3\:30af\:306f\:4e26\:5217\:3001\:4f9d\:5b58\:30c1\:30e3\:30f3\:30af\:306f\:9010\:6b21\:306b\:5b9f\:884c
+     4. \:7d50\:679c\:3092 mergeFn \:3067\:7d71\:5408
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
 
-(* ────────────────────────────────────────────────────────
-   ISplittable レジストリ
-   型名 → <|splitFn, mergeFn, homoTestFn|> の Association
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   ISplittable \:30ec\:30b8\:30b9\:30c8\:30ea
+   \:578b\:540d \[RightArrow] <|splitFn, mergeFn, homoTestFn|> \:306e Association
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 $iSplittableRegistry = <||>;
 
 iRegisterSplittable[typeName_String,
@@ -15209,10 +15534,10 @@ iRegisterSplittable[typeName_String,
 iGetSplittable[typeName_String] :=
   Lookup[$iSplittableRegistry, typeName, Missing["UnknownType"]];
 
-(* ────────────────────────────────────────────────────────
-   チャンク型コンストラクタ
-   各チャンクにメタデータを付与する
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30c1\:30e3\:30f3\:30af\:578b\:30b3\:30f3\:30b9\:30c8\:30e9\:30af\:30bf
+   \:5404\:30c1\:30e3\:30f3\:30af\:306b\:30e1\:30bf\:30c7\:30fc\:30bf\:3092\:4ed8\:4e0e\:3059\:308b
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iNewChunk[chunkID_String, content_, typeName_String,
           chunkIdx_Integer, totalChunks_Integer,
           meta_Association: <||>] :=
@@ -15228,9 +15553,9 @@ iNewChunk[chunkID_String, content_, typeName_String,
     "CreatedAt"   -> AbsoluteTime[]
   |>, meta];
 
-(* ────────────────────────────────────────────────────────
-   iISplit: 入力を分割してチャンクリストを返す
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   iISplit: \:5165\:529b\:3092\:5206\:5272\:3057\:3066\:30c1\:30e3\:30f3\:30af\:30ea\:30b9\:30c8\:3092\:8fd4\:3059
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iISplit[input_, typeName_String, opts_Association: <||>] :=
   Module[{rec, splitFn, rawChunks, n},
     rec = iGetSplittable[typeName];
@@ -15248,16 +15573,16 @@ iISplit[input_, typeName_String, opts_Association: <||>] :=
       rawChunks]
   ];
 
-(* ────────────────────────────────────────────────────────
-   iIMerge: チャンクリストの Result を統合する
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   iIMerge: \:30c1\:30e3\:30f3\:30af\:30ea\:30b9\:30c8\:306e Result \:3092\:7d71\:5408\:3059\:308b
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iIMerge[chunks_List, typeName_String, opts_Association: <||>] :=
   Module[{rec, mergeFn, results},
     rec = iGetSplittable[typeName];
     If[!AssociationQ[rec], Return[Missing["UnknownType", typeName]]];
     mergeFn = rec["mergeFn"];
-    (* Results を安全に抽出:
-       chunks が正しいリストでない場合でも List を保証する *)
+    (* Results \:3092\:5b89\:5168\:306b\:62bd\:51fa:
+       chunks \:304c\:6b63\:3057\:3044\:30ea\:30b9\:30c8\:3067\:306a\:3044\:5834\:5408\:3067\:3082 List \:3092\:4fdd\:8a3c\:3059\:308b *)
     results = If[ListQ[chunks],
       Lookup[#, "Result", None] & /@ chunks,
       {}];
@@ -15265,10 +15590,10 @@ iIMerge[chunks_List, typeName_String, opts_Association: <||>] :=
     Quiet[mergeFn[results, opts]]
   ];
 
-(* ────────────────────────────────────────────────────────
-   スケジュールジョブ構造
-   ChunkID → <|Provider, Priority, DependsOn, Status|>
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30b9\:30b1\:30b8\:30e5\:30fc\:30eb\:30b8\:30e7\:30d6\:69cb\:9020
+   ChunkID \[RightArrow] <|Provider, Priority, DependsOn, Status|>
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iNewScheduleJob[chunks_List, routeMap_Association: <||>] :=
   Module[{n = Length[chunks], jobID},
     jobID = "job-" <> DateString[Now, {"Year","Month","Day","Hour","Minute","Second"}];
@@ -15282,7 +15607,7 @@ iNewScheduleJob[chunks_List, routeMap_Association: <||>] :=
             chunk,
             "Provider" -> Lookup[routeMap, chunk["ChunkID"],
               Lookup[routeMap, "default", "ClaudeCode"]],
-            "DependsOn" -> {}   (* Phase 5b で依存解析を実装 *)
+            "DependsOn" -> {}   (* Phase 5b \:3067\:4f9d\:5b58\:89e3\:6790\:3092\:5b9f\:88c5 *)
           |>],
         chunks],
       "RouteMap"   -> routeMap,
@@ -15290,9 +15615,9 @@ iNewScheduleJob[chunks_List, routeMap_Association: <||>] :=
     |>
   ];
 
-(* ────────────────────────────────────────────────────────
-   iIScheduleJob: チャンクをスケジュールジョブに変換する
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   iIScheduleJob: \:30c1\:30e3\:30f3\:30af\:3092\:30b9\:30b1\:30b8\:30e5\:30fc\:30eb\:30b8\:30e7\:30d6\:306b\:5909\:63db\:3059\:308b
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iIScheduleJob[input_, typeName_String,
               routeMap_Association: <||>,
               splitOpts_Association: <||>] :=
@@ -15302,14 +15627,14 @@ iIScheduleJob[input_, typeName_String,
     iNewScheduleJob[chunks, routeMap]
   ];
 
-(* ────────────────────────────────────────────────────────
-   NotebookCells 型の ISplittable 実装
-   セルを PrivacySpec タグ（Confidential/Public）で分割する。
-   同一タグが連続するブロックをひとつのチャンクにまとめる。
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   NotebookCells \:578b\:306e ISplittable \:5b9f\:88c5
+   \:30bb\:30eb\:3092 PrivacySpec \:30bf\:30b0\:ff08Confidential/Public\:ff09\:3067\:5206\:5272\:3059\:308b\:3002
+   \:540c\:4e00\:30bf\:30b0\:304c\:9023\:7d9a\:3059\:308b\:30d6\:30ed\:30c3\:30af\:3092\:3072\:3068\:3064\:306e\:30c1\:30e3\:30f3\:30af\:306b\:307e\:3068\:3081\:308b\:3002
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iRegisterSplittable[
   "NotebookCells",
-  (* splitFn: ノートブックオブジェクト → チャンクリスト *)
+  (* splitFn: \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30aa\:30d6\:30b8\:30a7\:30af\:30c8 \[RightArrow] \:30c1\:30e3\:30f3\:30af\:30ea\:30b9\:30c8 *)
   Function[{nb, opts},
     Module[{cells, groups, currentTag, currentGroup, cellIdx, tag},
       cells = Quiet @ Cells[nb];
@@ -15325,7 +15650,7 @@ iRegisterSplittable[
           {True -> "Confidential", _ -> "Public"}];
         If[tag === currentTag,
           AppendTo[currentGroup, cellIdx],
-          (* タグ変化: 現グループを確定 *)
+          (* \:30bf\:30b0\:5909\:5316: \:73fe\:30b0\:30eb\:30fc\:30d7\:3092\:78ba\:5b9a *)
           If[currentGroup =!= {},
             AppendTo[groups, <|"Tag" -> currentTag,
               "Cells" -> currentGroup|>]];
@@ -15336,22 +15661,22 @@ iRegisterSplittable[
         AppendTo[groups, <|"Tag" -> currentTag,
           "Cells" -> currentGroup|>]];
       groups]],
-  (* mergeFn: 処理済みチャンクリスト → まとめた結果 *)
+  (* mergeFn: \:51e6\:7406\:6e08\:307f\:30c1\:30e3\:30f3\:30af\:30ea\:30b9\:30c8 \[RightArrow] \:307e\:3068\:3081\:305f\:7d50\:679c *)
   Function[{results, opts},
     StringJoin @ Riffle[
       Select[results, StringQ] , "\n\n"]],
-  (* homoTestFn: 同じタグを持つか *)
+  (* homoTestFn: \:540c\:3058\:30bf\:30b0\:3092\:6301\:3064\:304b *)
   Function[{c1, c2},
     Lookup[c1, "Tag", ""] === Lookup[c2, "Tag", ""]]
 ];
 
-(* ────────────────────────────────────────────────────────
-   TextChunks 型の ISplittable 実装 (Phase 6 先行登録)
-   テキストを段落または文字数で分割する。
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   TextChunks \:578b\:306e ISplittable \:5b9f\:88c5 (Phase 6 \:5148\:884c\:767b\:9332)
+   \:30c6\:30ad\:30b9\:30c8\:3092\:6bb5\:843d\:307e\:305f\:306f\:6587\:5b57\:6570\:3067\:5206\:5272\:3059\:308b\:3002
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iRegisterSplittable[
   "TextChunks",
-  (* splitFn: テキスト文字列 → 段落チャンクリスト *)
+  (* splitFn: \:30c6\:30ad\:30b9\:30c8\:6587\:5b57\:5217 \[RightArrow] \:6bb5\:843d\:30c1\:30e3\:30f3\:30af\:30ea\:30b9\:30c8 *)
   Function[{text, opts},
     Module[{maxChars, paragraphs, current = "", chunks = {}},
       maxChars   = Lookup[opts, "MaxChars", 2000];
@@ -15368,14 +15693,14 @@ iRegisterSplittable[
   (* mergeFn *)
   Function[{results, opts},
     StringJoin @ Riffle[Select[results, StringQ], "\n\n"]],
-  (* homoTestFn: 常に均質 *)
+  (* homoTestFn: \:5e38\:306b\:5747\:8cea *)
   (True &)
 ];
 
-(* ────────────────────────────────────────────────────────
-   NotebookLLMGraphSummary 公開 API
-   Phase 4c と 5a 双方の状態を一覧表示する
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   NotebookLLMGraphSummary \:516c\:958b API
+   Phase 4c \:3068 5a \:53cc\:65b9\:306e\:72b6\:614b\:3092\:4e00\:89a7\:8868\:793a\:3059\:308b
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 NotebookLLMGraphSummary[nb_NotebookObject] :=
   Module[{graph, nodes, rows, statusCounts, totalL2, totalErrors,
           invalidatedCount},
@@ -15384,26 +15709,26 @@ NotebookLLMGraphSummary[nb_NotebookObject] :=
       Print["LLMGraph \:306a\:3057"]; Return[Missing["NoGraph"]]];
     nodes = Lookup[graph, "Nodes", <||>];
 
-    (* ステータス集計 *)
+    (* \:30b9\:30c6\:30fc\:30bf\:30b9\:96c6\:8a08 *)
     statusCounts = Counts[Lookup[#, "Status", "Unknown"] & /@ Values[nodes]];
     totalL2      = Total[Lookup[#, "L2NodeCount", 0] & /@ Values[nodes]];
     totalErrors  = Total[Lookup[#, "L2ErrorCount", 0] & /@ Values[nodes]];
     invalidatedCount = Lookup[statusCounts, "Invalidated", 0];
 
-    Print[Style["\:2022 L1 \:30ce\:30fc\:30c9\:6570 : ", Bold], Length[nodes]];
-    Print[Style["\:2022 Status \:5185\:8a33 : ", Bold],
+    Print[Style["\[Bullet] L1 \:30ce\:30fc\:30c9\:6570 : ", Bold], Length[nodes]];
+    Print[Style["\[Bullet] Status \:5185\:8a33 : ", Bold],
       StringRiffle[
         KeyValueMap[ToString[#1] <> "=" <> ToString[#2] &, statusCounts],
         ", "]];
-    Print[Style["\:2022 L2 \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:5408\:8a08 : ", Bold], totalL2];
-    Print[Style["\:2022 L2 \:30a8\:30e9\:30fc\:5408\:8a08 : ", Bold],
+    Print[Style["\[Bullet] L2 \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:5408\:8a08 : ", Bold], totalL2];
+    Print[Style["\[Bullet] L2 \:30a8\:30e9\:30fc\:5408\:8a08 : ", Bold],
       If[totalErrors > 0, Style[totalErrors, Red, Bold], totalErrors]];
     If[invalidatedCount > 0,
       Print[Style["\:26a0\:fe0f Invalidated \:30ce\:30fc\:30c9: " <>
-        ToString[invalidatedCount] <> " \:4ef6 \:2014 NotebookLLMGraphRerun \:3067\:518d\:5b9f\:884c\:53ef\:80fd",
+        ToString[invalidatedCount] <> " \:4ef6 \[LongDash] NotebookLLMGraphRerun \:3067\:518d\:5b9f\:884c\:53ef\:80fd",
         Orange]]];
 
-    (* 詳細 Dataset *)
+    (* \:8a73\:7d30 Dataset *)
     rows = KeyValueMap[
       Function[{nid, node},
         <|
@@ -15423,45 +15748,45 @@ NotebookLLMGraphSummary[] :=
   NotebookLLMGraphSummary[EvaluationNotebook[]];
 
 
-(* ════════════════════════════════════════════════════════
-   Phase 5b: 並列 LLM 投入エンジン
-   ════════════════════════════════════════════════════════
+(* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
+   Phase 5b: \:4e26\:5217 LLM \:6295\:5165\:30a8\:30f3\:30b8\:30f3
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
 
-   設計原則:
-     - 独立チャンクは StartProcess で同時並行起動
-     - DependsOn を持つチャンクは「波」単位で逐次実行
-     - 1秒ごとの ScheduledTask で全プロセスをポーリング
-     - プロバイダ別キュー: ClaudeCode = bat, API/LMStudio = PS1
+   \:8a2d\:8a08\:539f\:5247:
+     - \:72ec\:7acb\:30c1\:30e3\:30f3\:30af\:306f StartProcess \:3067\:540c\:6642\:4e26\:884c\:8d77\:52d5
+     - DependsOn \:3092\:6301\:3064\:30c1\:30e3\:30f3\:30af\:306f\:300c\:6ce2\:300d\:5358\:4f4d\:3067\:9010\:6b21\:5b9f\:884c
+     - 1\:79d2\:3054\:3068\:306e ScheduledTask \:3067\:5168\:30d7\:30ed\:30bb\:30b9\:3092\:30dd\:30fc\:30ea\:30f3\:30b0
+     - \:30d7\:30ed\:30d0\:30a4\:30c0\:5225\:30ad\:30e5\:30fc: ClaudeCode = bat, API/LMStudio = PS1
 
-   実行フロー:
+   \:5b9f\:884c\:30d5\:30ed\:30fc:
      LLMGraphExecute[job, opts]
-       → iIBuildWaves[job]          # 依存解析 → 並列波リスト
-       → iILaunchWave[...]          # 波内の全チャンクを同時起動
-       → ScheduledTask ポーリング   # iIJobTick[] が毎秒呼ばれる
-       → iICollectChunkResult[...]  # 完了チェック + 結果回収
-       → 次の波を起動 or 全完了
-       → iIFinishJob[...]           # Phase 5c: Merge + 任意書き戻し
-   ════════════════════════════════════════════════════════ *)
+       \[RightArrow] iIBuildWaves[job]          # \:4f9d\:5b58\:89e3\:6790 \[RightArrow] \:4e26\:5217\:6ce2\:30ea\:30b9\:30c8
+       \[RightArrow] iILaunchWave[...]          # \:6ce2\:5185\:306e\:5168\:30c1\:30e3\:30f3\:30af\:3092\:540c\:6642\:8d77\:52d5
+       \[RightArrow] ScheduledTask \:30dd\:30fc\:30ea\:30f3\:30b0   # iIJobTick[] \:304c\:6bce\:79d2\:547c\:3070\:308c\:308b
+       \[RightArrow] iICollectChunkResult[...]  # \:5b8c\:4e86\:30c1\:30a7\:30c3\:30af + \:7d50\:679c\:56de\:53ce
+       \[RightArrow] \:6b21\:306e\:6ce2\:3092\:8d77\:52d5 or \:5168\:5b8c\:4e86
+       \[RightArrow] iIFinishJob[...]           # Phase 5c: Merge + \:4efb\:610f\:66f8\:304d\:623b\:3057
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
 
-(* ────────────────────────────────────────────────────────
-   グローバル実行状態レジストリ
-   jobID → <|job, waves, waveIdx, opts, nb, ...|>
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30b0\:30ed\:30fc\:30d0\:30eb\:5b9f\:884c\:72b6\:614b\:30ec\:30b8\:30b9\:30c8\:30ea
+   jobID \[RightArrow] <|job, waves, waveIdx, opts, nb, ...|>
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 $iIRunningJobs = <||>;
 
-(* ────────────────────────────────────────────────────────
-   依存解析: ジョブのチャンクをトポロジカル波に分解する
-   戻り値: {{ "TextChunks-1", "TextChunks-3" }, { "TextChunks-2" }, ...}
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:4f9d\:5b58\:89e3\:6790: \:30b8\:30e7\:30d6\:306e\:30c1\:30e3\:30f3\:30af\:3092\:30c8\:30dd\:30ed\:30b8\:30ab\:30eb\:6ce2\:306b\:5206\:89e3\:3059\:308b
+   \:623b\:308a\:5024: {{ "TextChunks-1", "TextChunks-3" }, { "TextChunks-2" }, ...}
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iIBuildWaves[job_Association] :=
   Module[{chunks, done = {}, waves = {}, remaining, wave},
     chunks    = Lookup[job, "Chunks", <||>];
     remaining = Keys[chunks];
     While[Length[remaining] > 0,
-      (* この波: DependsOn が全て done に含まれているチャンク *)
+      (* \:3053\:306e\:6ce2: DependsOn \:304c\:5168\:3066 done \:306b\:542b\:307e\:308c\:3066\:3044\:308b\:30c1\:30e3\:30f3\:30af *)
       wave = Select[remaining,
         SubsetQ[done, Lookup[Lookup[chunks, #, <||>], "DependsOn", {}]] &];
-      (* 循環依存や依存なし → 残り全部を1波 *)
+      (* \:5faa\:74b0\:4f9d\:5b58\:3084\:4f9d\:5b58\:306a\:3057 \[RightArrow] \:6b8b\:308a\:5168\:90e8\:30921\:6ce2 *)
       If[wave === {}, wave = remaining];
       AppendTo[waves, wave];
       done      = Join[done, wave];
@@ -15469,14 +15794,14 @@ iIBuildWaves[job_Association] :=
     waves
   ];
 
-(* ────────────────────────────────────────────────────────
-   プロンプト構築: チャンク内容をテンプレートに展開
-   テンプレートプレースホルダ:
-     `content`      — チャンクの Content を文字列化
-     `chunkIdx`     — 何番目のチャンクか
-     `totalChunks`  — 全チャンク数
-     `chunkID`      — ChunkID
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30d7\:30ed\:30f3\:30d7\:30c8\:69cb\:7bc9: \:30c1\:30e3\:30f3\:30af\:5185\:5bb9\:3092\:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:306b\:5c55\:958b
+   \:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:30d7\:30ec\:30fc\:30b9\:30db\:30eb\:30c0:
+     `content`      \[LongDash] \:30c1\:30e3\:30f3\:30af\:306e Content \:3092\:6587\:5b57\:5217\:5316
+     `chunkIdx`     \[LongDash] \:4f55\:756a\:76ee\:306e\:30c1\:30e3\:30f3\:30af\:304b
+     `totalChunks`  \[LongDash] \:5168\:30c1\:30e3\:30f3\:30af\:6570
+     `chunkID`      \[LongDash] ChunkID
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iIBuildChunkPrompt[chunk_Association, template_String] :=
   StringReplace[template, {
     "`content`"     -> ToString[Lookup[chunk, "Content", ""]],
@@ -15485,12 +15810,12 @@ iIBuildChunkPrompt[chunk_Association, template_String] :=
     "`chunkID`"     -> Lookup[chunk, "ChunkID", ""]
   }];
 
-(* ────────────────────────────────────────────────────────
-   チャンクの非同期プロセス起動
-   戻り値: RunState Association | $Failed
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30c1\:30e3\:30f3\:30af\:306e\:975e\:540c\:671f\:30d7\:30ed\:30bb\:30b9\:8d77\:52d5
+   \:623b\:308a\:5024: RunState Association | $Failed
    RunState: <|"proc"->..., "outFile"->..., "provider"->...,
                "startTime"->..., (batFile/promptFile for cleanup)|>
-   ──────────────────────────────────────────────────────── *)
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iILaunchChunkAsync[chunk_Association, prompt_String,
                    provider_String: "claudecode",
                    modelSpec_: Automatic,
@@ -15501,13 +15826,13 @@ iILaunchChunkAsync[chunk_Association, prompt_String,
          StringReplace[Lookup[chunk, "ChunkID", "x"], {"-"->"", "_"->""}];
     outFile    = FileNameJoin[{$TemporaryDirectory, "iip_out_"  <> ts <> ".txt"}];
     promptFile = FileNameJoin[{$TemporaryDirectory, "iip_pmt_"  <> ts <> ".txt"}];
-    (* プロンプトを UTF-8 で書き出し *)
+    (* \:30d7\:30ed\:30f3\:30d7\:30c8\:3092 UTF-8 \:3067\:66f8\:304d\:51fa\:3057 *)
     Quiet @ Block[{strm},
       strm = OpenWrite[promptFile, BinaryFormat -> True];
       BinaryWrite[strm, ToCharacterCode[prompt, "UTF-8"], "Byte"];
       Close[strm]];
     Which[
-      (* ── ClaudeCode: bat 経由 ── *)
+      (* \[HorizontalLine]\[HorizontalLine] ClaudeCode: bat \:7d4c\:7531 \[HorizontalLine]\[HorizontalLine] *)
       provider === "claudecode",
         batFile = iMakeBat[promptFile, outFile, {}];
         proc    = Quiet @ StartProcess[{"cmd", "/c", batFile}];
@@ -15516,7 +15841,7 @@ iILaunchChunkAsync[chunk_Association, prompt_String,
             "batFile"->batFile, "provider"->provider,
             "startTime"->AbsoluteTime[]|>,
           $Failed],
-      (* ── Anthropic API / LMStudio / OpenAI: PS1 経由 ── *)
+      (* \[HorizontalLine]\[HorizontalLine] Anthropic API / LMStudio / OpenAI: PS1 \:7d4c\:7531 \[HorizontalLine]\[HorizontalLine] *)
       MemberQ[{"anthropic","lmstudio","openai"}, ToLowerCase[provider]],
         Module[{apiKey, apiURL},
           apiKey = If[ToLowerCase[provider] === "lmstudio",
@@ -15547,11 +15872,11 @@ iILaunchChunkAsync[chunk_Association, prompt_String,
       True, $Failed]
   ];
 
-(* ────────────────────────────────────────────────────────
-   1チャンクのプロセス完了確認と結果回収
-   戻り値: <|"status"->"Running"|"Done"|"Failed",
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   1\:30c1\:30e3\:30f3\:30af\:306e\:30d7\:30ed\:30bb\:30b9\:5b8c\:4e86\:78ba\:8a8d\:3068\:7d50\:679c\:56de\:53ce
+   \:623b\:308a\:5024: <|"status"->"Running"|"Done"|"Failed",
              "result"->..., "error"->...|>
-   ──────────────────────────────────────────────────────── *)
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iICollectChunkResult[runState_Association, timeout_: Automatic] :=
   Module[{proc, outFile, elapsed, resolvedTimeout, raw, result},
     proc    = Lookup[runState, "proc", None];
@@ -15559,14 +15884,14 @@ iICollectChunkResult[runState_Association, timeout_: Automatic] :=
     resolvedTimeout = Replace[timeout, Automatic -> $ClaudeTimeout];
     elapsed = AbsoluteTime[] - Lookup[runState, "startTime", AbsoluteTime[]];
     Which[
-      (* タイムアウト *)
+      (* \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8 *)
       elapsed > resolvedTimeout,
         Quiet @ KillProcess[proc];
         Quiet @ DeleteFile[Lookup[runState, "batFile", ""]];
         Quiet @ DeleteFile[Lookup[runState, "promptFile", ""]];
         <|"status"->"Failed", "result"->None,
           "error"->"Timeout (" <> ToString[Round[elapsed]] <> "s)"|>,
-      (* プロセス完了 *)
+      (* \:30d7\:30ed\:30bb\:30b9\:5b8c\:4e86 *)
       Quiet[ProcessStatus[proc]] === "Finished",
         Quiet @ DeleteFile[Lookup[runState, "batFile", ""]];
         Quiet @ DeleteFile[Lookup[runState, "promptFile", ""]];
@@ -15579,14 +15904,14 @@ iICollectChunkResult[runState_Association, timeout_: Automatic] :=
             <|"status"->"Done", "result"->result, "error"->None|>],
           <|"status"->"Failed", "result"->None,
             "error"->"Output file not found"|>],
-      (* まだ実行中 *)
+      (* \:307e\:3060\:5b9f\:884c\:4e2d *)
       True,
         <|"status"->"Running", "result"->None, "error"->None|>]
   ];
 
-(* ────────────────────────────────────────────────────────
-   波の起動: 波内の全チャンクを同時 StartProcess する
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:6ce2\:306e\:8d77\:52d5: \:6ce2\:5185\:306e\:5168\:30c1\:30e3\:30f3\:30af\:3092\:540c\:6642 StartProcess \:3059\:308b
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iILaunchWave[jobID_String, waveIdx_Integer,
              waves_List, opts_Association] :=
   Module[{state, job, chunks, waveIDs, template, verbose,
@@ -15600,7 +15925,7 @@ iILaunchWave[jobID_String, waveIdx_Integer,
     verbose  = TrueQ[Lookup[opts, "Verbose", True]];
     timeout  = Lookup[opts, "Timeout", Automatic];
     If[verbose && Length[waveIDs] > 0,
-      Print[Style["\:25b6 Wave " <> ToString[waveIdx] <> "/" <>
+      Print[Style["\[FilledRightTriangle] Wave " <> ToString[waveIdx] <> "/" <>
         ToString[Length[waves]] <> " \:8d77\:52d5: " <>
         ToString[Length[waveIDs]] <> " \:30c1\:30e3\:30f3\:30af\:4e26\:5217\:5b9f\:884c", Bold, Blue]]];
     Do[
@@ -15608,7 +15933,7 @@ iILaunchWave[jobID_String, waveIdx_Integer,
       If[!AssociationQ[chunk], Continue[]];
       provider = Lookup[chunk, "Provider", "claudecode"];
       prompt   = iIBuildChunkPrompt[chunk,
-        (* チャンク固有テンプレートがあればそれを優先 *)
+        (* \:30c1\:30e3\:30f3\:30af\:56fa\:6709\:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:512a\:5148 *)
         Lookup[chunk, "PromptTemplate", template]];
       runState = iILaunchChunkAsync[chunk, prompt, provider,
         Lookup[opts, Model, Automatic], timeout];
@@ -15617,7 +15942,7 @@ iILaunchWave[jobID_String, waveIdx_Integer,
         chunk["RunState"]  = runState;
         chunk["StartedAt"] = AbsoluteTime[];
         If[verbose, Print["  \:21aa ", cid, " (", provider, ") \:8d77\:52d5"]],
-        (* 起動失敗 *)
+        (* \:8d77\:52d5\:5931\:6557 *)
         chunk["Status"]   = "Failed";
         chunk["ErrorMsg"] = "Launch failed";
         If[verbose, Print[Style["  \:26a0\:fe0f " <> cid <> " \:8d77\:52d5\:5931\:6557", Red]]]];
@@ -15628,9 +15953,9 @@ iILaunchWave[jobID_String, waveIdx_Integer,
     $iIRunningJobs[jobID] = state;
   ];
 
-(* ────────────────────────────────────────────────────────
-   1秒ポーリングティック
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   1\:79d2\:30dd\:30fc\:30ea\:30f3\:30b0\:30c6\:30a3\:30c3\:30af
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iIJobTick[jobID_String, taskSym_Symbol] :=
   Module[{state, job, waveIdx, waves, currentWaveIDs,
           chunks, opts, allDone, cid, chunk, runState, collected},
@@ -15645,13 +15970,13 @@ iIJobTick[jobID_String, taskSym_Symbol] :=
     opts          = state["opts"];
     chunks        = job["Chunks"];
     If[waveIdx > Length[waves],
-      (* 全波完了済み — FinishJob から呼ばれるはずだが念のため *)
+      (* \:5168\:6ce2\:5b8c\:4e86\:6e08\:307f \[LongDash] FinishJob \:304b\:3089\:547c\:3070\:308c\:308b\:306f\:305a\:3060\:304c\:5ff5\:306e\:305f\:3081 *)
       Quiet @ StopScheduledTask[taskSym];
       Quiet @ RemoveScheduledTask[taskSym];
       $iIRunningJobs = KeyDrop[$iIRunningJobs, jobID];
       Return[]];
     currentWaveIDs = waves[[waveIdx]];
-    (* Running チャンクをポーリング *)
+    (* Running \:30c1\:30e3\:30f3\:30af\:3092\:30dd\:30fc\:30ea\:30f3\:30b0 *)
     Do[
       chunk = Lookup[chunks, cid, None];
       If[!AssociationQ[chunk] ||
@@ -15664,7 +15989,7 @@ iIJobTick[jobID_String, taskSym_Symbol] :=
         chunk["Result"]   = collected["result"];
         chunk["ErrorMsg"] = collected["error"];
         chunk["DoneAt"]   = AbsoluteTime[];
-        chunk["RunState"] = <||>;  (* 完了後は RunState を消去してサイズ節約 *)
+        chunk["RunState"] = <||>;  (* \:5b8c\:4e86\:5f8c\:306f RunState \:3092\:6d88\:53bb\:3057\:3066\:30b5\:30a4\:30ba\:7bc0\:7d04 *)
         chunks[cid]       = chunk;
         If[TrueQ[state["verbose"]],
           Print[
@@ -15678,13 +16003,13 @@ iIJobTick[jobID_String, taskSym_Symbol] :=
                 ToString[Round[chunk["DoneAt"] -
                   Lookup[chunk, "StartedAt", chunk["DoneAt"]], 0.1]] <> "s)",
               " \:5931\:6557: " <> ToString[collected["error"]]]]];
-        (* OnChunkDone コールバック *)
+        (* OnChunkDone \:30b3\:30fc\:30eb\:30d0\:30c3\:30af *)
         Quiet @ state["onChunkDone"][cid, collected]];,
     {cid, currentWaveIDs}];
     job["Chunks"] = chunks;
     state["job"]  = job;
     $iIRunningJobs[jobID] = state;
-    (* 波が全て完了したか確認 *)
+    (* \:6ce2\:304c\:5168\:3066\:5b8c\:4e86\:3057\:305f\:304b\:78ba\:8a8d *)
     allDone = AllTrue[currentWaveIDs,
       MemberQ[{"Done","Failed"},
         Lookup[Lookup[chunks, #, <||>], "Status", ""]] &];
@@ -15694,22 +16019,22 @@ iIJobTick[jobID_String, taskSym_Symbol] :=
         $iIRunningJobs[jobID] = state;
         If[nextWaveIdx <= Length[waves],
           iILaunchWave[jobID, nextWaveIdx, waves, opts],
-          (* 全波完了 → Finish *)
+          (* \:5168\:6ce2\:5b8c\:4e86 \[RightArrow] Finish *)
           iIFinishJob[jobID, job, opts,
             state["nb"], taskSym]]]]
   ];
 
-(* ════════════════════════════════════════════════════════
-   Phase 5c: Merge と出力再合成
-   ════════════════════════════════════════════════════════ *)
+(* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
+   Phase 5c: Merge \:3068\:51fa\:529b\:518d\:5408\:6210
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
 
-(* ────────────────────────────────────────────────────────
-   iIFinishJob: 全波完了後の後処理
-     1. チャンク結果を iIMerge で統合
-     2. 任意でノートブックへ書き戻し
-     3. OnJobDone コールバック呼び出し
-     4. ScheduledTask 停止・クリーンアップ
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   iIFinishJob: \:5168\:6ce2\:5b8c\:4e86\:5f8c\:306e\:5f8c\:51e6\:7406
+     1. \:30c1\:30e3\:30f3\:30af\:7d50\:679c\:3092 iIMerge \:3067\:7d71\:5408
+     2. \:4efb\:610f\:3067\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3078\:66f8\:304d\:623b\:3057
+     3. OnJobDone \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:547c\:3073\:51fa\:3057
+     4. ScheduledTask \:505c\:6b62\:30fb\:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iIFinishJob[jobID_String, job_Association, opts_Association,
             nb_NotebookObject, taskSym_Symbol] :=
   Module[{chunks, typeName, resultOrder, orderedChunks,
@@ -15719,7 +16044,7 @@ iIFinishJob[jobID_String, job_Association, opts_Association,
     Quiet @ RemoveScheduledTask[taskSym];
     chunks = Lookup[job, "Chunks", <||>];
 
-    (* typeName: Values が空のときは "" → フォールバック用に安全に取得 *)
+    (* typeName: Values \:304c\:7a7a\:306e\:3068\:304d\:306f "" \[RightArrow] \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:7528\:306b\:5b89\:5168\:306b\:53d6\:5f97 *)
     typeName = Module[{vals = If[AssociationQ[chunks], Values[chunks], {}]},
       If[Length[vals] > 0 && AssociationQ[First[vals]],
         Lookup[First[vals], "Type", ""],
@@ -15731,13 +16056,13 @@ iIFinishJob[jobID_String, job_Association, opts_Association,
     verbose     = TrueQ[Lookup[opts, "Verbose", True]];
     onJobDone   = Lookup[opts, "OnJobDone", (Nothing &)];
 
-    (* 完了順序を ResultOrder に揃える:
-       Association でない要素は除外して常に List[Association...] を保証 *)
+    (* \:5b8c\:4e86\:9806\:5e8f\:3092 ResultOrder \:306b\:63c3\:3048\:308b:
+       Association \:3067\:306a\:3044\:8981\:7d20\:306f\:9664\:5916\:3057\:3066\:5e38\:306b List[Association...] \:3092\:4fdd\:8a3c *)
     orderedChunks = If[AssociationQ[chunks] && ListQ[resultOrder],
       Select[Map[Lookup[chunks, #, None] &, resultOrder], AssociationQ],
       {}];
 
-    (* 統計 *)
+    (* \:7d71\:8a08 *)
     doneCount  = Count[If[AssociationQ[chunks], Values[chunks], {}],
       _?(Lookup[#, "Status",""] === "Done" &)];
     failCount  = Count[If[AssociationQ[chunks], Values[chunks], {}],
@@ -15746,39 +16071,39 @@ iIFinishJob[jobID_String, job_Association, opts_Association,
       Lookup[Quiet @ $iIRunningJobs[jobID], "startTime", AbsoluteTime[]], 0.1];
 
     If[verbose,
-      Print[Style["\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014\:2014", Gray]];
+      Print[Style["\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]\[LongDash]", Gray]];
       Print[Style["\:2705 \:30b8\:30e7\:30d6\:5b8c\:4e86: " <> jobID, Bold, Darker[Green]]];
       Print["  Done: ", doneCount, " / Failed: ",
         Style[failCount, If[failCount > 0, Red, Black]],
         " / \:7d4c\:904e\:6642\:9593: ", elapsed, "s"]];
 
-    (* Merge: 両パスとも Quiet でメッセージを抑制 *)
+    (* Merge: \:4e21\:30d1\:30b9\:3068\:3082 Quiet \:3067\:30e1\:30c3\:30bb\:30fc\:30b8\:3092\:6291\:5236 *)
     mergedResult = Quiet[
       If[typeName =!= "" && Length[orderedChunks] > 0,
-        (* 登録済み型: iIMerge 経由でマージ *)
+        (* \:767b\:9332\:6e08\:307f\:578b: iIMerge \:7d4c\:7531\:3067\:30de\:30fc\:30b8 *)
         iIMerge[orderedChunks, typeName,
           Lookup[opts, "MergeOpts", <||>]],
-        (* フォールバック: Done チャンクの文字列 Result を連結 *)
+        (* \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af: Done \:30c1\:30e3\:30f3\:30af\:306e\:6587\:5b57\:5217 Result \:3092\:9023\:7d50 *)
         Module[{rawResults = Lookup[#, "Result", None] & /@ orderedChunks},
           StringJoin @ Riffle[
             Select[If[ListQ[rawResults], rawResults, {}], StringQ],
             "\n\n"]]]];
 
-    (* mergedResult が非文字列でも安全に処理 *)
+    (* mergedResult \:304c\:975e\:6587\:5b57\:5217\:3067\:3082\:5b89\:5168\:306b\:51e6\:7406 *)
     If[!StringQ[mergedResult], mergedResult = ""];
 
     If[verbose && mergedResult =!= "",
       Print["  \:7d71\:5408\:7d50\:679c: ", StringTake[mergedResult, UpTo[100]], "..."]];
 
-    (* ノートブック書き戻し *)
+    (* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:66f8\:304d\:623b\:3057 *)
     If[TrueQ[writeToNb] && nb =!= None && mergedResult =!= "",
       NBAccess`NBWriteCell[nb,
         Cell[mergedResult, "Text",
           Background -> LightYellow]];
       If[verbose,
-        Print[Style["  \:2192 \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:66f8\:304d\:623b\:3057\:5b8c\:4e86", Darker[Green]]]]];
+        Print[Style["  \[RightArrow] \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:66f8\:304d\:623b\:3057\:5b8c\:4e86", Darker[Green]]]]];
 
-    (* OnJobDone コールバック *)
+    (* OnJobDone \:30b3\:30fc\:30eb\:30d0\:30c3\:30af *)
     Quiet @ onJobDone[<|
       "JobID"        -> jobID,
       "Result"       -> mergedResult,
@@ -15787,31 +16112,31 @@ iIFinishJob[jobID_String, job_Association, opts_Association,
       "ElapsedSecs"  -> elapsed,
       "Chunks"       -> chunks
     |>];
-    (* クリーンアップ *)
+    (* \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7 *)
     $iIRunningJobs = KeyDrop[$iIRunningJobs, jobID];
   ];
 
-(* ────────────────────────────────────────────────────────
-   LLMGraphExecute 公開 API (Phase 5b + 5c 統合エントリポイント)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   LLMGraphExecute \:516c\:958b API (Phase 5b + 5c \:7d71\:5408\:30a8\:30f3\:30c8\:30ea\:30dd\:30a4\:30f3\:30c8)
 
-   第一形式: LLMGraphExecute[job, opts]
-     job — iIScheduleJob[] で生成したジョブ Association
+   \:7b2c\:4e00\:5f62\:5f0f: LLMGraphExecute[job, opts]
+     job \[LongDash] iIScheduleJob[] \:3067\:751f\:6210\:3057\:305f\:30b8\:30e7\:30d6 Association
 
-   第二形式: LLMGraphExecute[input, typeName, opts]
-     input    — テキスト文字列、ノートブック等
-     typeName — "TextChunks" | "NotebookCells" | 独自登録型
+   \:7b2c\:4e8c\:5f62\:5f0f: LLMGraphExecute[input, typeName, opts]
+     input    \[LongDash] \:30c6\:30ad\:30b9\:30c8\:6587\:5b57\:5217\:3001\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:7b49
+     typeName \[LongDash] "TextChunks" | "NotebookCells" | \:72ec\:81ea\:767b\:9332\:578b
 
    Options:
-     PromptTemplate  — プロンプトテンプレート文字列 (デフォルト: "`content`")
-     Model           — モデル指定 (デフォルト: Automatic = claude-sonnet-4-6)
-     "Timeout"       — タイムアウト秒数
-     "Verbose"       — 進捗表示 (デフォルト: True)
-     "WriteToNotebook" — 統合結果をノートブックに書き戻す (デフォルト: False)
-     "OnChunkDone"   — チャンク完了コールバック Function[{chunkID, result}, ...]
-     "OnJobDone"     — ジョブ完了コールバック Function[{resultAssoc}, ...]
+     PromptTemplate  \[LongDash] \:30d7\:30ed\:30f3\:30d7\:30c8\:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:6587\:5b57\:5217 (\:30c7\:30d5\:30a9\:30eb\:30c8: "`content`")
+     Model           \[LongDash] \:30e2\:30c7\:30eb\:6307\:5b9a (\:30c7\:30d5\:30a9\:30eb\:30c8: Automatic = claude-sonnet-4-6)
+     "Timeout"       \[LongDash] \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:79d2\:6570
+     "Verbose"       \[LongDash] \:9032\:6357\:8868\:793a (\:30c7\:30d5\:30a9\:30eb\:30c8: True)
+     "WriteToNotebook" \[LongDash] \:7d71\:5408\:7d50\:679c\:3092\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:66f8\:304d\:623b\:3059 (\:30c7\:30d5\:30a9\:30eb\:30c8: False)
+     "OnChunkDone"   \[LongDash] \:30c1\:30e3\:30f3\:30af\:5b8c\:4e86\:30b3\:30fc\:30eb\:30d0\:30c3\:30af Function[{chunkID, result}, ...]
+     "OnJobDone"     \[LongDash] \:30b8\:30e7\:30d6\:5b8c\:4e86\:30b3\:30fc\:30eb\:30d0\:30c3\:30af Function[{resultAssoc}, ...]
 
-   戻り値: jobID 文字列 (非同期; LLMGraphExecuteStatus で状態確認)
-   ──────────────────────────────────────────────────────── *)
+   \:623b\:308a\:5024: jobID \:6587\:5b57\:5217 (\:975e\:540c\:671f; LLMGraphExecuteStatus \:3067\:72b6\:614b\:78ba\:8a8d)
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 Options[LLMGraphExecute] = {
   PromptTemplate  -> "`content`",
   Model           -> Automatic,
@@ -15838,10 +16163,10 @@ LLMGraphExecute[job_Association, opts:OptionsPattern[]] :=
       DateString[Now, {"Year","Month","Day","Hour","Minute","Second"}]];
     waves = iIBuildWaves[job];
     If[TrueQ[optsA["Verbose"]],
-      Print[Style["\:25b6 LLMGraphExecute: " <> jobID, Bold]];
+      Print[Style["\[FilledRightTriangle] LLMGraphExecute: " <> jobID, Bold]];
       Print["  \:30c1\:30e3\:30f3\:30af\:6570: ", Length[job["Chunks"]],
         " / \:6ce2\:6570: ", Length[waves]]];
-    (* グローバル状態に登録 *)
+    (* \:30b0\:30ed\:30fc\:30d0\:30eb\:72b6\:614b\:306b\:767b\:9332 *)
     $iIRunningJobs[jobID] = <|
       "job"          -> job,
       "waves"        -> waves,
@@ -15853,10 +16178,10 @@ LLMGraphExecute[job_Association, opts:OptionsPattern[]] :=
       "onChunkDone"  -> optsA["OnChunkDone"],
       "onJobDone"    -> optsA["OnJobDone"]
     |>;
-    (* 第1波を起動 *)
+    (* \:7b2c1\:6ce2\:3092\:8d77\:52d5 *)
     If[Length[waves] > 0,
       iILaunchWave[jobID, 1, waves, optsA]];
-    (* ポーリング ScheduledTask: 1秒ごとに iIJobTick を呼ぶ *)
+    (* \:30dd\:30fc\:30ea\:30f3\:30b0 ScheduledTask: 1\:79d2\:3054\:3068\:306b iIJobTick \:3092\:547c\:3076 *)
     taskSym = Unique["iIJobTask"];
     taskExpr = With[{jid = jobID, ts = taskSym},
       SessionSubmit[ScheduledTask[
@@ -15864,10 +16189,10 @@ LLMGraphExecute[job_Association, opts:OptionsPattern[]] :=
         1]]];
     If[TrueQ[optsA["Verbose"]],
       Print[Style["  \:23f1 \:30dd\:30fc\:30ea\:30f3\:30b0\:958b\:59cb (1s\:9593\:9694)", Gray]]];
-    jobID  (* 非同期: JobID を即座に返す *)
+    jobID  (* \:975e\:540c\:671f: JobID \:3092\:5373\:5ea7\:306b\:8fd4\:3059 *)
   ];
 
-(* 第二形式: 入力 + typeName から直接起動 *)
+(* \:7b2c\:4e8c\:5f62\:5f0f: \:5165\:529b + typeName \:304b\:3089\:76f4\:63a5\:8d77\:52d5 *)
 LLMGraphExecute[input_, typeName_String, opts:OptionsPattern[]] :=
   Module[{job},
     job = iIScheduleJob[input, typeName,
@@ -15877,9 +16202,9 @@ LLMGraphExecute[input_, typeName_String, opts:OptionsPattern[]] :=
     LLMGraphExecute[job, opts]
   ];
 
-(* ────────────────────────────────────────────────────────
-   LLMGraphExecuteStatus: 実行中ジョブの状態照会
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   LLMGraphExecuteStatus: \:5b9f\:884c\:4e2d\:30b8\:30e7\:30d6\:306e\:72b6\:614b\:7167\:4f1a
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 LLMGraphExecuteStatus[jobID_String] :=
   Module[{state, job, chunks, summary},
     state = Quiet @ $iIRunningJobs[jobID];
@@ -15906,9 +16231,9 @@ LLMGraphExecuteStatus[jobID_String] :=
     summary
   ];
 
-(* ────────────────────────────────────────────────────────
-   LLMGraphExecuteCancel: 実行中ジョブのキャンセル
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   LLMGraphExecuteCancel: \:5b9f\:884c\:4e2d\:30b8\:30e7\:30d6\:306e\:30ad\:30e3\:30f3\:30bb\:30eb
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 LLMGraphExecuteCancel[jobID_String] :=
   Module[{state, job, chunks},
     state = Quiet @ $iIRunningJobs[jobID];
@@ -15917,7 +16242,7 @@ LLMGraphExecuteCancel[jobID_String] :=
       Return[$Failed]];
     job    = state["job"];
     chunks = Lookup[job, "Chunks", <||>];
-    (* 実行中プロセスを全て強制終了 *)
+    (* \:5b9f\:884c\:4e2d\:30d7\:30ed\:30bb\:30b9\:3092\:5168\:3066\:5f37\:5236\:7d42\:4e86 *)
     KeyValueMap[
       Function[{cid, chunk},
         If[Lookup[chunk, "Status", ""] === "Running",
@@ -15930,42 +16255,42 @@ LLMGraphExecuteCancel[jobID_String] :=
   ];
 
 
-(* ════════════════════════════════════════════════════════
-   Phase 3C: スレッド抽出・再適用
-   ════════════════════════════════════════════════════════
+(* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
+   Phase 3C: \:30b9\:30ec\:30c3\:30c9\:62bd\:51fa\:30fb\:518d\:9069\:7528
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
 
-   「ある LLM セッションで行った作業」をオブジェクト化し、
-   同じ手順を別のファイルや別のデータに繰り返す仕組み。
+   \:300c\:3042\:308b LLM \:30bb\:30c3\:30b7\:30e7\:30f3\:3067\:884c\:3063\:305f\:4f5c\:696d\:300d\:3092\:30aa\:30d6\:30b8\:30a7\:30af\:30c8\:5316\:3057\:3001
+   \:540c\:3058\:624b\:9806\:3092\:5225\:306e\:30d5\:30a1\:30a4\:30eb\:3084\:5225\:306e\:30c7\:30fc\:30bf\:306b\:7e70\:308a\:8fd4\:3059\:4ed5\:7d44\:307f\:3002
 
-   コンビネータとしての Thread オブジェクト:
-     Thread を f とすると f[newTarget] が再実行になる。
-     複数 Thread を合成することもできる:
-       ApplyThread[thread1 |> thread2, ...]   (将来拡張)
+   \:30b3\:30f3\:30d3\:30cd\:30fc\:30bf\:3068\:3057\:3066\:306e Thread \:30aa\:30d6\:30b8\:30a7\:30af\:30c8:
+     Thread \:3092 f \:3068\:3059\:308b\:3068 f[newTarget] \:304c\:518d\:5b9f\:884c\:306b\:306a\:308b\:3002
+     \:8907\:6570 Thread \:3092\:5408\:6210\:3059\:308b\:3053\:3068\:3082\:3067\:304d\:308b:
+       ApplyThread[thread1 |> thread2, ...]   (\:5c06\:6765\:62e1\:5f35)
 
-   Thread 構造:
+   Thread \:69cb\:9020:
      <|
        "ThreadID"      -> "thread-history-5-20260325",
        "CreatedAt"     -> AbsoluteTime[],
        "SourceNB"      -> "path/to/original.nb",
-       "SourceFile"    -> "path/to/file.nb",    (* 操作対象だったファイル *)
-       "NodeChain"     -> {"history-1", ...},   (* 祖先→対象ノードの順 *)
-       "Instructions"  -> {"instruction1", ...}, (* テンプレート化済み *)
-       "PrivacySpecs"  -> {0.5, 1.0, ...},      (* ノード別 AccessLevel *)
+       "SourceFile"    -> "path/to/file.nb",    (* \:64cd\:4f5c\:5bfe\:8c61\:3060\:3063\:305f\:30d5\:30a1\:30a4\:30eb *)
+       "NodeChain"     -> {"history-1", ...},   (* \:7956\:5148\[RightArrow]\:5bfe\:8c61\:30ce\:30fc\:30c9\:306e\:9806 *)
+       "Instructions"  -> {"instruction1", ...}, (* \:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:5316\:6e08\:307f *)
+       "PrivacySpecs"  -> {0.5, 1.0, ...},      (* \:30ce\:30fc\:30c9\:5225 AccessLevel *)
        "AccessLevels"  -> {"ClaudeCode", ...},
-       "L2Codes"       -> {"code1\n\ncode2", ...}, (* 実際に実行されたコード *)
-       "TargetSlot"    -> "`targetFile`",        (* 差し替えスロット名 *)
-       "SlotPattern"   -> "path/to/original.nb" (* 元のスロット値 *)
+       "L2Codes"       -> {"code1\n\ncode2", ...}, (* \:5b9f\:969b\:306b\:5b9f\:884c\:3055\:308c\:305f\:30b3\:30fc\:30c9 *)
+       "TargetSlot"    -> "`targetFile`",        (* \:5dee\:3057\:66ff\:3048\:30b9\:30ed\:30c3\:30c8\:540d *)
+       "SlotPattern"   -> "path/to/original.nb" (* \:5143\:306e\:30b9\:30ed\:30c3\:30c8\:5024 *)
      |>
 
-   再適用:
+   \:518d\:9069\:7528:
      ApplyThread[thread, newTarget, nb]
-       → instruction の SlotPattern を newTarget に置換
-       → NodeChain 順に iClaudeEvalImpl で逐次実行
-   ════════════════════════════════════════════════════════ *)
+       \[RightArrow] instruction \:306e SlotPattern \:3092 newTarget \:306b\:7f6e\:63db
+       \[RightArrow] NodeChain \:9806\:306b iClaudeEvalImpl \:3067\:9010\:6b21\:5b9f\:884c
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
 
-(* ────────────────────────────────────────────────────────
-   BFS で指定ノードへの全祖先を収集 (InEdges を逆辿り)
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   BFS \:3067\:6307\:5b9a\:30ce\:30fc\:30c9\:3078\:306e\:5168\:7956\:5148\:3092\:53ce\:96c6 (InEdges \:3092\:9006\:8fbf\:308a)
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphAncestors[nodes_Association, targetID_String] :=
   Module[{queue = {targetID}, visited = {}, nid, preds},
     While[Length[queue] > 0,
@@ -15973,47 +16298,47 @@ iLLMGraphAncestors[nodes_Association, targetID_String] :=
       queue = Rest[queue];
       If[MemberQ[visited, nid], Continue[]];
       AppendTo[visited, nid];
-      (* InEdges から親ノードを取得 *)
+      (* InEdges \:304b\:3089\:89aa\:30ce\:30fc\:30c9\:3092\:53d6\:5f97 *)
       preds = Flatten[
         Function[e, Lookup[e, "From", Nothing]] /@
           Lookup[Lookup[nodes, nid, <||>], "InEdges", {}]];
       queue = Join[queue, Complement[preds, visited]]];
-    (* targetID は含む; Step 順にソート *)
+    (* targetID \:306f\:542b\:3080; Step \:9806\:306b\:30bd\:30fc\:30c8 *)
     SortBy[visited,
       Lookup[Lookup[nodes, #, <||>], "Step", 0] &]
   ];
 
-(* ────────────────────────────────────────────────────────
-   instruction 中のファイルパス候補を検出する
-   "C:\...\file.nb" や ".../file.nb" などを抽出する。
-   変数代入形式 (notebookfile = "...") にも対応。
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   instruction \:4e2d\:306e\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:5019\:88dc\:3092\:691c\:51fa\:3059\:308b
+   "C:\...\file.nb" \:3084 ".../file.nb" \:306a\:3069\:3092\:62bd\:51fa\:3059\:308b\:3002
+   \:5909\:6570\:4ee3\:5165\:5f62\:5f0f (notebookfile = "...") \:306b\:3082\:5bfe\:5fdc\:3002
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphDetectFilePath[instruction_String] :=
   Module[{m},
-    (* 変数代入形式を最優先: notebookfile = "path.nb" *)
+    (* \:5909\:6570\:4ee3\:5165\:5f62\:5f0f\:3092\:6700\:512a\:5148: notebookfile = "path.nb" *)
     m = StringCases[instruction,
       RegularExpression[
         "(?i)(?:notebookfile|file|path|nb|notebook)\\s*=\\s*\"([^\"]+\\.(?:nb|wl|txt|csv|json|pdf|wls))\""] :> "$1"];
     If[m =!= {}, Return[First[m]]];
-    (* Windows パス クォート内: "C:\..." — スペースを含むパスも対応 *)
+    (* Windows \:30d1\:30b9 \:30af\:30a9\:30fc\:30c8\:5185: "C:\..." \[LongDash] \:30b9\:30da\:30fc\:30b9\:3092\:542b\:3080\:30d1\:30b9\:3082\:5bfe\:5fdc *)
     m = StringCases[instruction,
       RegularExpression["\"([A-Za-z]:[/\\\\][^\"]+\\.(?:nb|wl|txt|csv|json|pdf|wls))\""] :> "$1"];
     If[m =!= {}, Return[First[m]]];
-    (* Windows パス クォートなし: スペース可、末尾に拡張子 — 行頭または改行後のみ *)
+    (* Windows \:30d1\:30b9 \:30af\:30a9\:30fc\:30c8\:306a\:3057: \:30b9\:30da\:30fc\:30b9\:53ef\:3001\:672b\:5c3e\:306b\:62e1\:5f35\:5b50 \[LongDash] \:884c\:982d\:307e\:305f\:306f\:6539\:884c\:5f8c\:306e\:307f *)
     m = StringCases[instruction,
       RegularExpression["(?:^|\\n)([A-Za-z]:[/\\\\][^\\n\"'`]{5,}\\.(?:nb|wl|txt|csv|json|pdf|wls))"]
         :> "$1"];
     If[m =!= {}, Return[StringTrim @ First[m]]];
-    (* Unix/Mac パス クォート内 *)
+    (* Unix/Mac \:30d1\:30b9 \:30af\:30a9\:30fc\:30c8\:5185 *)
     m = StringCases[instruction,
       RegularExpression["\"((?:/|~)[^\"]+\\.(?:nb|wl|txt|csv|json|pdf|wls))\""] :> "$1"];
     If[m =!= {}, Return[First[m]]];
     None
   ];
 
-(* ────────────────────────────────────────────────────────
-   L2 コードを外部キャッシュから回収する
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   L2 \:30b3\:30fc\:30c9\:3092\:5916\:90e8\:30ad\:30e3\:30c3\:30b7\:30e5\:304b\:3089\:56de\:53ce\:3059\:308b
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphGetL2Code[nodeID_String] :=
   Module[{l2 = iLLMGraphCacheReadL2[nodeID]},
     If[!AssociationQ[l2], Return[""]];
@@ -16022,9 +16347,9 @@ iLLMGraphGetL2Code[nodeID_String] :=
       "\n\n"]
   ];
 
-(* ────────────────────────────────────────────────────────
-   AccessLevel → PrivacySpec 数値変換
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   AccessLevel \[RightArrow] PrivacySpec \:6570\:5024\:5909\:63db
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphAccessLevelToPrivacySpec["ClaudeCode"]  := 0.5;
 iLLMGraphAccessLevelToPrivacySpec["ClaudeAPI"]   := 0.5;
 iLLMGraphAccessLevelToPrivacySpec["LMStudio"]    := 1.0;
@@ -16032,9 +16357,9 @@ iLLMGraphAccessLevelToPrivacySpec["WolframLLM"]  := 0.75;
 iLLMGraphAccessLevelToPrivacySpec["Local"]       := 1.0;
 iLLMGraphAccessLevelToPrivacySpec[_]             := 0.5;
 
-(* ────────────────────────────────────────────────────────
-   Thread 構築
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   Thread \:69cb\:7bc9
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 iLLMGraphBuildThread[graph_Association, nodeIDs_List,
                      sourceNBPath_String] :=
   Module[{nodes, nodeChain, instructions, privacySpecs,
@@ -16051,7 +16376,7 @@ iLLMGraphBuildThread[graph_Association, nodeIDs_List,
       nodeChain];
     privacySpecs = iLLMGraphAccessLevelToPrivacySpec /@ accessLevels;
     l2Codes = iLLMGraphGetL2Code /@ nodeChain;
-    (* 各 instruction から個別にファイルパスを検出 (連結すると誤検出する) *)
+    (* \:5404 instruction \:304b\:3089\:500b\:5225\:306b\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:3092\:691c\:51fa (\:9023\:7d50\:3059\:308b\:3068\:8aa4\:691c\:51fa\:3059\:308b) *)
     slotPattern = Module[{fp = None},
       Scan[Function[instr,
         If[fp === None && StringQ[instr],
@@ -16059,7 +16384,7 @@ iLLMGraphBuildThread[graph_Association, nodeIDs_List,
             If[StringQ[p] && p =!= "", fp = p]]]],
         instructions];
       fp];
-    (* instruction 内のパスをスロット記法に置換 (パスが検出できた場合のみ) *)
+    (* instruction \:5185\:306e\:30d1\:30b9\:3092\:30b9\:30ed\:30c3\:30c8\:8a18\:6cd5\:306b\:7f6e\:63db (\:30d1\:30b9\:304c\:691c\:51fa\:3067\:304d\:305f\:5834\:5408\:306e\:307f) *)
     If[StringQ[slotPattern] && slotPattern =!= "",
       instructions = StringReplace[#, slotPattern -> targetSlot] & /@
         instructions];
@@ -16079,9 +16404,9 @@ iLLMGraphBuildThread[graph_Association, nodeIDs_List,
     |>
   ];
 
-(* ────────────────────────────────────────────────────────
-   NotebookLLMGraphExtractThread 公開 API
-   ──────────────────────────────────────────────────────── *)
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   NotebookLLMGraphExtractThread \:516c\:958b API
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 NotebookLLMGraphExtractThread[nb_NotebookObject, nodeID_String] :=
   Module[{graph, nodes, chain, nbPath, thread},
     graph  = iLLMGraphGetCached[nb];
@@ -16097,7 +16422,7 @@ NotebookLLMGraphExtractThread[nb_NotebookObject, nodeID_String] :=
     thread = iLLMGraphBuildThread[graph, chain, nbPath];
     Print[Style["\:2714 Thread \:62bd\:51fa\:5b8c\:4e86: " <> thread["ThreadID"], Bold, Darker[Green]]];
     Print["  \:30ce\:30fc\:30c9\:9023\:9396: ", Length[chain], " \:30ce\:30fc\:30c9 (",
-      StringRiffle[chain, " \:2192 "], ")"];
+      StringRiffle[chain, " \[RightArrow] "], ")"];
     Print["  \:30b9\:30ed\:30c3\:30c8\:30d1\:30bf\:30fc\:30f3: \"",
       Lookup[thread, "SlotPattern", "(none)"], "\""];
     thread
@@ -16105,19 +16430,19 @@ NotebookLLMGraphExtractThread[nb_NotebookObject, nodeID_String] :=
 NotebookLLMGraphExtractThread[nodeID_String] :=
   NotebookLLMGraphExtractThread[EvaluationNotebook[], nodeID];
 
-(* ────────────────────────────────────────────────────────
-   NotebookLLMGraphApplyThread 公開 API
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   NotebookLLMGraphApplyThread \:516c\:958b API
 
-   Thread の NodeChain を新しい対象に対して順次再実行する。
-   各ノードの instruction の `targetFile` スロットを
-   newTarget で置換してから ClaudeEval を呼ぶ。
+   Thread \:306e NodeChain \:3092\:65b0\:3057\:3044\:5bfe\:8c61\:306b\:5bfe\:3057\:3066\:9806\:6b21\:518d\:5b9f\:884c\:3059\:308b\:3002
+   \:5404\:30ce\:30fc\:30c9\:306e instruction \:306e `targetFile` \:30b9\:30ed\:30c3\:30c8\:3092
+   newTarget \:3067\:7f6e\:63db\:3057\:3066\:304b\:3089 ClaudeEval \:3092\:547c\:3076\:3002
 
    Options:
-     "DryRun"       -> False   実行せず計画だけ返す
-     "StepByStep"   -> False   True なら各ステップ前に確認プロンプト
-     "SessionTag"   -> Automatic  履歴を書く先のセッションタグ
+     "DryRun"       -> False   \:5b9f\:884c\:305b\:305a\:8a08\:753b\:3060\:3051\:8fd4\:3059
+     "StepByStep"   -> False   True \:306a\:3089\:5404\:30b9\:30c6\:30c3\:30d7\:524d\:306b\:78ba\:8a8d\:30d7\:30ed\:30f3\:30d7\:30c8
+     "SessionTag"   -> Automatic  \:5c65\:6b74\:3092\:66f8\:304f\:5148\:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:30bf\:30b0
      "Verbose"      -> True
-   ──────────────────────────────────────────────────────── *)
+   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 Options[NotebookLLMGraphApplyThread] = {
   "DryRun"     -> False,
   "StepByStep" -> False,
@@ -16140,13 +16465,13 @@ NotebookLLMGraphApplyThread[thread_Association, newTarget_String,
     privacySpecs = Lookup[thread, "PrivacySpecs", {}];
     targetSlot   = Lookup[thread, "TargetSlot", "`targetFile`"];
 
-    (* newTarget でスロットを置換 *)
+    (* newTarget \:3067\:30b9\:30ed\:30c3\:30c8\:3092\:7f6e\:63db *)
     instructions = StringReplace[#, targetSlot -> newTarget] & /@
       instructions;
 
-    (* 実行計画を表示 *)
+    (* \:5b9f\:884c\:8a08\:753b\:3092\:8868\:793a *)
     If[verbose,
-      Print[Style["\:25b6 Thread \:9069\:7528: " <> Lookup[thread, "ThreadID", "?"],
+      Print[Style["\[FilledRightTriangle] Thread \:9069\:7528: " <> Lookup[thread, "ThreadID", "?"],
         Bold]];
       Print["  \:5bfe\:8c61: ", newTarget];
       Print["  \:30b9\:30c6\:30c3\:30d7\:6570: ", Length[chain]]];
@@ -16160,7 +16485,7 @@ NotebookLLMGraphApplyThread[thread_Association, newTarget_String,
        PadRight[privacySpecs,  Length[chain], 0.5]}];
 
     If[TrueQ[dryRun],
-      Print[Style["  [DryRun \:30e2\:30fc\:30c9 \:2014 \:5b9f\:884c\:306a\:3057]", Italic, Gray]];
+      Print[Style["  [DryRun \:30e2\:30fc\:30c9 \[LongDash] \:5b9f\:884c\:306a\:3057]", Italic, Gray]];
       Scan[
         Function[step,
           Print["  [", step["NodeID"], "] ",
@@ -16169,12 +16494,12 @@ NotebookLLMGraphApplyThread[thread_Association, newTarget_String,
         plan];
       Return[plan]];
 
-    (* 逐次実行: 各ステップを iClaudeEvalImpl 経由で実行 *)
+    (* \:9010\:6b21\:5b9f\:884c: \:5404\:30b9\:30c6\:30c3\:30d7\:3092 iClaudeEvalImpl \:7d4c\:7531\:3067\:5b9f\:884c *)
     Do[
       Module[{step = plan[[i]]},
         instr = step["Instruction"];
         ps    = step["PrivacySpec"];
-        (* PrivacySpec から Model を決定 *)
+        (* PrivacySpec \:304b\:3089 Model \:3092\:6c7a\:5b9a *)
         mdl = Which[
           ps >= 0.9,
             If[ListQ[$ClaudePrivateModel] && Length[$ClaudePrivateModel] > 0,
@@ -16186,7 +16511,7 @@ NotebookLLMGraphApplyThread[thread_Association, newTarget_String,
             " [", step["NodeID"], "] ps=", ps];
           Print["    ", StringTake[instr, UpTo[80]]]];
         If[TrueQ[stepByStep] && i > 1,
-          (* ユーザー確認 *)
+          (* \:30e6\:30fc\:30b6\:30fc\:78ba\:8a8d *)
           If[!TrueQ[ChoiceDialog[
               "Step " <> ToString[i] <> " \:3092\:5b9f\:884c\:3057\:307e\:3059\:304b\:ff1f\n" <>
               StringTake[instr, UpTo[120]],
@@ -16211,21 +16536,21 @@ NotebookLLMGraphApplyThread[thread_Association, newTarget_String,
     EvaluationNotebook[], opts];
 
 
-(* ════════════════════════════════════════════════════════
-   NBFileTranslate: 秘匿分離翻訳
-   ════════════════════════════════════════════════════════
-   設計:
-     1. NBFileReadAllCells で全セルを取得 (PrivacyLevel 付き)
-     2. 公開セル → ClaudeCode (iClaudeQueryRaw) で翻訳
-     3. 秘匿セル → $ClaudePrivateModel (iStartFallbackAsync 同期版) で翻訳
-     4. NBFileWriteAllCells で置き換え
-     5. NBFileSave で別名保存
+(* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
+   NBFileTranslate: \:79d8\:533f\:5206\:96e2\:7ffb\:8a33
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
+   \:8a2d\:8a08:
+     1. NBFileReadAllCells \:3067\:5168\:30bb\:30eb\:3092\:53d6\:5f97 (PrivacyLevel \:4ed8\:304d)
+     2. \:516c\:958b\:30bb\:30eb \[RightArrow] ClaudeCode (iClaudeQueryRaw) \:3067\:7ffb\:8a33
+     3. \:79d8\:533f\:30bb\:30eb \[RightArrow] $ClaudePrivateModel (iStartFallbackAsync \:540c\:671f\:7248) \:3067\:7ffb\:8a33
+     4. NBFileWriteAllCells \:3067\:7f6e\:304d\:63db\:3048
+     5. NBFileSave \:3067\:5225\:540d\:4fdd\:5b58
 
-   注意:
-     - [CONFIDENTIAL] のままにしておく選択肢もある
-       (PrivateModel 未設定時や "SkipConfidential"->True 時)
-     - CellEpilog/TaggingRules は NBFileWriteCell が保持する
-   ════════════════════════════════════════════════════════ *)
+   \:6ce8\:610f:
+     - [CONFIDENTIAL] \:306e\:307e\:307e\:306b\:3057\:3066\:304a\:304f\:9078\:629e\:80a2\:3082\:3042\:308b
+       (PrivateModel \:672a\:8a2d\:5b9a\:6642\:3084 "SkipConfidential"->True \:6642)
+     - CellEpilog/TaggingRules \:306f NBFileWriteCell \:304c\:4fdd\:6301\:3059\:308b
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
 
 Options[ClaudeProcessFile] = {
   "Threshold"  -> 0.5
@@ -16235,7 +16560,7 @@ If[!AssociationQ[$iCPFState], $iCPFState = <||>];
 
 iNBParseJSONResult[raw_String] :=
   Module[{jsonStr, parsed, tmpFile},
-    (* Step 1: JSON 部分を抽出 *)
+    (* Step 1: JSON \:90e8\:5206\:3092\:62bd\:51fa *)
     jsonStr = First[
       StringCases[raw,
         RegularExpression["```(?:json)?\\s*([\\s\\S]*?)```"] :> "$1", 1],
@@ -16249,11 +16574,11 @@ iNBParseJSONResult[raw_String] :=
           raw]]];
     jsonStr = StringTrim[jsonStr];
 
-    (* Step 2: パース (複数の方法を試す) *)
-    (* 方法A: Developer`ReadRawJSONString (Mathematica 内部文字列を直接パース) *)
+    (* Step 2: \:30d1\:30fc\:30b9 (\:8907\:6570\:306e\:65b9\:6cd5\:3092\:8a66\:3059) *)
+    (* \:65b9\:6cd5A: Developer`ReadRawJSONString (Mathematica \:5185\:90e8\:6587\:5b57\:5217\:3092\:76f4\:63a5\:30d1\:30fc\:30b9) *)
     parsed = Quiet @ Check[Developer`ReadRawJSONString[jsonStr], $Failed];
 
-    (* 方法B: UTF-8 一時ファイル経由 (ImportString は Windows で非ASCII が壊れる) *)
+    (* \:65b9\:6cd5B: UTF-8 \:4e00\:6642\:30d5\:30a1\:30a4\:30eb\:7d4c\:7531 (ImportString \:306f Windows \:3067\:975eASCII \:304c\:58ca\:308c\:308b) *)
     If[!AssociationQ[parsed],
       tmpFile = FileNameJoin[{$TemporaryDirectory,
         "cpf_json_" <> ToString[RandomInteger[99999]] <> ".json"}];
@@ -16261,7 +16586,7 @@ iNBParseJSONResult[raw_String] :=
       parsed = Quiet @ Check[Import[tmpFile, "RawJSON"], $Failed];
       Quiet @ DeleteFile[tmpFile]];
 
-    (* 方法C: ImportString (ASCII のみの JSON で動作) *)
+    (* \:65b9\:6cd5C: ImportString (ASCII \:306e\:307f\:306e JSON \:3067\:52d5\:4f5c) *)
     If[!AssociationQ[parsed],
       parsed = Quiet @ Check[ImportString[jsonStr, "RawJSON"], $Failed]];
 
@@ -16400,7 +16725,7 @@ iClaudeProcessFileTick[stateKey_String] :=
           "startErr" -> StringStartsQ[ToString[privRaw], "ERROR"], "isStr" -> StringQ[privRaw]|>]];
 
     (* Merge + Save *)
-    (* DEBUG: 診断用にグローバルに保存 *)
+    (* DEBUG: \:8a3a\:65ad\:7528\:306b\:30b0\:30ed\:30fc\:30d0\:30eb\:306b\:4fdd\:5b58 *)
     Global`$iCPFLastPubResults = pubResults;
     Global`$iCPFLastPrivResults = privResults;
     Global`$iCPFLastPubRaw = If[StringQ[pubRaw], StringTake[pubRaw, UpTo[500]], None];
@@ -16460,7 +16785,7 @@ iClaudeProcessFileTick[stateKey_String] :=
     $iCPFState = KeyDrop[$iCPFState, stateKey];
   ];
 
-(* Splitter: raw prompt からセル単位の処理指示を抽出する *)
+(* Splitter: raw prompt \:304b\:3089\:30bb\:30eb\:5358\:4f4d\:306e\:51e6\:7406\:6307\:793a\:3092\:62bd\:51fa\:3059\:308b *)
 iClaudeProcessFileSplitPrompt[rawPrompt_String, srcPath_String, dstPath_String] :=
   Module[{splitPrompt, result},
     splitPrompt =
@@ -16484,10 +16809,10 @@ iClaudeProcessFileSplitPrompt[rawPrompt_String, srcPath_String, dstPath_String] 
       StringTrim @ StringReplace[rawPrompt,
         {srcPath -> "", dstPath -> "",
          FileNameTake[srcPath] -> "", FileNameTake[dstPath] -> "",
-         RegularExpression["\\s*(?:として)?\\s*保存\\s*(?:して|する|せよ|してほしい|してください)[。、]?\\s*"] -> "",
+         RegularExpression["\\s*(?:\:3068\:3057\:3066)?\\s*\:4fdd\:5b58\\s*(?:\:3057\:3066|\:3059\:308b|\:305b\:3088|\:3057\:3066\:307b\:3057\:3044|\:3057\:3066\:304f\:3060\:3055\:3044)[\:3002\:3001]?\\s*"] -> "",
          RegularExpression["\\s*(?:and\\s+)?save\\s+(?:as|to)\\s+\\S+\\.nb[,.]?\\s*"] -> "",
-         RegularExpression["^\\s*このファイルを\\s*"] -> "",
-         RegularExpression["[,、。]+\\s*$"] -> ""}]]
+         RegularExpression["^\\s*\:3053\:306e\:30d5\:30a1\:30a4\:30eb\:3092\\s*"] -> "",
+         RegularExpression["[,\:3001\:3002]+\\s*$"] -> ""}]]
   ];
 
 ClaudeProcessFile[prompt_String, inputPath_String, outputPath_String,
@@ -16513,7 +16838,7 @@ ClaudeProcessFile[prompt_String, inputPath_String, outputPath_String,
     (* auto-dispatch node step *)
     dispatchStep = Length[iSessionHistory[nb0, tag]];
 
-    (* Step 2: Splitter — extract cell-level instruction from raw prompt *)
+    (* Step 2: Splitter \[LongDash] extract cell-level instruction from raw prompt *)
     Quiet[CurrentValue[nb0, WindowStatusArea] =
       "ClaudeProcessFile: Splitter running..."];
     cellPrompt = iClaudeProcessFileSplitPrompt[prompt, inputPath, outputPath];
@@ -16602,7 +16927,7 @@ ClaudeProcessFile[prompt_String, inputPath_String, outputPath_String,
 
 Options[NBFileTranslate] = {
   "TargetLang"         -> "English",
-  "SkipConfidential"   -> False,   (* True: 秘匿セルは翻訳せず保持 *)
+  "SkipConfidential"   -> False,   (* True: \:79d8\:533f\:30bb\:30eb\:306f\:7ffb\:8a33\:305b\:305a\:4fdd\:6301 *)
   "Verbose"            -> True
 };
 
@@ -16618,7 +16943,7 @@ NBFileTranslate[inputPath_String, outputPath_String,
     If[!FileExistsQ[inputPath],
       Print["ERROR: File not found: ", inputPath]; Return[$Failed]];
 
-    (* 1. 全セルを読む *)
+    (* 1. \:5168\:30bb\:30eb\:3092\:8aad\:3080 *)
     nb2 = NBAccess`NBFileOpen[inputPath];
     If[nb2 === $Failed, Return[$Failed]];
     cells = NBAccess`NBFileReadAllCells[nb2];
@@ -16634,8 +16959,8 @@ NBFileTranslate[inputPath_String, outputPath_String,
         " / \:79d8\:5bc6\:30bb\:30eb: ", Length[confCells]];
       Print["  \:7ffb\:8a33\:5148: ", targetLang]];
 
-    (* 2. 公開セルを ClaudeCode で翻訳 *)
-    If[verbose, Print[Style["  \:2460 \:516c\:958b\:30bb\:30eb \:2192 ClaudeCode\:3067\:7ffb\:8a33", Bold]]];
+    (* 2. \:516c\:958b\:30bb\:30eb\:3092 ClaudeCode \:3067\:7ffb\:8a33 *)
+    If[verbose, Print[Style["  \:2460 \:516c\:958b\:30bb\:30eb \[RightArrow] ClaudeCode\:3067\:7ffb\:8a33", Bold]]];
     Scan[
       Function[c,
         Module[{prompt, resp},
@@ -16654,14 +16979,14 @@ NBFileTranslate[inputPath_String, outputPath_String,
             totalFail++]]],
       publicCells];
 
-    (* 3. 秘匿セルを $ClaudePrivateModel で翻訳 *)
+    (* 3. \:79d8\:533f\:30bb\:30eb\:3092 $ClaudePrivateModel \:3067\:7ffb\:8a33 *)
     If[!skipConf && Length[confCells] > 0,
       If[!ListQ[$ClaudePrivateModel] || Length[$ClaudePrivateModel] === 0,
         If[verbose,
           Print[Style["  \:26a0\:fe0f $ClaudePrivateModel \:672a\:8a2d\:5b9a\:3002\:79d8\:5bc6\:30bb\:30eb\:306f\:7ffb\:8a33\:3057\:307e\:305b\:3093\:3002",
             Orange]]],
         If[verbose,
-          Print[Style["  \:2461 \:79d8\:5bc6\:30bb\:30eb \:2192 $ClaudePrivateModel\:3067\:7ffb\:8a33", Bold]]];
+          Print[Style["  \:2461 \:79d8\:5bc6\:30bb\:30eb \[RightArrow] $ClaudePrivateModel\:3067\:7ffb\:8a33", Bold]]];
         Scan[
           Function[c,
             Module[{prompt, provider, model, customURL, apiKey, resp},
@@ -16682,7 +17007,7 @@ NBFileTranslate[inputPath_String, outputPath_String,
               If[!StringQ[apiKey],
                 If[verbose, Print["    \:26a0\:fe0f API\:30ad\:30fc\:53d6\:5f97\:5931\:6557"]];
                 totalFail++; Return[]];
-              (* 同期呼び出し: PS1 経由 *)
+              (* \:540c\:671f\:547c\:3073\:51fa\:3057: PS1 \:7d4c\:7531 *)
               resp = Quiet @ Module[{prepared, proc, outF, startT},
                 prepared = iPrepareAnthropicPS1[apiKey, model, prompt,
                   Which[
@@ -16719,7 +17044,7 @@ NBFileTranslate[inputPath_String, outputPath_String,
                     c["CellIdx"], "]"]]]]],
           confCells]]];
 
-    (* 4. 書き戻し + 保存 *)
+    (* 4. \:66f8\:304d\:623b\:3057 + \:4fdd\:5b58 *)
     If[Length[replacements] > 0,
       NBAccess`NBFileWriteAllCells[nb2, replacements]];
     NBAccess`NBFileSave[nb2, outputPath];
@@ -16733,6 +17058,37 @@ NBFileTranslate[inputPath_String, outputPath_String,
     outputPath
   ];
 
+
+(* ============================================================
+   NBAccess LLM \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:767b\:9332
+   NBAccess`$NBLLMQueryFunc \:306b ClaudeQueryAsync \:3092\:767b\:9332\:3059\:308b\:3002
+   NBCellTransformWithLLM \:304c\:3053\:306e\:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:7d4c\:7531\:3067\:975e\:540c\:671f LLM \:3092\:547c\:3073\:51fa\:3059\:3002
+   \:30b7\:30b0\:30cd\:30c1\:30e3: $NBLLMQueryFunc[prompt, callback, Model -> spec, Fallback -> bool]
+   ============================================================ *)
+NBAccess`$NBLLMQueryFunc = ClaudeCode`ClaudeQueryAsync;
+
+
+(* ============================================================
+   \:30d1\:30ec\:30c3\:30c8\:8a2d\:5b9a\:516c\:958b\:30a2\:30af\:30bb\:30b5
+   Documentation \:30d1\:30ec\:30c3\:30c8\:7b49\:306e\:5916\:90e8\:30d1\:30c3\:30b1\:30fc\:30b8\:304c ClaudeCode \:306e
+   \:30d1\:30ec\:30c3\:30c8\:8a2d\:5b9a\:3092\:8aad\:307f\:66f8\:304d\:3059\:308b\:305f\:3081\:306e\:516c\:958b\:95a2\:6570\:3002
+   Private \:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306e\:5909\:6570\:3092\:76f4\:63a5\:53c2\:7167\:3059\:308b\:5fc5\:8981\:304c\:306a\:304f\:306a\:308b\:3002
+   ============================================================ *)
+
+ClaudeCode`GetPaletteModel[] := $iPaletteModel;
+ClaudeCode`GetPaletteEffort[] := $iPaletteEffort;
+ClaudeCode`GetPaletteFallback[] := TrueQ[$iPaletteFallback];
+ClaudeCode`GetModelOpus[] := $iModelOpus;
+ClaudeCode`GetModelSonnet[] := $iModelSonnet;
+
+ClaudeCode`SetPaletteModel[v_String] := (
+  $iPaletteModel = v;
+  $ClaudeModel = Switch[v, "opus", $iModelOpus, "sonnet", $iModelSonnet, _, ""];
+);
+ClaudeCode`SetPaletteEffort[v_String] := ($iPaletteEffort = v);
+ClaudeCode`SetPaletteFallback[v_] := ($iPaletteFallback = TrueQ[v]);
+ClaudeCode`SavePaletteSettings[nb_NotebookObject] := iSavePaletteSettings[nb];
+ClaudeCode`LoadPaletteSettings[nb_NotebookObject] := iLoadPaletteSettings[nb];
 
 End[];
 
