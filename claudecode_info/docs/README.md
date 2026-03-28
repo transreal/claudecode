@@ -6,11 +6,19 @@ Mathematica ノートブックから Claude Code CLI を呼び出し、コード
 
 claudecode は、Mathematica のノートブック環境と Claude Code CLI をシームレスに統合することを目的として設計されています。ユーザーは自然言語でタスクを記述するだけで、Mathematica コードの生成・実行・デバッグ・レビューを一貫したワークフローの中で完結できます。
 
-本パッケージの中核となる設計思想は以下の3点です。
+本パッケージの中核となる設計思想は以下の点です。
 
 **ノートブック中心のコンテキスト共有**: ClaudeEval や ClaudeQuery を呼び出す際、ノートブック内のセル履歴（入力・出力・エラーメッセージ）が自動的に収集され、Claude へのプロンプトに組み込まれます。これにより、ユーザーが手動でコードを貼り付ける必要がなく、Claude は現在の作業状態を正確に把握した上で応答を生成します。コンテキスト収集は [NBAccess](https://github.com/transreal/NBAccess) パッケージに委譲されており、セルの読み書き・プライバシー管理・変数追跡といった低レベル操作は分離されています。
 
 **機密データの自動保護**: API キーや個人情報を扱うセルは `Confidential` ラッパーや `MarkConfidential` によって機密マークされ、以降の Claude プロンプトから自動的に除外されます。さらに CellEpilog を利用した伝播機構により、機密変数を参照する下流のセルも自動検出・マーキングされます。機密変数が存在する場合のみ高コストな依存グラフ構築・走査を実行するため、通常使用時のオーバーヘッドは最小限に抑えられます。`NonConfidential` で明示的に公開指定することも可能で、きめ細かなプライバシー制御を実現しています。LLM 送信直前には全ノートブックを走査して完全な依存グラフを構築し、秘密依存変数の最終判定を行う精密チェック（第2層）が実行されます。別ノートブック経由の秘密依存も自動検出されます。
+
+**ファイルアクセスのファイアウォール**: Claude Code が参照できるディレクトリはグローバル変数 `$ClaudeAccessibleDirs` で規定されており、その初期値は `$packageDirectory` のみです。Claude の行動原理は次の通りです。
+
+> 問題の本質
+> 「指令を書いても Read ツールを止められない」のは当然で、Claude Code はプロンプト中にファイルパスが見えている限り Read ツールを使います。「読むな」と書いても、パスが見えれば読みに行くのが Claude Code の自然な動作です。
+> 解決策: パスを Claude Code に見せない
+
+したがって、Read 可能なディレクトリを安易に追加すること自体が設計上の誤りです。ファイルを参照させる場合は、作業中のノートブックで `ClaudeAttach` 関数を陽に実行することで、当該ファイルを `$packageDirectory/claude_attachments` にコピーを作成し、そのコピーを参照させることでファイルアクセスのファイアウォールを護持します。もちろん、コードを作成または修正して `ClaudeEval` で自動実行させることは技術的に可能であるため、これは本質的な問題の解決ではありません。しかし、Mathematica 側の LLM に依存しないロジックによってコードの健全性を確認する機構を厳格化することで対処することができます。
 
 **セッションによる会話の継続性**: セッション機構により、複数回のやり取りにわたって会話履歴を保持します。セッションはノートブックの TaggingRules に永続化されるため、ノートブックを閉じて再度開いた後でも会話を再開できます。履歴が長くなった場合はエントリ数ベースとサイズベースの二重チェックにより自動または手動でコンパクションが行われ、トークン消費を抑制します。名前付きセッションの作成・継承・復元・削除が可能で、複数の独立したタスクを並行して進められます。
 
@@ -128,7 +136,7 @@ apiKey = Confidential[SystemCredential["MyAPIKey"]]
 (* 秘密データをローカルモデルで自動処理 *)
 ClaudeEval["秘密変数 成績 のデータを分析して", AutoPrivate -> True]
 
-(* 参考資料のアタッチ *)
+(* 参考資料のアタッチ（ファイアウォールを護持しつつ参照させる） *)
 ClaudeAttach["spec.pdf"]
 ClaudeEval["添付した仕様書に従ってコードを書いて"]
 
@@ -162,7 +170,7 @@ ShowClaudePalette[]
 | `$ClaudeModel` | `""` | Claude CLI に渡すモデル名。空文字は CLI デフォルト |
 | `$ClaudeTimeout` | `1200` | タイムアウト秒数 |
 | `$ClaudeWorkingDirectory` | `FileNameJoin[{$HomeDirectory, "Claude Working"}]` | 作業ディレクトリ |
-| `$ClaudeAccessibleDirs` | `{$packageDirectory}` | Claude Code に Read 許可する追加ディレクトリ |
+| `$ClaudeAccessibleDirs` | `{$packageDirectory}` | Claude Code に Read 許可する追加ディレクトリ。パスを見せないことがファイアウォールの本質であり、安易な追加は避けること |
 | `$ClaudeNBDirAccess` | `"list"` | NotebookDirectory のアクセスレベル（`"list"` / `"read"` / `"readwrite"`） |
 | `$ClaudeFallbackModels` | `{{"anthropic","claude-opus-4-6"},{"openai","gpt-5"}}` | フォールバックモデル優先順位。`{"lmstudio","modelName","http://host:port"}` 形式でローカル LLM も指定可能 |
 | `$ClaudePrivateModel` | `{}` | 秘密データ処理用のローカルモデル指定 |
@@ -199,7 +207,7 @@ ShowClaudePalette[]
 - `ClaudeSessionStatus[]` — セッション状態の確認
 
 **アタッチメント**
-- `ClaudeAttach[path]` — セッションに参考資料を添付（PDF、.wl 等）
+- `ClaudeAttach[path]` — セッションに参考資料を添付（PDF、.wl 等）。ファイルを `$packageDirectory/claude_attachments` にコピーし、パスを直接 Claude に見せないファイアウォール機構を実現
 - `ClaudeDetach[path]` — 添付を解除
 - `ClaudeAttachments[]` — アタッチメント一覧
 
@@ -349,11 +357,9 @@ ClaudeQuery["Explain how to implement Fibonacci sequence"]
 
 - [claudecode デモ動画 — Mathematica ノートブックから Claude Code を操作する様子を紹介（YouTube）](https://www.youtube.com/watch?v=_Lc-XtBPkl8&t=919s)
 
-### ClaudeQueryの実行例
+### ノートブック
 
-実際の使用例とサンプルコードは以下のデモノートブックでご覧いただけます：
-
-[ClaudeQuery デモノートブック](https://www.wolframcloud.com/obj/imai/Published/claudecode-examples.nb)
+- [ClaudeQuery デモノートブック — 実際の使用例とサンプルコード（Wolfram Cloud）](https://www.wolframcloud.com/obj/imai/Published/claudecode-examples.nb)
 
 ## 謝辞
 

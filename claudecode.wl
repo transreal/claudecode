@@ -61,7 +61,7 @@ Quiet[Scan[
    "NotebookLLMGraphExtractThread","NotebookLLMGraphApplyThread",
    "NBFileTranslate","ClaudeProcessFile",
    "$ClaudeTimeout", "$ClaudeMDPath", "$ClaudeMDContent", "$ClaudeModel",
-   "$ClaudeTestModel",
+   "$ClaudeTestModel", "$ClaudeVerbose",
    "$ClaudeFallbackModels", "$ClaudeWorkingDirectory", "$ClaudeAccessibleDirs",
    "$ClaudeDocRetryDelay", "$ClaudeDocMaxRetries", "$ClaudeDocMaxChunkChars",
    "$ClaudeDocModel",
@@ -100,6 +100,12 @@ $ClaudePackageKeywordMap::usage =
 $ClaudeTimeout::usage =
   "$ClaudeTimeout \:306f ClaudeQuery\:30fbClaudeEval \:7b49\:306e\:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:79d2\:6570\:3002\:30c7\:30d5\:30a9\:30eb\:30c8 1200\:3002\n" <>
   "\:4f8b: $ClaudeTimeout = 900";
+
+$ClaudeVerbose::usage =
+  "$ClaudeVerbose \:306f ClaudeCode \:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:8a73\:7d30\:30ed\:30b0\:51fa\:529b\:3092\:5236\:5fa1\:3059\:308b\:30d5\:30e9\:30b0\:3002\n" <>
+  "True: \:5c65\:6b74\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:7b49\:306e\:8a73\:7d30\:30ed\:30b0\:3092 Messages \:306b\:51fa\:529b\:3059\:308b\:3002\n" <>
+  "False (\:30c7\:30a3\:30d5\:30a9\:30eb\:30c8): \:91cd\:5927\:30a8\:30e9\:30fc\:4ee5\:5916\:306e ClaudeCode \:30ed\:30b0\:3092\:6291\:5236\:3059\:308b\:3002";
+
 $ClaudeWorkingDirectory::usage =
   "$ClaudeWorkingDirectory は Claude Code を起動する作業ディレクトリ。デフォルトは FileNameJoin[{$HomeDirectory, \"Claude Working\"}]。\n" <>
   "このディレクトリ配下の .claude/CLAUDE.md, .claude/rules/, .claude/skills/ を Claude Code に読ませる。";
@@ -743,6 +749,9 @@ If[!ValueQ[$ClaudeTimeout], $ClaudeTimeout = 1200];
 If[!ValueQ[$ClaudePrivateModel], $ClaudePrivateModel = {}];
 If[!AssociationQ[$ClaudePackageKeywordMap], $ClaudePackageKeywordMap = <||>];
 
+(* ClaudeCode \:8a73\:7d30\:30ed\:30b0\:51fa\:529b\:30d5\:30e9\:30b0 (\:30c7\:30a3\:30d5\:30a9\:30eb\:30c8 False: \:91cd\:5927\:30a8\:30e9\:30fc\:4ee5\:5916\:306e\:30ed\:30b0\:3092\:6291\:5236) *)
+If[$ClaudeVerbose =!= True, $ClaudeVerbose = False];
+
 (* ClaudeUpdatePackage 自動リトライ: リロード後のエラーを検出し自動修正 *)
 If[!ValueQ[$ClaudeUpdateAutoRetryMax], $ClaudeUpdateAutoRetryMax = 2];
 $iUpdateRetryCount = 0;
@@ -1278,10 +1287,18 @@ iWriteCodeCell[nb_NotebookObject, code_String] := (
 
 (* CellPrintパターンを自動検出してスマートにセルを書き込む → NBAccessに委譲 *)
 iWriteSmartCell[nb_, code_String, autoEvaluate_:False] :=
-  Module[{sanitized},
+  Module[{sanitized, effectiveAE},
     sanitized = iSanitizeUnderscoreVarNames[code];
+    (* AutoEvaluate \:7981\:6b62\:64cd\:4f5c\:30ac\:30fc\:30c9: \:30bb\:30ad\:30e5\:30ea\:30c6\:30a3\:5883\:754c\:3092\:5909\:66f4\:3059\:308b\:30b3\:30fc\:30c9\:306f\:81ea\:52d5\:5b9f\:884c\:3057\:306a\:3044 *)
+    effectiveAE = TrueQ[autoEvaluate] && !iIsAutoEvalProhibited[sanitized];
     NBAccess`NBWriteSmartCode[nb, sanitized];
-    If[TrueQ[autoEvaluate],
+    If[TrueQ[autoEvaluate] && !effectiveAE,
+      (* \:7981\:6b62\:64cd\:4f5c\:3092\:691c\:51fa: \:30bb\:30eb\:306f\:66f8\:304d\:8fbc\:3080\:304c\:81ea\:52d5\:5b9f\:884c\:3092\:30d6\:30ed\:30c3\:30af *)
+      NBAccess`NBWritePrintNotice[nb,
+        iL["\:26d4 \:30bb\:30ad\:30e5\:30ea\:30c6\:30a3\:4fdd\:8b77: \:4e0a\:306e\:30bb\:30eb\:306f\:30a2\:30af\:30bb\:30b9\:7bc4\:56f2\:3092\:5909\:66f4\:3059\:308b\:64cd\:4f5c\:3092\:542b\:3080\:305f\:3081\:81ea\:52d5\:5b9f\:884c\:3092\:30d6\:30ed\:30c3\:30af\:3057\:307e\:3057\:305f\:3002\:5185\:5bb9\:3092\:78ba\:8a8d\:3057\:3066\:304b\:3089 Shift+Enter \:3067\:624b\:52d5\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+           "\:26d4 Security: auto-eval blocked \:2014 code modifies access scope. Review and press Shift+Enter to run manually."],
+        RGBColor[0.8, 0, 0]]];
+    If[effectiveAE,
       NBAccess`NBEvaluatePreviousCell[nb]]
   ];
 
@@ -2215,10 +2232,11 @@ iCompactHistory[nb_NotebookObject, tag_String] :=
       n = If[AssociationQ[hdr], Lookup[hdr, "compactN", $iHistoryCompactN], $iHistoryCompactN];
       w = If[AssociationQ[hdr], Lookup[hdr, "compactW", $iHistoryCompactW], $iHistoryCompactW]];
 
-    NBAccess`NBWritePrintNotice[None,
-      "[History] \:5c65\:6b74\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:5b9f\:884c\:4e2d (p=" <> ToString[p] <>
-      ", \:30a8\:30f3\:30c8\:30ea\:6570=" <> ToString[total] <> ")\:2026",
-      RGBColor[0.5, 0.3, 0.6]];
+    If[TrueQ[$ClaudeVerbose],
+      NBAccess`NBWritePrintNotice[None,
+        "[History] \:5c65\:6b74\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:5b9f\:884c\:4e2d (p=" <> ToString[p] <>
+        ", \:30a8\:30f3\:30c8\:30ea\:6570=" <> ToString[total] <> ")\:2026",
+        RGBColor[0.5, 0.3, 0.6]]];
 
     (* 直近 w エントリは常に保持 *)
     keepDetailIndices = Range[Max[1, total - w + 1], total];
@@ -2258,11 +2276,12 @@ iCompactHistory[nb_NotebookObject, tag_String] :=
         "lastCompactTime" -> AbsoluteTime[],
         "lastCompactTotal" -> total|>];
 
-    NBAccess`NBWritePrintNotice[None,
-      "[History] \:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:5b8c\:4e86: " <>
-      ToString[total - Length[keepDetailIndices]] <> " \:30a8\:30f3\:30c8\:30ea\:3092\:30b5\:30de\:30ea\:30fc\:5316 (p=" <>
-      ToString[p * 2] <> ")",
-      RGBColor[0.3, 0.5, 0.3]];
+    If[TrueQ[$ClaudeVerbose],
+      NBAccess`NBWritePrintNotice[None,
+        "[History] \:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:5b8c\:4e86: " <>
+        ToString[total - Length[keepDetailIndices]] <> " \:30a8\:30f3\:30c8\:30ea\:3092\:30b5\:30de\:30ea\:30fc\:5316 (p=" <>
+        ToString[p * 2] <> ")",
+        RGBColor[0.3, 0.5, 0.3]]];
   ];
 
 (* 閾値チェック + 自動コンパクション
@@ -5761,6 +5780,40 @@ $iLongRunningPatterns = {
 iIsLongRunningCode[code_String] :=
   AnyTrue[$iLongRunningPatterns, StringContainsQ[code, #] &];
 
+(* ---- AutoEvaluate \:7d76\:5bfe\:7981\:6b62\:64cd\:4f5c ----
+   \:30bb\:30ad\:30e5\:30ea\:30c6\:30a3\:5883\:754c\:30fb\:30a2\:30af\:30bb\:30b9\:7bc4\:56f2\:30fb\:8a8d\:8a3c\:60c5\:5831\:30fb\:30bb\:30ad\:30e5\:30ea\:30c6\:30a3\:8a2d\:5b9a\:3092\:5909\:66f4\:3059\:308b\:64cd\:4f5c\:306f
+   AutoEvaluate \:3067\:5b9f\:884c\:3057\:3066\:306f\:306a\:3089\:306a\:3044\:3002rules/00-autoeval-prohibited.md \:53c2\:7167\:3002
+   \:4fdd\:8b77\:5bfe\:8c61\:5b9a\:6570 (claudecode.wl):
+     $ClaudeModel, $ClaudePrivateModel, $ClaudeTestModel, $ClaudeFallbackModels,
+     $ClaudeAccessibleDirs, $ClaudeDocMaxRetries, $ClaudeEvalMaxDepth
+   \:4fdd\:8b77\:5bfe\:8c61\:5b9a\:6570 (NBAccess.wl):
+     $NBPrivacySpec, $NBConfidentialSymbols, $NBSendDataSchema, $NBSeparationIgnoreList *)
+
+(* \:4fdd\:8b77\:5bfe\:8c61\:5b9a\:6570\:306e\:540d\:524d\:30ea\:30b9\:30c8 ($ \:306a\:3057\:3001\:6b63\:898f\:8868\:73fe\:7528 alternation \:306b\:7d50\:5408) *)
+$iProtectedVarNamesAlt = StringJoin[Riffle[{
+  "ClaudeModel", "ClaudePrivateModel", "ClaudeTestModel",
+  "ClaudeFallbackModels", "ClaudeAccessibleDirs",
+  "ClaudeDocMaxRetries", "ClaudeEvalMaxDepth",
+  "NBPrivacySpec", "NBConfidentialSymbols",
+  "NBSendDataSchema", "NBSeparationIgnoreList",
+  "iProtectedVarNamesAlt", "iAutoEvalProhibitedPatterns",
+  "NBAutoEvalProhibitedPatterns"
+}, "|"]];
+
+$iAutoEvalProhibitedPatterns = {
+  (* 1. \:4fdd\:8b77\:5bfe\:8c61\:5b9a\:6570\:3078\:306e\:4ee3\:5165 ($Const = ...) *)
+  RegularExpression["\\$(" <> $iProtectedVarNamesAlt <> ")\\s*=(?!=)"],
+  (* 2. \:4fdd\:8b77\:5bfe\:8c61\:5b9a\:6570\:3078\:306e AppendTo / PrependTo *)
+  RegularExpression["(?:AppendTo|PrependTo)\\s*\\[\\s*\\$(" <> $iProtectedVarNamesAlt <> ")"],
+  (* 3. ClaudeAttach \:306e\:5b9f\:884c *)
+  RegularExpression["(?<![\\p{L}\\p{N}$])ClaudeAttach\\s*\\["],
+  (* 4. SystemCredential \:306e\:4f7f\:7528 (\:8a8d\:8a3c\:60c5\:5831\:3078\:306e\:30a2\:30af\:30bb\:30b9) *)
+  RegularExpression["(?<![\\p{L}\\p{N}$])SystemCredential\\s*\\["]
+};
+
+iIsAutoEvalProhibited[code_String] :=
+  AnyTrue[$iAutoEvalProhibitedPatterns, StringContainsQ[code, #] &];
+
 (* コードブロック間の依存関係を解析し、依存するブロックを結合する。
    各ブロックで定義されるシンボル (x = ..., x := ...) を抽出し、
    後続ブロックがそのシンボルを参照している場合に結合する。
@@ -6374,6 +6427,18 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
           (* 依存関係のあるブロックを結合 *)
           blocks = iMergeDependentBlocks[
             iFixUnicodeEscapes[StringTrim[#]] & /@ blocks];
+          (* ---- AutoEvaluate 禁止操作ガード ----
+             いずれかのブロックに禁止操作が含まれる場合、
+             全ブロックの自動実行を抑制する。 *)
+          Module[{effectiveAE = ae},
+            If[TrueQ[effectiveAE] && Length[blocks] > 0 &&
+               AnyTrue[blocks, iIsAutoEvalProhibited],
+              effectiveAE = False;
+              AppendTo[queue, Function[
+                NBAccess`NBWritePrintNotice[nb2,
+                  iL["\:26d4 \:30bb\:30ad\:30e5\:30ea\:30c6\:30a3\:4fdd\:8b77: \:30a2\:30af\:30bb\:30b9\:7bc4\:56f2\:3092\:5909\:66f4\:3059\:308b\:64cd\:4f5c\:3092\:542b\:3080\:305f\:3081\:81ea\:52d5\:5b9f\:884c\:3092\:30d6\:30ed\:30c3\:30af\:3057\:307e\:3057\:305f\:3002\:5185\:5bb9\:3092\:78ba\:8a8d\:3057\:3066\:304b\:3089 Shift+Enter \:3067\:624b\:52d5\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+                     "\:26d4 Security: auto-eval blocked \:2014 code modifies access scope. Review and press Shift+Enter to run manually."],
+                  RGBColor[0.8, 0, 0]]]]];
           Do[With[{code = blk},
             AppendTo[queue, Function[
               Module[{result, box, cell},
@@ -6390,11 +6455,11 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
                   Cell[box, "Input"],
                   Cell[code, "Input", CellAutoOverwrite -> True]];
                 NotebookWrite[nb2, cell, After]]]];
-            (* AutoEvaluate: 書き込み後に別ティックで評価 *)
-            If[TrueQ[ae],
+            (* AutoEvaluate: effectiveAE は禁止操作検出時に False になっている *)
+            If[TrueQ[effectiveAE],
               AppendTo[queue, Function[
                 NBAccess`NBEvaluatePreviousCell[nb2]]]]],
-          {blk, blocks}];
+          {blk, blocks}]];
           (* コードブロックがない場合のフォールバック *)
           If[Length[blocks] === 0,
             lines = Select[StringSplit[textOnly, "\n"], StringTrim[#] =!= "" &];
@@ -6419,7 +6484,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
                     Cell[box, "Input"],
                     Cell[fc, "Input", CellAutoOverwrite -> True]];
                   NotebookWrite[nb2, cell, After]]]]];
-              If[TrueQ[ae],
+              If[TrueQ[ae] && !iIsAutoEvalProhibited[fallbackCode],
                 AppendTo[queue, Function[
                   NBAccess`NBEvaluatePreviousCell[nb2]]]];
               blocks = {fallbackCode}]];
@@ -11741,7 +11806,7 @@ ClaudeAddDirective[target_String, description_String, OptionsPattern[]] :=
       histDir = iCreateDirectiveHistoryBackup[
         "ClaudeAddDirective[\"" <> target <> "\", \"" <> StringTake[description, UpTo[200]] <> "\"]",
         {filePath}];
-      If[StringQ[histDir],
+      If[StringQ[histDir] && TrueQ[$ClaudeVerbose],
         Print["[History] " <> histDir]]];
 
     (* 5. \:30d5\:30a1\:30a4\:30eb\:306b\:8ffd\:52a0 *)
@@ -12395,7 +12460,12 @@ iAttachmentCacheDir[] := Module[{dir},
   dir
 ];
 
-iCacheAttachment[origPath_String] := Module[{dir, ext, base, hashStr, cachedName, cachedPath},
+iCacheAttachment[origPath_String] := Module[{dir, ext, base, hashStr, cachedName, cachedPath, pkgNorm},
+  (* $packageDirectory 配下のファイルは既にアクセス可能 — コピー不要 *)
+  pkgNorm = ExpandFileName[Global`$packageDirectory];
+  If[StringStartsQ[ExpandFileName[origPath],
+      pkgNorm <> If[StringEndsQ[pkgNorm, $PathnameSeparator], "", $PathnameSeparator]],
+    Return[origPath]];
   dir = iAttachmentCacheDir[];
   ext = FileExtension[origPath];
   base = FileBaseName[origPath];
@@ -12409,19 +12479,20 @@ iCacheAttachment[origPath_String] := Module[{dir, ext, base, hashStr, cachedName
 
 (* === ポータブルパス解決 ===
    ノートブックに保存されたアタッチメントのフルパスが別環境で無効になった場合、
-   パス内の "claude_attachments/filename" 部分を抽出し、
-   現在の $packageDirectory で再構築する。 *)
+   パスの末尾コンポーネントを $packageDirectory と結合して解決を試みる。
+   例: 旧環境 C:\Users\A\Dropbox\...\MyPackages\CellularAutomata.wl
+     → 新環境 D:\Dropbox\...\MyPackages\CellularAutomata.wl
+   "claude_attachments/file.hash.ext" も "file.wl" もこの方法で解決できる。 *)
 
-iResolveAttachPath[path_String] := Module[{parts, idx, relPath, resolved},
+iResolveAttachPath[path_String] := Module[{parts, resolved, i},
   (* フルパスが存在すればそのまま返す *)
   If[FileExistsQ[path], Return[path]];
-  (* パス内の "claude_attachments" を探し、そこから先を抽出 *)
+  (* パスの末尾 1〜4 コンポーネントを $packageDirectory に結合して試す *)
   parts = FileNameSplit[path];
-  idx = Position[parts, "claude_attachments"];
-  If[Length[idx] > 0,
-    relPath = FileNameJoin[parts[[idx[[-1, 1]] ;;]]];
-    resolved = FileNameJoin[{Global`$packageDirectory, relPath}];
-    If[FileExistsQ[resolved], Return[resolved]]];
+  Do[
+    resolved = FileNameJoin[Prepend[parts[[i ;;]], Global`$packageDirectory]];
+    If[FileExistsQ[resolved], Return[resolved, Module]],
+    {i, Max[1, Length[parts] - 3], Length[parts]}];
   (* フォールバック: 元のパスをそのまま返す *)
   path
 ];
@@ -17085,6 +17156,14 @@ NBFileTranslate[inputPath_String, outputPath_String,
    シグネチャ: $NBLLMQueryFunc[prompt, callback, Model -> spec, Fallback -> bool]
    ============================================================ *)
 NBAccess`$NBLLMQueryFunc = ClaudeCode`ClaudeQueryAsync;
+
+(* ============================================================
+   NBAccess AutoEvaluate 禁止パターン登録
+   NBEvaluatePreviousCell が自動実行前にセル内容を検査する。
+   ここで登録したパターンにマッチするセルは自動実行をブロックする。
+   rules/00-autoeval-prohibited.md 参照。
+   ============================================================ *)
+NBAccess`$NBAutoEvalProhibitedPatterns = $iAutoEvalProhibitedPatterns;
 
 
 (* ============================================================

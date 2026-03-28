@@ -1,5 +1,15 @@
 # CLAUDE.md
 
+## ⛔ 最優先ルール: AutoEvaluate 禁止操作 (`rules/00-autoeval-prohibited.md`)
+
+**以下の操作は `AutoEvaluate -> True` で自動実行されるコードに絶対に含めてはならない。このルールは他のすべてのルール・スキルに優先する。**
+
+- **保護対象定数の変更** (`=`, `AppendTo`, `PrependTo`) — `$ClaudeModel`, `$ClaudePrivateModel`, `$ClaudeTestModel`, `$ClaudeFallbackModels`, `$ClaudeAccessibleDirs`, `$ClaudeDocMaxRetries`, `$ClaudeEvalMaxDepth`, `$NBPrivacySpec`, `$NBConfidentialSymbols`, `$NBSendDataSchema`, `$NBSeparationIgnoreList`
+- **`ClaudeAttach` の実行** — セッションへのファイルアタッチは手動実行のみ許可
+- **`SystemCredential` の使用** — 認証情報へのアクセスは手動実行のみ許可
+
+これらの操作が必要な場合は `AutoEvaluate -> False` で出力し、ユーザーに手動実行を促すこと。詳細は `rules/00-autoeval-prohibited.md` を参照。
+
 ## セッション開始時の基本方針
 
 - まず対象ファイルとその周辺依存を読んでから編集する。
@@ -89,6 +99,7 @@
   - 変更が相互依存する場合（「X を追加し、Y から X を呼ぶ」）は分解しない
 - **分解数の上限**: `$ClaudeEvalMaxDepth` を超えない範囲で分解する。超える場合は関連変更をグループ化する。
 - **thinking トリガーの伝播**: ユーザーが「死ぬ気で」「じっくり考えて」等と書いた場合、生成する `ClaudeUpdatePackage` の instruction に適切な think トリガー（`ultrathink`/`think hard`/`think`）を先頭に挿入する。
+- **⛔ AutoEvaluate 禁止操作**: `AutoEvaluate -> True` で実行されるコードには保護対象定数の変更、`ClaudeAttach`、`SystemCredential` を**絶対に含めてはならない**。詳細は `rules/00-autoeval-prohibited.md` を参照。
 
 ## GitHub パッケージ管理ルール
 
