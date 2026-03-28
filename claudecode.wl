@@ -5796,6 +5796,7 @@ $iProtectedVarNamesAlt = StringJoin[Riffle[{
   "ClaudeDocMaxRetries", "ClaudeEvalMaxDepth",
   "NBPrivacySpec", "NBConfidentialSymbols",
   "NBSendDataSchema", "NBSeparationIgnoreList",
+  "packageDirectory",
   "iProtectedVarNamesAlt", "iAutoEvalProhibitedPatterns",
   "NBAutoEvalProhibitedPatterns"
 }, "|"]];
@@ -5807,8 +5808,8 @@ $iAutoEvalProhibitedPatterns = {
   RegularExpression["(?:AppendTo|PrependTo)\\s*\\[\\s*\\$(" <> $iProtectedVarNamesAlt <> ")"],
   (* 3. ClaudeAttach \:306e\:5b9f\:884c *)
   RegularExpression["(?<![\\p{L}\\p{N}$])ClaudeAttach\\s*\\["],
-  (* 4. SystemCredential \:306e\:4f7f\:7528 (\:8a8d\:8a3c\:60c5\:5831\:3078\:306e\:30a2\:30af\:30bb\:30b9) *)
-  RegularExpression["(?<![\\p{L}\\p{N}$])SystemCredential\\s*\\["]
+  (* 4. \:8a8d\:8a3c\:60c5\:5831\:30fb\:30d5\:30a1\:30a4\:30eb\:7834\:58ca\:7684\:64cd\:4f5c *)
+  RegularExpression["(?<![\\p{L}\\p{N}$])(?:SystemCredential|RenameFile|DeleteFile|CopyFile)\\s*\\["]
 };
 
 iIsAutoEvalProhibited[code_String] :=
