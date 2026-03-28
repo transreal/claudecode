@@ -263,3 +263,107 @@ Block[{$CharacterEncoding = "UTF-8"},
 - **ソースが documentupdate より新しい** → 全ファイル再生成
 - **ソースが documentupdate 以前で、一部ファイルのみ存在** → 未生成分のみ生成
 - **全ファイル存在** → 全ファイル再生成
+
+## Documentation` パッケージ（documentation.wl）の特殊セルタイプ
+
+Documentation` パッケージは以下の特殊セルスタイルを提供する。これらは「メタセル」と呼ばれ、エクスポート時に出力から除外され、展開・翻訳・同期の対象にもならない。
+
+### Note セル
+- スタイル名: `"Note"`
+- 用途: 著者向けメモ。出力に含まれない。
+
+### Dictionary セル
+- スタイル名: `"Dictionary"`
+- 用途: 翻訳時の用語対応辞書。形式は Mathematica リスト式:
+  `{{<<Japanese>>, <<English>>, <<Context>>}, {"状相", "configuration", "セルオートマトン"}, ...}`
+- 1行目はヘッダー（`<<>>` で囲む）、2行目以降が「Context の文脈における用語対応」を表す
+- LLM プロンプトに `=== Dictionary ===` ブロックとして自動注入され、翻訳時に用語の対応を強制する
+- 展開・同期時にも参照される（Directives と同様）
+
+### Directive セル
+- スタイル名: `"Directive"`
+- 用途: 展開・翻訳・同期の実行時に LLM が順守すべき指示を記載する
+- 複数の Directive セルを配置可能（全て収集されて結合される）
+- LLM プロンプトに `=== Directives ===` ブロックとして自動注入される
+- 例: 「技術用語は初出時に英語を括弧書きで併記する」「文体は常体（だ・である調）を使用する」
+
+### コンテキスト収集の仕組み
+展開・翻訳・同期の各操作時、LLM プロンプトには以下が順に挿入される:
+1. **Directives**: `iDocCollectDirectives[nb]` — 全 Directive セルの内容
+2. **Dictionary**: `iDocCollectDictionary[nb]` — 全 Dictionary セルの用語対応
+3. **Document context**: `iDocCollectContext[nb, cellIdx]` — 周辺セルのテキストとアタッチメント情報
+
+### Export 除外マーキング
+- 任意のセルに `$iDocTagExcludeExport` タグを付けて、エクスポートから除外できる
+- パレットの「除外切替」ボタンで選択セルの除外フラグをトグルする
+- 除外セルには右側に赤いマーカー `×` が表示される
+- Note/Dictionary/Directive セルは常に除外される（タグ不要）
+
+### セル分割 (`DocSplitCell`)
+- カーソル位置でセルを前半・後半に分割する
+- パラグラフ/翻訳表示中: 表示テキストをカーソル位置で分割、翻訳/パラグラフ/翻訳元を比率で自動分割、プロンプトがあれば `$NBLLMQueryFunc` で前半・後半用に再生成
+- 普通のセル: テキストを単純に分割
+- 秘匿セルの場合は `PrivacyLevel` に基づき `$ClaudePrivateModel` にルーティングされる
+
+### セル合併 (`DocMergeCells`)
+- 複数選択セルのテキスト・プロンプト・翻訳・翻訳元をそれぞれスペース区切りで結合
+- 最初のセルに結合結果を書き込み、残りのセルは後ろから順に削除
+- モード・スタイルは最初のセルのものを維持
+
+### Bibliography セル
+- スタイル名: `"Bibliography"`
+- 用途: 参考文献リストの管理。形式は Mathematica リスト式:
+  `{{<<Key>>, <<Author>>, <<Year>>, <<Title>>}, {"morita1996", "K. Morita", "1996", "Universality of..."}}`
+- Export 時に LaTeX では `\begin{thebibliography}...\end{thebibliography}`、Markdown では `## References` セクションとして自動出力
+- 本文中の `<<cite:key>>` が `\cite{key}` / `[Author, Year](#ref-key)` に自動変換
+
+### 図メタデータ (`DocEditFigureMeta`)
+- 画像セルの TaggingRules に `figLabel`（参照用ラベル）と `figCaption`（キャプション）を保存
+- パレットの「図メタ」ボタンでダイアログ入力
+- Export 時に LaTeX では `\begin{figure}[h]\centerline{\includegraphics[scale=.8]{...}}\caption{...}\label{fig:...}\end{figure}` を出力
+- ラスター画像は PNG、ベクター/Mathematica 計算画像は PDF で出力
+- ナンバリングは `iDocBuildFigureTable` で Export 時にセル順で自動付番
+
+### 本文中の参照記法
+- `<<fig:label>>` → 図参照（LaTeX: `\figurename~\ref{fig:label}`, Markdown: `[Figure N](#fig-label)`）
+- `<<cite:key>>` → 引用（LaTeX: `\cite{key}`, Markdown: `[Author, Year](#ref-key)`）
+- 参照解決は `iDocResolveReferences` で Export 時に全テキストセルに適用
+
+### 編集追跡と自動同期
+- `$iDocTagCleanText` — プログラムが書き込んだテキストのクリーンコピーを TaggingRules に保存
+- `iDocWriteAndTrack[nb, cellIdx, text]` — テキスト書き込み + クリーンコピー記録の一括ヘルパー
+- DocExpandIdea / DocTranslate の completionFn で cleanText を自動記録
+- DocToggleView 実行時に `cleanText` と現在テキストを比較し、不一致なら編集ありと判定
+- 編集検出時、切替後に `iDocPostToggleSync` がバックグラウンドで発動:
+  - パラグラフ編集 → 翻訳を再生成（`iDocReTranslatePromptFn`）
+  - プロンプト編集 → パラグラフを再展開（`iDocReExpandPromptFn`）
+  - 翻訳編集 → パラグラフを逆同期（`iDocReverseSyncPromptFn`）
+- すべて `PrivacyLevel` 対応で秘匿セルは `$ClaudePrivateModel` にルーティング
+- 同期ボタンは不要になったためパレットから削除済み
+
+### Directive によるエクスポート時スタイル読み替え
+- Directive セル内に `{Subsection -> Section, Subsubsection -> Subsection}` のような Wolfram Language のルール式を記述すると、Markdown/LaTeX エクスポート時にセルスタイルが読み替えられる
+- `iDocParseStyleRemap[nb]` が全 Directive セルを走査し、`{...->...}` パターンを抽出して `<|"Subsection" -> "Section", ...|>` の Association を構築
+- `iDocTextCellToExport` の冒頭で `style = Lookup[styleRemap, style, style]` を適用
+- シンボル名（`Subsection`）も文字列（`"Subsection"`）も自動的に文字列に変換される
+
+### 編集検出のモード一致チェック（バグ修正）
+- `$iDocTagCleanMode` — テキスト書き込み時のモード状態を `"paragraph:False"` のような文字列で記録
+- `wasEdited` チェック時に `cleanMode === currentMode` を検証。モードが変わっていれば cleanText は前モードの残留値として無視される
+- `iDocShowAllAs`（一括表示切替）の全書き込み箇所に `$iDocTagCleanText` 追跡を追加
+- `DocTranslate` のキャッシュ表示パス（LLM 不要の即時表示）にも追跡を追加
+- 旧セル（cleanMode 未設定）は `StringQ[cleanMode] = False` → `wasEdited = False` となり安全
+
+### DocExportWord（Word エクスポート）
+- `DocExportMarkdown` で Markdown を生成し、Pandoc で `.docx` に変換
+- `ProcessDirectory -> outDir` で Pandoc を画像フォルダ内で実行し、相対パスの画像を確実に解決
+- `--from=markdown+implicit_figures` で `![caption](file){#label}` を図として認識
+- オプション `"ReferenceDoc" -> "template.docx"` でスタイルテンプレートを指定可能
+
+### エクスポート時の言語統一
+- `iDocDetectExportLanguage[nb]` — 翻訳表示セルが過半数なら翻訳ターゲット言語を返す
+- 翻訳モード検出時、エクスポートパイプライン全体でターゲット言語に統一:
+  - **文献タイトル**: `iDocTranslateBibTitle` が日本語タイトルを検出し、PDF テキストから英語タイトルを探すか LLM で翻訳
+  - **図キャプション**: `iDocTranslateFigCaption` がターゲット言語に翻訳
+  - `exportLang` パラメータが `iDocCellToExport` → `iDocOutputCellToExport` → bib 出力まで一貫して伝搬
+- Markdown / LaTeX / Word（Pandoc経由）すべてに適用

@@ -18,7 +18,8 @@ Quiet[ClearAll[
   iWriteQueryResponse, iFlushQueryTextBuf, iSaveDocOptions, iLoadAndMergeDocOptions,
   iDocGet, iDocInitState, iDocBuildRefSection, iDocGlobalInstructionPrompt,
   iDocBuildAcknowledgmentsPrompt, iDocBuildDisclaimerPrompt, iDocBuildLicensePrompt,
-  ClaudePrepareCommit, iCollectChangeSummaries, iFormatCommitMessage, iWrapCommitBodyLines
+  ClaudePrepareCommit, iCollectChangeSummaries, iFormatCommitMessage, iWrapCommitBodyLines,
+  iClearAllClaudeHistory, iForceAccessLevelLiterals
 ]];
 
 (* NBAccess \:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:30ed\:30fc\:30c9 (\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:8aad\:307f\:66f8\:304d\:30fb\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:7ba1\:7406) *)
@@ -2021,7 +2022,11 @@ iCaptureNotebookContext[nb_NotebookObject, afterIdx_Integer] :=
 
 iCaptureNotebookContext[nb_NotebookObject, afterIdx_Integer, accessLevel_?NumericQ] :=
   NBAccess`NBGetContext[nb, afterIdx,
-    PrivacySpec -> <|"AccessLevel" -> accessLevel|>];
+    PrivacySpec -> Which[
+      accessLevel >= 1.0,  <|"AccessLevel" -> 1.0|>,
+      accessLevel >= 0.75, <|"AccessLevel" -> 0.75|>,
+      True,                <|"AccessLevel" -> 0.5|>
+    ]];
 
 
 (* response \:304b\:3089 ```mathematica...``` \:30d6\:30ed\:30c3\:30af\:3092\:9664\:53bb\:3057\:30c6\:30ad\:30b9\:30c8\:306e\:307f\:3092\:53d6\:308a\:51fa\:3059
@@ -5809,7 +5814,9 @@ $iAutoEvalProhibitedPatterns = {
   (* 3. ClaudeAttach \:306e\:5b9f\:884c *)
   RegularExpression["(?<![\\p{L}\\p{N}$])ClaudeAttach\\s*\\["],
   (* 4. \:8a8d\:8a3c\:60c5\:5831\:30fb\:30d5\:30a1\:30a4\:30eb\:7834\:58ca\:7684\:64cd\:4f5c *)
-  RegularExpression["(?<![\\p{L}\\p{N}$])(?:SystemCredential|RenameFile|DeleteFile|CopyFile)\\s*\\["]
+  RegularExpression["(?<![\\p{L}\\p{N}$])(?:SystemCredential|RenameFile|DeleteFile|CopyFile)\\s*\\["],
+  (* 5. AccessLevel \:306e\:4f7f\:7528 \u2014 \:30d7\:30e9\:30a4\:30d0\:30b7\:30ec\:30d9\:30eb\:6607\:683c\:3092\:9632\:6b62 *)
+  RegularExpression["(?<![\\p{L}\\p{N}$])AccessLevel(?![\\p{L}\\p{N}$])"]
 };
 
 iIsAutoEvalProhibited[code_String] :=
@@ -12423,6 +12430,33 @@ ClaudeDeleteSession[name_String] := Module[{nb, tag},
   Print[iL["\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:524a\:9664\:3057\:307e\:3057\:305f: ", "Session deleted: "] <> name];
 ];
 
+(* iClearAllClaudeHistory[nb]: \:5168\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:3092\:524a\:9664\:ff08\:30d5\:30a1\:30a4\:30eb\:5171\:6709\:6642\:306e\:60c5\:5831\:9664\:53bb\:7528\:ff09 *)
+(* \:30bb\:30eb\:30ec\:30d9\:30eb\:306e\:6a5f\:5bc6\:30fb\:6a5f\:5bc6\:4f9d\:5b58\:30bf\:30b0\:306f\:524a\:9664\:3057\:306a\:3044 *)
+(* \:30d1\:30ec\:30c3\:30c8\:8a2d\:5b9a\:306f\:524a\:9664\:3057\:306a\:3044 *)
+iClearAllClaudeHistory[nb_NotebookObject] := Module[{count},
+  (* 1. \:5168\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:3092\:524a\:9664 *)
+  count = NBAccess`NBHistoryClearAll[nb, "history",
+    PrivacySpec -> <|"AccessLevel" -> 1.0|>];
+  If[!IntegerQ[count],
+    Print[iL[
+      "\:26a0\:fe0f \:5c65\:6b74\:524a\:9664\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002AccessLevel \:304c\:4e0d\:8db3\:3057\:3066\:3044\:307e\:3059\:3002",
+      "\:26a0\:fe0f Failed to clear history. Insufficient AccessLevel."]];
+    Return[$Failed]];
+  (* 2. LLMGraph \:30c7\:30fc\:30bf\:3092\:524a\:9664 *)
+  Quiet[CurrentValue[nb,
+    {TaggingRules, "claudecode", "LLMGraph"}] = Inherited];
+  $iLLMGraphCache = None;
+  $iLLMGraphCacheNB = None;
+  (* 3. \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:30a2\:30af\:30bb\:30b9\:60c5\:5831\:3092\:524a\:9664 *)
+  Quiet[NBAccess`NBDeleteTaggingRule[nb, "claudeAccessibleDirs"]];
+  Quiet[NBAccess`NBDeleteTaggingRule[nb, "claudeDirPermissions"]];
+  Print[iL[
+    "\:2714 \:5168\:5c65\:6b74\:3092\:524a\:9664\:3057\:307e\:3057\:305f (" <> ToString[count] <>
+      " \:30bb\:30c3\:30b7\:30e7\:30f3 + LLMGraph + \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:8a2d\:5b9a)",
+    "\:2714 All history cleared (" <> ToString[count] <>
+      " sessions + LLMGraph + directory settings)"]];
+];
+
 (* ClaudeShowHistory[]: \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\:8868\:793a *)
 ClaudeShowHistory[] := Module[{nb},
   nb = EvaluationNotebook[];
@@ -13215,6 +13249,41 @@ ShowClaudePalette[] := (
         With[{nb = InputNotebook[]},
           NBAccess`NBInsertAndEvaluateInput[nb,
             RowBox[{"ClaudeListSessions", "[", "]"}]]]],
+      Spacer[8],
+      Button[
+        Style[iL["\[Times] \:5168\:5c65\:6b74\:524a\:9664", "\[Times] Clear All"], Bold, 9, White],
+        With[{nb = InputNotebook[]},
+          If[ChoiceDialog[
+            Column[{
+              Style[iL["\:26a0\:fe0f \:5168\:5c65\:6b74\:524a\:9664\:306e\:78ba\:8a8d", "\:26a0\:fe0f Confirm: Clear All History"], Bold, 14, Red],
+              Spacer[8],
+              Style[iL[
+                "\:3053\:306e\:64cd\:4f5c\:306f\:3001\:3053\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:4ee5\:4e0b\:306e\:60c5\:5831\:3092\n\:5b8c\:5168\:306b\:524a\:9664\:3057\:307e\:3059:\n  \:25cf \:5168\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:ff08\:30c7\:30d5\:30a9\:30eb\:30c8\:30fb\:540d\:524d\:4ed8\:304d\:5168\:3066\:ff09\n  \:25cf LLMGraph \:30c7\:30fc\:30bf\n  \:25cf \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:30a2\:30af\:30bb\:30b9\:8a2d\:5b9a",
+                "This will permanently delete the following\nfrom this notebook:\n  \:25cf All session history (default + named)\n  \:25cf LLMGraph data\n  \:25cf Directory access settings"],
+                12],
+              Spacer[4],
+              Style[iL[
+                "\:25cf \:4ed6\:8005\:306b\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3092\:6e21\:3059\:969b\:3001\:4f1a\:8a71\:5c65\:6b74\:3084\n  \:30ed\:30fc\:30ab\:30eb\:30d1\:30b9\:7b49\:306e\:4e0d\:8981\:306a\:60c5\:5831\:3092\:524a\:9664\:3057\:307e\:3059\:3002\n\:25cf \:6a5f\:5bc6\:30de\:30fc\:30af\:30fb\:30d1\:30ec\:30c3\:30c8\:8a2d\:5b9a\:306f\:524a\:9664\:3055\:308c\:307e\:305b\:3093\:3002\n\:25cf \:3053\:306e\:64cd\:4f5c\:306f\:53d6\:308a\:6d88\:305b\:307e\:305b\:3093\:3002",
+                "\:25cf Use this to remove conversation history, local\n  paths, and other unnecessary data before\n  sharing the notebook with others.\n\:25cf Confidential marks and palette settings are\n  preserved.\n\:25cf This operation cannot be undone."],
+                11, GrayLevel[0.3]],
+              Spacer[8],
+              Style[iL[
+                "\:672c\:5f53\:306b\:524a\:9664\:3057\:307e\:3059\:304b\:ff1f",
+                "Are you sure you want to proceed?"],
+                12, Bold]
+            }, Alignment -> Left],
+            {iL["\:524a\:9664\:3059\:308b", "Delete All"] -> True,
+             iL["\:30ad\:30e3\:30f3\:30bb\:30eb", "Cancel"] -> False},
+            WindowTitle -> iL["\:5168\:5c65\:6b74\:524a\:9664", "Clear All History"]],
+          (* confirmed *)
+          iClearAllClaudeHistory[nb],
+          (* cancelled *)
+          Print[iL["\:30ad\:30e3\:30f3\:30bb\:30eb\:3057\:307e\:3057\:305f\:3002", "Cancelled."]]]],
+        Appearance -> "Frameless",
+        Background -> RGBColor[0.65, 0.15, 0.15],
+        ImageSize -> {100, 20},
+        FrameMargins -> {{4, 4}, {1, 1}},
+        Method -> "Queued"],
       Spacer[2],
 
       (* \:2500\:2500 \:30b9\:30c6\:30fc\:30bf\:30b9 \:2500\:2500 *)
@@ -13457,6 +13526,26 @@ iSeparationDocsContext[packageName_String] :=
   ];
 
 (* ============================================================
+   AccessLevel 変数使用の強制書き換え
+   "AccessLevel" -> 変数名 を "AccessLevel" -> 0.5 に強制置換する。
+   ClaudeFixSeparation で LLM 修正の前後に適用し、
+   変数による AccessLevel 指定を確実に排除する。
+   ============================================================ *)
+iForceAccessLevelLiterals[code_String] :=
+  Module[{result, count = 0},
+    result = StringReplace[code,
+      RegularExpression["(\"AccessLevel\"\\s*->\\s*)[a-zA-Z$][a-zA-Z0-9$]*"] :>
+        "${1}0.5"];
+    count = StringCount[code,
+      RegularExpression["\"AccessLevel\"\\s*->\\s*[a-zA-Z$][a-zA-Z0-9$]*"]];
+    If[count > 0,
+      Print[iL[
+        "\:26a0\:fe0f AccessLevel \:306e\:5909\:6570\:4f7f\:7528\:3092 " <> ToString[count] <> " \:7b87\:6240\:3001\:5f37\:5236\:7684\:306b 0.5 \:306b\:66f8\:304d\:63db\:3048\:307e\:3057\:305f",
+        "\:26a0\:fe0f Forced " <> ToString[count] <> " variable AccessLevel(s) to 0.5"]]];
+    result
+  ];
+
+(* ============================================================
    静的パターン走査: 正規表現ベースの禁止シンボル検出
    LLM 判定の前段で確実に違反候補を拾い、偽陰性を減らす。
    ============================================================ *)
@@ -13555,7 +13644,11 @@ iStaticSeparationScan[source_String, fileName_String] :=
 
       (* --- CellGroupData 直構築 --- *)
       {"Cell\\s*\\[\\s*CellGroupData", "b",
-       "CellGroupData を伴うセルグループ直構築 (NBWriteCell に Cell[CellGroupData[...]] を渡すか専用APIを使用)"}
+       "CellGroupData を伴うセルグループ直構築 (NBWriteCell に Cell[CellGroupData[...]] を渡すか専用APIを使用)"},
+
+      (* --- 6. PrivacySpec AccessLevel に変数使用の検出 --- *)
+      {"\"AccessLevel\"\\s*->\\s*(?![0-9])", "k",
+       "AccessLevel に変数を使用 (数値定数 0.5, 0.75, 1.0 等のみ許可。コード検索で機密アクセス箇所を検証可能にするため)"}
     };
     (* 各行を走査 *)
     Do[
@@ -13654,7 +13747,10 @@ ClaudeCheckSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :
           "NBMoveAfterCell etc.)\n" <>
           "j. Destructive updates to NBAccess public globals via AppendTo, AssociateTo, PrependTo, " <>
           "KeyDropFrom, Unset, Increment, Decrement, Part assignment (x[key]=...) " <>
-          "(must use NBRegisterConfidentialVar, NBSetConfidentialVars etc.)\n\n" <>
+          "(must use NBRegisterConfidentialVar, NBSetConfidentialVars etc.)\n" <>
+          "k. Using a variable for PrivacySpec AccessLevel value " <>
+          "(\"AccessLevel\" -> variable is FORBIDDEN; must use numeric literals like 0.5, 0.75, 1.0 " <>
+          "so that grep/search can audit all sensitive data access points).\n\n" <>
           "EXCEPTION: Calls through the NBAccess public API (NBAccess`NBxxx[...]) are ALLOWED.\n" <>
           "EXCEPTION: Passing Cell[CellGroupData[...]] as argument to NBAccess`NBWriteCell is ALLOWED.\n\n" <>
           If[Length[staticHits] > 0,
@@ -13665,7 +13761,7 @@ ClaudeCheckSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :
             ""] <>
           "Respond in JSON format ONLY. No other text.\n" <>
           "Format: [{\"line\": <line_number>, \"code\": \"<offending code snippet>\", " <>
-          "\"violation\": \"<a|b|c|d|e|f|g|h|i|j>\", \"description\": \"<explanation in " <> iLanguageName[] <> ">\"}]\n" <>
+          "\"violation\": \"<a|b|c|d|e|f|g|h|i|j|k>\", \"description\": \"<explanation in " <> iLanguageName[] <> ">\"}]\n" <>
           "If no violations found, respond with: []\n\n" <>
           If[docsCtx =!= "",
             "=== NBAccess DOCUMENTATION (for reference) ===\n" <> docsCtx <> "\n", ""] <>
@@ -13767,6 +13863,8 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
         (* ClaudeUpdatePackage 相当の修正 *)
         Module[{src, fixPrompt, fixResult},
           src = Import[target, "Text"];
+          (* AccessLevel 変数使用を先に強制修正 *)
+          src = iForceAccessLevelLiterals[src];
           fixPrompt =
             "Fix the following NBAccess separation violations in this Wolfram Language source file.\n" <>
             "Use the NBAccess public API instead of direct operations.\n\n" <>
@@ -13782,7 +13880,8 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
             "- Cells[nb, CellTags->...] -> NBAccess`NBCellIndicesByTag[nb, tag]\n" <>
             "- CurrentValue[..., TaggingRules] -> NBAccess`NBCellGetTaggingRule[nb, idx, path]\n" <>
             "- SetOptions[..., TaggingRules->...] -> NBAccess`NBCellSetOptions[nb, idx, opts]\n" <>
-            "- AppendTo/AssociateTo on NBAccess` globals -> use setter APIs (NBRegisterConfidentialVar etc.)\n\n" <>
+            "- AppendTo/AssociateTo on NBAccess` globals -> use setter APIs (NBRegisterConfidentialVar etc.)\n" <>
+            "- \"AccessLevel\" -> variable -> must use numeric literal (0.5, 0.75, 1.0 etc.)\n\n" <>
             "VIOLATIONS:\n" <> violationDesc <> "\n\n" <>
             "Output the COMPLETE corrected source file. Do NOT wrap in code fences.\n\n" <>
             "=== SOURCE ===\n" <> src;
@@ -13825,6 +13924,8 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
                 ]
               ];
               If[finalCode =!= None,
+                (* LLM が変数 AccessLevel を再導入した場合に備え、最終出力も強制修正 *)
+                finalCode = iForceAccessLevelLiterals[finalCode];
                 Export[target, finalCode, "Text", CharacterEncoding -> "UTF-8"];
                 Print[Style["\:2705 " <> FileNameTake[target] <> " \:3092\:4fee\:6b63\:3057\:307e\:3057\:305f", Bold]];
                 $iSeparationCheckCache = KeyDrop[$iSeparationCheckCache, target],
@@ -13855,9 +13956,20 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
           "EvaluationCell[]/CellPrint[]/SetSelectedNotebook[]\:306fNBAccess API\:306b\:7f6e\:63db\:3002\n" <>
           "CurrentValue/SetOptions\:306b\:3088\:308bTaggingRules/CellTags/CellEpilog\:76f4\:63a5\:30a2\:30af\:30bb\:30b9\:306fNBAccess API\:306b\:7f6e\:63db\:3002\n" <>
           "SelectionEvaluate/SelectionMove/FrontEndTokenExecute\:306fNBAccess API\:306b\:7f6e\:63db\:3002\n" <>
-          "NBAccess\:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:3078\:306eAppendTo/AssociateTo\:7b49\:306fsetter API\:306b\:7f6e\:63db\:3002\n\n" <>
+          "NBAccess\:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:3078\:306eAppendTo/AssociateTo\:7b49\:306fsetter API\:306b\:7f6e\:63db\:3002\n" <>
+          "AccessLevel\:306e\:5024\:306b\:5909\:6570\:4f7f\:7528\:306f\:7981\:6b62\:3001\:6570\:5024\:5b9a\:6570(0.5, 0.75, 1.0\:7b49)\:306e\:307f\:8a31\:53ef\:3002\n\n" <>
           "\:9055\:53cd\:4e00\:89a7:\n" <> violationDesc,
           Fallback -> TrueQ[OptionValue[Fallback]]];
+        (* ClaudeUpdatePackage 完了後、AccessLevel 変数使用を強制修正 *)
+        Scan[
+          Function[fi,
+            Module[{fPath = fi["path"], orig, fixed},
+              If[FileExistsQ[fPath],
+                orig = Import[fPath, "Text"];
+                fixed = iForceAccessLevelLiterals[orig];
+                If[fixed =!= orig,
+                  Export[fPath, fixed, "Text", CharacterEncoding -> "UTF-8"]]]]],
+          files];
         $iSeparationCheckCache = KeyDrop[$iSeparationCheckCache, target]
       ];
       Return[]];
