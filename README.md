@@ -1,3 +1,5 @@
+---
+
 # claudecode
 
 Mathematica ノートブックから Claude Code CLI を呼び出し、コード生成・デバッグ・パッケージ管理・ドキュメント生成を対話的に行うパッケージです。
@@ -30,7 +32,7 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 パッケージキーワード自動注入システムにより、各外部パッケージが `$ClaudePackageKeywordMap` を通じて独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。これにより claudecode.wl はパッケージ非依存を保ちつつ、必要な API ドキュメントを自動的に提供できます。
 
-ドキュメント生成機能 (`ClaudeCreateDocumentation`, `ClaudeUpdateDocumentation`) では、ソースコードから API リファレンス・使用例・セットアップガイドなどの文書一式を自動生成します。ドキュメント更新時はノートブックの現在のコンテキストも参照でき、「上で議論された内容を反映して」といった自然な指示が可能です。`Disclaimer`・`License`・`Acknowledgments` 等のオプションで免責事項・ライセンス情報・謝辞を指定でき、これらは `doc_options.json` に永続化されて以降の更新でも保持されます。ドキュメント生成にはトークン節約のためソースコードのチャンク化が行われ、ドキュメント種別ごとに関連セクションのみを選択的に送信します。ドキュメント生成専用モデル (`$ClaudeDocModel`) を指定でき、Sonnet クラスの安価なモデルでコスト効率よく生成できます。リミット到達時は自動停止し、再実行で未生成分のみ続行します。ディレクティブファイルの書き込みには、サイズ退行・タイトル整合性・スキル名保持を検証するガード機構 (`iSafeWriteDirective`) が組み込まれています。
+ドキュメント生成機能 (`ClaudeCreateDocumentation`, `ClaudeUpdateDocumentation`) では、ソースコードから API リファレンス・使用例・セットアップガイドなどの文書一式を自動生成します。ドキュメント更新時はノートブックの現在のコンテキストも参照でき、「上で議論された内容を反映して」といった自然な指示が可能です。`TargetFiles` オプションでは `api`・`setup`・`user_manual`・`example`・`README` の5種類の .md ファイルのみが許可リストとして設定されており、拡張子 `.md` は省略可能（自動補完）です。例えば `TargetFiles -> {"api", "user_manual", "README"}` のように拡張子なしで指定できます。指定が許可リスト外の場合はエラーとなります。`Disclaimer`・`License`・`Acknowledgments` 等のオプションで免責事項・ライセンス情報・謝辞を指定でき、これらは `doc_options.json` に永続化されて以降の更新でも保持されます。ドキュメント生成にはトークン節約のためソースコードのチャンク化が行われ、ドキュメント種別ごとに関連セクションのみを選択的に送信します。ドキュメント生成専用モデル (`$ClaudeDocModel`) を指定でき、Sonnet クラスの安価なモデルでコスト効率よく生成できます。リミット到達時は自動停止し、再実行で未生成分のみ続行します。ディレクティブファイルの書き込みには、サイズ退行・タイトル整合性・スキル名保持を検証するガード機構 (`iSafeWriteDirective`) が組み込まれています。
 
 AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImageGenerate`）と OpenAI TTS API による音声合成（`ClaudeSpeech`）を統合しています。ClaudeQuery のリッチレスポンスモードでは、ユーザーの要求に応じて自動的にこれらの API を呼び出すコードや、安全な可視化コード（Plot、Graphics 等）を自動評価します。
 
@@ -162,6 +164,10 @@ ClaudeDeleteSession["セッション名", "All"]
 ClaudeEval["階乗を計算して",
   Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
 
+(* ドキュメントを特定ファイルだけ更新（拡張子省略可） *)
+ClaudeUpdateDocumentation["claudecode", "新機能を追記して",
+  TargetFiles -> {"api", "user_manual", "README"}]
+
 (* パレット表示 *)
 ShowClaudePalette[]
 ```
@@ -241,7 +247,7 @@ ShowClaudePalette[]
 
 **ドキュメント生成**
 - `ClaudeCreateDocumentation["name"]` — パッケージの文書一式を自動生成。`Disclaimer`・`License`・`Acknowledgments` 等のオプションで README に免責事項・ライセンス情報・謝辞を付加可能。リミット到達時は自動停止し、再実行で未生成分のみ続行。`$ClaudeDocModel` で生成専用モデルを指定可能
-- `ClaudeUpdateDocumentation["name", "指示"]` — 既存ドキュメントの更新。ノートブックのコンテキストも参照可能。オプション設定は `doc_options.json` に永続化。ソースコードの差分に基づくチャンク化により、トークン消費を最適化
+- `ClaudeUpdateDocumentation["name", "指示"]` — 既存ドキュメントの更新。ノートブックのコンテキストも参照可能。オプション設定は `doc_options.json` に永続化。ソースコードの差分に基づくチャンク化により、トークン消費を最適化。`TargetFiles` オプションで更新対象を `api`・`setup`・`user_manual`・`example`・`README` の5種類に限定でき（許可リスト外はエラー）、拡張子 `.md` は省略可能（自動補完）
 
 **ディレクティブ管理**
 - `ClaudeAddDirective[target, description]` — CLAUDE.md やスキルファイルにディレクティブを追加。`Scope -> "Local"` でプロジェクト固有のディレクティブも追加可能
@@ -344,6 +350,30 @@ ClaudeQuery["フィボナッチ数列の実装方法を教えてください"]
 $Language = "English"
 ClaudeQuery["Explain how to implement Fibonacci sequence"]
 (* → English explanation is returned *)
+```
+
+### TargetFiles オプションの許可リスト
+
+`ClaudeUpdateDocumentation` の `TargetFiles` オプションには、更新対象として指定できるファイルに許可リストが設けられています。
+
+| 指定値（拡張子省略可） | 実際のファイル |
+|----------------------|--------------|
+| `"api"` または `"api.md"` | `api.md` |
+| `"setup"` または `"setup.md"` | `setup.md` |
+| `"user_manual"` または `"user_manual.md"` | `user_manual.md` |
+| `"example"` または `"example.md"` | `examples/example.md` |
+| `"README"` または `"README.md"` | `README.md` |
+
+拡張子 `.md` は省略可能で自動補完されます。許可リスト外の値を指定するとエラーになります。
+
+```mathematica
+(* 拡張子なしで指定可能 *)
+ClaudeUpdateDocumentation["claudecode", "新機能を追記して",
+  TargetFiles -> {"api", "user_manual", "README"}]
+
+(* 拡張子ありでも同様に動作 *)
+ClaudeUpdateDocumentation["claudecode", "セットアップ手順を更新して",
+  TargetFiles -> {"setup.md"}]
 ```
 
 ### ドキュメント一覧

@@ -7614,8 +7614,8 @@ iPackageSourceFile[packageName_String] :=
     FileNameJoin[{Global`$packageDirectory, packageName <> ".wl"}]
   ];
 
-(* \:30bf\:30a4\:30e0\:30b9\:30bf\:30f3\:30d7\:6587\:5b57\:5217 "YYYYMMDD_HHMMSS" \:307e\:305f\:306f "YYYYMMDDHHMM" \:3092\:8aad\:307f\:3084\:3059\:3044\:5f62\:5f0f\:306b\:5909\:63db *)
-formatTimestamp[ts_String] := Module[{m, m2},
+(* \:30bf\:30a4\:30e0\:30b9\:30bf\:30f3\:30d7\:6587\:5b57\:5217 "YYYYMMDD_HHMMSS", "YYYYMMDDHHMMSS", "YYYYMMDDHHMM" \:3092\:8aad\:307f\:3084\:3059\:3044\:5f62\:5f0f\:306b\:5909\:63db *)
+formatTimestamp[ts_String] := Module[{m, m2, m3},
   (* YYYYMMDD_HHMMSS \:5f62\:5f0f (ClaudeUpdatePackage) → 秒は省略 *)
   m = StringCases[ts,
     RegularExpression["(\\d{4})(\\d{2})(\\d{2})_(\\d{2})(\\d{2})(\\d{2})"] :>
@@ -7624,17 +7624,25 @@ formatTimestamp[ts_String] := Module[{m, m2},
     With[{p = First[m]},
       p[[1]] <> "-" <> p[[2]] <> "-" <> p[[3]] <>
       " " <> p[[4]] <> ":" <> p[[5]]],
-    (* YYYYMMDDHHMM \:5f62\:5f0f (ClaudeUpdateDocumentation) *)
+    (* YYYYMMDDHHMMSS \:5f62\:5f0f (14\:6841\u30fb\:30a2\:30f3\:30c0\:30fc\:30b9\:30b3\:30a2\:306a\:3057) *)
     m2 = StringCases[ts,
-      RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
+      RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
         {"$1", "$2", "$3", "$4", "$5"}];
     If[Length[m2] > 0,
       With[{p = First[m2]},
         p[[1]] <> "-" <> p[[2]] <> "-" <> p[[3]] <>
         " " <> p[[4]] <> ":" <> p[[5]]],
-      ts]
-  ]
-];
+      (* YYYYMMDDHHMM \:5f62\:5f0f (12\:6841\u30fb\:65e7\:5f62\:5f0f) *)
+      m3 = StringCases[ts,
+        RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
+          {"$1", "$2", "$3", "$4", "$5"}];
+      If[Length[m3] > 0,
+        With[{p = First[m3]},
+          p[[1]] <> "-" <> p[[2]] <> "-" <> p[[3]] <>
+          " " <> p[[4]] <> ":" <> p[[5]]],
+        ts]
+    ]]
+  ];
 
 (* \:6307\:5b9a\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:66f4\:65b0\:5c65\:6b74\:30a8\:30f3\:30c8\:30ea\:30ea\:30b9\:30c8\:3092\:8fd4\:3059\:ff08\:5185\:90e8\:7528\:ff09 *)
 packageHistoryEntries[packageName_String] := Module[
@@ -10119,7 +10127,7 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       filteredQueue = $iDocQueue;
       (* \:5c65\:6b74\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: _documentupdate \:4ed8\:304d\:30d5\:30a9\:30eb\:30c0\:306b .wl \:3068 docs \:3092\:4fdd\:5b58 *)
       bdir = backupDir[packageName];
-      timestamp = DateString[Now, {"Year","Month","Day","Hour24","Minute"}];
+      timestamp = DateString[Now, {"Year","Month","Day","Hour24","Minute","Second"}];
       histDir = FileNameJoin[{bdir, timestamp <> "_documentupdate"}];
       CreateDirectory[histDir, CreateIntermediateDirectories -> True];
       Quiet[iSaveBackupWl[histDir, srcFile, packageName]];
@@ -10263,6 +10271,43 @@ iEnsureReadmeLast[docs_List] :=
     Append[withoutReadme, "README.md"]
   ];
 
+(* TargetFiles のバリデーションと正規化。
+   許可されるファイル名: "api.md", "README.md", "setup.md", "user_manual.md", "example.md"
+   拡張子なし ("api","README","setup","user_manual","example") は自動的に .md を付与。
+   不正なファイル名が含まれる場合は $Failed を返す。 *)
+$iAllowedTargetBases = {"api", "README", "setup", "user_manual", "example"};
+$iAllowedTargetFiles = (# <> ".md") & /@ $iAllowedTargetBases;
+
+iNormalizeOneTargetFile[f_String] :=
+  Which[
+    MemberQ[$iAllowedTargetFiles, f], f,
+    MemberQ[$iAllowedTargetBases, f], f <> ".md",
+    True, $Failed
+  ];
+
+iValidateTargetFiles[Automatic] := Automatic;
+iValidateTargetFiles[tf_String] :=
+  Module[{norm = iNormalizeOneTargetFile[tf]},
+    If[norm === $Failed,
+      Message[ClaudeUpdateDocumentation::badtarget, tf, StringRiffle[$iAllowedTargetFiles, ", "]];
+      $Failed,
+      {norm}]
+  ];
+iValidateTargetFiles[tf_List] :=
+  Module[{normed, bad},
+    normed = iNormalizeOneTargetFile /@ tf;
+    bad = Pick[tf, normed, $Failed];
+    If[Length[bad] > 0,
+      Message[ClaudeUpdateDocumentation::badtarget,
+        StringRiffle[bad, ", "], StringRiffle[$iAllowedTargetFiles, ", "]];
+      Return[$Failed]];
+    DeleteDuplicates[normed]
+  ];
+iValidateTargetFiles[_] := Automatic;
+
+ClaudeUpdateDocumentation::badtarget =
+  "TargetFiles に不正なファイル名 `1` が含まれています。許可されるファイル: `2`";
+
 $iDocKeywords = <|
   "README.md"       -> {"README", "readme", "\:6982\:8981", "\:306f\:3058\:3081",
                          "\:30e9\:30a4\:30bb\:30f3\:30b9", "License", "\:514d\:8cac", "Disclaimer",
@@ -10348,7 +10393,7 @@ iCreateDocUpdateBackup[packageName_String, srcFile_String, docsDir_String,
     instruction_String:""] :=
   Module[{bdir, timestamp, histDir},
     bdir = backupDir[packageName];
-    timestamp = DateString[Now, {"Year","Month","Day","Hour24","Minute"}];
+    timestamp = DateString[Now, {"Year","Month","Day","Hour24","Minute","Second"}];
     histDir = FileNameJoin[{bdir, timestamp <> "_documentupdate"}];
     CreateDirectory[histDir, CreateIntermediateDirectories -> True];
     Quiet[iSaveBackupWl[histDir, srcFile, packageName]];
@@ -10428,15 +10473,17 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
       nbPrint[nb, "\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306b\:5909\:66f4\:304c\:3042\:308a\:307e\:305b\:3093\:3002\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:6700\:65b0\:3067\:3059\:3002"];
       Return[]];
     (* \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:5bfe\:8c61\:306b\:3059\:308b *)
+    (* TargetFiles バリデーション *)
+    If[iValidateTargetFiles[OptionValue[TargetFiles]] === $Failed,
+      Return[$Failed]];
     (* 全ドキュメントファイルを対象にする (サブディレクトリ含む)
        ルートと docs/ 等に同名ファイルがある場合はルートを優先 *)
-    allDocs = Module[{rootDocs, subDocs, rootNames, tf},
-      (* TargetFiles オプションが指定されていればそれを使用 *)
+    allDocs = Module[{rootDocs, subDocs, rootNames, tf, vtf},
+      (* TargetFiles オプションが指定されていればバリデーション+正規化 *)
       tf = OptionValue[TargetFiles];
-      If[ListQ[tf] && Length[tf] > 0,
-        Return[iEnsureReadmeLast[tf], Module]];
-      If[StringQ[tf] && tf =!= "",
-        Return[{tf}, Module]];
+      vtf = iValidateTargetFiles[tf];
+      If[ListQ[vtf],
+        Return[iEnsureReadmeLast[vtf], Module]];
       (* Automatic: 全ファイルを検出 *)
       rootDocs = FileNameTake /@ FileNames["*.md", docsDir];
       rootNames = rootDocs;
@@ -10537,16 +10584,16 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     (* Mode を先に解決 *)
     Module[{mode = Replace[OptionValue[ClaudeUpdateDocumentation, {opts}, Mode],
               Except["Create" | "Update"] -> "Update"],
-            tf = OptionValue[ClaudeUpdateDocumentation, {opts}, TargetFiles]},
-    (* TargetFiles が明示的に指定されていればそれを使用 *)
-    targetDocs = If[ListQ[tf] && Length[tf] > 0,
-      nbPrint[nb, "TargetFiles \:6307\:5b9a: " <> StringRiffle[tf, ", "]];
-      iEnsureReadmeLast[tf],
-      If[StringQ[tf] && tf =!= "",
-        nbPrint[nb, "TargetFiles \:6307\:5b9a: " <> tf];
-        {tf},
-        (* 自動判定: Create モードならファイル存在チェックをスキップ *)
-        iGuessTargetDocs[instruction, docsDir, mode === "Create"]]];
+            tf = OptionValue[ClaudeUpdateDocumentation, {opts}, TargetFiles],
+            vtf},
+    (* TargetFiles バリデーション+正規化 *)
+    vtf = iValidateTargetFiles[tf];
+    If[vtf === $Failed, Return[$Failed]];
+    targetDocs = If[ListQ[vtf],
+      nbPrint[nb, "TargetFiles \:6307\:5b9a: " <> StringRiffle[vtf, ", "]];
+      iEnsureReadmeLast[vtf],
+      (* 自動判定: Create モードならファイル存在チェックをスキップ *)
+      iGuessTargetDocs[instruction, docsDir, mode === "Create"]];
     (* 今回の呼び出しで Demos/References が明示的に渡された場合のみ README.md を強制追加 *)
     If[TrueQ[iDocGet[packageName, "ExplicitDemosOrRefs"]] &&
        !MemberQ[targetDocs, "README.md"] &&
@@ -10586,12 +10633,12 @@ ClaudeUpdateDocumentation[packageName_String, items_List, opts:OptionsPattern[]]
       Return[$Failed]];
     If[!DirectoryQ[docsDir],
       Quiet @ CreateDirectory[docsDir, CreateIntermediateDirectories -> True]];
-    (* TargetFiles を取得（図の登録先として使用） *)
-    targetFiles = OptionValue[ClaudeUpdateDocumentation, {opts}, TargetFiles];
-    targetFiles = Which[
-      ListQ[targetFiles] && Length[targetFiles] > 0, targetFiles,
-      StringQ[targetFiles] && targetFiles =!= "", {targetFiles},
-      True, {"user_manual.md", "README.md"}  (* デフォルト: 主要ドキュメント *)
+    (* TargetFiles を取得（図の登録先として使用）+ バリデーション *)
+    targetFiles = iValidateTargetFiles[
+      OptionValue[ClaudeUpdateDocumentation, {opts}, TargetFiles]];
+    If[targetFiles === $Failed, Return[$Failed]];
+    If[!ListQ[targetFiles],
+      targetFiles = {"user_manual.md", "README.md"}  (* デフォルト: 主要ドキュメント *)
     ];
     (* リスト要素を分類: String → テキスト, Image → docs/ に保存 + figures 登録 *)
     Scan[Function[item,
@@ -13997,15 +14044,23 @@ iBackupDirToAbsoluteTime[dirName_String] :=
       Quiet @ AbsoluteTime[{
         StringJoin[Riffle[First[m], {"-", "-", " ", ":", ":"}]],
         {"Year", "-", "Month", "-", "Day", " ", "Hour", ":", "Minute", ":", "Second"}}],
-      (* YYYYMMDDHHMM 形式 *)
+      (* YYYYMMDDHHMMSS 形式 (14桁・アンダースコアなし) *)
       m = StringCases[ts,
-        RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
-          {"$1", "$2", "$3", "$4", "$5"}];
+        RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
+          {"$1", "$2", "$3", "$4", "$5", "$6"}];
       If[Length[m] > 0,
         Quiet @ AbsoluteTime[{
-          StringJoin[Riffle[First[m], {"-", "-", " ", ":"}]],
-          {"Year", "-", "Month", "-", "Day", " ", "Hour", ":", "Minute"}}],
-        0]]];
+          StringJoin[Riffle[First[m], {"-", "-", " ", ":", ":"}]],
+          {"Year", "-", "Month", "-", "Day", " ", "Hour", ":", "Minute", ":", "Second"}}],
+        (* YYYYMMDDHHMM 形式 (12桁・旧形式) *)
+        m = StringCases[ts,
+          RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
+            {"$1", "$2", "$3", "$4", "$5"}];
+        If[Length[m] > 0,
+          Quiet @ AbsoluteTime[{
+            StringJoin[Riffle[First[m], {"-", "-", " ", ":"}]],
+            {"Year", "-", "Month", "-", "Day", " ", "Hour", ":", "Minute"}}],
+          0]]]];
 
 (* 前回コミット以降のバックアップエントリから変更サマリーを収集 *)
 iCollectChangeSummaries[packageName_String, sinceTime_?NumericQ] :=
@@ -14765,14 +14820,21 @@ iBackupDirNameToAbsoluteTime[dirName_String] :=
          ToExpression["$4"], ToExpression["$5"], ToExpression["$6"]}];
     If[Length[m] > 0,
       Quiet @ AbsoluteTime[First[m]],
-      (* YYYYMMDDHHMM 形式 *)
+      (* YYYYMMDDHHMMSS 形式 (14桁・アンダースコアなし) *)
       m = StringCases[ts,
-        RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
+        RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
           {ToExpression["$1"], ToExpression["$2"], ToExpression["$3"],
-           ToExpression["$4"], ToExpression["$5"], 0}];
+           ToExpression["$4"], ToExpression["$5"], ToExpression["$6"]}];
       If[Length[m] > 0,
         Quiet @ AbsoluteTime[First[m]],
-        None]]
+        (* YYYYMMDDHHMM 形式 (12桁・旧形式) *)
+        m = StringCases[ts,
+          RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
+            {ToExpression["$1"], ToExpression["$2"], ToExpression["$3"],
+             ToExpression["$4"], ToExpression["$5"], 0}];
+        If[Length[m] > 0,
+          Quiet @ AbsoluteTime[First[m]],
+          None]]]
   ];
 
 (* ────────────────────────────────────────────────────────

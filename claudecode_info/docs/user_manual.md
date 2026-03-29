@@ -478,25 +478,52 @@ ClaudeUpdatePackage 等の呼び出し時にも、指示文中の日本語表現
 ClaudeUpdateDocumentation["MyPackage", "新機能の説明を追加"]
 
 (* 新規作成モード（既存内容を無視して新規作成） *)
-ClaudeUpdateDocumentation["MyPackage", "setup.mdを作成", 
+ClaudeUpdateDocumentation["MyPackage", "setup.mdを作成",
   TargetFiles -> {"setup.md"}, Mode -> "Create"]
 
-(* 特定ファイルのみ更新 *)
-ClaudeUpdateDocumentation["MyPackage", "API仕様を更新", 
+(* 特定ファイルのみ更新（.md 拡張子あり） *)
+ClaudeUpdateDocumentation["MyPackage", "API仕様を更新",
   TargetFiles -> {"api.md"}]
 
-(* 複数ファイルを同時更新 *)
-ClaudeUpdateDocumentation["MyPackage", "全体的な改善", 
-  TargetFiles -> {"README.md", "user_manual.md"}]
+(* 拡張子なしでも自動補完されます（"api" → "api.md"） *)
+ClaudeUpdateDocumentation["MyPackage", "API仕様を更新",
+  TargetFiles -> {"api"}]
+
+(* 複数ファイルを同時更新（拡張子あり・なし混在も可） *)
+ClaudeUpdateDocumentation["MyPackage", "全体的な改善",
+  TargetFiles -> {"api", "user_manual", "README"}]
 ```
 
 | オプション | デフォルト | 説明 |
 |---|---|---|
 | `Mode` | `"Update"` | `"Update"`: 既存を更新、`"Create"`: 新規作成（既存内容無視） |
-| `TargetFiles` | `Automatic` | 更新対象ファイルのリスト。`Automatic` で全ドキュメントを対象 |
+| `TargetFiles` | `Automatic` | 更新対象ファイルのリスト。`Automatic` で全ドキュメントを対象。許可されるファイル名は下記参照。 |
 | `References` | `{}` | 参考文献リスト（README.md に反映） |
 | `Demos` | `{}` | デモ動画・使用例 URL（README.md に反映） |
 | `Disclaimer` | `{}` | 免責事項（README.md に反映） |
+
+#### TargetFiles の許可リストと拡張子自動補完
+
+`TargetFiles` に指定できるファイルは以下の 5 種類に限定されています。
+
+| ファイル名 | 拡張子省略形 | 説明 |
+|---|---|---|
+| `"api.md"` | `"api"` | API リファレンス |
+| `"README.md"` | `"README"` | パッケージ概要・セットアップ手順 |
+| `"setup.md"` | `"setup"` | インストール手順書 |
+| `"user_manual.md"` | `"user_manual"` | ユーザーマニュアル |
+| `"example.md"` | `"example"` | 使用例集 |
+
+拡張子（`.md`）を省略した形式（例: `"api"`, `"user_manual"`）を指定すると、自動的に `.md` が補完されます。許可リスト外のファイル名を指定した場合は `ClaudeUpdateDocumentation::badtarget` メッセージが表示され、処理は中断されます。
+
+```mathematica
+(* 不正なファイル名を指定した場合のエラー例 *)
+ClaudeUpdateDocumentation["MyPackage", "更新指示",
+  TargetFiles -> {"invalid_file.md"}]
+(* → ClaudeUpdateDocumentation::badtarget:
+       TargetFiles に不正なファイル名 invalid_file.md が含まれています。
+       許可されるファイル: api.md, README.md, setup.md, user_manual.md, example.md *)
+```
 
 ### [実験的] LLM 適用グラフ (LLMGraph)
 
