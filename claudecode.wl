@@ -15,7 +15,7 @@ Quiet[ClearAll[
   iAskDirPermission, iEnsureDirPermission, iIsSafeDefaultDir,
   iGetDirPermission, iSetDirPermission,
   iResolveWebFetch, iResolveWebFetchWithFallback,
-  iWriteQueryResponse, iFlushQueryTextBuf, iSaveDocOptions, iLoadAndMergeDocOptions,
+  iWriteQueryResponse, iWriteQueryResponseQueued, iFlushQueryTextBuf, iSaveDocOptions, iLoadAndMergeDocOptions,
   iDocGet, iDocInitState, iDocBuildRefSection, iDocGlobalInstructionPrompt,
   iDocBuildAcknowledgmentsPrompt, iDocBuildDisclaimerPrompt, iDocBuildLicensePrompt,
   ClaudePrepareCommit, iCollectChangeSummaries, iFormatCommitMessage, iWrapCommitBodyLines,
@@ -3664,6 +3664,178 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
     iFlushQueryTextBuf[nb, textBuf];
   ];
 
+(* iWriteQueryResponseQueued: iWriteQueryResponse \:3068\:540c\:3058\:89e3\:6790\:30ed\:30b8\:30c3\:30af\:3060\:304c\:3001
+   \:30bb\:30eb\:3092\:76f4\:63a5\:66f8\:304d\:8fbc\:307e\:305a Function[] \:306e thunk \:30ea\:30b9\:30c8\:3068\:3057\:3066\:8fd4\:3059\:3002
+   ScheduledTask \:306e writing \:30d5\:30a7\:30fc\:30ba\:304c 1 \:30c6\:30a3\:30c3\:30af 1 thunk \:305a\:3064\:5b9f\:884c\:3059\:308b\:305f\:3081\:3001
+   FrontEnd \:306e\:30d5\:30a9\:30fc\:30de\:30c3\:30c8\:51e6\:7406\:304c\:30c6\:30a3\:30c3\:30af\:9593\:3067\:5b8c\:4e86\:3057\:30ab\:30fc\:30cd\:30eb\:30ed\:30c3\:30af\:3092\:9632\:3050\:3002 *)
+iWriteQueryResponseQueued[nb_NotebookObject, text_String, autoEvaluate_:False] :=
+  Module[{lines, i, line, trimmed, textBuf = {}, content,
+          inCodeBlock = False, codeLang = "", codeBuf = {},
+          processedText, thunks = {}},
+    processedText = If[TrueQ[autoEvaluate],
+      iMergeResponseCodeBlocks[text], text];
+    lines = StringSplit[processedText, "\n"];
+    Do[
+      line = lines[[i]];
+      trimmed = StringTrim[line];
+      Which[
+        (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:958b\:59cb *)
+        !inCodeBlock && StringMatchQ[trimmed, "```" ~~ ___],
+          If[Length[textBuf] > 0,
+            With[{buf2 = textBuf},
+              AppendTo[thunks, Function[
+                NBAccess`NBWriteCell[nb,
+                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+            textBuf = {}];
+          codeLang = StringTrim[StringReplace[trimmed,
+            RegularExpression["^```\\s*"] -> ""]];
+          inCodeBlock = True;
+          codeBuf = {},
+
+        (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:7d42\:4e86 *)
+        inCodeBlock && StringMatchQ[trimmed, "```"],
+          inCodeBlock = False;
+          If[Length[codeBuf] > 0,
+            With[{codeText2 = StringJoin[Riffle[codeBuf, "\n"]],
+                  lang2 = codeLang, ae2 = autoEvaluate},
+              If[MemberQ[{"mathematica", "wolfram", "wl", "mma"}, ToLowerCase[lang2]],
+                AppendTo[thunks, Function[iWriteSmartCell[nb, codeText2, ae2]]],
+                AppendTo[thunks, Function[
+                  NBAccess`NBWriteCell[nb, Cell[codeText2, "Program"]]]]]]];
+          codeBuf = {};
+          codeLang = "",
+
+        inCodeBlock,
+          AppendTo[codeBuf, line],
+
+        trimmed === "",
+          If[Length[textBuf] > 0,
+            With[{buf2 = textBuf},
+              AppendTo[thunks, Function[
+                NBAccess`NBWriteCell[nb,
+                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+            textBuf = {}],
+
+        StringContainsQ[trimmed, RegularExpression["^#{3,}\\s"]],
+          If[Length[textBuf] > 0,
+            With[{buf2 = textBuf},
+              AppendTo[thunks, Function[
+                NBAccess`NBWriteCell[nb,
+                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+            textBuf = {}];
+          content = StringReplace[StringTrim[StringReplace[trimmed,
+            RegularExpression["^#{3,}\\s*"] -> ""]], "**" -> ""];
+          With[{c2 = content},
+            AppendTo[thunks, Function[
+              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Subsubsection"]]]]],
+
+        StringContainsQ[trimmed, RegularExpression["^#{2}\\s"]],
+          If[Length[textBuf] > 0,
+            With[{buf2 = textBuf},
+              AppendTo[thunks, Function[
+                NBAccess`NBWriteCell[nb,
+                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+            textBuf = {}];
+          content = StringReplace[StringTrim[StringReplace[trimmed,
+            RegularExpression["^#{2}\\s*"] -> ""]], "**" -> ""];
+          With[{c2 = content},
+            AppendTo[thunks, Function[
+              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Subsection"]]]]],
+
+        StringContainsQ[trimmed, RegularExpression["^#\\s"]],
+          If[Length[textBuf] > 0,
+            With[{buf2 = textBuf},
+              AppendTo[thunks, Function[
+                NBAccess`NBWriteCell[nb,
+                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+            textBuf = {}];
+          content = StringReplace[StringTrim[StringReplace[trimmed,
+            RegularExpression["^#\\s*"] -> ""]], "**" -> ""];
+          With[{c2 = content},
+            AppendTo[thunks, Function[
+              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Subsection"]]]]],
+
+        StringContainsQ[line, RegularExpression["^(\\s{4,}|\\t\\t)[-*\:2022]\\s"]],
+          If[Length[textBuf] > 0,
+            With[{buf2 = textBuf},
+              AppendTo[thunks, Function[
+                NBAccess`NBWriteCell[nb,
+                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+            textBuf = {}];
+          content = StringReplace[StringTrim[StringReplace[trimmed,
+            RegularExpression["^[-*\:2022]\\s*"] -> ""]], "**" -> ""];
+          With[{c2 = content},
+            AppendTo[thunks, Function[
+              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Subsubitem"]]]]],
+
+        StringContainsQ[line, RegularExpression["^(\\s{2,3}|\\t)[-*\:2022]\\s"]],
+          If[Length[textBuf] > 0,
+            With[{buf2 = textBuf},
+              AppendTo[thunks, Function[
+                NBAccess`NBWriteCell[nb,
+                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+            textBuf = {}];
+          content = StringReplace[StringTrim[StringReplace[trimmed,
+            RegularExpression["^[-*\:2022]\\s*"] -> ""]], "**" -> ""];
+          With[{c2 = content},
+            AppendTo[thunks, Function[
+              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Subitem"]]]]],
+
+        StringContainsQ[trimmed, RegularExpression["^[-*\:2022]\\s"]],
+          If[Length[textBuf] > 0,
+            With[{buf2 = textBuf},
+              AppendTo[thunks, Function[
+                NBAccess`NBWriteCell[nb,
+                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+            textBuf = {}];
+          content = StringReplace[StringTrim[StringReplace[trimmed,
+            RegularExpression["^[-*\:2022]\\s*"] -> ""]], "**" -> ""];
+          With[{c2 = content},
+            AppendTo[thunks, Function[
+              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Item"]]]]],
+
+        StringContainsQ[trimmed, RegularExpression["^\\d+\\.\\s"]],
+          If[Length[textBuf] > 0,
+            With[{buf2 = textBuf},
+              AppendTo[thunks, Function[
+                NBAccess`NBWriteCell[nb,
+                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+            textBuf = {}];
+          content = StringReplace[StringTrim[StringReplace[trimmed,
+            RegularExpression["^\\d+\\.\\s*"] -> ""]], "**" -> ""];
+          With[{c2 = content},
+            AppendTo[thunks, Function[
+              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Item"]]]]],
+
+        StringMatchQ[trimmed, RegularExpression["^[-*_]{3,}$"]],
+          If[Length[textBuf] > 0,
+            With[{buf2 = textBuf},
+              AppendTo[thunks, Function[
+                NBAccess`NBWriteCell[nb,
+                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+            textBuf = {}],
+
+        True,
+          content = StringReplace[trimmed, {"**" -> "", "__" -> ""}];
+          AppendTo[textBuf, content]
+      ],
+      {i, Length[lines]}];
+
+    If[inCodeBlock && Length[codeBuf] > 0,
+      With[{codeText2 = StringJoin[Riffle[codeBuf, "\n"]],
+            lang2 = codeLang, ae2 = autoEvaluate},
+        If[MemberQ[{"mathematica", "wolfram", "wl", "mma"}, ToLowerCase[lang2]],
+          AppendTo[thunks, Function[iWriteSmartCell[nb, codeText2, ae2]]],
+          AppendTo[thunks, Function[
+            NBAccess`NBWriteCell[nb, Cell[codeText2, "Program"]]]]]]];
+    If[Length[textBuf] > 0,
+      With[{buf2 = textBuf},
+        AppendTo[thunks, Function[
+          NBAccess`NBWriteCell[nb,
+            iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]]];
+    thunks
+  ];
+
 (* ============================================================
    \:30b3\:30a2\:547c\:3073\:51fa\:3057\:95a2\:6570
    ============================================================ *)
@@ -4690,8 +4862,10 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
         iFallbackNotifyAndLog[nb,
           iL["\[WarningSign] \:5168\:30e2\:30c7\:30eb\:304c\:5229\:7528\:4e0d\:53ef\:3067\:3059\:3002", "\[WarningSign] All models are unavailable."], Red]];
       If[!TrueQ[$iFallbackDone], $iFallbackDone = True;
-        callback[If[StringQ[$iFallbackLastError] && $iFallbackLastError =!= "",
-          $iFallbackLastError, $Failed]]];
+        Module[{queue = callback[If[StringQ[$iFallbackLastError] && $iFallbackLastError =!= "",
+            $iFallbackLastError, $Failed]]},
+          If[ListQ[queue],
+            Scan[Function[thk, Quiet[thk[]]], queue]]]];
       Return[]];
     (* モデル指定を展開: {provider, model} または {provider, model, url} *)
     Module[{entry = models[[modelIdx]]},
@@ -4807,7 +4981,10 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
                       "\[Checkmark] " <> mods[[mIdx, 1]] <> "/" <> mods[[mIdx, 2]] <>
                       " " <> iL["\:3067\:5fdc\:7b54\:3092\:53d6\:5f97\:3057\:307e\:3057\:305f\:3002", " response obtained."], RGBColor[0, 0.5, 0.2]];
                     Quiet[SelectionMove[pNb, After, Notebook]]];
-                  cb[text]],
+                  (* callback \:304c thunk \:30ea\:30b9\:30c8\:3092\:8fd4\:3059\:5834\:5408\:306b\:5bfe\:5fdc *)
+                  Module[{queue = cb[text]},
+                    If[ListQ[queue],
+                      Scan[Function[thk, Quiet[thk[]]], queue]]]],
                 (* エラー: 最後のエラーを保存して次のモデルへ *)
                 If[StringQ[text], $iFallbackLastError = text];
                 iStartFallbackAsync[pmt, pNb, cb, mods, mIdx + 1, jid, tmo, mf]
@@ -5522,7 +5699,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
             ccBefore = NBAccess`NBCellCount[nb],
             ae = autoEvaluate},
         Function[response,
-          Module[{},
+          Module[{cellThunks},
             (* \:30a2\:30f3\:30ab\:30fc\:306e\:76f4\:5f8c\:306b\:51fa\:529b\:3092\:914d\:7f6e *)
             NBAccess`NBJobMoveToAnchor[jid];
             $iJobActiveNb = nb2;
@@ -5535,22 +5712,24 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
               iSessionUpdateLast[nb2, stag2, <|
                 "response" -> response,
                 "cellCountAfter" -> NBAccess`NBCellCount[nb2]|>];
-              Return[]];
-            If[StringQ[response],
-              iWriteQueryResponse[nb2, response, ae],
-              NBAccess`NBWriteCell[nb2,
-                Cell[iL["Error: \:5fdc\:7b54\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002", "Error: Could not obtain a response."], "Text"]]];
-            (* 高 AccessLevel の場合、新規セルを自動秘密マーク *)
-            If[TrueQ[autoMark],
-              iAutoMarkNewCellsConfidential[nb2, ccBefore]];
-            (* ジョブ終了: 進捗スロットを未使用に戻して削除 *)
-            NBAccess`NBJobResetSlotWritten[jid, 1];
-            $iJobActiveNb = None;
-            NBAccess`NBEndJob[jid];
-            iSessionUpdateLast[nb2, stag2, <|
-              "response"       -> response,
-              "cellCountAfter" -> NBAccess`NBCellCount[nb2]
-            |>]
+              Return[{}]];
+            (* \:6b63\:5e38\:5fdc\:7b54: thunk \:30ea\:30b9\:30c8\:3092\:751f\:6210\:3057 writing \:30d5\:30a7\:30fc\:30ba\:306b\:59d4\:8b72 *)
+            cellThunks = If[StringQ[response],
+              iWriteQueryResponseQueued[nb2, response, ae],
+              {Function[NBAccess`NBWriteCell[nb2,
+                Cell[iL["Error: \:5fdc\:7b54\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002", "Error: Could not obtain a response."], "Text"]]]}];
+            (* \:6700\:5f8c\:306e thunk \:306b\:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7\:51e6\:7406\:3092\:8ffd\:52a0 *)
+            AppendTo[cellThunks, Function[
+              If[TrueQ[autoMark],
+                iAutoMarkNewCellsConfidential[nb2, ccBefore]];
+              NBAccess`NBJobResetSlotWritten[jid, 1];
+              $iJobActiveNb = None;
+              NBAccess`NBEndJob[jid];
+              iSessionUpdateLast[nb2, stag2, <|
+                "response"       -> response,
+                "cellCountAfter" -> NBAccess`NBCellCount[nb2]
+              |>]]];
+            cellThunks
           ]
         ]
       ];
