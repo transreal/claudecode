@@ -19,7 +19,12 @@ Quiet[ClearAll[
   iDocGet, iDocInitState, iDocBuildRefSection, iDocGlobalInstructionPrompt,
   iDocBuildAcknowledgmentsPrompt, iDocBuildDisclaimerPrompt, iDocBuildLicensePrompt,
   ClaudePrepareCommit, iCollectChangeSummaries, iFormatCommitMessage, iWrapCommitBodyLines,
-  iClearAllClaudeHistory, iForceAccessLevelLiterals
+  iClearAllClaudeHistory, iForceAccessLevelLiterals,
+  iAttachmentMetaFile, iLoadAttachmentMeta, iSaveAttachmentMeta,
+  iUpdateAttachmentMeta, iGetAttachmentMeta, iIsURL,
+  iCacheURLAttachment, iMatchAttachmentsByKeyword,
+  iSanitizeFileName, iExtractHTMLTitle, iURLSlug, iFindCachedURLFile,
+  iFindCachedURLFileAny
 ]];
 
 (* NBAccess \:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:30ed\:30fc\:30c9 (\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:8aad\:307f\:66f8\:304d\:30fb\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:7ba1\:7406) *)
@@ -71,6 +76,7 @@ Quiet[Scan[
    "Fallback", "AutoPrivate", "AutoEvaluate", "StartTime", "Timeout",
    "TargetFiles", "TargetFunctions", "Mode", "DryRun", "Inherit",
    "License", "Model", "WebFetch", "WebSearch", "RepeatInterval", "PrivacySpec",
+   "Keywords", "Title", "Refetch",
    "Owner", "Repository", "Branch", "BaseBranch",
    "References", "Demos", "Disclaimer", "Acknowledgments"}
 ], Remove::ssym];
@@ -476,8 +482,11 @@ ClaudeQuery::usage =
   "ClaudeShowHistory[\"name\"] \:306f\:6307\:5b9a\:540d\:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\:3092\:8868\:793a\:3059\:308b\:3002";
 ClaudeAttach::usage =
   "ClaudeAttach[path] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306b\:53c2\:8003\:8cc7\:6599\:3092\:30a2\:30bf\:30c3\:30c1\:3059\:308b\:3002\n" <>
+  "ClaudeAttach[url] \:306f URL \:306e\:30da\:30fc\:30b8\:3092 PDF \:5316\:3057\:3066\:30ad\:30e3\:30c3\:30b7\:30e5\:3057\:30a2\:30bf\:30c3\:30c1\:3059\:308b\:3002\n" <>
   "ClaudeAttach[session, path] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:306b\:30a2\:30bf\:30c3\:30c1\:3059\:308b\:3002\n" <>
-  "\:30a2\:30bf\:30c3\:30c1\:3055\:308c\:305f\:30d5\:30a1\:30a4\:30eb\:306f ClaudeQuery/ClaudeEval \:6642\:306b\:81ea\:52d5\:7684\:306b Read \:3055\:308c\:308b\:3002";
+  "\:30a2\:30bf\:30c3\:30c1\:3055\:308c\:305f\:30d5\:30a1\:30a4\:30eb\:306f ClaudeQuery/ClaudeEval \:6642\:306b\:81ea\:52d5\:7684\:306b Read \:3055\:308c\:308b\:3002\n" <>
+  "Options: Keywords -> {}, Title -> None, Refetch -> False\:3002\n" <>
+  "Keywords \:3067\:767b\:9332\:3059\:308b\:3068\:30d7\:30ed\:30f3\:30d7\:30c8\:4e2d\:306e\:30ad\:30fc\:30ef\:30fc\:30c9\:306b\:5fdc\:3058\:3066\:81ea\:52d5\:6ce8\:5165\:3055\:308c\:308b\:3002";
 ClaudeDetach::usage =
   "ClaudeDetach[path] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:304b\:3089\:30d5\:30a1\:30a4\:30eb\:3092\:30c7\:30bf\:30c3\:30c1\:3059\:308b\:3002\n" <>
   "ClaudeDetach[session, path] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:304b\:3089\:30c7\:30bf\:30c3\:30c1\:3059\:308b\:3002";
@@ -874,14 +883,20 @@ iResolveNotebookFiles[prompt_String] :=
 iResolveNotebookFiles[prompt_List] := prompt;
 iResolveNotebookFiles[prompt_] := prompt;
 
-(* プロンプトにセッションアタッチメント + NotebookDirectory ファイルを注入する *)
+(* プロンプトにセッションアタッチメント + キーワードマッチ + NotebookDirectory ファイルを注入する *)
 iInjectAttachments[prompt_] :=
-  Module[{result},
+  Module[{result, sessionFiles, kwFiles, allFiles, promptText},
     result = iResolveNotebookFiles[prompt];
-    If[Length[$iCurrentSessionAttachments] === 0,
+    promptText = If[StringQ[prompt], prompt,
+      If[ListQ[prompt], StringJoin[ToString /@ prompt], ToString[prompt]]];
+    sessionFiles = File /@ Select[
+      If[ListQ[$iCurrentSessionAttachments], $iCurrentSessionAttachments, {}],
+      FileExistsQ];
+    kwFiles = File /@ iMatchAttachmentsByKeyword[promptText];
+    allFiles = DeleteDuplicates[Join[sessionFiles, kwFiles]];
+    If[Length[allFiles] === 0,
       result,
-      Join[File /@ Select[$iCurrentSessionAttachments, FileExistsQ],
-           If[ListQ[result], result, {result}]]
+      Join[allFiles, If[ListQ[result], result, {result}]]
     ]
   ];
 
@@ -1088,7 +1103,28 @@ iFileAccessContext[userPrompt_String:""] := Module[
     Select[$iCurrentSessionAttachments, StringQ[#] && FileExistsQ[#] &], {}];
   If[Length[attachments] > 0,
     AppendTo[lines, "Session Attachments:"];
-    Do[AppendTo[lines, "  - " <> a], {a, attachments}]];
+    Do[Module[{meta = iGetAttachmentMeta[a], kws, ttl, src},
+      kws = Lookup[meta, "keywords", {}];
+      ttl = Lookup[meta, "title", ""];
+      src = Lookup[meta, "source", ""];
+      AppendTo[lines, "  - " <> a <>
+        If[StringQ[ttl] && ttl =!= "", "  [" <> ttl <> "]", ""] <>
+        If[ListQ[kws] && Length[kws] > 0, "  Keywords:" <> ToString[kws], ""] <>
+        If[StringQ[src] && iIsURL[src], "  (URL:" <> StringTake[src, UpTo[80]] <> ")", ""]]],
+      {a, attachments}]];
+
+  (* キーワード/タイトルマッチによる自動注入アタッチメント *)
+  Module[{kwMatched},
+    kwMatched = iMatchAttachmentsByKeyword[userPrompt];
+    If[Length[kwMatched] > 0,
+      AppendTo[lines, "Keyword-Matched Reference Files (auto-injected, read these when relevant):"];
+      Do[Module[{meta = iGetAttachmentMeta[kf], ttl, src},
+        ttl = Lookup[meta, "title", ""];
+        src = Lookup[meta, "source", ""];
+        AppendTo[lines, "  - " <> kf <>
+          If[StringQ[ttl] && ttl =!= "", "  [" <> ttl <> "]", ""] <>
+          If[StringQ[src] && iIsURL[src], "  (URL:" <> StringTake[src, UpTo[80]] <> ")", ""]]],
+        {kf, kwMatched}]]];
 
   If[nbDirReadable,
     AppendTo[lines, "IMPORTANT: When files from NotebookDirectory or attachments " <>
@@ -1250,6 +1286,21 @@ iClaudeSysPrompt[] :=
    nbPrint が末尾に飛ばすと出力位置がずれる。
    非 Job パス (ClaudeUpdateDocumentation 等) では末尾移動が必要。 *)
 $iJobActiveNb = None;
+
+(* EvaluationCell を公開関数の冒頭で捕捉し、NBBeginJob に渡す。
+   ClaudeQuery → iClaudeQueryImpl → NBBeginJob の呼び出しチェーンで、
+   途中の重い処理で評価コンテキストがずれるのを防ぐ。 *)
+$iCurrentEvalCell = None;
+
+iCaptureEvalCell[] := (
+  $iCurrentEvalCell = Quiet @ EvaluationCell[];
+  If[Head[$iCurrentEvalCell] =!= CellObject, $iCurrentEvalCell = None]);
+
+iBeginJobAtCapturedCell[nb_NotebookObject] :=
+  Module[{cell = $iCurrentEvalCell},
+    $iCurrentEvalCell = None;
+    NBAccess`NBBeginJob[nb, cell]
+  ];
 
 nbPrint[nb_, text_String, style_String:"Text"] := (
   If[nb =!= $iJobActiveNb,
@@ -2693,6 +2744,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
       "startTime" -> startTime,
       "outFile" -> outFile,
       "process" -> proc,
+      "nb" -> nb,
       "lineCount" -> 0,
       "textFragments" -> 0,
       "thinkingFragments" -> 0,
@@ -2820,7 +2872,10 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
 
             (* === Phase: writing — 表示と実行を交互ティックで分離 ===
                writeSub="disp": WindowStatusArea 更新のみ (FrontEnd に描画時間を与える)
-               writeSub="exec": thunk 1つ実行 *)
+               writeSub="exec": thunk 1つ実行
+               テイルマーカー: アンカー直後に不可視セルを挿入し、
+               thunk 書き込み前に毎回そこへカーソルを復帰する。
+               ユーザーがティック間にカーソルを移動しても安全。 *)
             phase === "writing",
               Module[{idx, total, queue, thunk, sub},
                 idx   = Lookup[$claudeProgress[k], "writeIdx", 1];
@@ -2828,7 +2883,9 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                 queue = Lookup[$claudeProgress[k], "writeQueue", {}];
                 sub   = Lookup[$claudeProgress[k], "writeSub", "disp"];
                 If[idx > Length[queue],
-                  (* 全ステップ完了 *)
+                  (* 全ステップ完了: テイルマーカー削除 *)
+                  Module[{tt = Lookup[$claudeProgress[k], "writeTailTag", ""]},
+                    If[tt =!= "", Quiet[NBAccess`NBDeleteCellsByTag[pNb, tt]]]];
                   Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
                   $claudeProgress[k]["phase"] = "done",
                   If[sub === "disp",
@@ -2839,7 +2896,26 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                     $claudeProgress[k]["writeSub"] = "exec",
                     (* 実行ティック: thunk を 1 つ実行 + 所要時間を記録 *)
                     thunk = queue[[idx]];
-                    If[idx === 1 && uj, NBAccess`NBJobMoveToAnchor[jid]];
+                    (* カーソル位置を正しく復元 (ユーザーがカーソルを動かしても安全) *)
+                    If[uj,
+                      Module[{tailTag, tailCells},
+                        If[idx === 1,
+                          (* 初回: アンカー直後にテイルマーカー (不可視) を挿入 *)
+                          NBAccess`NBJobMoveToAnchor[jid];
+                          tailTag = "claude-tail-" <> jid;
+                          $claudeProgress[k]["writeTailTag"] = tailTag;
+                          Quiet[NotebookWrite[pNb,
+                            Cell["", "Text", CellOpen -> False,
+                              ShowCellBracket -> False,
+                              CellMargins -> {{0,0},{0,0}},
+                              CellElementSpacings -> {"CellMinHeight" -> 0},
+                              CellTags -> {tailTag}], After]]];
+                        (* 毎回: テイルマーカーの直前にカーソルを移動 *)
+                        tailTag = Lookup[$claudeProgress[k], "writeTailTag", ""];
+                        If[tailTag =!= "",
+                          tailCells = Quiet[Cells[pNb, CellTags -> tailTag]];
+                          If[ListQ[tailCells] && Length[tailCells] > 0,
+                            Quiet[SelectionMove[First[tailCells], Before, Cell]]]]]];
                     Module[{t1 = AbsoluteTime[], dt},
                       Quiet @ Check[thunk[], Null];
                       dt = AbsoluteTime[] - t1;
@@ -5147,11 +5223,16 @@ ClaudeAbort[] :=
     (* 1. メイン ScheduledTask + プロセスを停止 *)
     keys = If[AssociationQ[$claudeProgress], Keys[$claudeProgress], {}];
     Do[
-      Module[{info = $claudeProgress[key], proc, sym},
+      Module[{info = $claudeProgress[key], proc, sym, tailTag, abortNb},
         If[!AssociationQ[info], Continue[]];
         (* Claude Code プロセスを強制終了 *)
         proc = Lookup[info, "process", None];
         If[proc =!= None, Quiet[KillProcess[proc]]];
+        (* テイルマーカーを削除 *)
+        tailTag = Lookup[info, "writeTailTag", ""];
+        abortNb = Lookup[info, "nb", None];
+        If[tailTag =!= "" && Head[abortNb] === NotebookObject,
+          Quiet[NBAccess`NBDeleteCellsByTag[abortNb, tailTag]]];
         (* ScheduledTask を停止 *)
         sym = Quiet[Symbol["ClaudeCode`Private`$task" <> key]];
         If[Head[sym] =!= Symbol,
@@ -5203,8 +5284,15 @@ iClaudeSessionStatusImpl[nb_NotebookObject, tag_String, name_String] :=
     attachments = If[AssociationQ[hdr], iResolveAttachPath /@ Lookup[hdr, "attachments", {}], {}];
     Print[Style[iL["\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8", "Attachments"], Bold, 12]];
     If[ListQ[attachments] && Length[attachments] > 0,
-      Do[Print["  \:30fb ", a,
-        If[FileExistsQ[a], "  (" <> ToString[FileByteCount[a]] <> " bytes)", iL[iL["  (\:5b58\:5728\:3057\:306a\:3044)", "  (not found)"], "  (not found)"]]],
+      Do[Module[{meta = iGetAttachmentMeta[a], kws, ttl, src},
+        kws = Lookup[meta, "keywords", {}];
+        ttl = Lookup[meta, "title", ""];
+        src = Lookup[meta, "source", ""];
+        Print["  \:30fb ", a,
+          If[FileExistsQ[a], "  (" <> ToString[FileByteCount[a]] <> " bytes)", iL["  (\:5b58\:5728\:3057\:306a\:3044)", "  (not found)"]],
+          If[StringQ[ttl] && ttl =!= "", "  [" <> ttl <> "]", ""],
+          If[ListQ[kws] && Length[kws] > 0, "  Keywords:" <> ToString[kws], ""],
+          If[StringQ[src] && iIsURL[src], "  \:2190URL", ""]]],
         {a, attachments}],
       Print[iL["  (\:306a\:3057)", "  (none)"]]];
     Print[""];
@@ -5590,7 +5678,7 @@ ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPatter
       ]];
 
     (* === Job システム: iClaudeQueryImpl と完全に同じ === *)
-    jobId = NBAccess`NBBeginJobAtEvalCell[nb];
+    jobId = iBeginJobAtCapturedCell[nb];
 
     useClaudeCode = NBAccess`NBProviderCanAccess["claudecode", accessLevel];
     availModels = If[useFallback && !hasMedia,
@@ -5691,7 +5779,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
     iSessionAppend[nb, tag, entry];
 
     (* Job \:30b7\:30b9\:30c6\:30e0\:3067\:8a55\:4fa1\:30bb\:30eb\:76f4\:5f8c\:306b\:30b9\:30ed\:30c3\:30c8\:3092\:4e88\:7d04 *)
-    jobId = NBAccess`NBBeginJobAtEvalCell[nb];
+    jobId = iBeginJobAtCapturedCell[nb];
 
     (* アクセスレベルに基づいてフォールバック可能モデルを取得 *)
     availModels = If[TrueQ[useFallback],
@@ -5784,6 +5872,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
   ];
 
 ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
+    iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = True;
     $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
@@ -5804,6 +5893,7 @@ ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
 
 (* セッション対応版 ClaudeQuery（非同期・履歴保存付き） *)
 ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
+    iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[ClaudeQuery, {opts}, Fallback]];
     $iAllowReadTool = True;
     $iAllowWebSearch = TrueQ[OptionValue[ClaudeQuery, {opts}, WebSearch]];
@@ -5827,6 +5917,7 @@ ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
 (* リスト入力版 ClaudeQuery: {"質問", Image[...], File["path"], ...}
    画像・PDF・音声ファイルを API にマルチモーダルコンテンツとして直接送信する。 *)
 ClaudeQuery[items_List, opts:OptionsPattern[]] := (
+    iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = True;
     $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
@@ -5845,6 +5936,7 @@ ClaudeQuery[items_List, opts:OptionsPattern[]] := (
 
 (* セッション指定版リスト入力 ClaudeQuery *)
 ClaudeQuery[session_Association, items_List, opts:OptionsPattern[]] := (
+    iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[ClaudeQuery, {opts}, Fallback]];
     $iAllowReadTool = True;
     $iAllowWebSearch = TrueQ[OptionValue[ClaudeQuery, {opts}, WebSearch]];
@@ -6490,7 +6582,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
       |>];
 
       (* Job スロット確保 *)
-      Module[{jid = NBAccess`NBBeginJobAtEvalCell[nb]},
+      Module[{jid = iBeginJobAtCapturedCell[nb]},
         NBAccess`NBJobMoveToAnchor[jid];
 
         (* 説明テキストを出力 *)
@@ -6571,7 +6663,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     ]; (* End normal task Module *)
 
     (* Job \:30b7\:30b9\:30c6\:30e0\:3067\:8a55\:4fa1\:30bb\:30eb\:76f4\:5f8c\:306b\:30b9\:30ed\:30c3\:30c8\:3092\:4e88\:7d04 *)
-    jobId = NBAccess`NBBeginJobAtEvalCell[nb];
+    jobId = iBeginJobAtCapturedCell[nb];
 
     (* アクセスレベルに基づいてフォールバック可能モデルを取得 *)
     availModels = If[TrueQ[$currentUseFallback],
@@ -6900,6 +6992,7 @@ iResolveWebFetch[task_String, Automatic] :=
   ];
 
 ClaudeEval[task_String, opts:OptionsPattern[]] := (
+    iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = False;
     $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
@@ -6921,6 +7014,7 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := (
 
 (* リスト入力版: {"指示", data, Image, ...} *)
 ClaudeEval[items_List, opts:OptionsPattern[]] := (
+    iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = False;
     $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
@@ -6946,6 +7040,7 @@ ClaudeEval[items_List, opts:OptionsPattern[]] := (
 
 (* セッション指定版 ClaudeEval *)
 ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := (
+    iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[ClaudeEval, {opts}, Fallback]];
     $iAllowReadTool = False;
     $iAllowWebSearch = TrueQ[OptionValue[ClaudeEval, {opts}, WebSearch]];
@@ -6965,6 +7060,7 @@ ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := (
   ]);
 
 ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := (
+    iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[ClaudeEval, {opts}, Fallback]];
     $iAllowReadTool = False;
     $iAllowWebSearch = TrueQ[OptionValue[ClaudeEval, {opts}, WebSearch]];
@@ -7033,7 +7129,7 @@ iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :
     iSessionAppend[nb, tag, entry];
 
     (* Job \:30b7\:30b9\:30c6\:30e0\:3067\:30b9\:30ed\:30c3\:30c8\:3092\:4e88\:7d04 *)
-    jobId = NBAccess`NBBeginJobAtEvalCell[nb];
+    jobId = iBeginJobAtCapturedCell[nb];
 
     iClaudeQueryAsyncWithProgress[
       contextPrompt,
@@ -7063,6 +7159,7 @@ iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :
   ];
 
 ClaudeSpec[task_String] := (
+    iCaptureEvalCell[];
     $currentUseFallback = True;
   With[{nb = EvaluationNotebook[]},
     iPrecisionConfidentialCheck[nb];
@@ -7070,6 +7167,7 @@ ClaudeSpec[task_String] := (
   ]);
 
 ClaudeSpec[items_List] := (
+    iCaptureEvalCell[];
     $currentUseFallback = True;
   With[{nb = EvaluationNotebook[]},
   Module[{norm},
@@ -8904,6 +9002,7 @@ iExpandWithDeps[targets_List, blocks_Association] :=
 Options[ClaudeCreatePackage] = {Fallback -> False};
 
 ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] := (
+    iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
   With[{nb = EvaluationNotebook[]},
   Module[{destFile, prompt, beginMark, endMark, sessionDir, bdir, timestamp,
@@ -8968,7 +9067,7 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
 
   iSaveSessionMedia[sessionDir, prompt, imgDirs];
 
-  jobId = NBAccess`NBBeginJobAtEvalCell[nb];
+  jobId = iBeginJobAtCapturedCell[nb];
   iClaudeQueryAsyncWithProgress[prompt,
     With[{nb2 = nb, bm = beginMark, em = endMark,
           sf = destFile, sd = sessionDir, pn = packageName, jid = jobId},
@@ -9042,6 +9141,7 @@ If[!AssociationQ[$iLastUpdateInfo], $iLastUpdateInfo = <||>];
 $iContinueUpdateFlag = False;  (* ContinueUpdate から呼ばれた場合に True *)
 
 ClaudeUpdatePackage[packageName_String, updatePrompt_, opts:OptionsPattern[]] := (
+  iCaptureEvalCell[];
   $currentUseFallback = TrueQ[OptionValue[Fallback]];
   (* ContinueUpdate 用に呼び出し情報を記録 *)
   $iLastUpdateInfo = <|
@@ -9096,7 +9196,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
     iWriteSectionHeaderBeforeEvalCell[nb,
       "\:25b6 ClaudeUpdatePackage: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
-    jobId = NBAccess`NBBeginJobAtEvalCell[nb]
+    jobId = iBeginJobAtCapturedCell[nb]
   ];
 
   updatePromptNorm = iNormalizePrompt[updatePrompt];
@@ -10622,6 +10722,7 @@ Options[ClaudeUpdateDocumentation] = {
 
 (* 1\:5f15\:6570\:7248: \:524d\:56de _documentupdate \:4ee5\:964d\:306e\:5909\:66f4\:3092\:81ea\:52d5\:691c\:51fa\:3057\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0 *)
 ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
+  iCaptureEvalCell[];
   $currentUseFallback = TrueQ[OptionValue[Fallback]];
   iDocInitState[packageName,
     Replace[OptionValue[References], Except[_List] -> {}],
@@ -10716,6 +10817,7 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
 
 (* 2\:5f15\:6570\:7248: \:6307\:793a\:4ed8\:304d\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0 *)
 ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPattern[]] := (
+  iCaptureEvalCell[];
   $currentUseFallback = TrueQ[OptionValue[Fallback]];
   Module[{urlsInInstr, initDemos, initRefs, explicitDemos, explicitRefs},
     initRefs = Replace[OptionValue[References], Except[_List] -> {}];
@@ -10823,7 +10925,8 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
 (* リスト入力版: {"指示", Image, Image, ...} の形式で画像付きドキュメント更新
    Image オブジェクトは docs/ に保存され、マークダウンで参照される。
    Anthropic API 経由でマルチモーダル送信される。 *)
-ClaudeUpdateDocumentation[packageName_String, items_List, opts:OptionsPattern[]] :=
+ClaudeUpdateDocumentation[packageName_String, items_List, opts:OptionsPattern[]] := (
+  iCaptureEvalCell[];
   Module[{texts = {}, images = {}, imgIdx = 0, docsDir, imgName, imgPath, mediaFiles = {},
           targetFiles, figEntries = {}},
     docsDir = iPackageDocsDir[packageName];
@@ -10888,7 +10991,7 @@ ClaudeUpdateDocumentation[packageName_String, items_List, opts:OptionsPattern[]]
     $iDocMediaFiles = mediaFiles;
     (* String 版を呼び出し *)
     ClaudeUpdateDocumentation[packageName, StringJoin[Riffle[texts, "\n"]], opts]
-  ];
+  ]);
 
 (* ドキュメントを順次更新する再帰関数 (差分対応版・トークン節約版) *)
 iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
@@ -12727,6 +12830,9 @@ ClaudeShowHistory[name_String] := Module[{nb, tag},
    ============================================================ *)
 
 ClaudeAttach::notfound = "\:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: `1`";
+ClaudeAttach::urlfail = "URL \:306e\:53d6\:5f97\:306b\:5931\:6557\:3057\:307e\:3057\:305f: `1`";
+
+Options[ClaudeAttach] = {Keywords -> {}, Title -> None, Refetch -> False};
 
 (* デフォルトセッションにアタッチ *)
 (* === アタッチメントキャッシュ ===
@@ -12741,7 +12847,260 @@ iAttachmentCacheDir[] := Module[{dir},
   dir
 ];
 
-iCacheAttachment[origPath_String] := Module[{dir, ext, base, hashStr, cachedName, cachedPath, pkgNorm},
+(* === アタッチメントメタデータ DB ===
+   claude_attachments/_meta.json にキーワード・タイトル・ソース情報を保存する。
+   セッション横断で利用可能。プロンプト中のキーワードに応じて自動注入される。 *)
+
+iAttachmentMetaFile[] := FileNameJoin[{iAttachmentCacheDir[], "_meta.json"}];
+
+iLoadAttachmentMeta[] := Module[{f, raw},
+  f = iAttachmentMetaFile[];
+  If[!FileExistsQ[f], Return[<||>]];
+  raw = Quiet @ Check[Developer`ReadRawJSONFile[f], <||>];
+  If[AssociationQ[raw], raw, <||>]
+];
+
+iSaveAttachmentMeta[meta_Association] :=
+  Quiet @ Developer`WriteRawJSONFile[iAttachmentMetaFile[], meta];
+
+iUpdateAttachmentMeta[cachedPath_String, updates_Association] := Module[{meta, existing},
+  meta = iLoadAttachmentMeta[];
+  existing = Lookup[meta, cachedPath, <||>];
+  meta[cachedPath] = Merge[{existing, updates}, Last];
+  iSaveAttachmentMeta[meta];
+  meta[cachedPath]
+];
+
+iGetAttachmentMeta[cachedPath_String] := Module[{meta},
+  meta = iLoadAttachmentMeta[];
+  Lookup[meta, cachedPath, <||>]
+];
+
+(* === URL 判定 === *)
+iIsURL[s_String] := StringMatchQ[s, ("http://" | "https://") ~~ __];
+iIsURL[_] := False;
+
+(* === ファイル名安全化 ===
+   特殊記号・エスケープシーケンス・パス区切りを除去し、安全なファイル名文字列を返す。
+   日本語・英数字・ハイフン・アンダースコア・ドットは保持。 *)
+iSanitizeFileName[s_String] := Module[{cleaned},
+  cleaned = s;
+  (* URL スキーム・クエリ・フラグメントを除去 *)
+  cleaned = StringReplace[cleaned, RegularExpression["^https?://"] -> ""];
+  cleaned = StringReplace[cleaned, RegularExpression["[?#].*$"] -> ""];
+  (* パス区切り・不安全文字 → アンダースコア *)
+  cleaned = StringReplace[cleaned,
+    RegularExpression["[/\\\\:*?\"<>|&=;,@%+\\[\\]{}()\\x00-\\x1f]"] -> "_"];
+  (* 連続アンダースコアを1つに *)
+  cleaned = StringReplace[cleaned, RegularExpression["_+"] -> "_"];
+  (* 先頭・末尾のアンダースコアとドットを除去 *)
+  cleaned = StringTrim[cleaned, "_" | "."];
+  (* 長さ制限 (拡張子を付ける余地を残す) *)
+  StringTake[cleaned, UpTo[80]]
+];
+iSanitizeFileName[_] := "";
+
+(* === HTML <title> 抽出 === *)
+iExtractHTMLTitle[html_String] := Module[{m},
+  m = StringCases[html,
+    RegularExpression["(?si)<title[^>]*>\\s*(.*?)\\s*</title>"] :> "$1",
+    1];
+  If[Length[m] > 0 && StringLength[First[m]] > 0,
+    (* HTML エンティティをデコード *)
+    StringTrim @ StringReplace[First[m], {
+      "&amp;" -> "&", "&lt;" -> "<", "&gt;" -> ">",
+      "&quot;" -> "\"", "&#39;" -> "'", "&nbsp;" -> " ",
+      RegularExpression["&#x?[0-9a-fA-F]+;"] -> ""}],
+    None]
+];
+
+(* === URL からスラグ生成 ===
+   ドメイン + パス末尾を短くまとめた安全文字列 *)
+iURLSlug[url_String] := Module[{noScheme, parts, domain, pathPart},
+  noScheme = StringReplace[url, RegularExpression["^https?://"] -> ""];
+  noScheme = StringReplace[noScheme, RegularExpression["[?#].*$"] -> ""];
+  parts = StringSplit[noScheme, "/", All];
+  domain = If[Length[parts] > 0,
+    StringReplace[First[parts], "www." -> ""], ""];
+  pathPart = If[Length[parts] > 1,
+    StringJoin[Riffle[Rest[Select[parts, # =!= "" &]], "_"]],
+    ""];
+  iSanitizeFileName[
+    If[pathPart =!= "", domain <> "_" <> pathPart, domain]]
+];
+
+(* === ハッシュベースでキャッシュ済み URL ファイルを検索 ===
+   ファイル名に hash8 が含まれるものを探す (名前が変わっても検出可能)
+   新形式: descriptive.hash8.ext / 旧形式: url_hash8.ext *)
+iFindCachedURLFile[url_String, ext_String:"pdf"] := Module[{dir, hashStr, found},
+  dir = iAttachmentCacheDir[];
+  hashStr = IntegerString[Hash[url, "SHA256"], 16, 8];
+  (* 新形式: *.hash8.ext *)
+  found = FileNames["*." <> hashStr <> "." <> ext, dir];
+  If[Length[found] > 0, Return[First[found]]];
+  (* 旧形式: url_hash8.ext *)
+  found = FileNames["url_" <> hashStr <> "." <> ext, dir];
+  If[Length[found] > 0, First[found], None]
+];
+
+iFindCachedURLFileAny[url_String] := Module[{pdf, html},
+  pdf  = iFindCachedURLFile[url, "pdf"];
+  html = iFindCachedURLFile[url, "html"];
+  Which[StringQ[pdf], pdf, StringQ[html], html, True, None]
+];
+
+(* === URL キャッシュ: WeasyPrint で PDF 化 ===
+   URLRead で HTML を取得し、WeasyPrint で PDF 変換。
+   WeasyPrint 不在時は HTML のまま保存してフォールバック。
+   optTitle: ClaudeAttach の Title オプション値 (None or String) *)
+
+iCacheURLAttachment[url_String, refetch_:False, optTitle_:None] := Module[
+  {dir, hashStr, baseName, pdfPath, htmlPath, body, htmlTitle,
+   pyResult, pyScript, pyExe, res, existing},
+  dir = iAttachmentCacheDir[];
+  hashStr = IntegerString[Hash[url, "SHA256"], 16, 8];
+
+  (* 既にキャッシュ済みで Refetch でなければそのまま返す *)
+  If[!TrueQ[refetch],
+    existing = iFindCachedURLFileAny[url];
+    If[StringQ[existing], Return[existing]]];
+
+  (* 旧キャッシュファイルがあれば削除 (名前が変わる可能性があるため) *)
+  If[TrueQ[refetch],
+    Scan[Function[old, If[FileExistsQ[old], Quiet @ DeleteFile[old]]],
+      Flatten[{iFindCachedURLFile[url, "pdf"],
+               iFindCachedURLFile[url, "html"]} /. None -> Nothing]]];
+
+  (* HTML 取得 *)
+  body = Quiet @ Check[
+    URLRead[HTTPRequest[url,
+      <|"Headers" -> {"User-Agent" -> "Mozilla/5.0"}|>], "Body"],
+    $Failed];
+  If[!StringQ[body],
+    Return[$Failed]];
+
+  (* ファイル名構築: Title オプション > HTML title > URL スラグ *)
+  htmlTitle = iExtractHTMLTitle[body];
+  baseName = Which[
+    (* 1. Title オプション指定あり → Title + URL スラグ *)
+    StringQ[optTitle] && StringLength[optTitle] > 0,
+      iSanitizeFileName[optTitle <> "_" <> iURLSlug[url]],
+    (* 2. HTML <title> あり → HTML title + URL スラグ *)
+    StringQ[htmlTitle] && StringLength[htmlTitle] > 0,
+      iSanitizeFileName[htmlTitle <> "_" <> iURLSlug[url]],
+    (* 3. いずれもなし → URL スラグのみ *)
+    True,
+      iURLSlug[url]];
+  If[baseName === "", baseName = "url"];
+
+  pdfPath  = FileNameJoin[{dir, baseName <> "." <> hashStr <> ".pdf"}];
+  htmlPath = FileNameJoin[{dir, baseName <> "." <> hashStr <> ".html"}];
+
+  (* HTML を保存 *)
+  Export[htmlPath, body, "Text", CharacterEncoding -> "UTF-8"];
+
+  (* WeasyPrint で PDF 変換を試行
+     - StartProcess + KillProcess で確実にタイムアウト制御
+     - カスタム url_fetcher で外部リソース取得をブロック
+       (GitHub 等の巨大 CSS/JS/フォントをダウンロードしてハングする問題を回避) *)
+  pyScript = FileNameJoin[{dir, "_url2pdf_" <> hashStr <> ".py"}];
+  Export[pyScript,
+    "import sys, os\n" <>
+    "if sys.platform == 'win32':\n" <>
+    "    msys_bin = r'C:\\msys64\\ucrt64\\bin'\n" <>
+    "    if os.path.isdir(msys_bin):\n" <>
+    "        if msys_bin not in os.environ.get('PATH', ''):\n" <>
+    "            os.environ['PATH'] = msys_bin + ';' + os.environ.get('PATH', '')\n" <>
+    "        if hasattr(os, 'add_dll_directory'):\n" <>
+    "            os.add_dll_directory(msys_bin)\n" <>
+    "try:\n" <>
+    "    from weasyprint import HTML\n" <>
+    "    def local_fetcher(url, timeout=10, ssl_context=None):\n" <>
+    "        if url.startswith('file:'):\n" <>
+    "            from weasyprint import default_url_fetcher\n" <>
+    "            return default_url_fetcher(url, timeout=timeout, ssl_context=ssl_context)\n" <>
+    "        return {'string': '', 'mime_type': 'text/css', 'encoding': 'utf-8'}\n" <>
+    "    html_path = sys.argv[1]\n" <>
+    "    pdf_path  = sys.argv[2]\n" <>
+    "    html_text = open(html_path, encoding='utf-8', errors='replace').read()\n" <>
+    "    HTML(string=html_text, url_fetcher=local_fetcher).write_pdf(pdf_path)\n" <>
+    "    print('OK')\n" <>
+    "except Exception as e:\n" <>
+    "    print('FAIL:' + str(e))\n",
+    "Text", CharacterEncoding -> "UTF-8"];
+
+  (* Python 実行パスを検出: 登録済み Python → PATH 上の python *)
+  pyExe = Quiet @ Check[
+    Module[{reg, pyPath},
+      reg = Quiet @ RegisteredExternalEvaluators["Python"];
+      pyPath = If[Length[reg] > 0,
+        Quiet @ Check[reg[[1, "System"]], None], None];
+      If[StringQ[pyPath] && FileExistsQ[pyPath], pyPath, "python"]],
+    "python"];
+  If[!StringQ[pyExe] || pyExe === "", pyExe = "python"];
+
+  (* StartProcess + KillProcess (60秒) でハング確実防止 *)
+  res = Quiet @ Module[{proc, startT, stdout},
+    proc = Quiet @ Check[StartProcess[{pyExe, pyScript, htmlPath, pdfPath}], $Failed];
+    If[proc === $Failed, Return["FAIL:start-error", Module]];
+    startT = AbsoluteTime[];
+    While[Quiet[ProcessStatus[proc]] === "Running" && AbsoluteTime[] - startT < 60,
+      Pause[0.5]];
+    If[Quiet[ProcessStatus[proc]] =!= "Finished",
+      Quiet @ KillProcess[proc];
+      "TIMEOUT",
+      stdout = Quiet @ Check[ReadString[ProcessConnection[proc, "StandardOutput"]], ""];
+      If[StringQ[stdout], StringTrim[stdout], "FAIL:read-error"]]
+  ];
+
+  (* 一時スクリプト削除 *)
+  Quiet @ DeleteFile[pyScript];
+
+  pyResult = If[StringQ[res], StringTrim[res], "FAIL:timeout"];
+
+  Which[
+    StringStartsQ[pyResult, "OK"] && FileExistsQ[pdfPath],
+      (* PDF 成功: HTML 中間ファイルを削除 *)
+      Quiet @ DeleteFile[htmlPath];
+      pdfPath,
+    FileExistsQ[htmlPath],
+      (* PDF 失敗/タイムアウト: HTML フォールバック *)
+      htmlPath,
+    True,
+      $Failed
+  ]
+];
+
+(* === プロンプト中のキーワード/タイトルでアタッチメントを検索 ===
+   メタデータ DB の keywords/title がプロンプトにマッチするキャッシュファイルを返す。
+   セッション添付済みファイルは除外する（二重注入防止）。 *)
+
+iMatchAttachmentsByKeyword[prompt_String] := Module[
+  {meta, matched = {}, sessionAtts, sessionSet},
+  meta = iLoadAttachmentMeta[];
+  If[Length[meta] === 0, Return[{}]];
+  sessionAtts = If[ListQ[$iCurrentSessionAttachments], $iCurrentSessionAttachments, {}];
+  sessionSet = Association[# -> True & /@ sessionAtts];
+  KeyValueMap[
+    Function[{path, info},
+      If[!KeyExistsQ[sessionSet, path] && FileExistsQ[path],
+        Module[{kws, title, matched0 = False},
+          kws = Lookup[info, "keywords", {}];
+          title = Lookup[info, "title", ""];
+          (* キーワード一致チェック *)
+          If[ListQ[kws] && Length[kws] > 0,
+            If[AnyTrue[kws, StringContainsQ[prompt, #, IgnoreCase -> True] &],
+              matched0 = True]];
+          (* タイトル一致チェック *)
+          If[StringQ[title] && StringLength[title] > 0 && !matched0,
+            If[StringContainsQ[prompt, title, IgnoreCase -> True],
+              matched0 = True]];
+          If[matched0, AppendTo[matched, path]]]]],
+    meta];
+  matched
+];
+
+iCacheAttachment[origPath_String, refetch_:False] := Module[{dir, ext, base, hashStr, cachedName, cachedPath, pkgNorm},
   (* $packageDirectory 配下のファイルは既にアクセス可能 — コピー不要 *)
   pkgNorm = ExpandFileName[Global`$packageDirectory];
   If[StringStartsQ[ExpandFileName[origPath],
@@ -12753,7 +13112,9 @@ iCacheAttachment[origPath_String] := Module[{dir, ext, base, hashStr, cachedName
   hashStr = IntegerString[Hash[origPath, "SHA256"], 16, 8];
   cachedName = base <> "." <> hashStr <> If[ext =!= "", "." <> ext, ""];
   cachedPath = FileNameJoin[{dir, cachedName}];
-  (* 既にキャッシュ済みなら上書きコピー（元ファイルが更新されている可能性） *)
+  (* Refetch=False でキャッシュ済みならスキップ *)
+  If[!TrueQ[refetch] && FileExistsQ[cachedPath], Return[cachedPath]];
+  (* コピー（元ファイルが更新されている可能性） *)
   Quiet[CopyFile[origPath, cachedPath, OverwriteTarget -> True]];
   If[FileExistsQ[cachedPath], cachedPath, origPath]
 ];
@@ -12781,66 +13142,105 @@ iResolveAttachPath[path_String] := Module[{parts, resolved, i},
 iGetResolvedAttachments[nb_NotebookObject, tag_String] :=
   iResolveAttachPath /@ NBAccess`NBHistoryGetAttachments[nb, tag];
 
-ClaudeAttach[path_String] := Module[{nb, tag, norm, cached, atts},
-  nb = EvaluationNotebook[];
-  tag = iSessionTag[];
-  norm = ExpandFileName[path];
-  If[!FileExistsQ[norm],
-    Message[ClaudeAttach::notfound, norm]; Return[$Failed]];
-  (* キャッシュ: $packageDirectory 配下にコピーして CLI がアクセス可能にする *)
-  cached = iCacheAttachment[norm];
-  atts = NBAccess`NBHistoryAddAttachment[nb, tag, cached];
-  Print[iL["\:30a2\:30bf\:30c3\:30c1: ", "Attached: "] <> FileNameTake[norm] <>
-    "  (\:5408\:8a08 " <> ToString[Length[atts]] <> " \:30d5\:30a1\:30a4\:30eb)"];
-  atts
-];
+(* === 内部共通: アタッチ処理 === *)
+iClaudeAttachImpl[nb_NotebookObject, tag_String, pathOrURL_String, opts___?OptionQ] :=
+  Module[{kws, title, refetch, isUrl, cached, atts, displayName, metaUpdates, source},
+    kws     = OptionValue[ClaudeAttach, {opts}, Keywords];
+    title   = OptionValue[ClaudeAttach, {opts}, Title];
+    refetch = OptionValue[ClaudeAttach, {opts}, Refetch];
+    If[!ListQ[kws], kws = {}];
+    isUrl = iIsURL[pathOrURL];
+
+    If[isUrl,
+      (* === URL アタッチ === *)
+      cached = iCacheURLAttachment[pathOrURL, TrueQ[refetch], title];
+      If[cached === $Failed,
+        Message[ClaudeAttach::urlfail, pathOrURL]; Return[$Failed]];
+      displayName = StringTake[pathOrURL, UpTo[60]];
+      source = pathOrURL,
+      (* === ファイルアタッチ === *)
+      Module[{norm = ExpandFileName[pathOrURL]},
+        If[!FileExistsQ[norm],
+          Message[ClaudeAttach::notfound, norm]; Return[$Failed]];
+        cached = iCacheAttachment[norm, TrueQ[refetch]];
+        displayName = FileNameTake[norm];
+        source = norm]];
+
+    (* セッションに登録 *)
+    atts = NBAccess`NBHistoryAddAttachment[nb, tag, cached];
+
+    (* メタデータ更新 *)
+    metaUpdates = <|"source" -> source, "cachedAt" -> DateString[]|>;
+    If[Length[kws] > 0, metaUpdates["keywords"] = kws];
+    If[StringQ[title], metaUpdates["title"] = title];
+    iUpdateAttachmentMeta[cached, metaUpdates];
+
+    Print[iL["\:30a2\:30bf\:30c3\:30c1: ", "Attached: "] <> displayName <>
+      If[isUrl, " (URL\:2192" <> ToUpperCase[FileExtension[cached]] <> ")", ""] <>
+      If[Length[kws] > 0, "  Keywords:" <> ToString[kws], ""] <>
+      If[StringQ[title], "  Title:" <> title, ""] <>
+      "  (\:5408\:8a08 " <> ToString[Length[atts]] <> " \:30d5\:30a1\:30a4\:30eb)"];
+    atts
+  ];
+
+(* デフォルトセッションにアタッチ: ファイルまたは URL *)
+ClaudeAttach[path_String, opts:OptionsPattern[ClaudeAttach]] :=
+  iClaudeAttachImpl[EvaluationNotebook[], iSessionTag[], path, opts];
 
 (* セッション指定でアタッチ *)
-ClaudeAttach[session_Association, path_String] := Module[{nb, tag, norm, cached, atts},
-  nb = session["Notebook"];
-  tag = session["SessionTag"];
-  norm = ExpandFileName[path];
-  If[!FileExistsQ[norm],
-    Message[ClaudeAttach::notfound, norm]; Return[$Failed]];
-  cached = iCacheAttachment[norm];
-  atts = NBAccess`NBHistoryAddAttachment[nb, tag, cached];
-  Print[iL["\:30a2\:30bf\:30c3\:30c1: ", "Attached: "] <> FileNameTake[norm] <>
-    "  (\:5408\:8a08 " <> ToString[Length[atts]] <> " \:30d5\:30a1\:30a4\:30eb)"];
-  atts
-];
+ClaudeAttach[session_Association, path_String, opts:OptionsPattern[ClaudeAttach]] :=
+  iClaudeAttachImpl[session["Notebook"], session["SessionTag"], path, opts];
 
 (* デフォルトセッションからデタッチ *)
-ClaudeDetach[path_String] := Module[{nb, tag, norm, cached, atts},
+ClaudeDetach[path_String] := Module[{nb, tag, norm, cached, atts, isUrl},
   nb = EvaluationNotebook[];
   tag = iSessionTag[];
-  norm = ExpandFileName[path];
-  (* キャッシュパスで削除（アタッチ時にキャッシュパスで保存しているため） *)
-  cached = Module[{dir, ext, base, hashStr},
-    dir = iAttachmentCacheDir[];
-    ext = FileExtension[norm]; base = FileBaseName[norm];
-    hashStr = IntegerString[Hash[norm, "SHA256"], 16, 8];
-    FileNameJoin[{dir, base <> "." <> hashStr <> If[ext =!= "", "." <> ext, ""]}]];
+  isUrl = iIsURL[path];
+  If[isUrl,
+    (* URL の場合: ハッシュベースの glob でキャッシュファイルを検索 *)
+    cached = iFindCachedURLFileAny[path];
+    If[!StringQ[cached], cached = ""],
+    (* ファイルの場合 *)
+    norm = ExpandFileName[path];
+    cached = Module[{ext, base, h},
+      ext = FileExtension[norm]; base = FileBaseName[norm];
+      h = IntegerString[Hash[norm, "SHA256"], 16, 8];
+      FileNameJoin[{iAttachmentCacheDir[],
+        base <> "." <> h <> If[ext =!= "", "." <> ext, ""]}]]];
   atts = NBAccess`NBHistoryRemoveAttachment[nb, tag, cached];
   (* キャッシュファイルも削除 *)
-  If[FileExistsQ[cached], Quiet[DeleteFile[cached]]];
-  Print[iL["\:30c7\:30bf\:30c3\:30c1: ", "Detached: "] <> FileNameTake[path] <>
+  If[StringQ[cached] && FileExistsQ[cached], Quiet[DeleteFile[cached]]];
+  (* メタデータからも削除 *)
+  Module[{meta = iLoadAttachmentMeta[]},
+    If[StringQ[cached] && KeyExistsQ[meta, cached],
+      meta = KeyDrop[meta, cached]; iSaveAttachmentMeta[meta]]];
+  Print[iL["\:30c7\:30bf\:30c3\:30c1: ", "Detached: "] <>
+    If[isUrl, StringTake[path, UpTo[60]], FileNameTake[path]] <>
     "  (\:6b8b\:308a " <> ToString[Length[atts]] <> " \:30d5\:30a1\:30a4\:30eb)"];
   atts
 ];
 
 (* セッション指定でデタッチ *)
-ClaudeDetach[session_Association, path_String] := Module[{nb, tag, norm, cached, atts},
+ClaudeDetach[session_Association, path_String] := Module[{nb, tag, norm, cached, atts, isUrl},
   nb = session["Notebook"];
   tag = session["SessionTag"];
-  norm = ExpandFileName[path];
-  cached = Module[{dir, ext, base, hashStr},
-    dir = iAttachmentCacheDir[];
-    ext = FileExtension[norm]; base = FileBaseName[norm];
-    hashStr = IntegerString[Hash[norm, "SHA256"], 16, 8];
-    FileNameJoin[{dir, base <> "." <> hashStr <> If[ext =!= "", "." <> ext, ""]}]];
+  isUrl = iIsURL[path];
+  If[isUrl,
+    cached = iFindCachedURLFileAny[path];
+    If[!StringQ[cached], cached = ""],
+    norm = ExpandFileName[path];
+    cached = Module[{ext, base, h},
+      ext = FileExtension[norm]; base = FileBaseName[norm];
+      h = IntegerString[Hash[norm, "SHA256"], 16, 8];
+      FileNameJoin[{iAttachmentCacheDir[],
+        base <> "." <> h <> If[ext =!= "", "." <> ext, ""]}]]];
   atts = NBAccess`NBHistoryRemoveAttachment[nb, tag, cached];
-  If[FileExistsQ[cached], Quiet[DeleteFile[cached]]];
-  Print[iL["\:30c7\:30bf\:30c3\:30c1: ", "Detached: "] <> FileNameTake[path] <>
+  If[StringQ[cached] && FileExistsQ[cached], Quiet[DeleteFile[cached]]];
+  Module[{meta = iLoadAttachmentMeta[]},
+    If[StringQ[cached] && KeyExistsQ[meta, cached],
+      meta = KeyDrop[meta, cached]; iSaveAttachmentMeta[meta]]];
+  Print[iL["\:30c7\:30bf\:30c3\:30c1: ", "Detached: "] <>
+    If[isUrl, StringTake[path, UpTo[60]], FileNameTake[path]] <>
     "  (\:6b8b\:308a " <> ToString[Length[atts]] <> " \:30d5\:30a1\:30a4\:30eb)"];
   atts
 ];
@@ -12854,16 +13254,26 @@ ClaudeAttachments[session_Association] :=
 
 (* 全クリア *)
 ClearAttachments[] := (
-  (* キャッシュファイルを削除 *)
-  Module[{atts = iGetResolvedAttachments[EvaluationNotebook[], iSessionTag[]]},
-    If[ListQ[atts], Scan[Function[f, If[FileExistsQ[f], Quiet[DeleteFile[f]]]], atts]]];
+  (* キャッシュファイルとメタデータを削除 *)
+  Module[{atts = iGetResolvedAttachments[EvaluationNotebook[], iSessionTag[]], meta},
+    If[ListQ[atts],
+      meta = iLoadAttachmentMeta[];
+      Scan[Function[f,
+        If[FileExistsQ[f], Quiet[DeleteFile[f]]];
+        If[KeyExistsQ[meta, f], meta = KeyDrop[meta, f]]], atts];
+      iSaveAttachmentMeta[meta]]];
   NBAccess`NBHistoryClearAttachments[EvaluationNotebook[], iSessionTag[]];
   Print[iL["\:5168\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:3092\:30af\:30ea\:30a2\:3057\:307e\:3057\:305f\:3002", "All attachments cleared."]];
 );
 
 ClearAttachments[session_Association] := (
-  Module[{atts = iGetResolvedAttachments[session["Notebook"], session["SessionTag"]]},
-    If[ListQ[atts], Scan[Function[f, If[FileExistsQ[f], Quiet[DeleteFile[f]]]], atts]]];
+  Module[{atts = iGetResolvedAttachments[session["Notebook"], session["SessionTag"]], meta},
+    If[ListQ[atts],
+      meta = iLoadAttachmentMeta[];
+      Scan[Function[f,
+        If[FileExistsQ[f], Quiet[DeleteFile[f]]];
+        If[KeyExistsQ[meta, f], meta = KeyDrop[meta, f]]], atts];
+      iSaveAttachmentMeta[meta]]];
   NBAccess`NBHistoryClearAttachments[session["Notebook"], session["SessionTag"]];
   Print[iL["\:5168\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:3092\:30af\:30ea\:30a2\:3057\:307e\:3057\:305f\:3002", "All attachments cleared."]];
 );

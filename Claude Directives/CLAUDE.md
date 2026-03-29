@@ -85,6 +85,28 @@
 - ドキュメント生成 `ClaudeCreateDocumentation` はリミット到達時に自動リトライし、再実行で未生成分のみ続行する。
 - `_info/design/` フォルダが存在すれば、README の「設計思想」セクション生成時に参考にする（優先度: docs > コード > design メモ）。
 
+### ClaudeAttach のファイル/URL アタッチとキーワード自動注入
+
+`ClaudeAttach` はファイルだけでなく URL もアタッチできる。URL は WeasyPrint で PDF に変換し `claude_attachments/` にキャッシュされる。
+
+```mathematica
+(* ファイルアタッチ *)
+ClaudeAttach["report.pdf", Keywords -> {"売上", "revenue"}, Title -> "Q3売上レポート"]
+
+(* URL アタッチ: HTML を PDF 化してキャッシュ *)
+ClaudeAttach["https://example.com/docs/api-guide", 
+  Keywords -> {"API", "ガイド"}, Title -> "外部APIガイド"]
+
+(* Refetch -> True で再取得・上書き *)
+ClaudeAttach["https://example.com/docs/api-guide", Refetch -> True]
+```
+
+**キーワード/タイトルによる自動注入**: プロンプト中に登録済みキーワードまたはタイトルが含まれると、該当するアタッチメントが自動的にプロンプトに注入される（セッションに明示的にアタッチされていなくても）。メタデータは `claude_attachments/_meta.json` に永続化される。
+
+**Refetch の動作**:
+- `Refetch -> False`（デフォルト）: キャッシュ済みならファイルコピー/URL取得をスキップし、Keywords/Title の変更のみメタデータに記録。
+- `Refetch -> True`: ファイルを再コピーまたは URL を再取得して上書きし、メタデータも更新。
+
 ### ClaudeEval の再帰呼び出しと複合タスクの分解
 
 - **「使う」と「更新する」の区別（最重要）**: パッケージ名がプロンプトに含まれていても、パッケージの関数を呼び出して**計算・処理・分析・表示**を行う指示には `ClaudeUpdatePackage` を生成してはならない。api.md を確認し、既存の関数で実現できるなら、その関数を呼ぶコードを生成する。

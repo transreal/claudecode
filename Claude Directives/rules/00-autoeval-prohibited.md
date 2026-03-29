@@ -57,12 +57,14 @@ $NBConfidentialSymbols = <||>
 ### 2. `ClaudeAttach` の実行
 
 ```mathematica
-(* ❌ 絶対禁止: AutoEvaluate コード内でセッションにファイルをアタッチ *)
+(* ❌ 絶対禁止: AutoEvaluate コード内でセッションにファイルやURLをアタッチ *)
 ClaudeAttach["path/to/file"]
+ClaudeAttach["https://example.com/doc", Keywords -> {"key"}]
 ```
 
 **理由**: `ClaudeAttach` はセッションのコンテキストにファイルを追加し、
 以降のすべての LLM 呼び出しにそのファイル内容が送信される。
+URL 形式でも同様にキャッシュファイルが作成されコンテキストに注入される。
 
 ### 3. `SystemCredential` の使用
 
