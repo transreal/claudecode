@@ -363,17 +363,19 @@ $iPaletteEffort = "medium";
 $iPaletteFallback = False;
 
 (* ノートブックから設定を読み込み、グローバル変数を同期。
-   TaggingRules に設定が保存されている場合のみ更新し、
-   設定がないノートブック（新規等）ではメモリ上の値を保持する。 *)
+   TaggingRules に設定が保存されている場合はその値を採用し、
+   設定がないノートブック（新規等）ではデフォルト値にリセットする。
+   旧実装ではデフォルト値にリセットせずメモリ上の前ノートブックの値を保持していたため、
+   新規ノートブックが前ノートブックの設定を継承してしまう問題があった。 *)
 iLoadPaletteSettings[nb_NotebookObject] := Module[{v},
   v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteModel"}]];
-  If[MatchQ[v, "opus" | "sonnet" | "default"], $iPaletteModel = v];
+  $iPaletteModel = If[MatchQ[v, "opus" | "sonnet" | "default"], v, "opus"];
   v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteEffort"}]];
-  If[MatchQ[v, "low" | "medium" | "high" | "max"], $iPaletteEffort = v];
+  $iPaletteEffort = If[MatchQ[v, "low" | "medium" | "high" | "max"], v, "medium"];
   v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteFallback"}]];
-  If[MatchQ[v, True | False], $iPaletteFallback = v];
+  $iPaletteFallback = If[MatchQ[v, True | False], v, False];
   v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteUpdateApiMd"}]];
-  If[MatchQ[v, True | False], $iPaletteUpdateApiMd = v];
+  $iPaletteUpdateApiMd = If[MatchQ[v, True | False], v, False];
   (* $ClaudeModel も同期 *)
   $ClaudeModel = Switch[$iPaletteModel,
     "opus", $iModelOpus,
@@ -2772,9 +2774,19 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                                   Quiet[SelectionMove[pNb, After, Notebook]];
                                   NBAccess`NBWriteCell[pNb, Cell[result2, "Text"]]]]],
                             fbModels2, 1, jid]],
-                        (* 正常結果: 次のティックで callback 実行 *)
-                        $claudeProgress[k]["result"] = result2;
-                        $claudeProgress[k]["phase"] = "received"],
+                        (* Fallback=False の場合 *)
+                        If[isEmpty2 || iIsLimitError[result2],
+                          (* 空レスポンス/リミットエラー: received を経由せず即停止。
+                             received フェーズ経由だとコールバック例外時に
+                             ScheduledTask が無限ループする危険があるため直接 done に遷移。 *)
+                          $claudeProgress[k]["phase"] = "done";
+                          If[uj,
+                            NBAccess`NBAbortJob[jid, result2],
+                            Quiet[SelectionMove[pNb, After, Notebook]];
+                            Quiet @ cb[result2]],
+                          (* 正常結果: 次のティックで callback 実行 *)
+                          $claudeProgress[k]["result"] = result2;
+                          $claudeProgress[k]["phase"] = "received"]],
                       (* エラーなし・フォールバック不要: ファイルなし *)
                       $claudeProgress[k]["phase"] = "done";
                       If[uj,
@@ -2789,8 +2801,11 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
               (* 非 Job パス: カーソルをノートブック末尾に移動してから cb を呼ぶ。
                  Job パスは callback 内の NBJobMoveToAnchor が位置を制御する。 *)
               If[!uj, Quiet[SelectionMove[pNb, After, Notebook]]];
-              Module[{queue, t1 = AbsoluteTime[], dt},
-                queue = cb[$claudeProgress[k]["result"]];
+              Module[{queue = {}, t1 = AbsoluteTime[], dt},
+                (* コールバックを例外安全に呼び出す。
+                   cb が例外をスローしても queue={} のまま → phase="done" に遷移し
+                   ScheduledTask が同じコールバックを繰り返し呼ぶ無限ループを防止する。 *)
+                Quiet @ Check[queue = cb[$claudeProgress[k]["result"]], queue = {}];
                 dt = AbsoluteTime[] - t1;
                 If[dt > 1, $iLastSlowCb = <|"elapsed" -> Round[dt, 0.1], "key" -> k|>];
                 If[ListQ[queue] && Length[queue] > 0,
@@ -2826,12 +2841,14 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                     thunk = queue[[idx]];
                     If[idx === 1 && uj, NBAccess`NBJobMoveToAnchor[jid]];
                     Module[{t1 = AbsoluteTime[], dt},
-                      Quiet @ thunk[];
+                      Quiet @ Check[thunk[], Null];
                       dt = AbsoluteTime[] - t1;
                       (* デバッグ: 1秒以上かかった thunk を記録 *)
                       If[dt > 1, $iLastSlowThunk = <|
                         "idx" -> idx, "total" -> total,
                         "elapsed" -> Round[dt, 0.1], "key" -> k|>]];
+                    (* 例外の有無にかかわらず次の thunk に進む。
+                       失敗 thunk でスタックして無限ループになるのを防止。 *)
                     $claudeProgress[k]["writeIdx"] = idx + 1;
                     $claudeProgress[k]["writeSub"] = "disp"]]],
 
@@ -3884,7 +3901,10 @@ iClaudeQueryRaw[prompt_] := Module[
 iIsLimitError[response_String] :=
   StringContainsQ[response,
     "hit your limit" | "rate limit" | "overloaded" |
-    "TIMEOUT" | "RunProcess" | "ExitCode=",
+    "TIMEOUT" | "RunProcess" | "ExitCode=" |
+    (* 日本語の空レスポンス/利用制限メッセージも検出 *)
+    "\:5229\:7528\:5236\:9650" | "\:7a7a\:306e\:30ec\:30b9\:30dd\:30f3\:30b9" | "empty response" |
+    "usage limit" | "returned an empty response",
     IgnoreCase -> True] ||
   (* "resets" は単独では誤判定しやすいので "limit" との共起を要求 *)
   (StringContainsQ[response, "resets", IgnoreCase -> True] &&
