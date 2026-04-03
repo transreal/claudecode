@@ -83,20 +83,50 @@ respIsFullFile = StringContainsQ[response, "BeginPackage["] &&
 
 ### 新規関数の挿入
 
-元コードに存在しない関数がレスポンスに含まれる場合:
+元コードに存在しない新規関数がレスポンスに含まれる場合、4段階フォールバックで挿入位置を決定する:
 
 ```mathematica
 If[Length[newOnlyFuncs] > 0,
-  Module[{insertCode},
+  Module[{insertCode, codeBefore = code, inserted = False},
     insertCode = StringJoin[Lookup[updBlks, #, ""] & /@ newOnlyFuncs];
+    (* 戦略1: End[] + EndPackage[] が隣接する標準構造 *)
     code = StringReplace[code,
       RegularExpression["(\\n\\s*End\\[\\]\\s*;?\\s*\\n\\s*EndPackage\\[\\])"] :>
-      "\n" <> insertCode <> "$1", 1]
+      "\n" <> insertCode <> "$1", 1];
+    If[code =!= codeBefore, inserted = True];
+    (* 戦略2: 最後の End[] の直前に挿入（非標準構造対応） *)
+    If[!inserted,
+      code = codeBefore;
+      code = StringReplace[code,
+        RegularExpression["(\\n\\s*End\\[\\]\\s*;?\\s*\\n)(?![\\s\\S]*End\\[\\])"] :>
+        "\n" <> insertCode <> "$1", 1];
+      If[code =!= codeBefore, inserted = True]];
+    (* 戦略3: StringPosition で最後の End[] を探して直前に挿入 *)
+    If[!inserted, (* ... StringPosition ベースのフォールバック ... *)];
+    (* 戦略4: End[] すら無い場合は末尾に追加 *)
+    If[!inserted, code = codeBefore <> "\n" <> insertCode];
+    (* 挿入成否を検証して通知 *)
+    If[inserted,
+      nbPrint[nb2, "新規関数を追加: " <> StringRiffle[newOnlyFuncs, ", "]],
+      nbPrint[nb2, Style["⚠ 新規関数の挿入位置を検出できませんでした", ...]]]
   ]
 ]
 ```
 
-`End[]; EndPackage[];` の直前に挿入する。正規表現は `End[]` と `EndPackage[]` の間の空白・改行を許容する。
+#### 非標準パッケージ構造への対応
+
+`maildb.wl` のように `EndPackage[]` がファイル先頭付近（エクスポート宣言直後）にあり、`End[]` が末尾にある構造では、戦略1の `End[]; EndPackage[]` 隣接パターンがマッチしない。戦略2が `[\\s\\S]*` を使った改行横断の否定先読みで最後の `End[]` を特定し、その直前に挿入する。
+
+```
+非標準構造の例 (maildb.wl):
+  BeginPackage["Maildb`"];
+  EndPackage[];              ← エクスポート宣言直後
+  Begin["Maildb`Private`"];
+  ...
+  End[];                     ← 戦略2がここの直前に挿入
+```
+
+**重要**: 挿入の成否を必ず検証する（`code =!= codeBefore`）。旧実装では `StringReplace` がマッチしなくても成功メッセージが表示され、挿入失敗が隠蔽されていた。
 
 ## 3. プロンプト構築パターン
 

@@ -37,6 +37,7 @@
 - `github-operations` — GitHub パッケージ管理・PR 管理・インストール手順
 - `package-merge-pattern` — LLM レスポンスによるパッケージ部分更新のマージ・安全検証パターン
 - `maildb-operations` — maildb パッケージの API 使用パターン（showMails/searchFromMails は MailDBObject 必須）
+- `system-open` — SystemOpen によるファイル・フォルダ・ノートブックの開き方
 
 ## ファイル読み込みルール
 
@@ -122,6 +123,14 @@ ClaudeAttach["https://example.com/docs/api-guide", Refetch -> True]
 - **分解数の上限**: `$ClaudeEvalMaxDepth` を超えない範囲で分解する。超える場合は関連変更をグループ化する。
 - **thinking トリガーの伝播**: ユーザーが「死ぬ気で」「じっくり考えて」等と書いた場合、生成する `ClaudeUpdatePackage` の instruction に適切な think トリガー（`ultrathink`/`think hard`/`think`）を先頭に挿入する。
 - **⛔ AutoEvaluate 禁止操作**: `AutoEvaluate -> True` で実行されるコードには保護対象定数の変更、`ClaudeAttach`、`SystemCredential` を**絶対に含めてはならない**。詳細は `rules/00-autoeval-prohibited.md` を参照。
+
+## CUDA パッケージサポート
+
+- プロンプトに「CUDA」「GPU計算」等のキーワードが含まれると、`cuda.wl` 拡張が自動ロードされ CUDA モードになる。
+- `cuda.wl` は `$packageDirectory` に配置する。ロードできない場合は警告を表示し、純粋 Mathematica コードで続行する。
+- CUDA ソース (.cu) とバイナリは `<パッケージ名>.cuda/` に格納される。
+- 既存パッケージに `.cuda/` ディレクトリがあれば、更新時も自動的に CUDA モードが有効になる。
+- 詳細は `rules/81-cuda-package-operations.md` を参照。
 
 ## GitHub パッケージ管理ルール
 
@@ -233,18 +242,22 @@ GitHubCreatePullRequest["pkg", "PRタイトル",
   - `TaskObject` が返るので `TaskRemove[]` で停止可能。
   - `RepeatInterval` は `ClaudeEval` のみの機能。`ClaudeUpdatePackage` 等には `StartTime` のみ。
 
-### ScheduledTask 内の非同期制約（必須）
+### ScheduledTask・非同期処理の制約（必須）
 
-ClaudeEval / ContinueEval は内部で ScheduledTask チェーンを使う。**パッケージ関数が ClaudeEval 経由で呼ばれる場合、以下を厳守すること。**
+claudecode は ScheduledTask ベースの非同期基盤を提供する。パッケージ開発では以下の2つの制約を厳守すること:
 
-- ❌ `ClaudeQuery` を ScheduledTask 内から呼ぶ → デッドロック（StartProcess + ScheduledTask のネスト）
-- ❌ 同一評価ブロック内で `ClaudeQuery` を2回以上呼ぶ → 確実にフリーズ
+**A. ScheduledTask 内からの禁止操作**（ClaudeEval 経由で呼ばれる場合）:
+- ❌ `ClaudeQuery` を ScheduledTask 内から呼ぶ → デッドロック
+- ❌ 同一評価ブロック内で `ClaudeQuery` を2回以上呼ぶ → フリーズ
 - ❌ `ExternalEvaluate["Python", ...]` → サブプロセスがブロック
-- ✅ `LLMSynthesize[prompt]` → 同期 HTTP、ScheduledTask 内でも安全
-- ✅ `URLRead[HTTPRequest[...]]` → 同期 HTTP、ローカル LLM に安全
-- ✅ `ContinueEval[]` → ClaudeEval と同じチェーン、安全
+- ✅ `LLMSynthesize[prompt]` / `URLRead[HTTPRequest[...]]` → 同期 HTTP で安全
 
-**秘密/公開データの並立処理**: 秘密データは `URLRead` でローカル LLM、公開データは `LLMSynthesize` でクラウド LLM。逐次処理し、`ClaudeQuery` は使わない。
+**B. 独自 ScheduledTask 作成の禁止**:
+- ❌ パッケージ内で `CreateScheduledTask` を使い UI ポーリングや FrontEnd 更新ループを構築する
+- ✅ `iClaudeQueryAsyncWithProgress[]` で claudecode の共有ポーリング基盤に委譲する
+- ✅ FrontEnd 通信を行わない純粋計算タスクは例外（ドキュメントに明記）
+- ✅ PresentationListener のようにリアルタイム性が必要な場合も例外（ドキュメントに明記）
+
 詳細は `rules/95-scheduled-task-safety.md` を参照。
 
 ## バックアップ・履歴管理

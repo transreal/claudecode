@@ -22,76 +22,11 @@ description: Use for Wolfram Language / Mathematica coding, editing, notebook ou
 - 数値代入が本当に必要になるまでは、できるだけ記号式のまま処理する。
 - ベクトル・行列を扱う場合は、可能な限りベクトル・行列表現を保ったまま計算する。
 
-## 数式タイプセット（ClaudeEval / ClaudeQuery 生成コード）
-
-NBAccess が生成コードを `MakeBoxes[StandardForm]` でタイプセットするため、
-`Integrate` → ∫, `Sum` → Σ, `Subscript` → 下付き, `Sqrt` → √ 等の美しい表示が自動的に得られる。
-ただし `Module`, `Block`, `Show`, `Plot` 等の手続き的コードは FEParser を使用（変数スコーピング保護のため）。
-
-### コメント禁止（コードブロック内）
-`(* ... *)` コメントは `ToExpression` で除去される。
-**コードブロック内にコメントを書かず、説明はブロック外のテキストに記述する。**
-
-### テキスト内の LaTeX 数式（推奨）
-説明テキスト中の数式は `$...$` LaTeX 表記を使う。自動的に Mathematica タイプセットに変換される。
-例: `$\nabla^2 \varphi = 0$`, `$\pm q_m$`, `$\mathbf{B} = -\mu_0 \nabla \varphi$`
-
-### 推奨
-- 数学関数は標準の関数呼び出し形式: `Integrate[f, x]`, `Sum[...]`, `D[f, x]`
-- 下付き/上付き: `Subscript[q, m]`, `Superscript[x, n]`
-- 行列: `MatrixForm[...]`
-- ギリシャ文字: `\[CurlyPhi]`, `\[Mu]` 等
-
 ## 出力方針
 
 - 説明は必要十分にとどめ、冗長にしない。
 - 数式は省略せず明示する。
 - 可能なら短い動作確認コードや最小例を添える。
-
-## ノートブック出力のスタイル規約（必須）
-
-システムからのエラー・警告・進捗メッセージは、ユーザーの作業セルとは区別して **通知スタイル（Print セル・小さめフォント）** で表示する。
-
-### 使い分け
-
-| 出力の種類 | 使う関数 | セルスタイル |
-|-----------|---------|------------|
-| ユーザーへの回答テキスト | `NBAccess`NBWriteCell[nb, Cell[text, "Text"]]` | 通常 Text |
-| 生成コード | `NBAccess`NBWriteSmartCode[nb, code]` | Input |
-| エラー・警告・制限通知 | `NBAccess`NBWritePrintNotice[nb, text, color]` | Print (小さめ) |
-| 進捗表示 | `NBAccess`NBWriteDynamicCell[nb, ...]` | Print (小さめ) |
-
-### エラーレスポンスの早期検出パターン
-
-コールバック関数の冒頭で `iIsAPIErrorResponse` を使ってエラーを検出し、通知スタイルで表示して早期リターンする:
-
-```mathematica
-(* ✅ 正しいパターン: エラーは通知スタイルで表示 *)
-Function[response,
-  Module[{...},
-    NBAccess`NBJobMoveToAnchor[jid];
-    If[iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"],
-      NBAccess`NBWritePrintNotice[nb, response, RGBColor[0.8, 0, 0]];
-      NBAccess`NBEndJob[jid];
-      Return[]];
-    (* 以下: 正常レスポンスの処理 *)
-    ...
-  ]]
-
-(* ❌ 禁止: エラーメッセージを通常 Text セルで表示 *)
-Function[response,
-  Module[{...},
-    textOnly = cleanMarkdown[response];
-    NBAccess`NBWriteCell[nb, Cell[textOnly, "Text"]];  (* ← エラーもここに来る *)
-    ...
-  ]]
-```
-
-### 色の使い分け
-
-- エラー（赤）: `RGBColor[0.8, 0, 0]`
-- 警告・進捗（オレンジ）: `RGBColor[0.8, 0.4, 0]`
-- 成功（緑）: `RGBColor[0, 0.5, 0.2]`
 
 ## 全体禁止事項
 
@@ -100,6 +35,12 @@ Function[response,
 - `session` で始まる変数名を出力コードで使わない。
 - サンプルコードで `Clear["Global`*"]` や `Remove["Global`*"]` のような全消去をしない。
 - 物理 PDE を、自前の手書き差分式・有限差分・統計サンプリングで安易に置き換えない。
+
+## 非同期タスクスケジューリング規約
+
+- UI フィードバック（`WindowStatusArea`、`NotebookWrite`、`Dynamic` 等）を伴う非同期処理は、claudecode / NBAccess の公開 API を経由する。パッケージ側で個別に `CreateScheduledTask` を作成しない。
+- 例外: FrontEnd 通信を一切行わない純粋計算タスク、またはリアルタイム対話が必要なインタラクティブプログラム（PresentationListener 等）では独自 ScheduledTask を許可する。ただしドキュメントに明記すること。
+- 理由: 複数の ScheduledTask が同時に FrontEnd 操作を行うと「動的評価の放棄」ダイアログが発生しシステムがフリーズする。
 
 ## パッケージロード時のメッセージ
 
@@ -113,64 +54,9 @@ Print["
 "];
 ```
 
-## ファイルパス操作方針（必須）
+## ファイルパス解決方針
 
-Mathematica は Windows / macOS / Linux で動作する。ファイルパスの操作には **文字列操作関数を使わず、必ず専用関数を使う**。
-
-### パス結合・分解
-
-```mathematica
-(* ✅ 正しい *)
-FileNameJoin[{dir, "subdir", "file.wl"}]
-FileNameSplit["C:\\Users\\foo\\bar.wl"]  (* → {"C:", "Users", "foo", "bar.wl"} *)
-FileNameTake[path]            (* ファイル名のみ *)
-FileNameDrop[path, n]         (* 先頭 n 階層を除去 *)
-DirectoryName[path]           (* 親ディレクトリ *)
-FileExtension[path]           (* 拡張子 *)
-
-(* ❌ 禁止 *)
-dir <> $PathnameSeparator <> file
-StringReplace[path, dir <> $PathnameSeparator -> ""]
-StringDrop[path, StringLength[dir] + 1]
-```
-
-### 相対パスの計算
-
-```mathematica
-(* ✅ iRelativePath[fullPath, baseDir] — claudecode.wl に定義済み *)
-Module[{baseParts = FileNameSplit[baseDir],
-        fullParts = FileNameSplit[fullPath]},
-  FileNameJoin[Drop[fullParts, Length[baseParts]]]
-]
-
-(* ❌ 禁止 *)
-StringReplace[fullPath, baseDir <> $PathnameSeparator -> ""]
-```
-
-### パスの正規化（末尾セパレータ除去）
-
-```mathematica
-(* ✅ 正しい *)
-dir = FileNameJoin[FileNameSplit[dir]]
-
-(* ❌ 禁止 *)
-StringTrimRight[dir, "\\"]
-StringReplace[dir, RegularExpression["[\\\\/]+$"] -> ""]
-```
-
-### JSON 等から取得したスラッシュ区切りパスの変換
-
-```mathematica
-(* ✅ 正しい — FileNameSplit は "/" も "\" も認識する *)
-FileNameJoin[Flatten[{srcDir, FileNameSplit[path]}]]
-
-(* ❌ 禁止 *)
-FileNameJoin[{srcDir, StringReplace[path, "/" -> $PathnameSeparator]}]
-```
-
-### bare filename の解決
-
-- ファイル名だけが指定された場合は `FileNameJoin[{NotebookDirectory[], ファイル名}]` でパスを構築する。
+- ファイル名だけが指定された場合（フルパスでない場合）は、`FileNameJoin[{NotebookDirectory[], ファイル名}]` でパスを構築する。
 - `NotebookDirectory[]` が取得できない場合のフォールバックとして `Quiet @ Check[NotebookDirectory[], $packageDirectory]` を使う。
 - `Import["ファイル名"]` のようにカレントディレクトリ依存のコードを生成しない。
 
@@ -178,11 +64,9 @@ FileNameJoin[{srcDir, StringReplace[path, "/" -> $PathnameSeparator]}]
 
 - テーブル形式でデータを最終的に出力する場合は、可能な限り `Dataset` 形式で出力する。
 
-## Excel インポート方針（必須）
+## Excel インポート方針
 
-- Excel ファイルをインポートするときは、明示的に Table 等と指定されない限り **必ず `{"Dataset"}` 形式** で読み込む。
-  1行目をキー（列名）として使用する。ただし、1行目からデータが始まっている場合（1行目と2行目以降が同じタイプの項目）であれば、キーを列番号で生成する。
-- **シートが1枚の場合**（結果リストの長さが1）: `First @ Import[...]` でリストを外し、単一の Dataset を返す。
-  - 例: `First @ Import[file, {"Dataset"}]`
-- **シートが複数の場合**（結果リストの長さが2以上）: Dataset のリストとしてそのまま返す。
-- 秘密変数として Excel を読み込むときは、`Confidential[...]` でラップした直後に、キー情報を `NonConfidential` で出力する。
+- Excel ファイルを `Import` するとき、形式（`"XLSX"`, `"Dataset"` 等）によらず、シートが 1 枚だけの場合は結果に `First` または `[[1]]` を付けてリストを外す。
+  - 例: `Import[file, "Dataset"] // First`
+  - 例: `Import[file, {"XLSX", 1}]`
+- シート数が不明な場合は `First @ Import[...]` をデフォルトとする。

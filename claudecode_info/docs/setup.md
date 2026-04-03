@@ -53,6 +53,10 @@ claudecode パッケージは以下の依存関係があります：
 - **[NBAccess](https://github.com/transreal/NBAccess)** パッケージ（ノートブック操作用）
 - **[github](https://github.com/transreal/github)** パッケージ（GitHub 連携用）
 
+また、以下はオプションの依存パッケージです：
+
+- **[cuda](https://github.com/transreal/cuda)** パッケージ（CUDA 関連タスク用）― CUDA を必要とするプロンプトを送信すると自動的に検出・ロードが試みられます。`cuda.wl` が `$packageDirectory` に存在しない場合は警告が表示されます。
+
 これらのパッケージを `$packageDirectory` に配置してください。
 
 ### 2. claudecode パッケージの配置
@@ -74,7 +78,7 @@ FileExistsQ[FileNameJoin[{$packageDirectory, "claudecode.wl"}]]
 Get["claudecode.wl"]
 ```
 
-初回読み込み時に node-pty が自動的にインストールされます。
+初回読み込み時に node-pty が自動的にインストールされます。パッケージリロード時には旧バージョンの内部タスクが自動的に停止されるため、安全に再読み込みできます。
 
 ## 初期設定
 
@@ -103,7 +107,7 @@ $ClaudeAccessibleDirs = {$packageDirectory}
 
 ### 3. パッケージキーワードマップの設定
 
-新機能として、パッケージごとのキーワード自動登録システムが追加されました：
+パッケージごとのキーワード自動登録システムにより、プロンプトにキーワードが含まれると対応パッケージの api.md がコンテキストに自動注入されます：
 
 ```mathematica
 (* パッケージキーワードマップの設定例 *)
@@ -114,7 +118,7 @@ $ClaudePackageKeywordMap["github"] = {"GitHub", "git", "リポジトリ"}
 $ClaudePackageKeywordMap
 ```
 
-プロンプトにキーワードが含まれると、対応パッケージの api.md がコンテキストに自動注入されます。
+各パッケージは自身のロード時にキーワードを自動登録します。claudecode.wl 側はパッケージ非依存です。
 
 ### 4. フォールバックモデルの設定（オプション）
 
@@ -178,8 +182,18 @@ ClaudeUpdatePackageHistory[]
 (* パッケージ更新とapi.md自動更新のテスト *)
 ClaudeUpdatePackage["testpkg", "新機能を追加", "UpdateApiMd" -> True]
 
+(* 結果を踏まえてバグ修正を継続（履歴から自動取得） *)
+ContinueUpdate["エラーを修正してください"]
+
 (* キーワード連携のテスト（maildbキーワードを含むクエリ） *)
 ClaudeQuery["メールを処理するプログラムを作りたい"]
+```
+
+`ContinueUpdate[]` は引数なしで呼び出すと、直前の `ClaudeUpdatePackage` の履歴を自動的に参照してバグ修正を継続します。直前の履歴が見つからない場合は、パッケージ名を明示的に指定してください：
+
+```mathematica
+(* パッケージ名を明示して継続 *)
+ContinueUpdate["testpkg", "追加の修正指示"]
 ```
 
 ## 設定のカスタマイズ
@@ -271,6 +285,33 @@ Get["maildb.wl"]
 Get["github.wl"]
 ```
 
+#### 6. CUDA 拡張が読み込めない
+
+CUDA 関連のタスクを実行する際に以下の警告が表示される場合：
+
+```
+⚠ CUDA extension (cuda.wl) is required but could not be loaded.
+```
+
+`cuda.wl` を `$packageDirectory` に配置してください。CUDA が不要なタスクであれば、この警告は無視して構いません。
+
+```mathematica
+(* CUDA パッケージの存在確認 *)
+FileExistsQ[FileNameJoin[{$packageDirectory, "cuda.wl"}]]
+```
+
+#### 7. タスクが停止しない・フリーズする
+
+共有ポーリングタスク機構を使用して内部タスクが一元管理されています。タスクが応答しない場合は `ClaudeAbort[]` で強制停止できます。パッケージを再読み込みすると旧タスクは自動的に停止します：
+
+```mathematica
+(* 全タスクの強制停止 *)
+ClaudeAbort[]
+
+(* パッケージ再読み込みによるクリーンアップ *)
+Get["claudecode.wl"]
+```
+
 ### デバッグ情報の取得
 
 ```mathematica
@@ -303,6 +344,45 @@ ClaudeUpdatePackage["pkg", "修正指示", "UpdateApiMd" -> True]
 
 (* 自動更新を無効化 *)
 ClaudeUpdatePackage["pkg", "修正指示", "UpdateApiMd" -> False]
+```
+
+### 依存パッケージ API の自動注入
+
+`ClaudeUpdatePackage` 実行時、プロンプト内に登場する依存パッケージ名を検出し、そのパッケージの `api.md` を自動的にコンテキストに注入します。これにより、パッケージ境界を越えた関数呼び出しの原因追跡が可能になります。この機能は設定不要で自動的に動作します。
+
+### 検証テストの自動生成
+
+`ClaudeUpdatePackage` 実行時、LLM が更新後のコードに対する検証テストを自動生成します。テストは `===BEGIN_TESTS===` / `===END_TESTS===` マーカーで囲まれた形式で返され、コメントラベル付きのブロックに分割されてマージ後に自動実行されます。各ブロックは `(* コメント *)` の直後に Boolean 式が来る形式を想定しており、テスト結果（合否件数）はノートブックに表示されます。
+
+### ターゲット関数の自動推定
+
+`ClaudeUpdatePackage` はプロンプト内の複合語から更新対象関数を2フェーズで自動推定します：
+
+- **フェーズ 1（本体マッチ）**: 4文字以上の漢字・カタカナ連続列や5文字以上の英語キーワードをプロンプトから抽出し、関数本体にその複合語が含まれる関数を検出します。2文字以下の短い関数名や、3文字以下の汎用的すぎる語（ボタン、削除、展開 等）は誤マッチを防ぐため除外されます。
+- **フェーズ 2（usage bi-gram フォールバック）**: フェーズ 1 で対象関数が見つからない場合、usage 文字列への bi-gram マッチにフォールバックします。
+
+推定された関数数が40を超える場合は複合語が汎用的すぎると判断し、パッケージ全体を送信するフォールバックに切り替わります。
+
+### 非同期スケジューリング規約の自動注入
+
+`ClaudeUpdatePackage` 実行時、LLM プロンプトに非同期タスクスケジューリング規約が自動的に注入されます。これにより、生成されたコードが claudecode/NBAccess の公開 API（`ClaudeEval`、`NBBeginJob` 等）を使って非同期処理を実装するよう誘導されます。純粋な計算タスク（数値・組み合わせ計算等、UI を操作しないもの）や `PresentationListener` のような独立した対話型プログラムは例外として個別の `ScheduledTask` の使用が許可されます。この機能は設定不要で自動的に動作します。
+
+### ContinueUpdate の使い方
+
+`ContinueUpdate` は直前の `ClaudeUpdatePackage` の結果を踏まえて修正を継続します：
+
+```mathematica
+(* 引数なし: 履歴から自動でパッケージ・前回応答を取得してバグ修正を継続 *)
+ContinueUpdate[]
+
+(* 追加指示を付けて継続 *)
+ContinueUpdate["上半円の境界線が欠けているので修正して"]
+
+(* テキスト + 画像で継続 *)
+ContinueUpdate[{"スクリーンショットを確認して修正して", image}]
+
+(* パッケージ名を明示して継続（履歴が見つからない場合など） *)
+ContinueUpdate["pkgName", "追加の修正指示"]
 ```
 
 ### 遅延実行とスケジューリング
@@ -353,4 +433,5 @@ ShowClaudePalette[]
 (* ヘルプ情報 *)
 ?ClaudeEval
 ?ClaudeUpdatePackage
+?ContinueUpdate
 ?$ClaudePackageKeywordMap

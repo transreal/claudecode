@@ -24,7 +24,11 @@ Quiet[ClearAll[
   iUpdateAttachmentMeta, iGetAttachmentMeta, iIsURL,
   iCacheURLAttachment, iMatchAttachmentsByKeyword,
   iSanitizeFileName, iExtractHTMLTitle, iURLSlug, iFindCachedURLFile,
-  iFindCachedURLFileAny
+  iFindCachedURLFileAny,
+  iIsCUDARequest, iEnsureCUDAExtension, iCUDAUnavailableNote,
+  iEnsureSharedPollingTask, iSharedPollingTick,
+  iAsyncSchedulingRules,
+  iParseAnthropicBgResponse
 ]];
 
 (* NBAccess \:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:30ed\:30fc\:30c9 (\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:8aad\:307f\:66f8\:304d\:30fb\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:7ba1\:7406) *)
@@ -40,7 +44,7 @@ Quiet[Scan[
   Function[name,
     If[MemberQ[Names["Global`" <> name], "Global`" <> name],
       Quiet[Remove["Global`" <> name], Remove::ssym]]],
-  {"ClaudeQuery","ClaudeQuerySync","ClaudeQueryAsync","ClaudeWriteResponse","ClaudeMath","ClaudeExtractCode","ClaudeExtractAllCode",
+  {"ClaudeQuery","ClaudeQuerySync","ClaudeQueryBg","ClaudeQueryAsync","ClaudeWriteResponse","ClaudeMath","ClaudeExtractCode","ClaudeExtractAllCode",
    "ClaudeEval","ContinueEval","ContinueUpdate","ClaudeSpec","ClaudeDebug","ClaudeReview","ClaudeReviewChunked",
    "ClaudeUpdatePackage","ClaudeRestorePackage","ClaudeUpdatePackageHistory","ClaudeBackupDataset",
    "ClaudeConvertToPaclet","ClaudeCreateDocumentation","ClaudeUpdateDocumentation",
@@ -422,6 +426,16 @@ ClaudeQuerySync::usage =
   "    ClaudeQuerySync[prompt, PrivacyLevel -> 1.0]\n" <>
   "    ClaudeQuerySync[prompt, Model -> {\"anthropic\", \"claude-sonnet-4-6\"}]";
 
+ClaudeQueryBg::usage =
+  "ClaudeQueryBg[prompt] \:306f FrontEnd \:64cd\:4f5c\:30fb ScheduledTask \:751f\:6210\:306a\:3057\:3067 Claude \:306b\:540c\:671f\:554f\:3044\:5408\:308f\:305b\:3001\:5fdc\:7b54\:6587\:5b57\:5217\:3092\:8fd4\:3059\:3002\n" <>
+  "ClaudeQuerySync \:3068\:9055\:3044\:3001WindowStatusArea \:66f4\:65b0\:30fb\:9032\:6357\:8868\:793a\:7528 ScheduledTask \:3092\:4e00\:5207\:751f\:6210\:3057\:306a\:3044\:3002\n" <>
+  "SocketListen \:30cf\:30f3\:30c9\:30e9\:30fb ScheduledTask \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:7b49\:306e\:975e\:540c\:671f\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:304b\:3089\:5b89\:5168\:306b\:547c\:3073\:51fa\:305b\:308b\:3002\n" <>
+  "(rule 95: URLRead \:76f8\:5f53\:306e\:5b89\:5168\:306a\:4ee3\:66ff\:624b\:6bb5)\n" <>
+  "Options: Fallback -> False, Model -> Automatic, Timeout -> Automatic\n" <>
+  "\:4f8b: ClaudeQueryBg[\"Hello\"]  (* SocketListen \:30cf\:30f3\:30c9\:30e9\:5185\:304b\:3089\:5b89\:5168 *)\n" <>
+  "    ClaudeQueryBg[prompt, Fallback -> True]\n" <>
+  "    ClaudeQueryBg[prompt, Model -> {\"anthropic\", \"claude-sonnet-4-6\"}]";
+
 ClaudeWriteResponse::usage =
   "ClaudeWriteResponse[nb, text] \:306f\:30de\:30fc\:30af\:30c0\:30a6\:30f3\:5f62\:5f0f\:306e\:30c6\:30ad\:30b9\:30c8\:3092\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30bb\:30eb\:3068\:3057\:3066\:5c55\:958b\:3059\:308b\:3002\n" <>
   "\:898b\:51fa\:3057\:30fb\:30ea\:30b9\:30c8\:30fb\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:7b49\:3092\:9069\:5207\:306a\:30bb\:30eb\:30b9\:30bf\:30a4\:30eb\:306b\:5909\:63db\:3059\:308b\:3002\n" <>
@@ -464,6 +478,7 @@ ClaudeQuery::usage =
   "Option Timeout -> Automatic \:3067 API \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:79d2\:6570\:3092\:6307\:5b9a\:3002";ContinueUpdate::usage =
   "ContinueUpdate[] \:306f\:76f4\:524d\:306e ClaudeUpdatePackage \:306e\:7d50\:679c\:3092\:8e0f\:307e\:3048\:3066\:30d0\:30b0\:4fee\:6b63\:3092\:7d99\:7d9a\:3059\:308b\:3002\n" <>
   "ContinueUpdate[\"instruction\"] \:306f\:8ffd\:52a0\:6307\:793a\:3092\:4ed8\:3051\:3066\:7d99\:7d9a\:3002\n" <>
+  "ContinueUpdate[{\"instruction\", img}] \:306f\:30c6\:30ad\:30b9\:30c8+\:753b\:50cf\:3067\:7d99\:7d9a\:3002\n" <>
   "ContinueUpdate[\"pkgName\", \"instruction\"] \:306f\:6307\:5b9a\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:76f4\:524d\:306e\:66f4\:65b0\:3092\:7d99\:7d9a\:3002\n" <>
   "Options: Fallback -> False, \"UpdateApiMd\" -> True, StartTime -> Now\:3002\n" <>
   "\:4f8b: ContinueUpdate[]\n" <>
@@ -1316,8 +1331,8 @@ nbPrint[nb_, text_Style, ___] := (
   Module[{str, opts},
     str = First[text];
     opts = Sequence @@ Rest[List @@ text];
-    NotebookWrite[nb,
-      Cell[TextData[{StyleBox[str, opts]}], "Text"], After]]);
+    NBAccess`NBWriteCell[nb,
+      Cell[TextData[{StyleBox[str, opts]}], "Text"]]]);
 
 (* 2つ以上のアンダースコアを含む変数名を修正
    tiling3_12_12 → tiling3X12X12 (Mathematica でパターン解釈されるのを防ぐ)
@@ -1370,7 +1385,7 @@ iWriteSectionHeaderBeforeEvalCell[nb_NotebookObject, title_String] :=
     If[Head[evalCell] === CellObject,
       (* EvaluationCell の前にヘッダーを挿入し、EvalCell の後に移動 *)
       Quiet[SelectionMove[evalCell, Before, Cell]];
-      NotebookWrite[nb, headerCell, After];
+      NBAccess`NBWriteCell[nb, headerCell];
       Quiet[SelectionMove[evalCell, After, Cell]],
       (* フォールバック: 末尾に追記 *)
       Quiet[SelectionMove[nb, After, Notebook]];
@@ -2423,6 +2438,43 @@ iClaudeCallPrefix[] :=
 $claudeProgress = <||>;
 $iDeferredWork = <||>;
 
+(* === 共有ポーリングタスク ===
+   複数の非同期クエリを同時実行しても ScheduledTask は常に 1 つだけ。
+   個別に ScheduledTask を作ると、並行実行時に動的評価オーバーフロー
+   （「動的評価の放棄」ダイアログ）が発生しフリーズする問題を防止する。 *)
+(* パッケージリロード時に旧タスクを停止 *)
+If[$iSharedPollingTask =!= None,
+  Quiet[StopScheduledTask[$iSharedPollingTask]];
+  Quiet[RemoveScheduledTask[$iSharedPollingTask]]];
+$iSharedPollingTask = None;
+
+iEnsureSharedPollingTask[] := (
+  If[$iSharedPollingTask =!= None &&
+     MemberQ[ScheduledTasks[], $iSharedPollingTask],
+    Return[]];
+  $iSharedPollingTask = CreateScheduledTask[
+    iSharedPollingTick[], 1.5];
+  StartScheduledTask[$iSharedPollingTask]);
+
+iSharedPollingTick[] := Module[{keys, tickFn},
+  keys = Keys[$claudeProgress];
+  If[!ListQ[keys] || Length[keys] === 0,
+    If[$iSharedPollingTask =!= None,
+      Quiet[StopScheduledTask[$iSharedPollingTask]];
+      Quiet[RemoveScheduledTask[$iSharedPollingTask]];
+      $iSharedPollingTask = None];
+    (* 安全ネット: done フェーズの WindowStatusArea クリアが
+       例外等で失敗した場合に備えて、全ノートブックの
+       WindowStatusArea を一括クリアする。 *)
+    Scan[Function[n, Quiet[CurrentValue[n, WindowStatusArea] = ""]],
+      Notebooks[]];
+    Return[]];
+  Do[
+    If[AssociationQ[$claudeProgress[k]],
+      tickFn = Lookup[$claudeProgress[k], "tickFn", None];
+      If[tickFn =!= None, Quiet @ Check[tickFn[], Null]]],
+    {k, keys}]];
+
 (* --print モードではツール使用許可プロンプトに応答できないため
    Read ツールと Glob（ファイルリスト）を常に許可する。
    $iAllowReadTool が True の場合は Grep も追加し、内容検索を許可する。
@@ -2759,20 +2811,23 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
       Quiet[CurrentValue[nb, WindowStatusArea] = iL[iL["Claude に問い合わせ中... 0s", "Querying Claude... 0s"], "Querying Claude... 0s"]]
     ];
 
-    With[{gSym = Symbol["ClaudeCode`Private`$task" <> ts]},
-    gSym = CreateScheduledTask[
+    $claudeProgress[ts]["tickFn"] =
       With[{p = proc, t0 = startTime, cb = callback, k = ts,
             oFile = outFile, bFile = batFile, pFile = promptFile,
-            pNb = nb, ptag = progTag, useFb = useFallback, sym = gSym,
+            pNb = nb, ptag = progTag, useFb = useFallback,
             jid = jobId, uj = useJob, fbMdls = fallbackModels},
+        Function[{},
         Module[{elapsed, info, statusStr, phase, status, iUpdateDisp},
           If[!KeyExistsQ[$claudeProgress, k], Return[]];
           elapsed = Round[AbsoluteTime[] - t0, 1];
           phase = Lookup[$claudeProgress[k], "phase", "polling"];
 
-          (* === 進捗テキスト更新ヘルパー: WindowStatusArea に統一 === *)
+          (* === 進捗テキスト更新ヘルパー: WindowStatusArea に統一 + スロットリング === *)
           iUpdateDisp[text_String, color_:RGBColor[0.8, 0.4, 0]] :=
-            Quiet[CurrentValue[pNb, WindowStatusArea] = text];
+            Module[{now = AbsoluteTime[]},
+              If[now - Lookup[$claudeProgress[k], "lastDispTime", 0] < 1.0, Return[]];
+              $claudeProgress[k]["lastDispTime"] = now;
+              Quiet[CurrentValue[pNb, WindowStatusArea] = text]];
 
           Which[
             (* === Phase: polling — プロセス実行中 === *)
@@ -2894,23 +2949,23 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                       iL["Claude に問い合わせ中... ", "Querying Claude... "] <> ToString[elapsed] <> iL["s | 出力を書き込み中 (", "s | Writing output ("] <>
                       ToString[idx] <> "/" <> ToString[total] <> ")"];
                     $claudeProgress[k]["writeSub"] = "exec",
-                    (* 実行ティック: thunk を 1 つ実行 + 所要時間を記録 *)
+                    (* 実行ティック: thunk を共有ポーリングタスク内で直接実行。
+                       スナップショット動作版と同じ方式。
+                       RunScheduledTask を経由すると FrontEnd 操作が別タスクで
+                       競合し、セルが書き込まれない問題が発生するため直接実行する。 *)
                     thunk = queue[[idx]];
-                    (* カーソル位置を正しく復元 (ユーザーがカーソルを動かしても安全) *)
                     If[uj,
                       Module[{tailTag, tailCells},
                         If[idx === 1,
-                          (* 初回: アンカー直後にテイルマーカー (不可視) を挿入 *)
                           NBAccess`NBJobMoveToAnchor[jid];
                           tailTag = "claude-tail-" <> jid;
                           $claudeProgress[k]["writeTailTag"] = tailTag;
-                          Quiet[NotebookWrite[pNb,
+                          NBAccess`NBWriteCell[pNb,
                             Cell["", "Text", CellOpen -> False,
                               ShowCellBracket -> False,
                               CellMargins -> {{0,0},{0,0}},
                               CellElementSpacings -> {"CellMinHeight" -> 0},
-                              CellTags -> {tailTag}], After]]];
-                        (* 毎回: テイルマーカーの直前にカーソルを移動 *)
+                              CellTags -> {tailTag}]]];
                         tailTag = Lookup[$claudeProgress[k], "writeTailTag", ""];
                         If[tailTag =!= "",
                           tailCells = Quiet[Cells[pNb, CellTags -> tailTag]];
@@ -2919,22 +2974,17 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                     Module[{t1 = AbsoluteTime[], dt},
                       Quiet @ Check[thunk[], Null];
                       dt = AbsoluteTime[] - t1;
-                      (* デバッグ: 1秒以上かかった thunk を記録 *)
                       If[dt > 1, $iLastSlowThunk = <|
                         "idx" -> idx, "total" -> total,
                         "elapsed" -> Round[dt, 0.1], "key" -> k|>]];
-                    (* 例外の有無にかかわらず次の thunk に進む。
-                       失敗 thunk でスタックして無限ループになるのを防止。 *)
                     $claudeProgress[k]["writeIdx"] = idx + 1;
                     $claudeProgress[k]["writeSub"] = "disp"]]],
 
-            (* === Phase: done — ScheduledTask のクリーンアップのみ ===
-               NBEndJob はキューの最終 thunk または非キュー callback 内で実行済み。 *)
+            (* === Phase: done — クリーンアップのみ ===
+               共有ポーリングタスクがエントリ消去後に自動停止する。 *)
             phase === "done",
               Module[{deferred = Quiet @ $iDeferredWork[jid]},
                 $claudeProgress = KeyDrop[$claudeProgress, k];
-                Quiet[StopScheduledTask[sym]];
-                Quiet[RemoveScheduledTask[sym]];
                 Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
                 If[!uj, NBAccess`NBDeleteCellsByTag[pNb, ptag]];
                 (* 重い処理を完全に別の ScheduledTask で非同期実行。
@@ -2947,11 +2997,9 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                     {0.1}]]]
           ]
         ]
-      ],
-      1
-    ];
-    StartScheduledTask[gSym];
-    ]   (* With end *)
+      ]   (* Function end *)
+      ];  (* With end *)
+    iEnsureSharedPollingTask[];
   ];   (* Module end *)
 
 $BaseDir = FileNameJoin[{$UserBaseDirectory, "pty_runner"}];
@@ -3975,24 +4023,35 @@ iClaudeQueryRaw[prompt_] := Module[
 
 (* \:30a8\:30e9\:30fc\:5fdc\:7b54\:304b\:3089\:5229\:7528\:5236\:9650\:30fb\:63a5\:7d9a\:4e0d\:53ef\:3092\:691c\:51fa *)
 iIsLimitError[response_String] :=
-  StringContainsQ[response,
-    "hit your limit" | "rate limit" | "overloaded" |
-    "TIMEOUT" | "RunProcess" | "ExitCode=" |
-    (* 日本語の空レスポンス/利用制限メッセージも検出 *)
-    "\:5229\:7528\:5236\:9650" | "\:7a7a\:306e\:30ec\:30b9\:30dd\:30f3\:30b9" | "empty response" |
-    "usage limit" | "returned an empty response",
-    IgnoreCase -> True] ||
+  (* 長い応答 (600文字超) や Markdown ドキュメント (# で始まる) は
+     正常な LLM 応答であり、リミットエラーではない。
+     "TIMEOUT" や "RunProcess" は Mathematica のオプション名や関数名として
+     通常の回答に頻出するため、短いエラーメッセージでのみ検出する。 *)
+  (StringLength[response] < 600 &&
+   !StringStartsQ[StringTrim[response], "#"] &&
+   StringContainsQ[response,
+     "hit your limit" | "rate limit" | "overloaded" |
+     "TIMEOUT" | "RunProcess" | "ExitCode=" |
+     (* 日本語の空レスポンス/利用制限メッセージも検出 *)
+     "\:5229\:7528\:5236\:9650" | "\:7a7a\:306e\:30ec\:30b9\:30dd\:30f3\:30b9" | "empty response" |
+     "usage limit" | "returned an empty response",
+     IgnoreCase -> True]) ||
   (* "resets" は単独では誤判定しやすいので "limit" との共起を要求 *)
-  (StringContainsQ[response, "resets", IgnoreCase -> True] &&
+  (StringLength[response] < 600 &&
+   StringContainsQ[response, "resets", IgnoreCase -> True] &&
    StringContainsQ[response, "limit" | "hit your", IgnoreCase -> True]);
 
 (* API レスポンスがエラー/制限メッセージかを判定する統一関数。
    ファイル書き込み前に必ずチェックし、ファイル破損を防止する。 *)
 iIsAPIErrorResponse[response_String] :=
   StringStartsQ[response, "Error"] ||
-  StringContainsQ[response,
-    "hit your limit" | "rate limit" | "overloaded",
-    IgnoreCase -> True] ||
+  (* rate limit 等はエラーメッセージでは短い (<600文字)。
+     長い応答や # で始まる Markdown ドキュメントは誤検知を防ぐため除外。 *)
+  (StringLength[response] < 600 &&
+   !StringStartsQ[StringTrim[response], "#"] &&
+   StringContainsQ[response,
+     "hit your limit" | "rate limit" | "overloaded",
+     IgnoreCase -> True]) ||
   (* CenterDot (·) 付きリミットメッセージ: "You've hit your limit · resets..." のみ検出。
      注意: · は物理式の積 (F·v) や箇条書きにも使われるため、単独では誤検知する。
      "unavailable" も通常の説明文に出現するため、単独チェックから除外。 *)
@@ -4927,10 +4986,10 @@ iFallbackInsertProgress[nb_NotebookObject, key_String, provider_String, model_St
   $iFallbackProgress[key] = <|"disp" ->
     "Fallback: " <> provider <> "/" <> model <> " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s", "querying... 0s"]|>;
   With[{tag = "claude-fb-prog-" <> key},
-    NotebookWrite[nb,
+    NBAccess`NBWriteCell[nb,
       Cell["Fallback: " <> provider <> "/" <> model <> " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s", "querying... 0s"],
         "Print", CellTags -> {tag},
-        FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11], After]]);
+        FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]]]);
 
 (* \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:7528\:30d7\:30ed\:30b0\:30ec\:30b9\:30bb\:30eb\:3092\:524a\:9664 *)
 iFallbackDeleteProgress[nb_NotebookObject, key_String] := (
@@ -5220,10 +5279,10 @@ ClaudeStatus[] :=
 
 ClaudeAbort[] :=
   Module[{keys, stopped = 0},
-    (* 1. メイン ScheduledTask + プロセスを停止 *)
+    (* 1. プロセスを停止 + テイルマーカー削除 *)
     keys = If[AssociationQ[$claudeProgress], Keys[$claudeProgress], {}];
     Do[
-      Module[{info = $claudeProgress[key], proc, sym, tailTag, abortNb},
+      Module[{info = $claudeProgress[key], proc, tailTag, abortNb},
         If[!AssociationQ[info], Continue[]];
         (* Claude Code プロセスを強制終了 *)
         proc = Lookup[info, "process", None];
@@ -5233,14 +5292,17 @@ ClaudeAbort[] :=
         abortNb = Lookup[info, "nb", None];
         If[tailTag =!= "" && Head[abortNb] === NotebookObject,
           Quiet[NBAccess`NBDeleteCellsByTag[abortNb, tailTag]]];
-        (* ScheduledTask を停止 *)
-        sym = Quiet[Symbol["ClaudeCode`Private`$task" <> key]];
-        If[Head[sym] =!= Symbol,
-          Quiet[StopScheduledTask[sym]];
-          Quiet[RemoveScheduledTask[sym]]];
         stopped++],
       {key, keys}];
     $claudeProgress = <||>;
+    (* 共有ポーリングタスクを停止 *)
+    If[$iSharedPollingTask =!= None,
+      Quiet[StopScheduledTask[$iSharedPollingTask]];
+      Quiet[RemoveScheduledTask[$iSharedPollingTask]];
+      $iSharedPollingTask = None];
+    (* 全ノートブックの WindowStatusArea をクリア *)
+    Scan[Function[n, Quiet[CurrentValue[n, WindowStatusArea] = ""]],
+      Notebooks[]];
     (* 2. フォールバックタスクを停止 *)
     iCancelActiveFallbacks[];
     (* 3. Job システムの後始末 *)
@@ -5597,6 +5659,185 @@ ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
   ];
 
 
+(* ============================================================
+   ClaudeQueryBg: FrontEnd 操作なし・ScheduledTask/StartProcess 生成なしの同期クエリ
+   ── rule 95 安全な代替手段: URLRead ✅ のみ使用 ──────────
+   ClaudeQuerySync との違い:
+     - InputNotebook / EvaluationNotebook を一切参照しない
+     - WindowStatusArea 更新用 ScheduledTask を生成しない
+     - Claude CLI (StartProcess) を使わない
+     - URLRead[HTTPRequest[...]] で Anthropic API を直接呼ぶ
+       → $iSharedPollingTask との競合が発生しない
+   APIキー取得は NBAccess`NBGetAPIKey (AccessLevel 1.0 は claudecode 内部で処理)
+   用途:
+     - SocketListen ハンドラ内からの LLM 呼び出し
+     - ScheduledTask コールバック内からの LLM 呼び出し
+     - FrontEnd なし環境 (WolframScript 等) での LLM 呼び出し
+   ============================================================ *)
+Options[ClaudeQueryBg] = {
+  Fallback -> False,
+  Model    -> Automatic,
+  Timeout  -> Automatic
+};
+
+ClaudeQueryBg[prompt_String, opts:OptionsPattern[]] :=
+  Module[{modelSpec, model, apiKey, url, bodyStr, req, respStr, timeout},
+    modelSpec = OptionValue[Model];
+    timeout   = OptionValue[Timeout];
+    If[timeout === Automatic || !NumericQ[timeout], timeout = $ClaudeTimeout];
+    If[!NumericQ[timeout], timeout = 1200];
+
+    (* ── モデル解決 ── *)
+    model = Which[
+      (* 明示指定: {"anthropic","claude-sonnet-4-6"} *)
+      ListQ[modelSpec] && Length[modelSpec] >= 2,
+        modelSpec[[2]],
+      (* $ClaudeModel が設定済み *)
+      StringQ[$ClaudeModel] && StringTrim[$ClaudeModel] =!= "",
+        $ClaudeModel,
+      (* デフォルト *)
+      True,
+        $iModelSonnet
+    ];
+
+    (* ── APIキー取得 ──
+       NBGetAPIKey は AccessLevel >= 1.0 が必要。
+       この 1.0 は「認証情報ストアへのアクセス権」であり
+       claudecode 内部でのみ使用する (MathWebServer 等から隠蔽)。 *)
+    apiKey = Quiet[NBAccess`NBGetAPIKey["anthropic",
+      PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
+    If[!StringQ[apiKey] || StringLength[apiKey] === 0,
+      Return["Error: Anthropic API \:30ad\:30fc\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002\n" <>
+             "SystemCredential[\"ANTHROPIC_API_KEY\"] \:3092\:8a2d\:5b9a\:3057\:3066\:304f\:3060\:3055\:3044\:3002"]];
+
+    (* ── エンドポイント URL ── *)
+    url = If[ListQ[modelSpec] && Length[modelSpec] >= 3 && StringQ[modelSpec[[3]]] && modelSpec[[3]] =!= "",
+      modelSpec[[3]],
+      "https://api.anthropic.com/v1/messages"];
+
+    (* ── リクエストボディ (SKILL 準拠: ByteArray で送信) ──
+       ExportString["JSON"] を String で Body に渡すと Windows で
+       暗黙エンコーディング変換が入り日本語が文字化けする。
+       ExportByteArray["JSON"] で UTF-8 ByteArray として送信する。 *)
+    bodyBytes = Quiet @ Check[
+      ExportByteArray[<|
+        "model"      -> model,
+        "max_tokens" -> 4096,
+        "messages"   -> {<|"role" -> "user", "content" -> prompt|>}
+      |>, "JSON", "Compact" -> True],
+      $Failed];
+    (* ExportByteArray が使えない WL バージョン用フォールバック *)
+    If[!ByteArrayQ[bodyBytes],
+      bodyBytes = StringToByteArray[
+        StringReplace[
+          ExportString[<|
+            "model"      -> model,
+            "max_tokens" -> 4096,
+            "messages"   -> {<|"role" -> "user", "content" -> prompt|>}
+          |>, "JSON", "Compact" -> True],
+          (* 非ASCII文字を \uXXXX JSON エスケープに変換 *)
+          c : RegularExpression["[\\x80-\\x{FFFF}]"] :>
+            "\\u" <> IntegerString[First[ToCharacterCode[c]], 16, 4]],
+        "UTF-8"]];
+
+    (* ── URLRead で Anthropic API を直接呼ぶ ──
+       rule 95: URLRead は ScheduledTask/SocketListen コンテキストで ✅ 安全。
+       StartProcess / $iSharedPollingTask を一切使わないため
+       claudecode の非同期基盤と競合しない。 *)
+    req = HTTPRequest[url,
+      <|Method -> "POST",
+        "Headers" -> {
+          "x-api-key"         -> apiKey,
+          "anthropic-version" -> "2023-06-01",
+          "content-type"      -> "application/json"
+        },
+        (* SKILL 準拠: Body は ByteArray で渡す (文字列経由の変換を回避) *)
+        "Body" -> bodyBytes|>];
+
+    (* ── レスポンス受信 (SKILL 準拠: BodyByteArray → ImportByteArray["RawJSON"]) ──
+       ByteArrayToString を経由すると Windows の暗黙エンコーディング変換が入る。
+       ImportByteArray["RawJSON"] で ByteArray を直接 JSON パースする。 *)
+    Module[{rb},
+      rb = Quiet[TimeConstrained[URLRead[req, "BodyByteArray"], timeout, $Failed]];
+      If[!ByteArrayQ[rb],
+        Return["Error: API \:547c\:3073\:51fa\:3057\:306b\:5931\:6557\:3057\:307e\:3057\:305f (URLRead \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:307e\:305f\:306f\:30cd\:30c3\:30c8\:30ef\:30fc\:30af\:30a8\:30e9\:30fc)\:3002"]];
+      iParseAnthropicBgResponse[rb]]
+  ];
+
+(* リスト入力版: {"質問", Image[...], File["path"], ...}
+   テキスト部分のみを抽出してAPI送信 (マルチモーダルは未対応) *)
+ClaudeQueryBg[items_List, opts:OptionsPattern[]] :=
+  Module[{textParts},
+    textParts = Select[items, StringQ];
+    ClaudeQueryBg[StringJoin[Riffle[textParts, "\n"]], opts]
+  ];
+
+(* Anthropic レスポンス JSON → テキスト文字列 *)
+
+(* ByteArray 直接版 (SKILL 準拠: ImportByteArray["RawJSON"] で変換なしパース) *)
+iParseAnthropicBgResponse[rb_ByteArray] :=
+  Module[{parsed, str},
+    (* ImportByteArray["RawJSON"] で ByteArray を直接 JSON パース。
+       ByteArrayToString を経由しないため Windows の暗黙変換が入らない。 *)
+    parsed = Quiet @ Check[ImportByteArray[rb, "RawJSON"], $Failed];
+    If[parsed === $Failed,
+      (* フォールバック: 明示的 UTF-8 デコード後に文字列版を試みる *)
+      str = Quiet @ Check[ByteArrayToString[rb, "UTF-8"], $Failed];
+      If[StringQ[str], Return[iParseAnthropicBgResponse[str]]];
+      Return["Error: JSON \:89e3\:6790\:5931\:6557 (ByteArray)"]];
+    iParseAnthropicBgResponse[parsed]  (* Association を文字列版で処理 *)
+  ];
+
+(* Association 直接版: ImportByteArray の結果を受け取り text を抽出 *)
+iParseAnthropicBgResponse[parsed_Association] :=
+  Module[{content, errData},
+    If[KeyExistsQ[parsed, "error"],
+      errData = parsed["error"];
+      If[ListQ[errData] && !AssociationQ[errData], errData = Association[errData]];
+      Return["Error: " <> If[AssociationQ[errData],
+        Lookup[errData, "message", ToString[errData]],
+        ToString[errData]]]];
+    content = Lookup[parsed, "content", {}];
+    If[!ListQ[content] || Length[content] === 0,
+      Return["Error: \:30ec\:30b9\:30dd\:30f3\:30b9\:306b content \:30d5\:30a3\:30fc\:30eb\:30c9\:304c\:3042\:308a\:307e\:305b\:3093\:3002"]];
+    StringJoin[Map[Function[b,
+      If[AssociationQ[b] && Lookup[b, "type", ""] === "text",
+        Lookup[b, "text", ""], ""]],
+      content]]
+  ];
+
+(* String 版: ByteArrayToString 経由の旧パス (フォールバック用) *)
+iParseAnthropicBgResponse[respStr_String] :=
+  Module[{parsed, content, errData},
+    (* Developer`ReadRawJSONString (WL 11.1+) は \n, \\, \u 等の JSON エスケープを
+       正しく処理できる。ImportString["JSON"] はこれらで失敗するケースがある。 *)
+    parsed = Quiet @ Check[Developer`ReadRawJSONString[respStr], $Failed];
+    If[parsed === $Failed,
+      parsed = Quiet @ Check[ImportString[respStr, "RawJSON"], $Failed]];
+    If[parsed === $Failed,
+      parsed = Quiet @ Check[ImportString[respStr, "JSON"], $Failed]];
+    If[ListQ[parsed] && !AssociationQ[parsed], parsed = Association[parsed]];
+    If[!AssociationQ[parsed],
+      Return["Error: JSON \:89e3\:6790\:5931\:6557: " <>
+             StringTake[respStr, Min[200, StringLength[respStr]]]]];
+    (* エラーレスポンス *)
+    If[KeyExistsQ[parsed, "error"],
+      errData = parsed["error"];
+      If[ListQ[errData] && !AssociationQ[errData], errData = Association[errData]];
+      Return["Error: " <> If[AssociationQ[errData],
+        Lookup[errData, "message", ToString[errData]],
+        ToString[errData]]]];
+    (* 成功: content[0].text を連結 *)
+    content = Lookup[parsed, "content", {}];
+    If[!ListQ[content] || Length[content] === 0,
+      Return["Error: \:30ec\:30b9\:30dd\:30f3\:30b9\:306b content \:30d5\:30a3\:30fc\:30eb\:30c9\:304c\:3042\:308a\:307e\:305b\:3093\:3002"]];
+    StringJoin[Map[Function[b,
+      Module[{ba = If[ListQ[b] && !AssociationQ[b], Association[b], b]},
+        If[AssociationQ[ba] && Lookup[ba, "type", ""] === "text",
+          Lookup[ba, "text", ""], ""]]],
+      content]]
+  ];
+
 Options[ClaudeWriteResponse] = {AutoEvaluate -> False};
 ClaudeWriteResponse[nb_NotebookObject, text_String, opts:OptionsPattern[]] :=
   iWriteQueryResponse[nb, text, TrueQ[OptionValue[AutoEvaluate]]];
@@ -5812,7 +6053,14 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
             NBAccess`NBJobMoveToAnchor[jid];
             $iJobActiveNb = nb2;
             (* \:30a8\:30e9\:30fc/\:5236\:9650\:30ec\:30b9\:30dd\:30f3\:30b9\:306f\:901a\:77e5\:30b9\:30bf\:30a4\:30eb\:3067\:8868\:793a\:3057\:3066\:7d42\:4e86 *)
-            If[StringQ[response] && (iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"]),
+            (* エラーチェック:
+               - 500文字超の応答はエラーではない（ドキュメント等）
+               - "#" で始まる応答は Markdown ドキュメントなので絶対にエラーではない
+               - 非文字列は iIsAPIErrorResponse[_]:=True が捕まえる *)
+            If[StringQ[response] &&
+               StringLength[response] <= 500 &&
+               !StringStartsQ[StringTrim[response], "#"] &&
+               (iIsAPIErrorResponse[response] || StringStartsQ[response, "Error"]),
               NBAccess`NBWritePrintNotice[nb2, response, RGBColor[0.8, 0, 0]];
               NBAccess`NBJobResetSlotWritten[jid, 1];
               $iJobActiveNb = None;
@@ -5990,6 +6238,30 @@ iLanguageInstruction["summary"] :=
 iLanguageInstruction["explanation"] :=
   "All explanatory text must be written in " <> iLanguageName[] <> ".";
 
+(* 非同期タスクスケジューリング規約: ClaudeCreatePackage / ClaudeUpdatePackage プロンプトに注入。
+   claudecode/NBAccess が提供する共有ポーリングタスクを経由し、
+   パッケージ側で個別に ScheduledTask を作成しないことを指示する。 *)
+iAsyncSchedulingRules[] :=
+  "\n=== ASYNC TASK SCHEDULING RULES ===\n" <>
+  "When the package needs asynchronous or background processing with UI feedback:\n" <>
+  "1. MANDATORY: Use claudecode/NBAccess public APIs for async task scheduling.\n" <>
+  "   - Use iClaudeQueryAsyncWithProgress[] for LLM query tasks.\n" <>
+  "   - Use NBAccess functions (NBWriteCell, NBEndJob, etc.) for notebook output.\n" <>
+  "   - Do NOT create individual ScheduledTask objects for polling or progress tracking.\n" <>
+  "   - The shared polling infrastructure in claudecode manages all concurrent async tasks\n" <>
+  "     through a single ScheduledTask to prevent FrontEnd dynamic evaluation overload.\n" <>
+  "2. EXCEPTIONS (individual ScheduledTask allowed):\n" <>
+  "   a. Pure computation tasks (numerical, combinatorial) that do NOT interact with\n" <>
+  "      the FrontEnd (no WindowStatusArea, NotebookWrite, Dynamic, etc.).\n" <>
+  "   b. Interactive user-facing programs (e.g., PresentationListener) that have\n" <>
+  "      specific real-time requirements justifying a custom scheduler.\n" <>
+  "   In both cases, the documentation (api.md/user_manual.md/README.md) MUST explicitly\n" <>
+  "   note that the package uses its own ScheduledTask and explain why.\n" <>
+  "3. RATIONALE: Multiple concurrent ScheduledTask objects that update WindowStatusArea\n" <>
+  "   or call NotebookWrite cause Mathematica's dynamic evaluation to overflow,\n" <>
+  "   triggering the 'Dynamic evaluation abort' dialog and freezing all tasks.\n" <>
+  "=================================\n\n";
+
 ClaudeMath[task_String] := iClaudeQueryRaw[
   "You are an expert Wolfram Language / Mathematica programmer. \
 Provide clean, working Mathematica code. \
@@ -6106,7 +6378,7 @@ $iAutoEvalProhibitedPatterns = {
   RegularExpression["(?<![\\p{L}\\p{N}$])ClaudeAttach\\s*\\["],
   (* 4. \:8a8d\:8a3c\:60c5\:5831\:30fb\:30d5\:30a1\:30a4\:30eb\:7834\:58ca\:7684\:64cd\:4f5c *)
   RegularExpression["(?<![\\p{L}\\p{N}$])(?:SystemCredential|RenameFile|DeleteFile|CopyFile)\\s*\\["],
-  (* 5. AccessLevel \:306e\:4f7f\:7528 \u2014 \:30d7\:30e9\:30a4\:30d0\:30b7\:30ec\:30d9\:30eb\:6607\:683c\:3092\:9632\:6b62 *)
+  (* 5. AccessLevel \:306e\:4f7f\:7528 \:2014 \:30d7\:30e9\:30a4\:30d0\:30b7\:30ec\:30d9\:30eb\:6607\:683c\:3092\:9632\:6b62 *)
   RegularExpression["(?<![\\p{L}\\p{N}$])AccessLevel(?![\\p{L}\\p{N}$])"]
 };
 
@@ -6595,10 +6867,9 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
           FontSize  -> 10]];
 
         (* Input セルとして表示用に書き込み *)
-        Quiet @ NotebookWrite[nb,
+        NBAccess`NBWriteCell[nb,
           Cell[nbCallCode, "Input",
-            CellLabel -> "ClaudeProcessFile (auto)"],
-          After];
+            CellLabel -> "ClaudeProcessFile (auto)"]];
 
         $iJobActiveNb = None;
         NBAccess`NBEndJob[jid];
@@ -6753,7 +7024,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
                 cell = If[MatchQ[box, _BoxData],
                   Cell[box, "Input"],
                   Cell[code, "Input", CellAutoOverwrite -> True]];
-                NotebookWrite[nb2, cell, After]]]];
+                NBAccess`NBWriteCell[nb2, cell]]]];
             (* AutoEvaluate: effectiveAE は禁止操作検出時に False になっている *)
             If[TrueQ[effectiveAE],
               AppendTo[queue, Function[
@@ -6782,7 +7053,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
                   cell = If[MatchQ[box, _BoxData],
                     Cell[box, "Input"],
                     Cell[fc, "Input", CellAutoOverwrite -> True]];
-                  NotebookWrite[nb2, cell, After]]]]];
+                  NBAccess`NBWriteCell[nb2, cell]]]]];
               If[TrueQ[ae] && !iIsAutoEvalProhibited[fallbackCode],
                 AppendTo[queue, Function[
                   NBAccess`NBEvaluatePreviousCell[nb2]]]];
@@ -7424,9 +7695,42 @@ iBuildContinueUpdatePrompt[originalPrompt_, instruction_String, response_String,
 
 Options[ContinueUpdate] = {Fallback -> False, StartTime -> Now, "UpdateApiMd" -> False};
 
-(* ContinueUpdate["pkg", "instruction", opts] *)
-ContinueUpdate[packageName_String, instruction_String, opts:OptionsPattern[]] :=
-  Module[{info, nb, origPrompt, response, nbOutput, newPrompt},
+(* ContinueUpdate[]: パッケージ名を $iLastUpdateInfo から自動取得 *)
+ContinueUpdate[opts:OptionsPattern[]] :=
+  Module[{pn},
+    pn = If[AssociationQ[$iLastUpdateInfo],
+      Lookup[$iLastUpdateInfo, "packageName", ""], ""];
+    If[pn === "",
+      Module[{nb = Replace[EvaluationNotebook[],
+                Except[_NotebookObject] :> InputNotebook[]]},
+        nbPrint[nb, iL[
+          "\:30a8\:30e9\:30fc: \:76f4\:524d\:306e ClaudeUpdatePackage \:5c65\:6b74\:304c\:3042\:308a\:307e\:305b\:3093\:3002\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:6307\:5b9a\:3057\:3066\:304f\:3060\:3055\:3044: ContinueUpdate[\"pkg\", \"instruction\"]",
+          "Error: No previous ClaudeUpdatePackage history. Specify package name: ContinueUpdate[\"pkg\", \"instruction\"]"]];
+        Return[$Failed]]];
+    ContinueUpdate[pn, "", opts]
+  ];
+
+(* ContinueUpdate[instruction]: パッケージ名を $iLastUpdateInfo から自動取得 + 追加指示。
+   instruction は文字列またはテキスト+画像のリスト（ClaudeUpdatePackage と同じ）。 *)
+ContinueUpdate[instruction_, opts:OptionsPattern[]] :=
+  Module[{pn},
+    pn = If[AssociationQ[$iLastUpdateInfo],
+      Lookup[$iLastUpdateInfo, "packageName", ""], ""];
+    If[pn === "",
+      Module[{nb = Replace[EvaluationNotebook[],
+                Except[_NotebookObject] :> InputNotebook[]]},
+        nbPrint[nb, iL[
+          "\:30a8\:30e9\:30fc: \:76f4\:524d\:306e ClaudeUpdatePackage \:5c65\:6b74\:304c\:3042\:308a\:307e\:305b\:3093\:3002\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:6307\:5b9a\:3057\:3066\:304f\:3060\:3055\:3044: ContinueUpdate[\"pkg\", \"instruction\"]",
+          "Error: No previous ClaudeUpdatePackage history. Specify package name: ContinueUpdate[\"pkg\", \"instruction\"]"]];
+        Return[$Failed]]];
+    ContinueUpdate[pn, instruction, opts]
+  ] /; !MatchQ[instruction, _Rule | _RuleDelayed];
+
+(* ContinueUpdate["pkg", instruction, opts]
+   instruction は文字列またはテキスト+画像のリスト。 *)
+ContinueUpdate[packageName_String, instruction_, opts:OptionsPattern[]] :=
+  Module[{info, nb, origPrompt, response, nbOutput, newPrompt,
+          instrNorm, fullPrompt},
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     nb = Replace[EvaluationNotebook[],
       Except[_NotebookObject] :>
@@ -7448,9 +7752,17 @@ ContinueUpdate[packageName_String, instruction_String, opts:OptionsPattern[]] :=
     response   = Lookup[info, "response", ""];
     nbOutput   = iCaptureRecentOutput[nb,
       Replace[Lookup[info, "cellCountAfter", 0], Except[_Integer] -> 0]];
-    newPrompt  = iBuildContinueUpdatePrompt[origPrompt, instruction, response, nbOutput];
+    (* instruction をノーマライズ: テキスト部分とメディアファイルを分離 *)
+    instrNorm = iNormalizePrompt[instruction];
+    newPrompt = iBuildContinueUpdatePrompt[origPrompt, instrNorm["userText"], response, nbOutput];
+    (* メディアファイルがあれば multimodal リストとして構築 *)
+    fullPrompt = If[ListQ[instruction] &&
+        AnyTrue[If[ListQ[instruction], instruction, {}], !StringQ[#] &],
+      Join[{newPrompt},
+        Select[instruction, !StringQ[#] &]],
+      newPrompt];
     $iContinueUpdateFlag = True;
-    ClaudeUpdatePackage[packageName, newPrompt,
+    ClaudeUpdatePackage[packageName, fullPrompt,
       Fallback -> TrueQ[OptionValue[Fallback]],
       "UpdateApiMd" -> Replace[OptionValue["UpdateApiMd"],
         Automatic :> TrueQ[$iPaletteUpdateApiMd]],
@@ -7921,7 +8233,7 @@ formatTimestamp[ts_String] := Module[{m, m2, m3},
     With[{p = First[m]},
       p[[1]] <> "-" <> p[[2]] <> "-" <> p[[3]] <>
       " " <> p[[4]] <> ":" <> p[[5]]],
-    (* YYYYMMDDHHMMSS \:5f62\:5f0f (14\:6841\u30fb\:30a2\:30f3\:30c0\:30fc\:30b9\:30b3\:30a2\:306a\:3057) *)
+    (* YYYYMMDDHHMMSS \:5f62\:5f0f (14\:6841\:30fb\:30a2\:30f3\:30c0\:30fc\:30b9\:30b3\:30a2\:306a\:3057) *)
     m2 = StringCases[ts,
       RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
         {"$1", "$2", "$3", "$4", "$5"}];
@@ -7929,7 +8241,7 @@ formatTimestamp[ts_String] := Module[{m, m2, m3},
       With[{p = First[m2]},
         p[[1]] <> "-" <> p[[2]] <> "-" <> p[[3]] <>
         " " <> p[[4]] <> ":" <> p[[5]]],
-      (* YYYYMMDDHHMM \:5f62\:5f0f (12\:6841\u30fb\:65e7\:5f62\:5f0f) *)
+      (* YYYYMMDDHHMM \:5f62\:5f0f (12\:6841\:30fb\:65e7\:5f62\:5f0f) *)
       m3 = StringCases[ts,
         RegularExpression["^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$"] :>
           {"$1", "$2", "$3", "$4", "$5"}];
@@ -8294,7 +8606,7 @@ iBackupReview[packageName_String, dir_String, btype_String] :=
             Method -> "Queued"]
         }]
       ]], "Output"]]];
-    NotebookWrite[nb, Cell[CellGroupData[cells, Open]]];
+    NBAccess`NBWriteCell[nb, Cell[CellGroupData[cells, Open]]];
     <|"Action" -> "Review", "Package" -> packageName, "Directory" -> dir|>
   ];
 
@@ -8596,7 +8908,7 @@ ClaudeBackupDataset[packageName_String] :=
                         Method -> "Queued"]
                     }]]], "Output"]
                   }, Open]];
-                  NotebookWrite[nb, cells],
+                  NBAccess`NBWriteCell[nb, cells],
                   (* 変更なし *)
                   If[ChoiceDialog[iL["ローカル最新版に復元しますか？", "Restore to local latest?"]],
                     Module[{res},
@@ -8655,7 +8967,7 @@ ClaudeBackupDataset[packageName_String] :=
     Module[{nb = Quiet[EvaluationNotebook[]]},
       NBAccess`NBDeleteCellsByTag[nb, warningTag];
       NBAccess`NBDeleteCellsByTag[nb, outputTag]];
-    CellPrint[Cell[BoxData[ToBoxes[gridResult]], "Output",
+    NBAccess`NBCellPrint[Cell[BoxData[ToBoxes[gridResult]], "Output",
       CellTags -> {outputTag}]];
   ];
 
@@ -8714,7 +9026,7 @@ ClaudeBackupDataset[] :=
       ItemSize -> {{3, 14, 14, 8, 20, Automatic}, Automatic}];
     Module[{nb = Quiet[EvaluationNotebook[]]},
       NBAccess`NBDeleteCellsByTag[nb, outputTag]];
-    CellPrint[Cell[BoxData[ToBoxes[gridResult]], "Output",
+    NBAccess`NBCellPrint[Cell[BoxData[ToBoxes[gridResult]], "Output",
       CellTags -> {outputTag}]];
   ];
 
@@ -8898,21 +9210,49 @@ ClaudeMigrateBackupHistory[opts:OptionsPattern[]] :=
    関数単位抽出: ファイル内の各関数定義を Association に分解
    ============================================================== *)
 iExtractFunctions[code_String] :=
-  Module[{lines, blocks, current, funcName, nameRe},
+  Module[{lines, blocks, current, nameRe, usageRe, optRe},
     lines = StringSplit[code, "\n"];
     nameRe = RegularExpression["^([a-zA-Z\\$][a-zA-Z0-9\\$]*)\\s*[\\[\\(]"];
+    (* FuncName::usage = "..." → キーを FuncName にする *)
+    usageRe = RegularExpression["^([a-zA-Z\\$][a-zA-Z0-9\\$]*)::usage\\s*="];
+    (* Options[FuncName] = {...} → キーを FuncName にする *)
+    optRe = RegularExpression["^Options\\[([a-zA-Z\\$][a-zA-Z0-9\\$]*)\\]\\s*="];
     blocks = <||>;
     current = None;
     Scan[Function[line,
-      Module[{m},
-        m = StringCases[line, nameRe :> "$1"];
-        If[Length[m] > 0 && !StringStartsQ[line, " "] && !StringStartsQ[line, "\t"] &&
-           (StringContainsQ[line, ":="] || StringContainsQ[line, "= ("]),
-          current = First[m];
-          If[!KeyExistsQ[blocks, current], blocks[current] = ""];
-          blocks[current] = blocks[current] <> line <> "\n",
-          If[current =!= None,
-            blocks[current] = blocks[current] <> line <> "\n"]
+      Module[{m, mu, mo},
+        Which[
+          (* Options[FuncName] = {...}: FuncName をキーにする *)
+          (mo = StringCases[line, optRe :> "$1"]; Length[mo] > 0) &&
+            !StringStartsQ[line, " "] && !StringStartsQ[line, "\t"],
+            current = First[mo];
+            If[!KeyExistsQ[blocks, current], blocks[current] = ""];
+            blocks[current] = blocks[current] <> line <> "\n",
+          (* FuncName::usage = "...": FuncName をキーにする *)
+          (mu = StringCases[line, usageRe :> "$1"]; Length[mu] > 0) &&
+            !StringStartsQ[line, " "] && !StringStartsQ[line, "\t"],
+            current = First[mu];
+            If[!KeyExistsQ[blocks, current], blocks[current] = ""];
+            blocks[current] = blocks[current] <> line <> "\n",
+          (* 通常の関数定義: FuncName[...] := ... *)
+          (m = StringCases[line, nameRe :> "$1"]; Length[m] > 0) &&
+            !StringStartsQ[line, " "] && !StringStartsQ[line, "\t"] &&
+            (StringContainsQ[line, ":="] || StringContainsQ[line, "= ("]),
+            current = First[m];
+            If[!KeyExistsQ[blocks, current], blocks[current] = ""];
+            blocks[current] = blocks[current] <> line <> "\n",
+          (* $Constant = ... (行頭 $ で始まる定数代入) *)
+          StringStartsQ[line, "$"] && StringContainsQ[line, "="] &&
+            !StringStartsQ[line, " "] && !StringStartsQ[line, "\t"],
+            Module[{cm = StringCases[line, RegularExpression["^(\\$[a-zA-Z0-9]+)"] :> "$1"]},
+              If[Length[cm] > 0,
+                current = First[cm];
+                If[!KeyExistsQ[blocks, current], blocks[current] = ""];
+                blocks[current] = blocks[current] <> line <> "\n"]],
+          (* 継続行 *)
+          True,
+            If[current =!= None,
+              blocks[current] = blocks[current] <> line <> "\n"]
         ]
       ]
     ], lines];
@@ -8920,9 +9260,132 @@ iExtractFunctions[code_String] :=
   ];
 
 (* \:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:542b\:307e\:308c\:308b\:95a2\:6570\:540d\:3092\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30a8\:30af\:30b9\:30dd\:30fc\:30c8\:540d\:4e00\:89a7\:3068\:7167\:5c04\:3057\:3066\:63a8\:5b9a *)
+
+(* 依存パッケージの api.md を収集する。
+   対象パッケージのソースから Needs["Pkg`"] を検出し、各依存の api.md を読む。
+   ClaudeUpdatePackage のプロンプトに付加してパッケージ境界を越えた原因追跡を可能にする。 *)
+iCollectDependencyApis[sourceCode_String] :=
+  Module[{needsPkgs, apiTexts = {}, pkgDir = Global`$packageDirectory,
+          docsDir, apiFile, content},
+    If[!StringQ[pkgDir] || pkgDir === "", Return[""]];
+    (* Needs["PackageName`"] からパッケージ名を抽出 *)
+    needsPkgs = StringCases[sourceCode,
+      RegularExpression["Needs\\[\"([a-zA-Z][a-zA-Z0-9]*)`\"\\]"] :> "$1"];
+    needsPkgs = DeleteDuplicates[needsPkgs];
+    If[Length[needsPkgs] === 0, Return[""]];
+    Do[
+      docsDir = iPackageDocsDir[pkg];
+      If[StringQ[docsDir] && DirectoryQ[docsDir],
+        apiFile = FileNameJoin[{docsDir, "api.md"}];
+        If[FileExistsQ[apiFile],
+          content = Quiet @ Check[Import[apiFile, "Text"], ""];
+          If[StringQ[content] && StringLength[content] > 0,
+            AppendTo[apiTexts,
+              "=== Dependency API: " <> pkg <> " ===\n" <>
+              "(This package is used by the target package via Needs[\"" <> pkg <> "`\"]. " <>
+              "Use this API reference to understand available functions when tracing call chains.)\n\n" <>
+              content <> "\n\n"]]]],
+    {pkg, needsPkgs}];
+    StringJoin[apiTexts]
+  ];
+
+(* 変更検証: LLM レスポンスの VERIFY: タグを抽出し、マージ後のコードに含まれるか確認。
+   LLM が「変更した」と主張する内容が実際にコードに反映されているかを検証する。
+   検出されなかった項目は警告として返される。 *)
+iVerifyClaimedChanges[response_String, newCode_String] :=
+  Module[{verifyLines, missing = {}},
+    verifyLines = StringCases[response,
+      RegularExpression["VERIFY:\\s*(.+)"] :> "$1"];
+    verifyLines = StringTrim /@ verifyLines;
+    Do[
+      If[!StringContainsQ[newCode, item],
+        AppendTo[missing, item]],
+    {item, verifyLines}];
+    missing
+  ];
+
+(* 未変更関数の保全検証: LLM レスポンスに含まれない関数がマージで破損していないか確認。
+   origCode と newCode から関数ブロックを抽出し、LLM が変更していない関数の内容が
+   一致するか検証する。StringReplace の誤マッチ等による意図しない破損を検出する。
+   戻り値: 破損が検出された関数名のリスト（空なら問題なし）。 *)
+iVerifyUnchangedFunctions[origCode_String, newCode_String, llmResponse_String] :=
+  Module[{origBlks, newBlks, llmBlks, unchanged, corrupted = {}},
+    origBlks = iExtractFunctions[origCode];
+    newBlks  = iExtractFunctions[newCode];
+    llmBlks  = iExtractFunctions[llmResponse];
+    (* LLM レスポンスに含まれない関数 = 変更されていないはずの関数 *)
+    unchanged = Complement[Keys[origBlks], Keys[llmBlks]];
+    Do[
+      Module[{origDef, newDef},
+        origDef = Lookup[origBlks, fn, ""];
+        newDef  = Lookup[newBlks, fn, ""];
+        (* 元コードに存在し、新コードでも存在するが内容が異なる場合 → 破損 *)
+        If[origDef =!= "" && newDef =!= "" && origDef =!= newDef,
+          AppendTo[corrupted, fn]]],
+    {fn, unchanged}];
+    corrupted
+  ];
+
+(* テスト抽出・実行: LLM レスポンスから ===BEGIN_TESTS=== ～ ===END_TESTS=== を抽出し、
+   セッションディレクトリに test.wl として保存する。
+   戻り値: テストコード文字列（空なら抽出失敗）。 *)
+iExtractTests[response_String, sessionDir_String] :=
+  Module[{testCode, testFile},
+    testCode = iExtractBetweenMarkers[response,
+      "===BEGIN_TESTS===", "===END_TESTS==="];
+    If[testCode === "" || !StringQ[testCode], Return[""]];
+    testCode = StringTrim[testCode];
+    testFile = FileNameJoin[{sessionDir, "test.wl"}];
+    Quiet @ Export[testFile, testCode, "Text"];
+    testCode
+  ];
+
+(* テスト実行: テストコード中の各 Boolean 式を評価し、結果を返す。
+   $testSourceCode にマージ後のソースコードを束縛してからテストを評価する。
+   各テストは (* コメント *) の直後に Boolean 式が来る形式を想定。
+   戻り値: <|"passed" -> {テスト名...}, "failed" -> {テスト名...}|> *)
+iRunUpdateTests[testCode_String, newCode_String, nb_NotebookObject] :=
+  Module[{blocks, results = <|"passed" -> {}, "failed" -> {}|>,
+          currentLabel = "", val},
+    (* Global`$testSourceCode に設定: ToExpression が参照できるようにする。
+       Block だと ToExpression 内で別コンテキストのシンボルになり $Failed になる。 *)
+    Global`$testSourceCode = newCode;
+    Internal`WithLocalSettings[Null,
+      (* テストコードをコメント区切りでブロック分割。
+         複数行にまたがる Module[...] 等を1テストとして扱う。 *)
+      blocks = StringSplit[testCode,
+        RegularExpression["(?m)^\\(\\*\\s*(.+?)\\s*\\*\\)\\s*$"] :>
+        "$1"];
+      Do[
+        Module[{item = StringTrim[b]},
+          Which[
+            item === "", Null,
+            (* コメントから抽出されたラベル *)
+            !StringContainsQ[item, "["] && !StringContainsQ[item, "="],
+              currentLabel = item,
+            (* テスト式 *)
+            True,
+              val = Quiet @ Check[ToExpression[item], $Failed];
+              If[TrueQ[val],
+                AppendTo[results["passed"],
+                  If[currentLabel =!= "", currentLabel, StringTake[item, UpTo[60]]]],
+                AppendTo[results["failed"],
+                  If[currentLabel =!= "", currentLabel, StringTake[item, UpTo[60]]] <>
+                  " \[RightArrow] " <> ToString[val]]];
+              currentLabel = ""
+          ]],
+      {b, blocks}],
+      (* クリーンアップ: グローバル変数を除去 *)
+      Quiet[Global`$testSourceCode =.]];
+    results
+  ];
+
 (* \:65e5\:672c\:8a9e\:30ad\:30fc\:30ef\:30fc\:30c9 \:2192 \:95a2\:9023\:95a2\:6570\:30b0\:30eb\:30fc\:30d7\:306e\:30de\:30c3\:30d4\:30f3\:30b0\:3082\:4f7f\:7528 *)
 iGuessTargetFunctions[prompt_String, allFuncNames_List] :=
-  Module[{words, hits, kwMap, kwHits},
+  iGuessTargetFunctions[prompt, allFuncNames, ""];
+
+iGuessTargetFunctions[prompt_String, allFuncNames_List, sourceCode_String] :=
+  Module[{words, hits, kwMap, kwHits, usageHits = {}},
     (* \:82f1\:8a9e\:95a2\:6570\:540d\:306e\:76f4\:63a5\:30de\:30c3\:30c1 *)
     words = StringCases[prompt, RegularExpression["[a-zA-Z\\$][a-zA-Z0-9\\$]+"]];
     hits  = Select[allFuncNames, MemberQ[words, #] &];
@@ -8981,23 +9444,131 @@ iGuessTargetFunctions[prompt_String, allFuncNames_List] :=
 
     (* \:82f1\:8a9e\:30de\:30c3\:30c1 + \:30ad\:30fc\:30ef\:30fc\:30c9\:30de\:30c3\:30c1\:3092\:7d71\:5408\:3057\:3001\:5b9f\:5728\:3059\:308b\:95a2\:6570\:540d\:306e\:307f *)
     hits = Union[hits, Select[kwHits, MemberQ[allFuncNames, #] &]];
+
+    (* Usage + Body ベースマッチ: ソースコード中の関数を検出。
+       1. まず関数本体にプロンプトの複合語（3文字以上の漢字/カタカナ列）が含まれる関数を検出。
+          ボタンラベル等の UI テキストを含む関数を正確に特定できる。
+       2. 本体マッチが空なら usage 文字列への bi-gram マッチにフォールバック。 *)
+    If[StringLength[sourceCode] > 0 && Length[hits] === 0,
+      Module[{promptCompounds, bodyHits = {}, usagePairs, promptKws, matchedFuncs,
+              allBlks},
+        (* 複合語抽出: 4文字以上の漢字・カタカナ連続列。
+           3文字以下（ボタン、削除、展開等）は汎用すぎて大量誤マッチの原因になる。 *)
+        promptCompounds = DeleteDuplicates[
+          StringCases[prompt, RegularExpression["[\\x{4E00}-\\x{9FFF}\\x{30A0}-\\x{30FF}]{4,}"]]];
+        (* 英語キーワードも含める（5文字以上） *)
+        promptCompounds = Join[promptCompounds,
+          DeleteDuplicates[StringCases[prompt, RegularExpression["[a-zA-Z]{5,}"]]]];
+
+        (* Phase 1: 関数本体マッチ（複合語で検索 — 高精度） *)
+        If[Length[promptCompounds] > 0,
+          allBlks = iExtractFunctions[sourceCode];
+          Do[
+            Module[{body = Lookup[allBlks, fn, ""]},
+              If[body =!= "" &&
+                 AnyTrue[promptCompounds, StringContainsQ[body, #] &],
+                AppendTo[bodyHits, fn]]],
+          {fn, allFuncNames}];
+          bodyHits = DeleteDuplicates[bodyHits]];
+
+        If[Length[bodyHits] > 0 && Length[bodyHits] <= 10,
+          (* 本体マッチ成功: 適切な数なのでこれを使う *)
+          hits = Union[hits, bodyHits],
+          (* bodyHits > 10: 複合語が汎用すぎる → 全体送信にフォールバック *)
+          If[Length[bodyHits] > 10, Null,
+          (* bodyHits = 0: Phase 2: usage ベース bi-gram フォールバック *)
+          usagePairs = StringCases[sourceCode,
+            RegularExpression["([a-zA-Z\\$][a-zA-Z0-9\\$]*)::usage\\s*=\\s*\n?\\s*\"([^\"]*(?:\"\\s*<>\\s*\n?\\s*\"[^\"]*)*)\""] :>
+            {"$1", "$2"}];
+          If[Length[usagePairs] > 0,
+            promptKws = Union[
+              StringCases[prompt, RegularExpression["[\\x{4E00}-\\x{9FFF}\\x{30A0}-\\x{30FF}]+"]],
+              StringCases[prompt, RegularExpression["[a-zA-Z]{3,}"]]];
+            promptKws = Flatten[
+              If[StringLength[#] > 3,
+                Join[{#}, StringPartition[#, 2, 1]],
+                {#}] & /@ promptKws];
+            promptKws = DeleteDuplicates[Select[promptKws, StringLength[#] >= 2 &]];
+            matchedFuncs = {};
+            Do[
+              Module[{fn = pair[[1]], usageText = pair[[2]]},
+                If[AnyTrue[promptKws, StringContainsQ[usageText, #, IgnoreCase -> True] &],
+                  AppendTo[matchedFuncs, fn]]],
+            {pair, usagePairs}];
+            usageHits = Select[matchedFuncs, MemberQ[allFuncNames, #] &];
+            hits = Union[hits, usageHits]
+          ]]
+        ]
+      ]
+    ];
     hits
   ];
 
 
-(* \:4e3b\:95a2\:6570\:304c\:547c\:3073\:51fa\:3059\:30d8\:30eb\:30d1\:30fc\:3082\:542b\:3081\:308b *)
+(* \:4e3b\:95a2\:6570\:304c\:547c\:3073\:51fa\:3059\:30d8\:30eb\:30d1\:30fc\:3082\:542b\:3081\:308b。
+   展開上限: 結果が 40 関数を超えたら元のターゲットのみ返す。
+   短い関数名（2文字以下）の誤マッチも除外する。 *)
 iExpandWithDeps[targets_List, blocks_Association] :=
   Module[{allNames = Keys[blocks], result = targets, scan},
     scan = targets;
     Scan[Function[fn,
       Module[{body, called},
         body  = Lookup[blocks, fn, ""];
-        called = Select[allNames, fn =!= # && StringContainsQ[body, #] &];
+        (* 3文字以上の関数名のみ依存として検出（iL 等の誤マッチ防止） *)
+        called = Select[allNames,
+          StringLength[#] >= 3 && fn =!= # && StringContainsQ[body, #] &];
         result = Union[result, called]
       ]
     ], scan];
-    result
+    (* 展開上限チェック: 過剰展開は全体送信より品質が悪い *)
+    If[Length[result] > 40, targets, result]
   ];
+
+(* ============================================================
+   CUDA 拡張: 遅延ロードとキーワード検出
+   cuda.wl は別パッケージで、必要時に Get される。
+   ============================================================ *)
+
+(* CUDA 関連キーワードがプロンプトに含まれるか判定 *)
+iIsCUDARequest[text_String] :=
+  AnyTrue[{"CUDA", "cuda", "\:FF23\:FF35\:FF24\:FF21",
+    "GPU\:8a08\:7b97", "GPU\:4e26\:5217", "GPU accelerat", "GPU comput",
+    "CUDA\:3092\:4f7f\:7528", "CUDA\:3067", "CUDA\:30ab\:30fc\:30cd\:30eb",
+    "cuda kernel", "nvcc", "LibraryLink.*CUDA",
+    "__global__", "__device__"},
+    StringContainsQ[text, #, IgnoreCase -> True] &];
+iIsCUDARequest[_] := False;
+
+(* cuda.wl のロード済みフラグ（初期値: 未ロード） *)
+If[!ValueQ[$iCUDAExtensionLoaded], $iCUDAExtensionLoaded = False];
+
+(* cuda.wl を遅延ロードする。成功なら True、失敗なら False *)
+iEnsureCUDAExtension[] := Module[{cudaWl},
+  If[TrueQ[$iCUDAExtensionLoaded], Return[True]];
+  cudaWl = FileNameJoin[{Global`$packageDirectory, "cuda.wl"}];
+  If[!FileExistsQ[cudaWl],
+    (* $packageDirectory 以外のフォールバック *)
+    cudaWl = "cuda.wl"];
+  Quiet @ Block[{$CharacterEncoding = "UTF-8"}, Get[cudaWl]];
+  TrueQ[$iCUDAExtensionLoaded]
+];
+
+(* cuda.wl がロードできない場合のシステムプロンプトノート *)
+iCUDAUnavailableNote[nb_NotebookObject] := (
+  nbPrint[nb, Style[
+    iL["\:26a0 CUDA \:62e1\:5f35 (cuda.wl) \:304c\:5fc5\:8981\:3067\:3059\:304c\:3001\:30ed\:30fc\:30c9\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002\n" <>
+      "  cuda.wl \:3092 $packageDirectory \:306b\:914d\:7f6e\:3057\:3066\:304f\:3060\:3055\:3044\:3002\n" <>
+      "  CUDA \:306a\:3057\:3067\:7d9a\:884c\:3057\:307e\:3059 (\:7d14\:7c8b Mathematica \:30b3\:30fc\:30c9\:306e\:307f\:751f\:6210)\:3002",
+      "\:26a0 CUDA extension (cuda.wl) is required but could not be loaded.\n" <>
+      "  Place cuda.wl in $packageDirectory.\n" <>
+      "  Continuing without CUDA (pure Mathematica code only)."],
+    FontColor -> RGBColor[0.8, 0.5, 0]]];
+  (* LLM プロンプトに注入するフォールバックノート *)
+  "\n\nNOTE: The CUDA extension (cuda.wl) is not available on this system.\n" <>
+  "Generate a pure Mathematica implementation WITHOUT CUDA.\n" <>
+  "If the user specifically requested CUDA, include a comment explaining " <>
+  "that cuda.wl is needed and the package currently uses a CPU fallback.\n\n"
+);
 
 Options[ClaudeCreatePackage] = {Fallback -> False};
 
@@ -9006,7 +9577,7 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
   With[{nb = EvaluationNotebook[]},
   Module[{destFile, prompt, beginMark, endMark, sessionDir, bdir, timestamp,
-          packagePromptNorm, imgDirs, jobId},
+          packagePromptNorm, imgDirs, jobId, cudaRequested = False},
   iPrecisionConfidentialCheck[nb];
 
   destFile = FileNameJoin[{Global`$packageDirectory, packageName <> ".wl"}];
@@ -9047,7 +9618,8 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
     iTaskOverviewBlock["Create package `" <> packageName <> ".wl`: " <> packagePromptNorm["text"]] <>
     "Your response MUST start with " <> beginMark <> " on the very first line.\n" <>
     "Do NOT write any text before " <> beginMark <> ".\n" <>
-    "After " <> endMark <> " you may add a brief explanation.\n\n" <>
+    "After " <> endMark <> " you may add a brief explanation.\n" <>
+    "IMPORTANT: All explanations must be written in the SAME LANGUAGE as the user's specification.\n\n" <>
     "Create a Mathematica package named `" <> packageName <> ".wl`.\n" <>
     "Requirements:\n" <>
     "- Use BeginPackage[\"" <> packageName <> "`\"] / EndPackage[]\n" <>
@@ -9059,18 +9631,39 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
     "  (list each exported function with a one-line description, same style as ClaudeCode package)\n" <>
     "- Use UTF-8. All Japanese strings must use \\:XXXX Unicode escapes.\n" <>
     "- Do NOT use Clear[\"Global`*\"] or session-prefixed variable names.\n\n" <>
+    iAsyncSchedulingRules[] <>
     "Output format (MANDATORY):\n" <>
     beginMark <> "\n<complete package source code here>\n" <> endMark <> "\n" <>
     "(optional brief explanation after the end marker)\n\n" <>
     (* サンドイッチ構造: 仕様詳細を末尾に再掲 *)
     iTaskDetailBlock["SPECIFICATION (FULL)", packagePromptNorm["text"]];
 
+  (* CUDA 検出: プロンプトに CUDA キーワードが含まれていれば指示を注入 *)
+  If[iIsCUDARequest[packagePromptNorm["text"]],
+    cudaRequested = True;
+    If[iEnsureCUDAExtension[],
+      prompt = prompt <> iCUDACreatePromptBlock[packageName],
+      (* cuda.wl ロード失敗: フォールバックノートを注入 *)
+      prompt = prompt <> iCUDAUnavailableNote[nb]]
+  ];
+
+  (* 変更検証ヒント: LLM に実装内容の正確な記述を促す *)
+  prompt = prompt <>
+    "\n\nIMPORTANT: After " <> endMark <> ", list each key feature you implemented as:\n" <>
+    "  VERIFY: <identifier that should appear in the code>\n" <>
+    "This helps automated verification. Example: VERIFY: BeginPackage\n";
+
+  (* 自動 think hard: 仕様が長い場合は thinking を強化 *)
+  If[StringLength[packagePromptNorm["text"]] > 500,
+    prompt = "think hard\n" <> prompt];
+
   iSaveSessionMedia[sessionDir, prompt, imgDirs];
 
   jobId = iBeginJobAtCapturedCell[nb];
   iClaudeQueryAsyncWithProgress[prompt,
     With[{nb2 = nb, bm = beginMark, em = endMark,
-          sf = destFile, sd = sessionDir, pn = packageName, jid = jobId},
+          sf = destFile, sd = sessionDir, pn = packageName, jid = jobId,
+          isCuda = cudaRequested},
       Function[response,
         Module[{newCode, newWlFile, codeBlocks, strm2},
           Export[FileNameJoin[{sd, "response.txt"}], response, "Text"];
@@ -9100,6 +9693,16 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
               "\:30a8\:30e9\:30fc: \:6709\:52b9\:306a\:30d1\:30c3\:30b1\:30fc\:30b8\:30b3\:30fc\:30c9\:3092\:62bd\:51fa\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002\nresponse.txt: " <>
               FileNameJoin[{sd, "response.txt"}]];
             Return[]];
+
+          (* 変更検証: LLM が主張した実装内容が実際にコードに含まれるか確認 *)
+          Module[{missingFeatures},
+            missingFeatures = iVerifyClaimedChanges[response, newCode];
+            If[Length[missingFeatures] > 0,
+              nbPrint[nb2, Style[
+                "\:26a0 LLM \:304c\:4e3b\:5f35\:3057\:305f\:5b9f\:88c5\:304c\:30b3\:30fc\:30c9\:306b\:898b\:3064\:304b\:308a\:307e\:305b\:3093:\n" <>
+                StringJoin[("  \:274c " <> # <> "\n") & /@ missingFeatures],
+                FontColor -> RGBColor[0.8, 0.4, 0]]]]];
+
           newWlFile = FileNameJoin[{sd, pn <> ".wl"}];
           (* UTF-8 \:30d0\:30a4\:30ca\:30ea\:66f8\:304d\:8fbc\:307f\:ff08ShiftJIS \:74b0\:5883\:5bfe\:7b56\:ff09 *)
           strm2 = OpenWrite[newWlFile, BinaryFormat -> True];
@@ -9122,6 +9725,9 @@ ClaudeCreatePackage[packageName_String, packagePrompt_, opts:OptionsPattern[]] :
             Block[{Print = Function[{args}, nbPrint[nb2, args]]},
               Quiet @ Get[sf]];
             nbPrint[nb2, iL["\:30ed\:30fc\:30c9\:3057\:307e\:3057\:305f\:3002", "Loaded."]];
+            (* CUDA ポストプロセス: .cu ファイル抽出・コンパイル *)
+            If[isCuda && TrueQ[$iCUDAExtensionLoaded],
+              Quiet @ iCUDAPostProcessCreate[nb2, response, pn, sd]];
             (* api.md を自動生成 *)
             iAutoUpdateApiMd[nb2, pn],
             nbPrint[nb2, iL["\:8b66\:544a: \:66f8\:304d\:8fbc\:307f\:5931\:6557\:3002\:624b\:52d5\:3067\:30b3\:30d4\:30fc\:3057\:3066\:304f\:3060\:3055\:3044:\n", "Warning: Write failed. Copy manually:\n"] <>
@@ -9165,7 +9771,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
           beginMark, endMark, timestamp, sessionDir, bdir,
           allBlocks, allNames, targets, targetCode,
           jsPlaceholder, jsBlock, updatePromptNorm, imgDirs, jobId,
-          continueAnchorTag = None, preBackupFile = ""},
+          continueAnchorTag = None, preBackupFile = "", cudaRequested = False},
 
   iPrecisionConfidentialCheck[nb];
   srcFile = iPackageSourceFile[packageName];
@@ -9184,13 +9790,13 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
   (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3068\:30b8\:30e7\:30d6\:30a2\:30f3\:30ab\:30fc\:306e\:914d\:7f6e *)
   If[TrueQ[$iContinueUpdateFlag],
     (* ContinueUpdate: \:30dc\:30bf\:30f3\:30bb\:30eb\:306e\:76f4\:5f8c\:ff08\:73fe\:5728\:4f4d\:7f6e\:ff09\:306b\:30d8\:30c3\:30c0\:30fc\:3068\:30a2\:30f3\:30ab\:30fc\:3092\:914d\:7f6e *)
-    NotebookWrite[nb, Cell[
+    NBAccess`NBWriteCell[nb, Cell[
       "\:25b6 ContinueUpdate: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")",
-      "Subsubsection", CellGroupingRules -> {"SectionGrouping", 68}], After];
+      "Subsubsection", CellGroupingRules -> {"SectionGrouping", 68}]];
     continueAnchorTag = "continue-anchor-" <> ToString[UnixTime[]] <> "-" <> ToString[RandomInteger[99999]];
-    NotebookWrite[nb, Cell["", "Output", CellOpen -> False,
-      ShowCellBracket -> False, CellTags -> {continueAnchorTag}], After];
+    NBAccess`NBWriteCell[nb, Cell["", "Output", CellOpen -> False,
+      ShowCellBracket -> False, CellTags -> {continueAnchorTag}]];
     jobId = None,
     (* \:901a\:5e38: EvaluationCell \:3092\:57fa\:6e96 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
@@ -9213,6 +9819,9 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
     preDir = FileNameJoin[{bdir, "pre_" <> timestamp}];
     CreateDirectory[preDir, CreateIntermediateDirectories -> True];
     iSaveBackupWl[preDir, srcFile, packageName, True];
+    (* CUDA ソースのバックアップ (cuda.wl ロード済みの場合) *)
+    If[TrueQ[$iCUDAExtensionLoaded],
+      Quiet @ iCUDABackupSources[preDir, packageName]];
     preBackupFile = FileNameJoin[{preDir, packageName <> ".wl"}];
     nbPrint[nb, iL["\:4e8b\:524d\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Pre-backup: "] <> preDir];
     Quiet @ iLLMGraphLogSubStep["pre-backup", "Local", preDir]
@@ -9235,7 +9844,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
   (* \:5bfe\:8c61\:95a2\:6570\:3092\:6c7a\:5b9a *)
   targets = targetFuncsOpt;
   If[targets === Automatic,
-    targets = iGuessTargetFunctions[updatePromptNorm["userText"], allNames]];
+    targets = iGuessTargetFunctions[updatePromptNorm["userText"], allNames, currentCode]];
   (* \:4f9d\:5b58\:95a2\:6570\:3082\:5c55\:958b *)
   If[Length[targets] > 0,
     targets = iExpandWithDeps[targets, allBlocks]];
@@ -9271,7 +9880,8 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
     ] <>
     "Your response MUST start with " <> beginMark <> " on the very first line.\n" <>
     "Do NOT write any explanation or text before " <> beginMark <> ".\n" <>
-    "After " <> endMark <> " you may add optional explanation.\n\n" <>
+    "After " <> endMark <> " you may add optional explanation.\n" <>
+    "IMPORTANT: All explanations, VERIFY tags, and test comments must be written in the SAME LANGUAGE as the user's instruction.\n\n" <>
     (* \:6dfb\:4ed8\:30d5\:30a1\:30a4\:30eb\:304c\:3042\:308c\:3070\:5225\:30bb\:30af\:30b7\:30e7\:30f3\:3067\:53c2\:7167\:6307\:793a *)
     If[Length[updatePromptNorm["filePaths"]] > 0,
       "ATTACHMENTS (use the Read tool to view each file):\n" <>
@@ -9287,6 +9897,51 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
     (* サンドイッチ構造: タスク詳細を末尾に再掲 *)
     iTaskDetailBlock["INSTRUCTION (FULL)", iExpandSymbolRefs[updatePromptNorm["userText"]]];
 
+  (* 非同期タスクスケジューリング規約を注入 *)
+  prompt = prompt <> iAsyncSchedulingRules[];
+
+  (* 依存パッケージの API 情報を付加: パッケージ境界を越えた原因追跡を可能にする *)
+  Module[{depApis = iCollectDependencyApis[currentCode]},
+    If[StringLength[depApis] > 0,
+      prompt = prompt <>
+        "\n\n=== DEPENDENCY PACKAGE APIs ===\n" <>
+        "(These are API references for packages that the target package depends on. " <>
+        "Use them to trace call chains across package boundaries when diagnosing issues.)\n\n" <>
+        depApis]];
+
+  (* CUDA 検出: プロンプト・既存コード・.cuda ディレクトリの存在を確認 *)
+  If[iIsCUDARequest[updatePromptNorm["userText"]] ||
+     iIsCUDARequest[currentCode] ||
+     DirectoryQ[FileNameJoin[{Global`$packageDirectory, packageName <> ".cuda"}]],
+    cudaRequested = True;
+    If[iEnsureCUDAExtension[],
+      prompt = prompt <> iCUDAUpdatePromptBlock[packageName],
+      prompt = prompt <> iCUDAUnavailableNote[nb]]
+  ];
+
+  (* 変更検証ヒント: LLM に変更内容の正確な記述を促す *)
+  prompt = prompt <>
+    "\n\nIMPORTANT: After " <> endMark <> ", write all explanations in the SAME LANGUAGE as the user's instruction above.\n" <>
+    "Also list each change you made as:\n" <>
+    "  VERIFY: <identifier that should appear in the modified code>\n" <>
+    "This helps automated verification. Example: VERIFY: AutoScroll -> False\n\n" <>
+    "ALSO: Generate verification tests between ===BEGIN_TESTS=== and ===END_TESTS===.\n" <>
+    "The variable $testSourceCode contains the merged source code as a string.\n" <>
+    "Write one Boolean expression per line, preceded by a (* comment *) describing the test.\n" <>
+    "Test comments should be in the SAME LANGUAGE as the user's instruction.\n" <>
+    "Include both static tests (checking source code) and runtime tests (calling functions) if possible.\n" <>
+    "Example:\n" <>
+    "===BEGIN_TESTS===\n" <>
+    "(* AutoScroll option was added to SelectionMove *)\n" <>
+    "StringContainsQ[$testSourceCode, \"AutoScroll -> False\"]\n" <>
+    "(* Function returns expected result *)\n" <>
+    "MatchQ[funcName[testInput], _String]\n" <>
+    "===END_TESTS===\n";
+
+  (* D. 自動 think hard: 大規模ファイルや全体送信時は thinking を強化 *)
+  If[Length[targets] === 0 && StringLength[currentCode] > 5000,
+    prompt = "think hard\n" <> prompt];
+
   iSaveSessionMedia[sessionDir, prompt, imgDirs];
 
   Quiet @ iLLMGraphLogSubStep["build-prompt", "Local",
@@ -9299,7 +9954,7 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
           bm=beginMark, em=endMark, origCode=Import[srcFile, "Text"],
           doUpdateApi=updateApiMd, jid=jobId, cat=continueAnchorTag,
           pbf=preBackupFile, origInstr=updatePromptNorm["userText"],
-          retryN=$iUpdateRetryCount},
+          retryN=$iUpdateRetryCount, isCuda=cudaRequested},
       Function[response,
         Module[{newFuncs, newCode, newWlFile, validationErrors = {}},
           (* アンカーの直後に出力を配置 *)
@@ -9383,16 +10038,46 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
                   ]
                 ]
               ], Keys[updBlks]];
-              (* 新規関数があれば EndPackage[] の直前に挿入 *)
+              (* 新規関数があれば適切な位置に挿入 *)
               If[Length[newOnlyFuncs] > 0,
-                Module[{insertCode},
+                Module[{insertCode, codeBefore = code, inserted = False},
                   insertCode = StringJoin[
                     Lookup[updBlks, #, ""] & /@ newOnlyFuncs];
+                  (* 戦略1: End[] + EndPackage[] が隣接する標準構造 *)
                   code = StringReplace[code,
                     RegularExpression["(\\n\\s*End\\[\\]\\s*;?\\s*\\n\\s*EndPackage\\[\\])"] :>
                     "\n" <> insertCode <> "$1", 1];
-                  nbPrint[nb2, "\:65b0\:898f\:95a2\:6570\:3092\:8ffd\:52a0: " <>
-                    StringRiffle[newOnlyFuncs, ", "]]
+                  If[code =!= codeBefore, inserted = True];
+                  (* 戦略2: End[] が単独で存在する非標準構造 (EndPackage[] が先頭付近にある場合)
+                     最後の End[] の直前に挿入する *)
+                  If[!inserted,
+                    code = codeBefore;
+                    code = StringReplace[code,
+                      RegularExpression["(\\n\\s*End\\[\\]\\s*;?\\s*\\n)(?![\\s\\S]*End\\[\\])"] :>
+                      "\n" <> insertCode <> "$1", 1];
+                    If[code =!= codeBefore, inserted = True]];
+                  (* 戦略3: 最後の End[] を正規表現で見つけられない場合は
+                     StringPosition で最後の End[] を探して直前に挿入 *)
+                  If[!inserted,
+                    code = codeBefore;
+                    Module[{endPositions},
+                      endPositions = StringPosition[code, RegularExpression["\\nEnd\\[\\]\\s*;?"]];
+                      If[Length[endPositions] > 0,
+                        Module[{lastPos = Last[endPositions]},
+                          code = StringInsert[code, "\n" <> insertCode, lastPos[[1]]];
+                          inserted = True]]]];
+                  (* 戦略4: End[] すら無い場合は末尾に追加 *)
+                  If[!inserted,
+                    code = codeBefore <> "\n" <> insertCode;
+                    inserted = True];
+                  If[inserted,
+                    nbPrint[nb2, "\:65b0\:898f\:95a2\:6570\:3092\:8ffd\:52a0: " <>
+                      StringRiffle[newOnlyFuncs, ", "]],
+                    nbPrint[nb2, Style[
+                      "\:26a0 \:65b0\:898f\:95a2\:6570\:306e\:633f\:5165\:4f4d\:7f6e\:3092\:691c\:51fa\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f: " <>
+                      StringRiffle[newOnlyFuncs, ", "] <>
+                      "\n\:624b\:52d5\:3067\:8ffd\:52a0\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+                      FontColor -> RGBColor[0.8, 0.4, 0]]]]
                 ]
               ];
               If[mergedCount > 0,
@@ -9446,6 +10131,30 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
               "FAILED: " <> StringRiffle[validationErrors, "; "],
               "Passed"]];
 
+          (* 変更検証: LLM が主張した変更が実際にコードに反映されているか確認 *)
+          Module[{missingChanges},
+            missingChanges = iVerifyClaimedChanges[response, newCode];
+            If[Length[missingChanges] > 0,
+              nbPrint[nb2, Style[
+                "\:26a0 LLM \:304c\:4e3b\:5f35\:3057\:305f\:5909\:66f4\:304c\:30b3\:30fc\:30c9\:306b\:898b\:3064\:304b\:308a\:307e\:305b\:3093:\n" <>
+                StringJoin[("  \:274c " <> # <> "\n") & /@ missingChanges] <>
+                "\:30de\:30fc\:30b8\:306f\:5b9f\:884c\:3055\:308c\:307e\:3057\:305f\:304c\:3001\:610f\:56f3\:3057\:305f\:5909\:66f4\:304c\:6b20\:843d\:3057\:3066\:3044\:308b\:53ef\:80fd\:6027\:304c\:3042\:308a\:307e\:3059\:3002\n" <>
+                "ContinueUpdate[] \:3067\:4fee\:6b63\:3092\:7d99\:7d9a\:3067\:304d\:307e\:3059\:3002",
+                FontColor -> RGBColor[0.8, 0.4, 0]]]]];
+
+          (* 未変更関数の保全検証: マージで意図しない破損がないか確認。
+             警告のみ — validationErrors には追加しない。
+             新関数挿入時に iExtractFunctions のブロック境界がずれて偽陽性が発生するため、
+             ハードゲート（自動リトライ発動）としては使わない。 *)
+          Module[{corruptedFuncs},
+            corruptedFuncs = iVerifyUnchangedFunctions[origCode, newCode, newFuncs];
+            If[Length[corruptedFuncs] > 0,
+              nbPrint[nb2, Style[
+                "\:26a0 \:30de\:30fc\:30b8\:306b\:3088\:308a\:672a\:5909\:66f4\:306e\:306f\:305a\:306e\:95a2\:6570\:304c\:5909\:5316\:3057\:3066\:3044\:307e\:3059 (\:30d6\:30ed\:30c3\:30af\:5883\:754c\:30b7\:30d5\:30c8\:306e\:53ef\:80fd\:6027\:3042\:308a):\n" <>
+                StringJoin[("  \:26a0 " <> # <> "\n") & /@ corruptedFuncs] <>
+                "\:5b9f\:969b\:306b\:7834\:640d\:3057\:3066\:3044\:308b\:5834\:5408\:306f\:4e8b\:524d\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:304b\:3089\:5fa9\:5143\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+                FontColor -> RGBColor[0.8, 0.4, 0]]]]];
+
           newWlFile = FileNameJoin[{sd, pn <> ".wl"}];
           (* UTF-8 \:30d0\:30a4\:30ca\:30ea\:66f8\:304d\:8fbc\:307f\:ff08ShiftJIS \:74b0\:5883\:5bfe\:7b56\:ff09 *)
           Module[{strm3},
@@ -9491,7 +10200,10 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
                   FontColor -> RGBColor[0.8, 0, 0]]];
                 If[retryN < $ClaudeUpdateAutoRetryMax,
                   iScheduleUpdateAutoRetry[nb2, pn, origInstr, response,
-                    loadResult["messages"], retryN, pbf, sf],
+                    Select[loadResult["messages"], StringContainsQ[#,
+                      "sntx" | "syntax" | "noopen" | "noctx" |
+                      "argx" | "argr" | "argrx" | "argt"] &],
+                    retryN, pbf, sf],
                   (* リトライ上限: エラー表示のみ *)
                   nbPrint[nb2, iL[
                     "\:26d4 \:81ea\:52d5\:30ea\:30c8\:30e9\:30a4\:4e0a\:9650 (" <> ToString[$ClaudeUpdateAutoRetryMax] <>
@@ -9504,6 +10216,30 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
                 nbPrint[nb2, iL["\:518d\:30ed\:30fc\:30c9\:3057\:307e\:3057\:305f\:3002", "Reloaded."]];
                 Quiet @ iLLMGraphLogSubStep["reload", "Local", "Success"];
                 $iUpdateRetryCount = 0; (* リトライカウンタをリセット *)
+                (* テスト抽出・実行: LLM が生成した検証テストを実行 *)
+                Module[{testCode, testResults},
+                  testCode = iExtractTests[response, sd];
+                  If[StringLength[testCode] > 0,
+                    testResults = iRunUpdateTests[testCode, newCode, nb2];
+                    If[Length[testResults["failed"]] > 0,
+                      nbPrint[nb2, Style[
+                        iL["\:26a0 \:691c\:8a3c\:30c6\:30b9\:30c8\:5931\:6557 (",
+                           "\:26a0 Verification tests failed ("] <>
+                        ToString[Length[testResults["failed"]]] <> "/" <>
+                        ToString[Length[testResults["passed"]] + Length[testResults["failed"]]] <> "):\n" <>
+                        StringJoin[("  \:274c " <> # <> "\n") & /@ testResults["failed"]],
+                        FontColor -> RGBColor[0.8, 0.4, 0]]],
+                      If[Length[testResults["passed"]] > 0,
+                        nbPrint[nb2,
+                          iL["\:2705 \:691c\:8a3c\:30c6\:30b9\:30c8\:5168\:30d1\:30b9 (",
+                             "\:2705 All verification tests passed ("] <>
+                          ToString[Length[testResults["passed"]]] <>
+                          iL[" \:4ef6)", " tests)"]]]
+                      ]
+                    ]];
+                (* CUDA ポストプロセス: .cu ファイル抽出・コンパイル *)
+                If[isCuda && TrueQ[$iCUDAExtensionLoaded],
+                  Quiet @ iCUDAPostProcessUpdate[nb2, response, pn, sd]];
                 With[{afterEnd2 = StringTrim[Last[StringSplit[response, em, 2], ""]]},
                   If[afterEnd2 =!= "", nbPrint[nb2, afterEnd2]]];
                 (* api.md \:3092\:81ea\:52d5\:66f4\:65b0: \:30aa\:30f3\:306a\:3089\:81ea\:52d5\:5b9f\:884c *)
@@ -9537,20 +10273,32 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
    ============================================================ *)
 
 (* Get 実行時のエラーをキャプチャ *)
-(* 注意: Quiet @ Check は Quiet がメッセージを Check より先に吸収するため
-   エラー検出が不可能になる。Check のみ使用し、メッセージは
-   Internal`HandlerBlock で捕捉する。 *)
+(* 注意: Internal`HandlerBlock は Quiet より前にメッセージを捕捉するため、
+   良性メッセージ (General::newsym 等) も msgs に入る。
+   hasErrors は実際のエラーパターン (sntx, noopen 等) のみで判定する。
+   Check は良性メッセージでも $Failed にするため使用しない。 *)
 iGetWithErrorCapture[nb_NotebookObject, file_String] :=
   Module[{msgs = {}, result},
     Internal`HandlerBlock[
       {"Message", Function[{msg},
         AppendTo[msgs, ToString[msg]]]},
       Block[{Print = Function[{args}, nbPrint[nb, args]]},
-        result = Check[Get[file], $Failed]]];
-    <|"result" -> result, "messages" -> msgs,
-      "hasErrors" -> (result === $Failed || Length[msgs] > 0 ||
-        AnyTrue[msgs, StringContainsQ[#,
-          "noctx" | "sntx" | "syntax" | "noopen" | "General::"] &])|>
+        (* Check ではなく素の Get を使う。Check は良性メッセージ
+           (General::newsym 等) でも $Failed にしてしまうため。
+           Internal`HandlerBlock が全メッセージを捕捉するので
+           実際のエラーは msgs から検出する。 *)
+        result = Quiet[Get[file], {General::newsym, General::spell,
+          General::spell1, General::obspkg}]]];
+    (* hasErrors: 実際のエラーパターンのみを検出。
+       Length[msgs] > 0 は使わない — Quiet で抑制されたはずの
+       良性メッセージも Internal`HandlerBlock が捕捉するため。 *)
+    Module[{errorMsgs},
+      errorMsgs = Select[msgs, StringContainsQ[#,
+        "sntx" | "syntax" | "noopen" | "noctx" |
+        "argx" | "argr" | "argrx" | "argt"] &];
+      <|"result" -> result, "messages" -> msgs,
+        "hasErrors" -> (result === $Failed || Length[errorMsgs] > 0)|>
+    ]
   ];
 
 (* 自動リトライをスケジュール *)
@@ -11781,7 +12529,7 @@ iDirectiveBackupReview[dir_String] :=
             Method -> "Queued"]
         }]
       ]], "Output"]]];
-    NotebookWrite[nb, Cell[CellGroupData[cells, Open]]];
+    NBAccess`NBWriteCell[nb, Cell[CellGroupData[cells, Open]]];
     <|"Action" -> "Review", "Directory" -> dir|>
   ];
 
@@ -11955,7 +12703,7 @@ ClaudeDirectiveBackupDataset[] :=
                         Method -> "Queued"]
                     }]]], "Output"]
                   }, Open]];
-                  NotebookWrite[nb, cells],
+                  NBAccess`NBWriteCell[nb, cells],
                   (* 変更なし *)
                   If[ChoiceDialog[iL["ローカル最新版に復元しますか？", "Restore to local latest?"]],
                     Module[{res},
@@ -12022,7 +12770,7 @@ ClaudeDirectiveBackupDataset[] :=
     Module[{nb = Quiet[EvaluationNotebook[]]},
       NBAccess`NBDeleteCellsByTag[nb, warningTag];
       NBAccess`NBDeleteCellsByTag[nb, outputTag]];
-    CellPrint[Cell[BoxData[ToBoxes[gridResult]], "Output",
+    NBAccess`NBCellPrint[Cell[BoxData[ToBoxes[gridResult]], "Output",
       CellTags -> {outputTag}]];
   ];
 
@@ -13727,16 +14475,22 @@ iWriteUpdateCompletionMessage[nb_NotebookObject, packageName_String,
     apiMdAlreadyUpdated_:False] :=
   Module[{textParts},
     textParts = {
-      "完了。コードを実行して確認し、必要なら ",
+      iL["\:5b8c\:4e86\:3002\:30b3\:30fc\:30c9\:3092\:5b9f\:884c\:3057\:3066\:78ba\:8a8d\:3057\:3001\:5fc5\:8981\:306a\:3089 ",
+         "Done. Run code to verify, then use "],
       ButtonBox["ContinueUpdate",
         BaseStyle -> "Hyperlink",
-        ButtonFunction :> Module[{target = InputNotebook[]},
-          NotebookWrite[target,
+        ButtonFunction :> Module[{target = InputNotebook[], btnCell},
+          (* ボタンを含むセル（現在のセル）を特定し、その直後に Input セルを挿入 *)
+          btnCell = EvaluationCell[];
+          If[Head[btnCell] === CellObject,
+            SelectionMove[btnCell, After, Cell],
+            SelectionMove[target, After, Notebook]];
+          NBAccess`NBWriteCell[target,
             Cell[BoxData[RowBox[{"ContinueUpdate", "[", "]"}]], "Input"]];
           SelectionMove[target, Previous, Cell];
           SelectionMove[target, All, CellContents]],
         Evaluator -> Automatic, Method -> "Queued"],
-      "[] で継続できます。"
+      iL["[] \:3067\:7d99\:7d9a\:3067\:304d\:307e\:3059\:3002", "[] to continue."]
     };
     (* api.md 自動更新がオフの場合: 更新リンクを追加 *)
     If[!TrueQ[apiMdAlreadyUpdated],

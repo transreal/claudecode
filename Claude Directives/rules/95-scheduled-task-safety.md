@@ -1,13 +1,28 @@
+---
+paths:
+  - "**/*.{wl,wls,m,nb}"
+---
+
 # ScheduledTask・非同期処理の安全制約
 
 ## 概要
 
-ClaudeEval / ContinueEval は内部で `ScheduledTask` チェーンを使用する。
-パッケージ関数がこのチェーン内から呼ばれる可能性がある場合、以下の制約を厳守すること。
+claudecode は ScheduledTask ベースの非同期処理基盤を提供する。
+パッケージ開発時には以下の **2 つの制約** を厳守すること:
 
-## 禁止事項
+- **A. ScheduledTask 内からの禁止操作**: ClaudeEval / ContinueEval のチェーン内から ClaudeQuery 等を呼ばない
+- **B. 独自 ScheduledTask 作成の禁止**: UI ポーリング用の ScheduledTask を自前で作らず claudecode の共有基盤に委ねる
 
-### 1. ScheduledTask 内からの ClaudeQuery 呼び出し
+---
+
+## A. ScheduledTask 内からの禁止操作
+
+ClaudeEval / ContinueEval は内部で ScheduledTask チェーンを使用する。
+パッケージ関数がこのチェーン内から呼ばれる可能性がある場合、以下を厳守すること。
+
+### 禁止事項
+
+#### 1. ClaudeQuery の呼び出し
 
 ```mathematica
 (* ❌ ClaudeEval が生成したコード内で ClaudeQuery を呼ぶ → デッドロック *)
@@ -18,27 +33,26 @@ result1 = ClaudeQuery[prompt1];
 result2 = ClaudeQuery[prompt2];
 ```
 
-**原因**: ClaudeQuery は `StartProcess` + `CreateScheduledTask` で Claude CLI プロセスを管理する。
-ClaudeEval の ScheduledTask 内から呼ぶと、ネストした ScheduledTask が作られ、
+**原因**: ClaudeQuery は `StartProcess` で Claude CLI プロセスを起動し、
+共有ポーリングタスク (`$iSharedPollingTask`) 経由で結果を監視する。
+ClaudeEval の ScheduledTask 内から呼ぶと、ネストした非同期処理が作られ
 カーネルの評価キューがブロックされる。
 
-### 2. ScheduledTask 内からの SessionSubmit + SelectionEvaluate
+#### 2. SessionSubmit + SelectionEvaluate
 
 ```mathematica
 (* ❌ ScheduledTask 内で SessionSubmit → ClaudeEval の ScheduledTask と競合 *)
 SessionSubmit[SelectionEvaluate[nb, ...]]
 ```
 
-### 3. ExternalEvaluate (Python) のサブプロセス問題
+#### 3. ExternalEvaluate (Python)
 
 ```mathematica
 (* ❌ ScheduledTask 内から ExternalEvaluate → サブプロセスがブロック *)
 ExternalEvaluate["Python", code]
 ```
 
-## 安全な代替手段
-
-### LLM 呼び出し
+### 安全な代替手段
 
 | 方式 | ScheduledTask 内 | 用途 |
 |---|---|---|
@@ -65,38 +79,65 @@ iQueryCloudLLM[prompt_String] := Module[{result},
 iQueryLocalLLM[prompt_String] := iQueryLMStudioDirect[prompt, url, model]
 ```
 
-### ClaudeEval / ContinueEval のチェーン
-
-```mathematica
-(* ✅ 安全: ContinueEval は ClaudeEval と同じチェーンで動作するため安全 *)
-ClaudeEval["タスクを実行して"]
-(* → 出力: ContinueEval[] で継続できます *)
-ContinueEval[]
-
-(* ✅ 安全: ClaudeEval が生成するコードが同期関数のみを呼ぶ *)
-ClaudeEval["univの今日のメールを表示して"]
-(* → 生成: mdb = mailEnsureLoaded["univ"]; showMails[...] *)
-```
-
-## 秘密/公開メールの並列処理パターン
-
-メール処理で秘密（Confidential）データと公開（NonConfidential）データを分離して処理する場合:
+### 秘密/公開データの並列処理パターン
 
 ```mathematica
 (* ✅ 正しいパターン: 逐次処理、両方とも同期 HTTP *)
-(* 秘密分: ローカル LLM (URLRead → LM Studio) *)
-privResult = iQueryLocalLLM[privPrompt];
-(* 公開分: クラウド LLM (LLMSynthesize) *)
-pubResult = iQueryCloudLLM[pubPrompt];
+privResult = iQueryLocalLLM[privPrompt];   (* 秘密: ローカル LLM *)
+pubResult = iQueryCloudLLM[pubPrompt];     (* 公開: クラウド LLM *)
 
-(* ❌ 危険なパターン: 両方で ClaudeQuery を使う *)
+(* ❌ 危険: 両方で ClaudeQuery → デッドロック *)
 privResult = ClaudeQuery[privPrompt, Model -> $ClaudePrivateModel];
 pubResult = ClaudeQuery[pubPrompt, Fallback -> True];
-(* → 2回の ClaudeQuery が ScheduledTask 内でデッドロック *)
 ```
 
-**原則**:
-- 秘密データ → `URLRead` でローカル LLM (LM Studio 等) に送信。HTTP 通信なので安全。
-- 公開データ → `LLMSynthesize` でクラウド LLM に送信。同期 HTTP なので安全。
-- いずれも `ClaudeQuery` や `ExternalEvaluate` は使わない。
-- 処理は逐次（Sequential）で行い、並列化しない。
+**原則**: 秘密データは `URLRead` でローカル LLM、公開データは `LLMSynthesize` でクラウド LLM。逐次処理し、`ClaudeQuery` は使わない。
+
+---
+
+## B. 独自 ScheduledTask 作成の禁止
+
+claudecode は単一の共有ポーリングタスク (`$iSharedPollingTask`) で全非同期クエリを一括管理する。
+パッケージが独自に `CreateScheduledTask` で UI ポーリング・進捗表示を行うと、
+複数の ScheduledTask が同時に FrontEnd 操作を行い「動的評価の放棄」ダイアログでフリーズする。
+
+### 必須
+
+- UI フィードバック（`WindowStatusArea` 更新、`NotebookWrite`、`Dynamic` 表示等）を伴う非同期タスクは、claudecode の `iClaudeQueryAsyncWithProgress[]` および NBAccess の公開関数を通じて実行する。
+- パッケージ側で `CreateScheduledTask` / `RunScheduledTask` を使ってポーリングや進捗表示のループを作成してはならない。
+
+### 禁止例
+
+```mathematica
+(* ❌ パッケージ内で独自に進捗ポーリングタスクを作る *)
+myTask = CreateScheduledTask[
+  CurrentValue[nb, WindowStatusArea] = "処理中..." <> ToString[elapsed] <> "s";
+  If[ProcessStatus[proc] === "Finished", ...],
+  1];
+
+(* ❌ RunScheduledTask で FrontEnd 更新ループを構築する *)
+RunScheduledTask[
+  NotebookWrite[nb, Cell[progressText, "Print"]]; ...,
+  {1}]
+```
+
+### 安全な代替手段
+
+```mathematica
+(* ✅ claudecode の共有ポーリング基盤を利用する *)
+iClaudeQueryAsyncWithProgress[prompt, callback, nb]
+
+(* ✅ 純粋計算を ParallelSubmit で並列化（FrontEnd 通信なし） *)
+ParallelSubmit[heavyComputation[data]]
+```
+
+### 例外（独自 ScheduledTask の使用を許可）
+
+以下のいずれかを満たす場合に限り許可する:
+
+1. **純粋計算タスク**: 数値計算・組み合わせ問題・シミュレーション等、FrontEnd との通信を一切行わない処理。
+2. **インタラクティブプログラム**: `PresentationListener` のように、リアルタイム性が必要で共有ポーリングの間隔では要件を満たせないプログラム。
+
+#### 例外使用時の義務
+
+ドキュメント（`api.md` / `user_manual.md` / `README.md`）に独自 ScheduledTask を使用している旨と理由を**明記**すること。
