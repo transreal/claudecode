@@ -18,8 +18,8 @@ ClaudeCode は以下の設計原則に基づいています。
 - **自動実行安全ガード**: `ClaudeEval` の `AutoEvaluate -> True` で生成コードを自動実行する際、`NBAutoEvalProhibitedPatterns` に定義された禁止パターンに該当するコードの自動実行をブロックします。これにより、ファイル削除や危険なシステム操作などを含むコードが意図せず実行されることを防止します。
 - **共有ポーリングタスク**: 複数の非同期ジョブが実行中の場合、すべてのジョブが単一の共有ポーリングタスクを利用します。旧実装のようにジョブごとに個別の `ScheduledTask` を作成しないため、多数のジョブを並列実行した際のオーバーヘッドが大幅に削減されます。`iEnsureSharedPollingTask` により共有タスクのライフサイクルが管理され、パッケージリロード時には旧タスクが自動的に停止されます。
 - **非同期スケジューリング規約の自動注入**: `ClaudeUpdatePackage` のプロンプトに、非同期タスクのスケジューリング規約（claudecode/NBAccess 公開 API の使用義務・例外条件・根拠）を自動注入します。LLM が生成するパッケージコードが正しい非同期パターンに従うよう誘導します。
-- **Windows エンコーディング安全な API 通信**: Anthropic API 経由のフォールバック通信（`ClaudeQueryBg`）において、リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換（ShiftJIS 等）による日本語文字化けが発生しません。
-- **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG（有向非巡回グラフ）として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。
+- **Windows エンコーディング安全な API 通信（マルチモーダル対応）**: `ClaudeQueryBg` は テキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス（`Fallback -> True`）では Anthropic API のマルチモーダル `content` 配列を構築して送信します。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換（ShiftJIS 等）による日本語文字化けが発生しません。
+- **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG（有向非巡回グラフ）として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。`$LLMGraphMaxConcurrency` によりカテゴリ別の並列度を制御でき、DAG ジョブの作成・実行・キャンセルを行う `LLMGraphDAGCreate` / `LLMGraphExecute` 系の API も提供されます。
 - **[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージする機能を提供します。
 
 内部的には、[NBAccess](https://github.com/transreal/NBAccess) パッケージにノートブックのセル操作・プライバシー管理・履歴 DB を委譲し、[GitHubREST](https://github.com/transreal/github) パッケージと連携して GitHub 上のパッケージ管理を行います。
@@ -84,13 +84,17 @@ $ClaudeImageModels = {{"openai", "gpt-image-1"}, {"openai", "dall-e-3"}}
 $ClaudeTTSModels = {{"openai", "tts-1-hd"}, {"openai", "tts-1"}}
 
 (* アクセス可能ディレクトリ *)
-$ClaudeAccessibleDirs = {$packageDirectory}
+$ClaudeAccessibleDirs = {$packageDirectory, "C:\\Users\\...\\作業フォルダ"}
 
 (* 作業ディレクトリ *)
 $ClaudeWorkingDirectory = FileNameJoin[{$HomeDirectory, "Claude Working"}]
 
 (* パッケージキーワード自動注入マップ *)
 $ClaudePackageKeywordMap = <||>
+
+(* LLMGraph カテゴリ別並列度 (デフォルト値を変更する場合) *)
+$LLMGraphMaxConcurrency["cli"] = 4        (* CLI テキスト呼び出し *)
+$LLMGraphMaxConcurrency["cli-vision"] = 1 (* CLI 画像付き呼び出し *)
 ```
 
 ### パッケージキーワード自動注入システム
@@ -188,6 +192,13 @@ ClaudePrepareCommit["MyPackage"]
 | | `NotebookLLMGraphExtractThread` | 実行スレッド抽出 |
 | | `NotebookLLMGraphApplyThread` | Thread を別対象に再適用 |
 | | `NotebookLLMGraphRerun` | ノード再実行 |
+| | `LLMGraphDAGCreate` | DAG ジョブの作成 |
+| | `LLMGraphDAGStatus` | DAG ジョブのステータス取得 |
+| | `LLMGraphDAGCancel` | DAG ジョブのキャンセル |
+| | `LLMGraphExecute` | LLMGraph ジョブの実行 |
+| | `LLMGraphExecuteStatus` | LLMGraph ジョブのステータス取得 |
+| | `LLMGraphExecuteCancel` | LLMGraph ジョブのキャンセル |
+| | `$LLMGraphMaxConcurrency` | カテゴリ別並列度の制御 |
 | **[実験的] ファイル処理** | `ClaudeProcessFile` | プライバシー分割並列処理 |
 | **分離検証** | `ClaudeCheckSeparation` | NBAccess 分離原則の違反検査 |
 | | `ClaudeFixSeparation` | 違反の自動修正 |
@@ -403,6 +414,33 @@ ClaudeHistorySize[]
 ClaudeCode は書き込みキュー方式を採用し、各セル書き込みを個別のサンク（引数なし関数）としてキューに積み、ティック間でカウンタが更新される仕組みで、数十秒ブロックする可能性がある処理を軽量な直接書き込みに変換します。これにより、大量の出力生成時でもユーザーインターフェースの応答性を保ちます。
 
 複数のジョブが同時実行中の場合、すべてのジョブが **共有ポーリングタスク** を利用します。旧実装ではジョブごとに個別の `ScheduledTask` を作成していましたが、現在は `iEnsureSharedPollingTask` によって管理される単一の共有タスクがすべてのジョブのキューを一括処理します。これにより、多数の並列ジョブ実行時のスケジューラーへの負荷を大幅に削減しています。パッケージリロード時には旧タスクが自動的に停止されます。
+
+#### ClaudeQueryBg のマルチモーダル対応
+
+`ClaudeQueryBg` はテキスト文字列だけでなく、`Image` オブジェクトや `File[path]` を含むリスト形式の入力を受け付けます。これにより、SocketListen ハンドラや ScheduledTask コールバックなどの非同期コンテキストから、画像付きの問い合わせを安全に実行できます。
+
+```mathematica
+(* テキストのみ（従来どおり） *)
+ClaudeQueryBg["こんにちは"]
+
+(* テキスト + 画像のリスト形式 *)
+img = Import["C:\\...\\screenshot.png"]
+result = ClaudeQueryBg[{"この画像を説明してください", img}]
+
+(* テキスト + PDF ファイル *)
+result = ClaudeQueryBg[{"この PDF の要点を教えて", File["C:\\...\\doc.pdf"]},
+  Fallback -> True]
+```
+
+入力がリストの場合、内部で以下のように振り分けられます。
+
+| 条件 | 使用パス | 説明 |
+|---|---|---|
+| メディアなし（文字列のみ） | CLI または API（テキスト） | 従来どおりテキストを結合して送信 |
+| メディアあり + `Fallback -> False`（デフォルト） | CLI パス | `iNormalizePrompt` で `Image` を PNG ファイルに保存し、`--image` フラグ経由で CLI に渡す |
+| メディアあり + `Fallback -> True` | Anthropic API マルチモーダルパス | `content` 配列にテキストブロックと画像ブロックを組み立てて API に直接送信 |
+
+CLI パスでは画像ファイルが一時ディレクトリに保存され（最大 1024 px にリサイズ）、Claude Code CLI が `--image` フラグでそれを参照します。API パスでは PNG バイト列を Base64 エンコードした `image` コンテンツブロックを `content` 配列に追加して送信します。
 
 #### Anthropic API 通信の Windows エンコーディング対応
 
@@ -667,6 +705,51 @@ NotebookLLMGraphApplyThread[thread, "another.nb", "DryRun" -> True]
 
 Thread オブジェクトには各ノードの PrivacySpec が保持されており、`PrivacySpec >= 0.9` のノードは自動的に `$ClaudePrivateModel`（LM Studio 等）で実行されます。
 
+#### DAG ジョブ実行 API
+
+LLMGraph の実行をプログラマティックに制御するための低レベル API も提供されています。
+
+```mathematica
+(* DAG ジョブの作成 *)
+job = LLMGraphDAGCreate[nodes, taskDescriptor]
+
+(* ジョブのステータス取得 *)
+LLMGraphDAGStatus[job]
+
+(* ジョブのキャンセル *)
+LLMGraphDAGCancel[job]
+
+(* LLMGraph ジョブの実行（高レベル） *)
+LLMGraphExecute[graphSpec]
+
+(* 実行中ジョブのステータス取得 *)
+LLMGraphExecuteStatus[jobId]
+
+(* 実行中ジョブのキャンセル *)
+LLMGraphExecuteCancel[jobId]
+```
+
+#### LLMGraph 並列度の制御（$LLMGraphMaxConcurrency）
+
+`$LLMGraphMaxConcurrency` はカテゴリ別の最大並列実行数をグローバルに制御します。DAG の各ノードは抽象カテゴリに分類され、同一カテゴリのノードが同時に実行できる数を制限します。
+
+```mathematica
+(* カテゴリ別デフォルト値 *)
+$LLMGraphMaxConcurrency["cli"]        (* = 4 : Claude CLI テキスト単体呼び出し *)
+$LLMGraphMaxConcurrency["cli-vision"] (* = 1 : Claude CLI 画像付き呼び出し *)
+
+(* グローバルデフォルトを変更する例 *)
+$LLMGraphMaxConcurrency["cli"] = 2     (* CLI 呼び出しを同時2本に制限 *)
+```
+
+並列度の解決は以下の優先順位で行われます。
+
+1. `taskDescriptor["maxConcurrency"][abstractCat]` — ジョブ固有のオーバーライド（最優先）
+2. `$LLMGraphMaxConcurrency[abstractCat]` — グローバルデフォルト
+3. `1` — フォールバック（設定なし）
+
+ジョブ作成時に `taskDescriptor` にカテゴリマップと並列度オーバーライドを指定することで、ジョブ単位での細かな制御も可能です。
+
 #### 公開 API 一覧
 
 | 関数 | 説明 |
@@ -687,6 +770,13 @@ Thread オブジェクトには各ノードの PrivacySpec が保持されてお
 | `NotebookLLMGraphInvalidateDownstream[nb, nodeID]` | 下流無効化 |
 | `NotebookLLMGraphExtractThread[nb, nodeID]` | スレッド抽出 |
 | `NotebookLLMGraphApplyThread[thread, target]` | スレッド再適用 |
+| `LLMGraphDAGCreate[nodes, taskDesc]` | DAG ジョブの作成 |
+| `LLMGraphDAGStatus[job]` | DAG ジョブのステータス取得 |
+| `LLMGraphDAGCancel[job]` | DAG ジョブのキャンセル |
+| `LLMGraphExecute[graphSpec]` | LLMGraph ジョブの実行 |
+| `LLMGraphExecuteStatus[jobId]` | LLMGraph ジョブのステータス取得 |
+| `LLMGraphExecuteCancel[jobId]` | LLMGraph ジョブのキャンセル |
+| `$LLMGraphMaxConcurrency` | カテゴリ別最大並列度の制御 |
 
 ### [実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)
 

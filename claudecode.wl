@@ -28,7 +28,9 @@ Quiet[ClearAll[
   iIsCUDARequest, iEnsureCUDAExtension, iCUDAUnavailableNote,
   iEnsureSharedPollingTask, iSharedPollingTick,
   iAsyncSchedulingRules,
-  iParseAnthropicBgResponse
+  iParseAnthropicBgResponse,
+  iLLMGraphNode, iLLMGraphResolveConcurrency, iLLMGraphDAGTick,
+  $iLLMGraphDAGJobs
 ]];
 
 (* NBAccess \:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:30ed\:30fc\:30c9 (\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:8aad\:307f\:66f8\:304d\:30fb\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:7ba1\:7406) *)
@@ -68,6 +70,7 @@ Quiet[Scan[
    "NotebookLLMGraphRerun","NotebookLLMGraphInvalidateDownstream",
    "NotebookLLMGraphSummary",
    "LLMGraphExecute","LLMGraphExecuteStatus","LLMGraphExecuteCancel",
+   "LLMGraphDAGCreate","LLMGraphDAGStatus","LLMGraphDAGCancel",
    "NotebookLLMGraphExtractThread","NotebookLLMGraphApplyThread",
    "NBFileTranslate","ClaudeProcessFile",
    "$ClaudeTimeout", "$ClaudeMDPath", "$ClaudeMDContent", "$ClaudeModel",
@@ -77,6 +80,7 @@ Quiet[Scan[
    "$ClaudeDocModel",
    "$ClaudePrivateModel",
    "$ClaudePackageKeywordMap",
+   "$LLMGraphMaxConcurrency",
    "Fallback", "AutoPrivate", "AutoEvaluate", "StartTime", "Timeout",
    "TargetFiles", "TargetFunctions", "Mode", "DryRun", "Inherit",
    "License", "Model", "WebFetch", "WebSearch", "RepeatInterval", "PrivacySpec",
@@ -139,7 +143,7 @@ $ClaudeAccessibleDirs::usage =
   "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e TaggingRules \:306b\:3082 NBSetAccessibleDirs \:3067\:6c38\:7d9a\:5316\:53ef\:80fd\:3002\n" <>
   "\:30c7\:30d5\:30a9\:30eb\:30c8: {$packageDirectory}\:3002\n" <>
   "NotebookDirectory \:306f\:521d\:56de\:4f7f\:7528\:6642\:306b\:30c0\:30a4\:30a2\:30ed\:30b0\:3067\:8a31\:53ef\:3092\:78ba\:8a8d ($packageDirectory \:914d\:4e0b\:3092\:9664\:304f)\:3002\n" <>
-  "\:4f8b: $ClaudeAccessibleDirs = {$packageDirectory, \"F:\\\\Dropbox\\\\Mathematica-oneDrive\"}";
+  "\:4f8b: $ClaudeAccessibleDirs = {$packageDirectory, \"C:\\\\Users\\\\...\\\\\:4f5c\:696d\:30d5\:30a9\:30eb\:30c0\"}";
 
 If[!ListQ[$ClaudeAccessibleDirs],
   $ClaudeAccessibleDirs = Select[{Global`$packageDirectory},
@@ -767,6 +771,21 @@ ClaudeProcessFile::usage =
   "Options: \"Verbose\" (default True), \"SessionTag\" (default Automatic)\n" <>
   "\:4f8b: ClaudeProcessFile[\"Translate to English\", \"a.nb\", \"a-out.nb\"]";
 
+$LLMGraphMaxConcurrency::usage =
+  "$LLMGraphMaxConcurrency \:306f LLMGraph \:30b9\:30b1\:30b8\:30e5\:30fc\:30e9\:306e\:30ab\:30c6\:30b4\:30ea\:5225\:6700\:5927\:4e26\:5217\:5ea6\:3002\n" <>
+  "\:62bd\:8c61\:30ab\:30c6\:30b4\:30ea:\n" <>
+  "  \"cli\"        \:2014 Claude CLI \:30c6\:30ad\:30b9\:30c8\:5358\:4f53\:547c\:3073\:51fa\:3057 (\:30c7\:30d5\:30a9\:30eb\:30c8 4)\n" <>
+  "  \"cli-vision\" \:2014 Claude CLI \:753b\:50cf\:4ed8\:304d\:547c\:3073\:51fa\:3057 (\:30c7\:30d5\:30a9\:30eb\:30c8 1)\n" <>
+  "  \"process\"    \:2014 \:5916\:90e8\:30d7\:30ed\:30bb\:30b9 (Python \:7b49, \:30c7\:30d5\:30a9\:30eb\:30c8 1)\n" <>
+  "  \"sync\"       \:2014 \:540c\:671f\:30cf\:30f3\:30c9\:30e9 (\:30c7\:30d5\:30a9\:30eb\:30c8 99, \:5b9f\:8cea\:7121\:5236\:9650)\n" <>
+  "\:4f8b: $LLMGraphMaxConcurrency[\"cli\"] = 2";
+LLMGraphDAGCreate::usage =
+  "LLMGraphDAGCreate[spec] \:306f DAG \:30d9\:30fc\:30b9\:306e\:975e\:540c\:671f\:30b8\:30e7\:30d6\:3092\:4f5c\:6210\:3057\:8d77\:52d5\:3059\:308b\:3002jobId \:3092\:8fd4\:3059\:3002";
+LLMGraphDAGStatus::usage =
+  "LLMGraphDAGStatus[jobId] \:306f DAG \:30b8\:30e7\:30d6\:306e\:30ce\:30fc\:30c9\:72b6\:614b\:96c6\:8a08\:3092\:8fd4\:3059\:3002";
+LLMGraphDAGCancel::usage =
+  "LLMGraphDAGCancel[jobId] \:306f DAG \:30b8\:30e7\:30d6\:3092\:30ad\:30e3\:30f3\:30bb\:30eb\:3059\:308b\:3002";
+
     Begin["`Private`"];(* ============================================================
    \:8a2d\:5b9a\:ff1a\:5fc5\:8981\:306b\:5fdc\:3058\:3066\:624b\:52d5\:3067\:4e0a\:66f8\:304d\:53ef\:80fd
    ============================================================ *)
@@ -778,6 +797,15 @@ If[!AssociationQ[$ClaudePackageKeywordMap], $ClaudePackageKeywordMap = <||>];
 
 (* ClaudeCode \:8a73\:7d30\:30ed\:30b0\:51fa\:529b\:30d5\:30e9\:30b0 (\:30c7\:30a3\:30d5\:30a9\:30eb\:30c8 False: \:91cd\:5927\:30a8\:30e9\:30fc\:4ee5\:5916\:306e\:30ed\:30b0\:3092\:6291\:5236) *)
 If[$ClaudeVerbose =!= True, $ClaudeVerbose = False];
+
+(* LLMGraph カテゴリ別最大並列度のデフォルト値 *)
+If[!AssociationQ[$LLMGraphMaxConcurrency],
+  $LLMGraphMaxConcurrency = <|
+    "cli"        -> 4,
+    "cli-vision" -> 1,
+    "process"    -> 1,
+    "sync"       -> 99
+  |>];
 
 (* ClaudeUpdatePackage 自動リトライ: リロード後のエラーを検出し自動修正 *)
 If[!ValueQ[$ClaudeUpdateAutoRetryMax], $ClaudeUpdateAutoRetryMax = 2];
@@ -3266,7 +3294,7 @@ iIsImageMediaType[mt_String] := StringStartsQ[mt, "image/"];
    最大辺が $iMediaMaxImageSize を超える場合に縮小する。
    JPEG 品質は $iMediaJPEGQuality で制御。
    リサイズされた場合は一時ファイルのパスを返し、不要な場合は元パスを返す。 *)
-$iMediaMaxImageSize = 1024; (* ピクセル *)
+$iMediaMaxImageSize = 1024; (* ピクセル: CLI --print モードでの安定動作サイズ *)
 $iMediaJPEGQuality = 85;
 
 iResizeImageFile[path_String, tmpDir_String] :=
@@ -3983,12 +4011,24 @@ iWriteQueryResponseQueued[nb_NotebookObject, text_String, autoEvaluate_:False] :
 
 (* \:4f4e\:30ec\:30d9\:30eb\:540c\:671f\:547c\:3073\:51fa\:3057\:ff08\:5c65\:6b74\:4fdd\:5b58\:306a\:3057\:ff09 *)
 iClaudeQueryRaw[prompt_] := Module[
-  {outFile, promptFile, batFile, res, raw, norm},
+  {outFile, promptFile, batFile, res, raw, norm, workDir},
 
   norm       = iNormalizePrompt[iInjectAttachments[prompt]];
-  outFile    = FileNameJoin[{$TemporaryDirectory,
+  (* Claude Code がアクセスできるローカルディレクトリに出力。
+     $TemporaryDirectory は Claude Code CLI からアクセスできない。
+     $packageDirectory は Dropbox 上でテンポラリ用途に不適。 *)
+  workDir = $ClaudeWorkingDirectory;
+  If[!StringQ[workDir] || workDir === "",
+    workDir = FileNameJoin[{$HomeDirectory, "Claude Working"}]];
+  If[!DirectoryQ[workDir],
+    Quiet[CreateDirectory[workDir, CreateIntermediateDirectories -> True]]];
+  (* $ClaudeAccessibleDirs に登録 (未登録の場合) *)
+  If[ListQ[$ClaudeAccessibleDirs] &&
+     !MemberQ[$ClaudeAccessibleDirs, workDir],
+    AppendTo[$ClaudeAccessibleDirs, workDir]];
+  outFile    = FileNameJoin[{workDir,
     "claude_out_"    <> ToString[UnixTime[]] <> ".txt"}];
-  promptFile = FileNameJoin[{$TemporaryDirectory,
+  promptFile = FileNameJoin[{workDir,
     "claude_prompt_" <> ToString[UnixTime[]] <> ".txt"}];
 
   If[FileExistsQ[outFile],    DeleteFile[outFile]];
@@ -4017,9 +4057,62 @@ iClaudeQueryRaw[prompt_] := Module[
   cleanOutput[stripANSI[raw]]
 ];
 
-(* ============================================================
-   Fallback: Claude Code \:5229\:7528\:4e0d\:53ef\:6642\:306e API \:76f4\:63a5\:547c\:3073\:51fa\:3057
-   ============================================================ *)
+(* 非ブロッキング版: StartProcess + Pause ポーリング。
+   RunProcess と異なり Pause 中にフロントエンドが応答可能。
+   トップレベル評価でのみ使用。ScheduledTask/SocketListen 内では
+   iClaudeQueryRaw (RunProcess 版) を使うこと。 *)
+iClaudeQueryRawNonBlocking[prompt_, timeoutSpec_:Automatic] := Module[
+  {outFile, promptFile, batFile, proc, raw, norm, workDir, timeout, startTime},
+  timeout = timeoutSpec;
+  If[timeout === Automatic || !NumericQ[timeout], timeout = $ClaudeTimeout];
+  If[!NumericQ[timeout], timeout = 600];
+
+  norm    = iNormalizePrompt[iInjectAttachments[prompt]];
+  workDir = $ClaudeWorkingDirectory;
+  If[!StringQ[workDir] || workDir === "",
+    workDir = FileNameJoin[{$HomeDirectory, "Claude Working"}]];
+  If[!DirectoryQ[workDir],
+    Quiet[CreateDirectory[workDir, CreateIntermediateDirectories -> True]]];
+  If[ListQ[$ClaudeAccessibleDirs] &&
+     !MemberQ[$ClaudeAccessibleDirs, workDir],
+    AppendTo[$ClaudeAccessibleDirs, workDir]];
+  outFile    = FileNameJoin[{workDir,
+    "claude_out_"    <> ToString[UnixTime[]] <> ".txt"}];
+  promptFile = FileNameJoin[{workDir,
+    "claude_prompt_" <> ToString[UnixTime[]] <> ".txt"}];
+  If[FileExistsQ[outFile],    DeleteFile[outFile]];
+  If[FileExistsQ[promptFile], DeleteFile[promptFile]];
+
+  Block[{strm},
+    strm = OpenWrite[promptFile, BinaryFormat -> True];
+    BinaryWrite[strm,
+      ExportString[norm["text"], "Text", CharacterEncoding -> "UTF-8"]];
+    Close[strm]];
+
+  batFile   = iMakeBat[promptFile, outFile, norm["imageDirs"]];
+  proc      = StartProcess[{"cmd", "/c", batFile}];
+  startTime = AbsoluteTime[];
+
+  (* Pause ポーリング: フロントエンドはブロックしない *)
+  While[ProcessStatus[proc] === "Running" &&
+        AbsoluteTime[] - startTime < timeout,
+    Pause[0.5]];
+
+  If[ProcessStatus[proc] === "Running",
+    KillProcess[proc];
+    Quiet[DeleteFile /@ {batFile, promptFile}];
+    Return["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8 (" <>
+      ToString[Round[timeout]] <> "\:79d2)"]];
+
+  Quiet[DeleteFile[batFile]];
+  Quiet[DeleteFile[promptFile]];
+
+  If[!FileExistsQ[outFile],
+    Return["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"]];
+  raw = Import[outFile, "Text"];
+  Quiet[DeleteFile[outFile]];
+  cleanOutput[stripANSI[raw]]
+];
 
 (* \:30a8\:30e9\:30fc\:5fdc\:7b54\:304b\:3089\:5229\:7528\:5236\:9650\:30fb\:63a5\:7d9a\:4e0d\:53ef\:3092\:691c\:51fa *)
 iIsLimitError[response_String] :=
@@ -5660,15 +5753,15 @@ ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
 
 
 (* ============================================================
-   ClaudeQueryBg: FrontEnd 操作なし・ScheduledTask/StartProcess 生成なしの同期クエリ
-   ── rule 95 安全な代替手段: URLRead ✅ のみ使用 ──────────
-   ClaudeQuerySync との違い:
-     - InputNotebook / EvaluationNotebook を一切参照しない
-     - WindowStatusArea 更新用 ScheduledTask を生成しない
-     - Claude CLI (StartProcess) を使わない
-     - URLRead[HTTPRequest[...]] で Anthropic API を直接呼ぶ
-       → $iSharedPollingTask との競合が発生しない
-   APIキー取得は NBAccess`NBGetAPIKey (AccessLevel 1.0 は claudecode 内部で処理)
+   ClaudeQueryBg: FrontEnd 操作なし・同期クエリ
+   ── Fallback に応じたルーティング ──────────────────────
+   Fallback -> False (デフォルト):
+     - Claude Code CLI を RunProcess で同期呼び出し (iClaudeQueryRaw)
+     - 課金API不使用。Claude Code のサブスクリプション範囲内。
+     - ScheduledTask/SocketListen 内でも RunProcess は安全。
+   Fallback -> True:
+     - URLRead で Anthropic API を直接呼ぶ (課金あり)
+     - Claude Code CLI が利用不可な場合のフォールバック
    用途:
      - SocketListen ハンドラ内からの LLM 呼び出し
      - ScheduledTask コールバック内からの LLM 呼び出し
@@ -5677,13 +5770,31 @@ ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
 Options[ClaudeQueryBg] = {
   Fallback -> False,
   Model    -> Automatic,
-  Timeout  -> Automatic
+  Timeout  -> Automatic,
+  NonBlocking -> False
 };
 
 ClaudeQueryBg[prompt_String, opts:OptionsPattern[]] :=
-  Module[{modelSpec, model, apiKey, url, bodyStr, req, respStr, timeout},
-    modelSpec = OptionValue[Model];
-    timeout   = OptionValue[Timeout];
+  Module[{useFallback = TrueQ[OptionValue[Fallback]],
+          nonBlock = TrueQ[OptionValue[NonBlocking]]},
+    If[!useFallback,
+      (* === Fallback -> False: Claude Code CLI 経由 (課金なし) === *)
+      If[nonBlock,
+        (* NonBlocking: StartProcess + Pause ポーリング。
+           フロントエンドをロックしない。トップレベル評価専用。 *)
+        iClaudeQueryRawNonBlocking[prompt, OptionValue[Timeout]],
+        (* 通常: RunProcess で同期呼び出し。
+           ScheduledTask/SocketListen 内でも安全。 *)
+        iClaudeQueryRaw[prompt]],
+      (* === Fallback -> True: Anthropic API 直接呼び出し (課金あり) === *)
+      iClaudeQueryBgAPI[prompt, OptionValue[Model], OptionValue[Timeout]]
+    ]
+  ];
+
+(* Anthropic API 直接呼び出し: Fallback -> True 時のみ使用 *)
+iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
+  Module[{model, apiKey, url, bodyBytes, req, timeout},
+    timeout = timeoutSpec;
     If[timeout === Automatic || !NumericQ[timeout], timeout = $ClaudeTimeout];
     If[!NumericQ[timeout], timeout = 1200];
 
@@ -5765,11 +5876,103 @@ ClaudeQueryBg[prompt_String, opts:OptionsPattern[]] :=
   ];
 
 (* リスト入力版: {"質問", Image[...], File["path"], ...}
-   テキスト部分のみを抽出してAPI送信 (マルチモーダルは未対応) *)
+   CLI パス: iClaudeQueryRaw が iNormalizePrompt 経由で Image/File を処理。
+   API パス: マルチモーダル content 配列を構築して送信。 *)
 ClaudeQueryBg[items_List, opts:OptionsPattern[]] :=
-  Module[{textParts},
-    textParts = Select[items, StringQ];
-    ClaudeQueryBg[StringJoin[Riffle[textParts, "\n"]], opts]
+  Module[{useFallback = TrueQ[OptionValue[Fallback]],
+          nonBlock = TrueQ[OptionValue[NonBlocking]],
+          hasMedia},
+    hasMedia = AnyTrue[items,
+      (ImageQ[#] || MatchQ[#, File[_String]] ||
+       (StringQ[#] && FileExistsQ[#] && iIsMediaFile[#])) &];
+    If[!hasMedia,
+      (* メディアなし: 従来どおりテキスト結合 *)
+      ClaudeQueryBg[StringJoin[Riffle[Select[items, StringQ], "\n"]], opts],
+      If[!useFallback,
+        (* CLI パス: iNormalizePrompt 経由で Image → PNG 保存 *)
+        If[nonBlock,
+          iClaudeQueryRawNonBlocking[items, OptionValue[Timeout]],
+          iClaudeQueryRaw[items]],
+        (* API パス: マルチモーダル content 配列を構築 *)
+        iClaudeQueryBgAPIMultimodal[items,
+          OptionValue[Model], OptionValue[Timeout]]
+      ]
+    ]
+  ];
+
+(* Anthropic API マルチモーダル呼び出し *)
+iClaudeQueryBgAPIMultimodal[items_List, modelSpec_, timeoutSpec_] :=
+  Module[{model, apiKey, url, contentBlocks = {}, bodyBytes, req, timeout,
+          tmpDir, imgIdx = 0},
+    timeout = timeoutSpec;
+    If[timeout === Automatic || !NumericQ[timeout], timeout = $ClaudeTimeout];
+    If[!NumericQ[timeout], timeout = 1200];
+    model = Which[
+      ListQ[modelSpec] && Length[modelSpec] >= 2, modelSpec[[2]],
+      StringQ[$ClaudeModel] && StringTrim[$ClaudeModel] =!= "", $ClaudeModel,
+      True, $iModelSonnet];
+    apiKey = Quiet[NBAccess`NBGetAPIKey["anthropic",
+      PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
+    If[!StringQ[apiKey] || StringLength[apiKey] === 0,
+      Return["Error: Anthropic API \:30ad\:30fc\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002"]];
+    url = If[ListQ[modelSpec] && Length[modelSpec] >= 3 && StringQ[modelSpec[[3]]],
+      modelSpec[[3]], "https://api.anthropic.com/v1/messages"];
+    tmpDir = FileNameJoin[{$TemporaryDirectory,
+      "claude_mm_" <> ToString[UnixTime[]]}];
+    (* content 配列を構築 *)
+    Scan[Function[item, Which[
+      StringQ[item] && (!FileExistsQ[item] || !iIsMediaFile[item]),
+        AppendTo[contentBlocks,
+          <|"type" -> "text", "text" -> item|>],
+      ImageQ[item],
+        imgIdx++;
+        If[!DirectoryQ[tmpDir], CreateDirectory[tmpDir]];
+        With[{f = FileNameJoin[{tmpDir, "img_" <> ToString[imgIdx] <> ".png"}]},
+          Export[f, ImageResize[item, {Min[ImageDimensions[item][[1]], 1568]}], "PNG"];
+          With[{b64 = BaseEncode[ReadByteArray[f]]},
+            AppendTo[contentBlocks,
+              <|"type" -> "image",
+                "source" -> <|"type" -> "base64",
+                  "media_type" -> "image/png", "data" -> b64|>|>]]],
+      MatchQ[item, File[_String]] && FileExistsQ[item[[1]]] &&
+        iIsImageMediaType[iMediaTypeForExt[FileExtension[item[[1]]]]],
+        With[{b64 = BaseEncode[ReadByteArray[item[[1]]]],
+              mt = iMediaTypeForExt[FileExtension[item[[1]]]]},
+          AppendTo[contentBlocks,
+            <|"type" -> "image",
+              "source" -> <|"type" -> "base64",
+                "media_type" -> mt, "data" -> b64|>|>]],
+      StringQ[item] && FileExistsQ[item] && iIsMediaFile[item] &&
+        iIsImageMediaType[iMediaTypeForExt[FileExtension[item]]],
+        With[{b64 = BaseEncode[ReadByteArray[item]],
+              mt = iMediaTypeForExt[FileExtension[item]]},
+          AppendTo[contentBlocks,
+            <|"type" -> "image",
+              "source" -> <|"type" -> "base64",
+                "media_type" -> mt, "data" -> b64|>|>]],
+      True,
+        AppendTo[contentBlocks,
+          <|"type" -> "text", "text" -> ToString[item]|>]
+    ]], items];
+    If[DirectoryQ[tmpDir], Quiet[DeleteDirectory[tmpDir, DeleteContents -> True]]];
+    bodyBytes = Quiet @ Check[
+      ExportByteArray[<|
+        "model" -> model, "max_tokens" -> 4096,
+        "messages" -> {<|"role" -> "user", "content" -> contentBlocks|>}
+      |>, "JSON", "Compact" -> True], $Failed];
+    If[!ByteArrayQ[bodyBytes], Return["Error: JSON \:69cb\:7bc9\:5931\:6557"]];
+    req = HTTPRequest[url,
+      <|Method -> "POST",
+        "Headers" -> {
+          "x-api-key" -> apiKey,
+          "anthropic-version" -> "2023-06-01",
+          "content-type" -> "application/json"},
+        "Body" -> bodyBytes|>];
+    Module[{rb},
+      rb = Quiet[TimeConstrained[URLRead[req, "BodyByteArray"], timeout, $Failed]];
+      If[!ByteArrayQ[rb],
+        Return["Error: API \:547c\:3073\:51fa\:3057\:5931\:6557"]];
+      iParseAnthropicBgResponse[rb]]
   ];
 
 (* Anthropic レスポンス JSON → テキスト文字列 *)
@@ -17743,6 +17946,210 @@ iIFinishJob[jobID_String, job_Association, opts_Association,
     (* クリーンアップ *)
     $iIRunningJobs = KeyDrop[$iIRunningJobs, jobID];
   ];
+
+(* ════════════════════════════════════════════════════════
+   LLMGraph DAG スケジューラ (汎用フレームワーク)
+
+   構成要素:
+   - ノード: handler 関数 + 依存関係 + カテゴリ
+   - タスクディスクリプタ: カテゴリマッピング + 並列度オーバーライド
+   - スケジューラ: $claudeProgress の tickFn 経由で駆動
+
+   並列度解決の優先順位:
+     1. taskDescriptor["maxConcurrency"][abstractCat]  (ジョブ固有)
+     2. $LLMGraphMaxConcurrency[abstractCat]           (グローバルデフォルト)
+     3. 1                                               (フォールバック)
+   ════════════════════════════════════════════════════════ *)
+
+$iLLMGraphDAGJobs = <||>;
+
+iLLMGraphNode[id_String, type_String, category_String,
+              deps_List, handler_] :=
+  <|"id" -> id, "type" -> type, "category" -> category,
+    "dependsOn" -> deps, "status" -> "pending",
+    "handler" -> handler, "result" -> None,
+    "runState" -> None, "error" -> None|>;
+
+iLLMGraphResolveConcurrency[nodeCategory_String,
+    taskDescriptor_Association] :=
+  Module[{abstractCat, catMap, overrides},
+    catMap = Lookup[taskDescriptor, "categoryMap", <||>];
+    abstractCat = Lookup[catMap, nodeCategory, nodeCategory];
+    overrides = Lookup[taskDescriptor, "maxConcurrency", <||>];
+    If[KeyExistsQ[overrides, abstractCat],
+      overrides[abstractCat],
+      Lookup[$LLMGraphMaxConcurrency, abstractCat, 1]]
+  ];
+
+LLMGraphDAGCreate[spec_Association] :=
+  Module[{jobId, nodes, taskDesc, nb, onComplete, context},
+    jobId = "dag-" <> ToString[UnixTime[]] <>
+      "-" <> ToString[RandomInteger[99999]];
+    nodes      = spec["nodes"];
+    taskDesc   = Lookup[spec, "taskDescriptor", <||>];
+    nb         = Lookup[spec, "nb",
+      Quiet @ Check[EvaluationNotebook[], $Failed]];
+    onComplete = Lookup[spec, "onComplete", None];
+    context    = Lookup[spec, "context", <||>];
+
+    $iLLMGraphDAGJobs[jobId] = <|
+      "nodes"          -> nodes,
+      "taskDescriptor" -> taskDesc,
+      "nb"             -> nb,
+      "onComplete"     -> onComplete,
+      "context"        -> context,
+      "startTime"      -> AbsoluteTime[]
+    |>;
+
+    With[{jid = jobId},
+      $claudeProgress[jobId] = <|
+        "disp" -> Lookup[taskDesc, "name", "LLMGraph DAG"],
+        "phase" -> "llmgraph-dag",
+        "startTime" -> AbsoluteTime[],
+        "tickFn" -> Function[{}, iLLMGraphDAGTick[jid]]
+      |>];
+    iEnsureSharedPollingTask[];
+
+    If[nb =!= $Failed,
+      Quiet[CurrentValue[nb, WindowStatusArea] =
+        Lookup[taskDesc, "name", "LLMGraph"] <>
+        ": " <> ToString[Length[nodes]] <> " \:30ce\:30fc\:30c9"]];
+    jobId
+  ];
+
+LLMGraphDAGStatus[jobId_String] :=
+  Module[{job, nodes, counts},
+    job = Quiet @ $iLLMGraphDAGJobs[jobId];
+    If[!AssociationQ[job], Return[Missing["JobNotFound", jobId]]];
+    nodes = job["nodes"];
+    counts = Counts[Lookup[#, "status", "?"] & /@ Values[nodes]];
+    <|"JobID" -> jobId,
+      "TotalNodes" -> Length[nodes],
+      "Pending" -> Lookup[counts, "pending", 0],
+      "Running" -> Lookup[counts, "running", 0],
+      "Done" -> Lookup[counts, "done", 0],
+      "Failed" -> Lookup[counts, "failed", 0],
+      "ElapsedSecs" -> Round[
+        AbsoluteTime[] - Lookup[job, "startTime", AbsoluteTime[]], 0.1]|>];
+
+LLMGraphDAGCancel[jobId_String] :=
+  Module[{job, nodes},
+    job = Quiet @ $iLLMGraphDAGJobs[jobId];
+    If[!AssociationQ[job], Return[$Failed]];
+    nodes = job["nodes"];
+    Scan[Module[{n = nodes[#]},
+      If[Lookup[n, "status", ""] === "running",
+        Quiet @ KillProcess[
+          Lookup[Lookup[n, "runState", <||>], "proc", None]]]] &,
+      Keys[nodes]];
+    $iLLMGraphDAGJobs = KeyDrop[$iLLMGraphDAGJobs, jobId];
+    KeyDropFrom[$claudeProgress, jobId];
+    If[job["nb"] =!= $Failed,
+      Quiet[CurrentValue[job["nb"], WindowStatusArea] = ""]];
+    jobId];
+
+iLLMGraphDAGTick[jobId_String] :=
+  Module[{job, nodes, nb, taskDesc, elapsed, doneCount, totalCount,
+          runningIds, collected, node,
+          eligibleIds, catRunning, launched = 0},
+    job = Quiet @ $iLLMGraphDAGJobs[jobId];
+    If[!AssociationQ[job],
+      KeyDropFrom[$claudeProgress, jobId]; Return[]];
+    nodes    = job["nodes"];
+    nb       = job["nb"];
+    taskDesc = Lookup[job, "taskDescriptor", <||>];
+    elapsed  = Round[AbsoluteTime[] - Lookup[job, "startTime", AbsoluteTime[]]];
+    totalCount = Length[nodes];
+    doneCount  = Count[Values[nodes],
+      _?(MemberQ[{"done", "failed"}, Lookup[#, "status", ""]] &)];
+
+    runningIds = Select[Keys[nodes],
+      Lookup[nodes[#], "status", ""] === "running" &];
+    Do[
+      node = nodes[rid];
+      collected = iICollectChunkResult[node["runState"], 600];
+      If[collected["status"] =!= "Running",
+        node["status"]   = If[collected["status"] === "Done", "done", "failed"];
+        node["result"]   = collected["result"];
+        node["error"]    = collected["error"];
+        node["runState"] = None;
+        nodes[rid] = node;
+        If[node["status"] === "failed",
+          Print["  [LLMGraph] ", rid, " \[Rule] failed (",
+            ToString[node["error"]], ")"]]],
+      {rid, runningIds}];
+
+    job["nodes"] = nodes;
+    $iLLMGraphDAGJobs[jobId] = job;
+    doneCount = Count[Values[nodes],
+      _?(MemberQ[{"done", "failed"}, Lookup[#, "status", ""]] &)];
+
+    If[AllTrue[Values[nodes],
+        MemberQ[{"done", "failed"}, Lookup[#, "status", ""]] &],
+      Module[{onComplete = Lookup[job, "onComplete", None]},
+        If[onComplete =!= None, Quiet[onComplete[job]]]];
+      If[nb =!= $Failed,
+        Quiet[CurrentValue[nb, WindowStatusArea] = ""]];
+      $iLLMGraphDAGJobs = KeyDrop[$iLLMGraphDAGJobs, jobId];
+      KeyDropFrom[$claudeProgress, jobId];
+      Return[]];
+
+    catRunning = Counts[
+      Lookup[#, "category", "?"] & /@
+        Select[Values[nodes], Lookup[#, "status", ""] === "running" &]];
+
+    eligibleIds = Select[Keys[nodes],
+      Module[{n = nodes[#]},
+        Lookup[n, "status", ""] === "pending" &&
+        AllTrue[Lookup[n, "dependsOn", {}],
+          MemberQ[{"done", "failed"},
+            Lookup[Lookup[nodes, #, <||>], "status", ""]] &]] &];
+
+    Do[
+      node = nodes[nextId];
+      Module[{cat = Lookup[node, "category", "other"],
+              maxC, currentC, result},
+        maxC = iLLMGraphResolveConcurrency[cat, taskDesc];
+        currentC = Lookup[catRunning, cat, 0];
+        If[currentC >= maxC, Continue[]];
+
+        If[node["type"] === "sync",
+          result = Quiet[node["handler"][job]];
+          If[result === $Failed || result === None,
+            node["status"] = "failed";
+            node["error"]  = "Sync handler returned " <> ToString[Head[result]],
+            node["status"] = "done";
+            node["result"] = result],
+          Module[{launchResult = Quiet[node["handler"][job]]},
+            If[AssociationQ[launchResult] && KeyExistsQ[launchResult, "proc"],
+              node["status"]   = "running";
+              node["runState"] = launchResult;
+              catRunning[cat] = Lookup[catRunning, cat, 0] + 1,
+              node["status"] = "failed";
+              node["error"]  = "Launch failed: " <>
+                ToString[Short[launchResult, 2]]]]];
+        nodes[nextId] = node;
+        If[node["status"] === "failed",
+          Print["  [LLMGraph] ", nextId, " \[Rule] failed (",
+            ToString[node["error"]], ")"]];
+        launched++],
+      {nextId, eligibleIds}];
+
+    If[launched > 0,
+      job["nodes"] = nodes;
+      $iLLMGraphDAGJobs[jobId] = job];
+
+    If[nb =!= $Failed,
+      Module[{running = Select[Keys[nodes],
+          Lookup[nodes[#], "status", ""] === "running" &]},
+        If[Length[running] > 0,
+          Quiet[CurrentValue[nb, WindowStatusArea] =
+            "[" <> ToString[elapsed] <> "s] " <>
+            StringRiffle[running, ","] <>
+            " (" <> ToString[doneCount] <> "/" <>
+            ToString[totalCount] <> ")"]]]]
+  ];
+
 
 (* ────────────────────────────────────────────────────────
    LLMGraphExecute 公開 API (Phase 5b + 5c 統合エントリポイント)

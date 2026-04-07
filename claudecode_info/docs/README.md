@@ -38,9 +38,9 @@ AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImag
 
 **共有ポーリングタスク**: 複数の非同期ジョブが実行中の場合、すべてのジョブが単一の共有ポーリングタスクを利用します。ジョブごとに個別の `ScheduledTask` を作成しないため、多数のジョブを並列実行した際のオーバーヘッドが大幅に削減されます。実行中のタスクが応答しない場合は `ClaudeAbort[]` で全タスクを強制停止できます。パッケージの再読み込み時には旧タスクが自動的に停止されるため、安全に再読み込みできます。
 
-**Windows エンコーディング安全な API 通信**: Anthropic API 経由のフォールバック通信において、リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換（ShiftJIS 等）による日本語文字化けが発生しません。
+**Windows エンコーディング安全な API 通信（マルチモーダル対応）**: Anthropic API 経由のフォールバック通信において、リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換（ShiftJIS 等）による日本語文字化けが発生しません。`ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力（マルチモーダル入力）に対応しており、CLI パスでは画像を PNG に変換して送信し、API フォールバックパスでは Anthropic API のマルチモーダル `content` 配列を構築して送信します。
 
-**[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を記録・可視化するためのグラフ構造を導入しています。Mathematica 14.2 で導入された `LLMGraph` と類似の DAG（有向非巡回グラフ）構造を採用しており（将来的には `LLMGraph` そのものとの統合を目指しますが、現状では独自実装）、`ClaudeEval` / `ClaudeQuery` などを実行すると、自動的にノートブック固有の LLMGraph が生成されます。各ノードは LLM 呼び出しの命令・応答サマリー・アクセスレベル・ステータスなどを保持し、ノード間の関係（コンテキスト継承・データフロー）がエッジとして記録されます。`NotebookLLMGraphPlot[]` による DAG 可視化、`NotebookLLMGraphSummary[]` による統計表示、`NotebookLLMGraphExtractThread[]` による実行スレッドの抽出と再適用など、豊富な分析 API を備えています。この実装は、`claudecode_info/design/` にある 1992-WOOC'92.pdf および 1993-WOOC'93「信号処理に向いたオブジェクトモデルの提案と応用」で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。
+**[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を記録・可視化するためのグラフ構造を導入しています。Mathematica 14.2 で導入された `LLMGraph` と類似の DAG（有向非巡回グラフ）構造を採用しており（将来的には `LLMGraph` そのものとの統合を目指しますが、現状では独自実装）、`ClaudeEval` / `ClaudeQuery` などを実行すると、自動的にノートブック固有の LLMGraph が生成されます。各ノードは LLM 呼び出しの命令・応答サマリー・アクセスレベル・ステータスなどを保持し、ノード間の関係（コンテキスト継承・データフロー）がエッジとして記録されます。`$LLMGraphMaxConcurrency` によりカテゴリ別（`"cli"`・`"cli-vision"` 等）の並列実行数を制御でき、`LLMGraphDAGCreate` / `LLMGraphExecute` 系 API によって DAG ジョブの作成・実行・キャンセルを行えます。`NotebookLLMGraphPlot[]` による DAG 可視化、`NotebookLLMGraphSummary[]` による統計表示、`NotebookLLMGraphExtractThread[]` による実行スレッドの抽出と再適用など、豊富な分析 API を備えています。この実装は、`claudecode_info/design/` にある 1992-WOOC'92.pdf および 1993-WOOC'93「信号処理に向いたオブジェクトモデルの提案と応用」で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。
 
 **[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイル（.nb）のセルをプライバシーレベルに基づいて自動分割し、公開セルはクラウド LLM（Claude Code CLI）、秘匿セルはプライベート LLM（LM Studio 等）で並列処理してマージする `ClaudeProcessFile` を搭載しています。`ClaudeEval` でノートブックファイルパスを含む指示を与えると自動的に検出・起動され、Splitter → 並列 LLM 処理 → Merger の一連のフローが非同期で実行されます。処理過程は LLMGraph 上に Fork/Join トポロジとして記録されます。
 
@@ -131,8 +131,14 @@ Block[{$CharacterEncoding = "UTF-8"},
 (* 基本的な問い合わせ（リッチレスポンス: テキスト + コード自動評価） *)
 ClaudeQuery["Mathematica で行列の固有値を求める方法を説明してください"]
 
+(* マルチモーダル問い合わせ（テキスト＋画像） *)
+ClaudeQuery[{"このグラフの特徴を説明してください", Import["chart.png"]}]
+
 (* 軽量同期クエリ（セッション履歴なし） *)
 ClaudeQuerySync["フィボナッチ数列の漸化式を教えてください"]
+
+(* 非同期コンテキストから安全に呼び出せるマルチモーダル背景クエリ *)
+ClaudeQueryBg[{"この画像を解析してください", Image[...]}]
 
 (* コード生成・自動実行 *)
 ClaudeEval["フィボナッチ数列の最初の10項をリストで返す関数"]
@@ -175,6 +181,10 @@ ClaudeDeleteSession["セッション名", "All"]
 ClaudeEval["階乗を計算して",
   Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
 
+(* LLMGraph のカテゴリ別並列度を設定 *)
+$LLMGraphMaxConcurrency["cli"] = 4
+$LLMGraphMaxConcurrency["cli-vision"] = 1
+
 (* ドキュメントを特定ファイルだけ更新（拡張子省略可） *)
 ClaudeUpdateDocumentation["claudecode", "新機能を追記して",
   TargetFiles -> {"api", "user_manual", "README"}]
@@ -209,13 +219,14 @@ ShowClaudePalette[]
 | `$ClaudeDocMaxChunkChars` | `60000` | プロンプト中ソースの最大文字数 |
 | `$ClaudeEvalMaxDepth` | `5` | ClaudeEval が再帰的に ClaudeEval/ContinueEval を生成する際の最大深度。0 で再帰禁止 |
 | `$ClaudePackageKeywordMap` | `<\|\|>` | パッケージ API 自動注入用のキーワードマップ |
+| `$LLMGraphMaxConcurrency` | カテゴリ別設定 | LLMGraph のカテゴリ別並列実行数（`"cli"`・`"cli-vision"` 等） |
 
 ### 主な機能
 
 **クエリ・コード生成**
-- `ClaudeQuery[prompt]` — Claude に問い合わせ、テキスト応答を返す（非同期）。リッチレスポンスモードにより、安全なコード（プロット・計算等）は自動評価される
+- `ClaudeQuery[prompt]` — Claude に問い合わせ、テキスト応答を返す（非同期）。`ClaudeQuery[{text, Image[...], File[path], ...}]` でマルチモーダル入力も可能。リッチレスポンスモードにより、安全なコード（プロット・計算等）は自動評価される
 - `ClaudeQuerySync[prompt]` — Claude に問い合わせ、応答文字列を同期的に返す軽量版。セッション履歴やノートブック書き込みは行わない
-- `ClaudeQueryBg[prompt]` — FrontEnd 操作・ScheduledTask 生成なしで同期問い合わせする軽量版。SocketListen ハンドラや ScheduledTask コールバック等の非同期コンテキストから安全に呼び出せる
+- `ClaudeQueryBg[prompt]` — FrontEnd 操作・ScheduledTask 生成なしで同期問い合わせする軽量版。`{text, Image[...], File[path], ...}` のリスト形式によるマルチモーダル入力に対応。SocketListen ハンドラや ScheduledTask コールバック等の非同期コンテキストから安全に呼び出せる
 - `ClaudeMath[task]` — Mathematica コード生成に特化したクエリ
 - `ClaudeEval[task]` — コードを非同期生成し、ノートブックに挿入・自動実行。`Fallback`・`WebFetch`・`Model`・`AutoPrivate`・`RepeatInterval` オプションで柔軟に制御。禁止パターン（`NBAutoEvalProhibitedPatterns`）に該当するコードの自動実行を自動ブロック
 - `ContinueEval[instruction]` — 直前の ClaudeEval の続きを実行。エラー修正に便利
@@ -302,6 +313,7 @@ ShowClaudePalette[]
 - `NotebookLLMGraphRerun[nb, nodeID]` — L1 ノードの再実行（下流自動無効化）
 - `NotebookLLMGraphExtractThread[nb, nodeID]` — 祖先チェーンを Thread オブジェクトとして抽出
 - `NotebookLLMGraphApplyThread[thread, newTarget]` — Thread を別ファイルに適用（`DryRun -> True` で実行計画確認）
+- `LLMGraphDAGCreate` / `LLMGraphExecute` 系 — DAG ジョブの作成・実行・キャンセルを行う低レベル API
 
 **[実験的] ClaudeProcessFile — プライバシー分割ファイル処理**
 - `ClaudeProcessFile[prompt, srcPath, dstPath]` — .nb ファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージ。非同期実行（stateKey を返す）

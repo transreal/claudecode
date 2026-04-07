@@ -141,3 +141,129 @@ ParallelSubmit[heavyComputation[data]]
 #### 例外使用時の義務
 
 ドキュメント（`api.md` / `user_manual.md` / `README.md`）に独自 ScheduledTask を使用している旨と理由を**明記**すること。
+
+---
+
+## C. 複数 LLM 呼び出しの非同期処理: LLMGraph DAG フレームワーク
+
+複数の LLM 呼び出しを組み合わせてデータを処理するパッケージでは、
+claudecode の **LLMGraph DAG フレームワーク** (`LLMGraphDAGCreate`) を使用すること。
+
+### 背景
+
+PDF インデクシング・文書翻訳・マルチステップ要約等では、
+複数の LLM 呼び出し（OCR、要約、分類等）を依存関係を持たせて実行する必要がある。
+これを手動で `StartProcess` + 独自 `ScheduledTask` で管理すると、
+セクション B の禁止事項に抵触し、フロントエンドフリーズの原因となる。
+
+### 必須: LLMGraphDAGCreate の使用
+
+```mathematica
+(* ✅ 正しいパターン: LLMGraphDAGCreate で DAG を定義・実行 *)
+jobId = LLMGraphDAGCreate[<|
+  "nodes" -> <|
+    "ocr-1" -> iLLMGraphNode["ocr-1", "claude-cli", "ocr", {},
+      Function[{job}, (* handler: <|"proc"->...|> を返す *)]],
+    "sum-1" -> iLLMGraphNode["sum-1", "claude-cli", "summarize", {"ocr-1"},
+      Function[{job}, (* handler *)]],
+    "finalize" -> iLLMGraphNode["finalize", "sync", "save", {"sum-1"},
+      Function[{job}, (* sync handler: 結果を直接返す *)]]
+  |>,
+  "taskDescriptor" -> <|
+    "name" -> "MyPackage Processing",
+    "categoryMap" -> <|
+      "ocr"       -> "cli-vision",
+      "summarize" -> "cli",
+      "save"      -> "sync"
+    |>
+  |>,
+  "context" -> <|"myData" -> data|>,
+  "onComplete" -> Function[{job}, (* 全ノード完了時の処理 *)]
+|>];
+```
+
+```mathematica
+(* ❌ 禁止: 独自 ScheduledTask で LLM プロセスをポーリング *)
+myTask = RunScheduledTask[
+  If[ProcessStatus[proc] === "Finished",
+    result = Import[outFile]; ...],
+  1];
+```
+
+### ノード型とカテゴリ
+
+#### ノード型 (`type`)
+
+| 型 | 実行方法 | 用途 |
+|---|---|---|
+| `"sync"` | `handler[job]` を即時実行、戻り値が結果 | データ変換、マージ、保存 |
+| `"claude-cli"` | `StartProcess` → ポーリング | Claude CLI 呼び出し |
+| `"python"` | `StartProcess` → ポーリング | Python スクリプト実行 |
+
+async ノード（`"sync"` 以外）の handler は `<|"proc" -> ProcessObject[...], "outFile" -> "..."|>` を返すこと。
+スケジューラが `iICollectChunkResult` で自動ポーリングする。
+
+#### 抽象カテゴリと並列度制御
+
+`$LLMGraphMaxConcurrency` がグローバルデフォルト値を定義:
+
+| 抽象カテゴリ | デフォルト並列度 | 用途 |
+|---|---|---|
+| `"cli"` | 4 | Claude CLI テキスト単体（要約等） |
+| `"cli-vision"` | 1 | Claude CLI 画像付き（OCR 等） |
+| `"process"` | 1 | 外部プロセス（Python 等） |
+| `"sync"` | 99 | 同期ハンドラ（実質無制限） |
+
+パッケージは `taskDescriptor["categoryMap"]` でノード固有カテゴリ（`"ocr"`, `"summarize"` 等）を
+抽象カテゴリにマッピングする。
+
+#### 並列度のオーバーライド
+
+ジョブ固有の並列度制限が必要な場合、`taskDescriptor["maxConcurrency"]` で指定:
+
+```mathematica
+"taskDescriptor" -> <|
+  "name" -> "...",
+  "categoryMap" -> <|...|>,
+  "maxConcurrency" -> <|"cli" -> 2|>  (* このジョブだけ CLI 2並列に制限 *)
+|>
+```
+
+解決優先順位: ジョブ固有 → `$LLMGraphMaxConcurrency` → 1（フォールバック）
+
+### handler 内のデータアクセス
+
+handler 関数は `Function[{job}, ...]` で、`job` は以下のキーを持つ:
+
+| キー | 内容 |
+|---|---|
+| `job["nodes"]` | 全ノードの Association（他ノードの結果参照用） |
+| `job["context"]` | `LLMGraphDAGCreate` 時に指定したジョブ固有データ |
+| `job["nb"]` | NotebookObject（ステータスバー更新用） |
+
+```mathematica
+(* 例: 前のノードの結果を参照 *)
+Function[{job},
+  Module[{prevResult = Lookup[
+      Lookup[job["nodes"], "ocr-1", <||>], "result", ""]},
+    (* prevResult を使って処理 *)
+  ]]
+```
+
+### 完了コールバック
+
+`"onComplete" -> Function[{job}, ...]` で全ノード完了時（成功・失敗問わず）の処理を定義:
+
+```mathematica
+"onComplete" -> Function[{completedJob},
+  Module[{failCount = Count[Values[completedJob["nodes"]],
+      _?(Lookup[#, "status", ""] === "failed" &)]},
+    If[failCount > 0, Print["失敗ノードあり: " <> ToString[failCount]]]]]
+```
+
+### ステータス・キャンセル
+
+```mathematica
+LLMGraphDAGStatus[jobId]   (* ノード状態集計 *)
+LLMGraphDAGCancel[jobId]   (* 実行中プロセスを KillProcess + クリーンアップ *)
+```

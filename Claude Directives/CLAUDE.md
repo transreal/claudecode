@@ -260,6 +260,20 @@ claudecode は ScheduledTask ベースの非同期基盤を提供する。パッ
 
 詳細は `rules/95-scheduled-task-safety.md` を参照。
 
+### 複数 LLM 呼び出しの非同期処理: LLMGraph DAG（必須）
+
+複数の LLM 呼び出しを依存関係を持たせて実行する場合（OCR→要約→保存 等）、
+claudecode の **LLMGraph DAG フレームワーク** を使用すること:
+
+- `LLMGraphDAGCreate[<|"nodes"->..., "taskDescriptor"->..., "onComplete"->...|>]` でジョブを作成・起動
+- ノードは `iLLMGraphNode[id, type, category, deps, handler]` で定義
+- `type`: `"sync"`（即時実行）/ `"claude-cli"`・`"python"`（StartProcess + 自動ポーリング）
+- `taskDescriptor["categoryMap"]` でノードカテゴリを抽象カテゴリ（`"cli"`, `"cli-vision"`, `"process"`, `"sync"`）にマッピング
+- 並列度は `$LLMGraphMaxConcurrency` がデフォルト。ジョブ固有オーバーライドは `taskDescriptor["maxConcurrency"]`
+- ❌ 独自 ScheduledTask で LLM プロセスをポーリングする実装は禁止
+
+詳細は `rules/95-scheduled-task-safety.md` セクション C を参照。
+
 ## バックアップ・履歴管理
 
 - `ClaudeBackupDataset["pkg"]` — パッケージのバックアップ履歴を Grid 表示。#0行でローカル最新版に復元可能。
