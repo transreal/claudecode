@@ -30,7 +30,7 @@ Quiet[ClearAll[
   iAsyncSchedulingRules,
   iParseAnthropicBgResponse,
   iLLMGraphNode, iLLMGraphResolveConcurrency, iLLMGraphDAGTick,
-  $iLLMGraphDAGJobs
+  $iLLMGraphDAGJobs, iLLMGraphDAGRetryInternal, iLLMGraphDAGRecordHistory
 ]];
 
 (* NBAccess \:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:30ed\:30fc\:30c9 (\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:8aad\:307f\:66f8\:304d\:30fb\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:7ba1\:7406) *)
@@ -70,7 +70,7 @@ Quiet[Scan[
    "NotebookLLMGraphRerun","NotebookLLMGraphInvalidateDownstream",
    "NotebookLLMGraphSummary",
    "LLMGraphExecute","LLMGraphExecuteStatus","LLMGraphExecuteCancel",
-   "LLMGraphDAGCreate","LLMGraphDAGStatus","LLMGraphDAGCancel",
+   "LLMGraphDAGCreate","LLMGraphDAGStatus","LLMGraphDAGCancel","LLMGraphDAGRetry","LLMGraphDAGRebuild",
    "NotebookLLMGraphExtractThread","NotebookLLMGraphApplyThread",
    "NBFileTranslate","ClaudeProcessFile",
    "$ClaudeTimeout", "$ClaudeMDPath", "$ClaudeMDContent", "$ClaudeModel",
@@ -785,6 +785,14 @@ LLMGraphDAGStatus::usage =
   "LLMGraphDAGStatus[jobId] \:306f DAG \:30b8\:30e7\:30d6\:306e\:30ce\:30fc\:30c9\:72b6\:614b\:96c6\:8a08\:3092\:8fd4\:3059\:3002";
 LLMGraphDAGCancel::usage =
   "LLMGraphDAGCancel[jobId] \:306f DAG \:30b8\:30e7\:30d6\:3092\:30ad\:30e3\:30f3\:30bb\:30eb\:3059\:308b\:3002";
+
+LLMGraphDAGRetry::usage =
+  "LLMGraphDAGRetry[jobId] \:306f\:5b8c\:4e86\:6e08\:307f DAG \:30b8\:30e7\:30d6\:306e Failed \:30ce\:30fc\:30c9\:3092\:518d\:5b9f\:884c\:3059\:308b\:3002\n" <>
+  "LLMGraphDAGRetry[jobId, {\"node1\", ...}] \:306f\:6307\:5b9a\:30ce\:30fc\:30c9\:306e\:307f\:518d\:5b9f\:884c\:3059\:308b\:3002";
+
+LLMGraphDAGRebuild::usage =
+  "LLMGraphDAGRebuild[oldJobId, <|nodeId -> newNode, ...|>] \:306f\:65e7\:30b8\:30e7\:30d6\:306e Done \:7d50\:679c\:3092\:5f15\:304d\:7d99\:304e\:3001\n" <>
+  "\:6307\:5b9a\:30ce\:30fc\:30c9\:306e handler \:3092\:5dee\:3057\:66ff\:3048\:305f\:65b0 DAG \:3092\:69cb\:6210\:30fb\:8d77\:52d5\:3059\:308b\:3002";
 
     Begin["`Private`"];(* ============================================================
    \:8a2d\:5b9a\:ff1a\:5fc5\:8981\:306b\:5fdc\:3058\:3066\:624b\:52d5\:3067\:4e0a\:66f8\:304d\:53ef\:80fd
@@ -18048,6 +18056,244 @@ LLMGraphDAGCancel[jobId_String] :=
       Quiet[CurrentValue[job["nb"], WindowStatusArea] = ""]];
     jobId];
 
+(* ── LLMGraphDAGRetry ────────────────────────────────────
+   完了済みジョブの Failed ノード (+ その下流 Pending) を再実行する。
+   Done ノードの result はそのまま保持。
+   第2引数で特定ノードのみ指定可能。
+   ──────────────────────────────────────────────────────── *)
+
+LLMGraphDAGRetry[jobId_String] :=
+  Module[{job, failedIds},
+    job = Quiet @ $iLLMGraphDAGJobs[jobId];
+    If[!AssociationQ[job], Return[Missing["JobNotFound", jobId]]];
+    failedIds = Select[Keys[job["nodes"]],
+      Lookup[job["nodes"][#], "status", ""] === "failed" &];
+    If[Length[failedIds] === 0,
+      Return[Missing["NoFailedNodes", jobId]]];
+    iLLMGraphDAGRetryInternal[jobId, failedIds]
+  ];
+
+LLMGraphDAGRetry[jobId_String, nodeIds_List] :=
+  Module[{job},
+    job = Quiet @ $iLLMGraphDAGJobs[jobId];
+    If[!AssociationQ[job], Return[Missing["JobNotFound", jobId]]];
+    iLLMGraphDAGRetryInternal[jobId, nodeIds]
+  ];
+
+iLLMGraphDAGRetryInternal[jobId_String, retryIds_List] :=
+  Module[{job, nodes, taskDesc, nb, resetIds, downstream},
+    job   = $iLLMGraphDAGJobs[jobId];
+    nodes = job["nodes"];
+    taskDesc = Lookup[job, "taskDescriptor", <||>];
+    nb    = Lookup[job, "nb", $Failed];
+
+    (* retryIds + その下流ノード (依存先が retry 対象) を全て pending に *)
+    resetIds = retryIds;
+    (* 下流ノードの探索: 依存先に resetIds を含むノードを繰り返し追加 *)
+    Module[{prevLen = 0},
+      While[Length[resetIds] =!= prevLen,
+        prevLen = Length[resetIds];
+        downstream = Select[Keys[nodes],
+          Module[{n = nodes[#]},
+            !MemberQ[resetIds, #] &&
+            MemberQ[{"pending", "failed"}, Lookup[n, "status", ""]] &&
+            AnyTrue[Lookup[n, "dependsOn", {}],
+              MemberQ[resetIds, #] &]] &];
+        resetIds = Union[resetIds, downstream]]];
+
+    (* ノードをリセット *)
+    Scan[Module[{n = nodes[#]},
+      n["status"]   = "pending";
+      n["result"]   = None;
+      n["error"]    = None;
+      n["runState"] = None;
+      nodes[#] = n] &, resetIds];
+
+    job["nodes"]     = nodes;
+    job["startTime"] = AbsoluteTime[];
+    KeyDropFrom[job, "completedAt"];
+    $iLLMGraphDAGJobs[jobId] = job;
+
+    (* スケジューラ再登録 *)
+    With[{jid = jobId},
+      $claudeProgress[jobId] = <|
+        "disp" -> Lookup[taskDesc, "name", "LLMGraph DAG"] <> " (retry)",
+        "phase" -> "llmgraph-dag",
+        "startTime" -> AbsoluteTime[],
+        "tickFn" -> Function[{}, iLLMGraphDAGTick[jid]]
+      |>];
+    iEnsureSharedPollingTask[];
+
+    If[nb =!= $Failed,
+      Quiet[CurrentValue[nb, WindowStatusArea] =
+        "Retry: " <> ToString[Length[resetIds]] <> " \:30ce\:30fc\:30c9"]];
+
+    Print["  [LLMGraph] Retry: ",
+      StringRiffle[resetIds, ", "],
+      " (", ToString[Length[resetIds]], " \:30ce\:30fc\:30c9)"];
+    jobId
+  ];
+
+(* ── LLMGraphDAGRebuild ──────────────────────────────────
+   旧ジョブの Done 結果を引き継ぎ、指定ノードの handler を差し替えた
+   新しい DAG ジョブを構成・起動する。
+   差し替えノードとその下流は pending にリセット。
+   ──────────────────────────────────────────────────────── *)
+
+LLMGraphDAGRebuild[oldJobId_String, replacements_Association] :=
+  Module[{oldJob, oldNodes, newNodes, taskDesc, nb, onComplete, context,
+          replaceIds, downstreamIds, prevLen, newSpec},
+    oldJob = Quiet @ $iLLMGraphDAGJobs[oldJobId];
+    If[!AssociationQ[oldJob], Return[Missing["JobNotFound", oldJobId]]];
+    oldNodes = oldJob["nodes"];
+    taskDesc = Lookup[oldJob, "taskDescriptor", <||>];
+    nb       = Lookup[oldJob, "nb", $Failed];
+    onComplete = Lookup[oldJob, "onComplete", None];
+    context  = Lookup[oldJob, "context", <||>];
+
+    (* 新ノードマップ: 旧ノードをコピー *)
+    newNodes = Association @@ (Rule[#, oldNodes[#]] & /@ Keys[oldNodes]);
+
+    (* 差し替えノードを上書き *)
+    replaceIds = Keys[replacements];
+    Scan[Function[nid,
+      If[KeyExistsQ[newNodes, nid],
+        newNodes[nid] = replacements[nid]]], replaceIds];
+
+    (* 差し替えノード + 下流を pending にリセット *)
+    downstreamIds = replaceIds;
+    prevLen = 0;
+    While[Length[downstreamIds] =!= prevLen,
+      prevLen = Length[downstreamIds];
+      downstreamIds = Union[downstreamIds,
+        Select[Keys[newNodes],
+          Module[{n = newNodes[#]},
+            !MemberQ[downstreamIds, #] &&
+            AnyTrue[Lookup[n, "dependsOn", {}],
+              MemberQ[downstreamIds, #] &]] &]]];
+
+    Scan[Function[nid,
+      newNodes[nid, "status"]   = "pending";
+      newNodes[nid, "result"]   = None;
+      newNodes[nid, "error"]    = None;
+      newNodes[nid, "runState"] = None], downstreamIds];
+
+    (* DAG 依存整合性検証 *)
+    Module[{missing = {}},
+      Scan[Function[nid,
+        Scan[Function[dep,
+          If[!KeyExistsQ[newNodes, dep],
+            AppendTo[missing, nid -> dep]]],
+          Lookup[newNodes[nid], "dependsOn", {}]]],
+        Keys[newNodes]];
+      If[Length[missing] > 0,
+        Print["  [LLMGraph] Rebuild: \:4f9d\:5b58\:4e0d\:6574\:5408 ", missing];
+        Return[Missing["DependencyError", missing]]]];
+
+    (* 新ジョブ作成 *)
+    newSpec = <|
+      "nodes" -> newNodes,
+      "taskDescriptor" -> taskDesc,
+      "nb" -> nb,
+      "onComplete" -> onComplete,
+      "context" -> context
+    |>;
+
+    Print["  [LLMGraph] Rebuild from ", oldJobId,
+      ": ", ToString[Length[downstreamIds]], " \:30ce\:30fc\:30c9\:3092\:518d\:5b9f\:884c"];
+    LLMGraphDAGCreate[newSpec]
+  ];
+
+(* ── NotebookLLMGraph 統合: DAG ノードを実行履歴に記録 ──
+   完了した DAG ジョブのノードを NotebookLLMGraph に登録し、
+   NotebookLLMGraphPlot で可視化できるようにする。
+   カテゴリに応じた色分け:
+     cli / cli-vision → AccessLevel "Public" (青)
+     process          → AccessLevel "Mixed" (緑)
+     sync             → AccessLevel "Public" (青)
+   ─────────────────────────────────────────────────────── *)
+
+iLLMGraphDAGRecordHistory[job_Association] :=
+  Module[{nb, nodes, taskDesc, dagName, graph, graphNodes,
+          dagPrefix, catMap, nodeList, dagNode, nlgNodeID,
+          accessLevel, nodeType, statusStr, inEdges, outEdges},
+    nb = Lookup[job, "nb", $Failed];
+    If[nb === $Failed, Return[]];
+    nodes    = job["nodes"];
+    taskDesc = Lookup[job, "taskDescriptor", <||>];
+    dagName  = Lookup[taskDesc, "name", "LLMGraph DAG"];
+    catMap   = Lookup[taskDesc, "categoryMap", <||>];
+
+    graph = iLLMGraphGetCached[nb];
+    If[!AssociationQ[graph], Return[]];
+    graphNodes = Lookup[graph, "Nodes", <||>];
+
+    dagPrefix = "dag-" <> ToString[Round[Lookup[job, "startTime", AbsoluteTime[]]]];
+
+    (* DAG ノードを NotebookLLMGraph ノードに変換 *)
+    nodeList = Keys[nodes];
+    Do[
+      dagNode    = nodes[nid];
+      nlgNodeID  = dagPrefix <> "-" <> nid;
+
+      (* カテゴリ → AccessLevel *)
+      accessLevel = Module[{cat = Lookup[dagNode, "category", "sync"],
+                            absCat},
+        absCat = Lookup[catMap, cat, cat];
+        Switch[absCat,
+          "cli",        "Public",
+          "cli-vision", "Public",
+          "process",    "Mixed",
+          "sync",       "Public",
+          _,            "Public"]];
+
+      (* NodeType *)
+      nodeType = Module[{cat = Lookup[dagNode, "category", "sync"],
+                         absCat},
+        absCat = Lookup[catMap, cat, cat];
+        Switch[absCat,
+          "cli",        "CloudLLM",
+          "cli-vision", "VisionLLM",
+          "process",    "External",
+          "sync",       "Compute",
+          _,            "Compute"]];
+
+      (* Status *)
+      statusStr = Switch[Lookup[dagNode, "status", "pending"],
+        "done",    "Completed",
+        "failed",  "Failed",
+        "running", "Processing",
+        _,         "Pending"];
+
+      (* InEdges: DAG の dependsOn を変換 *)
+      inEdges = Function[dep,
+        <|"From" -> dagPrefix <> "-" <> dep, "Type" -> "DAGDependency"|>
+      ] /@ Lookup[dagNode, "dependsOn", {}];
+
+      (* OutEdges: 他ノードの dependsOn から逆引き *)
+      outEdges = Function[targetId,
+        <|"To" -> dagPrefix <> "-" <> targetId, "Type" -> "DAGDependency"|>
+      ] /@ Select[nodeList,
+        MemberQ[Lookup[nodes[#], "dependsOn", {}], nid] &];
+
+      graphNodes[nlgNodeID] = iNewLLMNode[nlgNodeID, nodeType, accessLevel,
+        <|"Instruction" -> dagName <> ": " <> nid,
+          "ResponseSummary" -> If[statusStr === "Failed",
+            "Error: " <> ToString[Lookup[dagNode, "error", ""]],
+            StringTake[ToString[Lookup[dagNode, "result", ""]], UpTo[80]]],
+          "Status" -> statusStr,
+          "Time" -> Lookup[job, "startTime", None],
+          "Type" -> "dag-node",
+          "InEdges" -> inEdges,
+          "OutEdges" -> outEdges|>],
+      {nid, nodeList}];
+
+    graph["Nodes"] = graphNodes;
+    graph["LastModified"] = AbsoluteTime[];
+    $iLLMGraphCache = graph;
+    Quiet @ iLLMGraphFlush[nb];
+  ];
+
 iLLMGraphDAGTick[jobId_String] :=
   Module[{job, nodes, nb, taskDesc, elapsed, doneCount, totalCount,
           runningIds, collected, node,
@@ -18088,9 +18334,16 @@ iLLMGraphDAGTick[jobId_String] :=
         MemberQ[{"done", "failed"}, Lookup[#, "status", ""]] &],
       Module[{onComplete = Lookup[job, "onComplete", None]},
         If[onComplete =!= None, Quiet[onComplete[job]]]];
+      (* NotebookLLMGraph に DAG ノードを記録 *)
+      Quiet @ iLLMGraphDAGRecordHistory[job];
       If[nb =!= $Failed,
         Quiet[CurrentValue[nb, WindowStatusArea] = ""]];
-      $iLLMGraphDAGJobs = KeyDrop[$iLLMGraphDAGJobs, jobId];
+      (* Failed ノードがあればジョブを保持 (retry 用) *)
+      If[AnyTrue[Values[nodes],
+          Lookup[#, "status", ""] === "failed" &],
+        job["completedAt"] = AbsoluteTime[];
+        $iLLMGraphDAGJobs[jobId] = job,
+        $iLLMGraphDAGJobs = KeyDrop[$iLLMGraphDAGJobs, jobId]];
       KeyDropFrom[$claudeProgress, jobId];
       Return[]];
 
