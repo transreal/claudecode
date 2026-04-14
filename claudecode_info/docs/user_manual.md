@@ -18,8 +18,9 @@ ClaudeCode は以下の設計原則に基づいています。
 - **自動実行安全ガード**: `ClaudeEval` の `AutoEvaluate -> True` で生成コードを自動実行する際、`NBAutoEvalProhibitedPatterns` に定義された禁止パターンに該当するコードの自動実行をブロックします。これにより、ファイル削除や危険なシステム操作などを含むコードが意図せず実行されることを防止します。
 - **共有ポーリングタスク**: 複数の非同期ジョブが実行中の場合、すべてのジョブが単一の共有ポーリングタスクを利用します。旧実装のようにジョブごとに個別の `ScheduledTask` を作成しないため、多数のジョブを並列実行した際のオーバーヘッドが大幅に削減されます。`iEnsureSharedPollingTask` により共有タスクのライフサイクルが管理され、パッケージリロード時には旧タスクが自動的に停止されます。
 - **非同期スケジューリング規約の自動注入**: `ClaudeUpdatePackage` のプロンプトに、非同期タスクのスケジューリング規約（claudecode/NBAccess 公開 API の使用義務・例外条件・根拠）を自動注入します。LLM が生成するパッケージコードが正しい非同期パターンに従うよう誘導します。
-- **Windows エンコーディング安全な API 通信（マルチモーダル対応）**: `ClaudeQueryBg` は テキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス（`Fallback -> True`）では Anthropic API のマルチモーダル `content` 配列を構築して送信します。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換（ShiftJIS 等）による日本語文字化けが発生しません。
-- **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG（有向非巡回グラフ）として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。`$LLMGraphMaxConcurrency` によりカテゴリ別の並列度を制御でき、DAG ジョブの作成・実行・キャンセルを行う `LLMGraphDAGCreate` / `LLMGraphExecute` 系の API も提供されます。
+- **Windows エンコーディング安全な API 通信（マルチモーダル対応）**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス（`Fallback -> True`）では Anthropic API のマルチモーダル `content` 配列を構築して送信します。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換（ShiftJIS 等）による日本語文字化けが発生しません。
+- **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすると、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、危険な操作に対して承認フロー（`NeedsApproval`）を提供します。`$UseClaudeRuntime = False` で無効化することで後方互換性を維持できます。
+- **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG（有向非巡回グラフ）として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。`$LLMGraphMaxConcurrency` によりカテゴリ別の並列度を制御でき、DAG ジョブの作成・実行・キャンセル・再構築を行う `LLMGraphDAGCreate` / `LLMGraphDAGRebuild` 系の API も提供されます。
 - **[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージする機能を提供します。
 
 内部的には、[NBAccess](https://github.com/transreal/NBAccess) パッケージにノートブックのセル操作・プライバシー管理・履歴 DB を委譲し、[GitHubREST](https://github.com/transreal/github) パッケージと連携して GitHub 上のパッケージ管理を行います。
@@ -95,6 +96,9 @@ $ClaudePackageKeywordMap = <||>
 (* LLMGraph カテゴリ別並列度 (デフォルト値を変更する場合) *)
 $LLMGraphMaxConcurrency["cli"] = 4        (* CLI テキスト呼び出し *)
 $LLMGraphMaxConcurrency["cli-vision"] = 1 (* CLI 画像付き呼び出し *)
+
+(* ClaudeRuntime の有効/無効 (ClaudeRuntime パッケージロード時のみ有効) *)
+$UseClaudeRuntime = True
 ```
 
 ### パッケージキーワード自動注入システム
@@ -185,6 +189,18 @@ ClaudePrepareCommit["MyPackage"]
 | | `ClaudeSpeech` | OpenAI TTS API で音声生成 |
 | **Web** | `ClaudeWebSearch` | Web 検索（Claude Code 組み込み） |
 | | `ClaudeWebFetch` | URL 内容取得・要約（Anthropic API） |
+| **ClaudeRuntime** | `ClaudeStartRuntime` | ランタイムの起動 |
+| | `ClaudeEvalViaRuntime` | ランタイム経由での評価 |
+| | `ClaudeUpdatePackageViaRuntime` | ランタイム経由でのパッケージ更新 |
+| | `ClaudeApproveProposal` | 承認待ち提案の承認 |
+| | `ClaudeRuntimeSnapshot` | ランタイムのスナップショット保存 |
+| | `ClaudeRuntimeRestore` | スナップショットからの復元 |
+| | `ClaudeRuntimeRetry` | 失敗ターンの再試行 |
+| | `ClaudeRuntimeListSnapshots` | スナップショット一覧 |
+| | `ClaudeBuildRuntimeAdapter` | ランタイムアダプタの構築 |
+| | `ClaudeBuildTransactionAdapter` | トランザクションアダプタの構築 |
+| | `$UseClaudeRuntime` | ランタイム有効/無効の切り替え |
+| | `$ClaudeLastRuntimeId` | 最後に使用したランタイム ID |
 | **[実験的] LLMGraph** | `NotebookLLMGraphPlot` | DAG 可視化 |
 | | `NotebookLLMGraphNodes` | 全ノード取得 |
 | | `NotebookLLMGraphSummary` | Status/L2 統計 Dataset |
@@ -195,6 +211,9 @@ ClaudePrepareCommit["MyPackage"]
 | | `LLMGraphDAGCreate` | DAG ジョブの作成 |
 | | `LLMGraphDAGStatus` | DAG ジョブのステータス取得 |
 | | `LLMGraphDAGCancel` | DAG ジョブのキャンセル |
+| | `LLMGraphDAGStop` | DAG ジョブの停止 |
+| | `LLMGraphDAGRetry` | DAG ジョブの再試行 |
+| | `LLMGraphDAGRebuild` | 指定ノードを差し替えた新 DAG の構成・起動 |
 | | `LLMGraphExecute` | LLMGraph ジョブの実行 |
 | | `LLMGraphExecuteStatus` | LLMGraph ジョブのステータス取得 |
 | | `LLMGraphExecuteCancel` | LLMGraph ジョブのキャンセル |
@@ -417,7 +436,7 @@ ClaudeCode は書き込みキュー方式を採用し、各セル書き込みを
 
 #### ClaudeQueryBg のマルチモーダル対応
 
-`ClaudeQueryBg` はテキスト文字列だけでなく、`Image` オブジェクトや `File[path]` を含むリスト形式の入力を受け付けます。これにより、SocketListen ハンドラや ScheduledTask コールバックなどの非同期コンテキストから、画像付きの問い合わせを安全に実行できます。
+`ClaudeQueryBg` は FrontEnd 操作・ScheduledTask 生成なしで Claude Code CLI を `RunProcess`（同期呼び出し）経由で実行する関数です。テキスト文字列だけでなく、`Image` オブジェクトや `File[path]` を含むリスト形式の入力を受け付けます。これにより、SocketListen ハンドラや ScheduledTask コールバックなどの非同期コンテキストから、画像付きの問い合わせを安全に実行できます。デフォルト（`Fallback -> False`）では課金 API を使用せず、Claude Code のサブスクリプション範囲内で動作します。
 
 ```mathematica
 (* テキストのみ（従来どおり） *)
@@ -678,6 +697,15 @@ NotebookLLMGraphPlotL2[EvaluationNotebook[], "history-3"]
 NotebookLLMGraphErrors[]
 ```
 
+`NotebookLLMGraphPlot` はノードをアクセスレベルに応じて色分けして表示します。DAG ノードのカテゴリと色の対応は以下の通りです。
+
+| カテゴリ | アクセスレベル | 色 |
+|---|---|---|
+| `"cli"` / `"cli-vision"` | Public | 青 |
+| `"CloudLLM"` | Cloud | 緑系 |
+| `"VisionLLM"` | Vision | 紫系 |
+| その他 | Compute | グレー系 |
+
 #### 再実行・無効化
 
 ```mathematica
@@ -719,6 +747,17 @@ LLMGraphDAGStatus[job]
 (* ジョブのキャンセル *)
 LLMGraphDAGCancel[job]
 
+(* ジョブの停止（処理中ノードを安全に停止） *)
+LLMGraphDAGStop[job]
+
+(* ジョブの再試行（失敗ノードを再スケジュール） *)
+LLMGraphDAGRetry[job]
+
+(* 指定ノードの handler を差し替えた新 DAG を構成・起動 *)
+(* 第2引数で特定ノードのみ指定可能 *)
+LLMGraphDAGRebuild[job]
+LLMGraphDAGRebuild[job, nodeIds]
+
 (* LLMGraph ジョブの実行（高レベル） *)
 LLMGraphExecute[graphSpec]
 
@@ -748,7 +787,16 @@ $LLMGraphMaxConcurrency["cli"] = 2     (* CLI 呼び出しを同時2本に制限
 2. `$LLMGraphMaxConcurrency[abstractCat]` — グローバルデフォルト
 3. `1` — フォールバック（設定なし）
 
-ジョブ作成時に `taskDescriptor` にカテゴリマップと並列度オーバーライドを指定することで、ジョブ単位での細かな制御も可能です。
+ジョブ作成時に `taskDescriptor` にカテゴリマップと並列度オーバーライドを指定することで、ジョブ単位での細かな制御も可能です。`taskDescriptor["categoryMap"]` には具体カテゴリ（例: `"cli"`）から抽象カテゴリへのマッピングを指定でき、複数の具体カテゴリを同一の抽象カテゴリとして扱って並列度を共有させることができます。
+
+```mathematica
+(* taskDescriptor の例: カテゴリマッピングと並列度オーバーライドを指定 *)
+taskDesc = <|
+  "categoryMap" -> <|"cli" -> "Public", "cli-vision" -> "Public"|>,
+  "maxConcurrency" -> <|"Public" -> 2|>
+|>;
+job = LLMGraphDAGCreate[nodes, taskDesc]
+```
 
 #### 公開 API 一覧
 
@@ -757,7 +805,7 @@ $LLMGraphMaxConcurrency["cli"] = 2     (* CLI 呼び出しを同時2本に制限
 | `NotebookLLMGraph[nb]` | グラフ全体を取得（キャッシュ優先） |
 | `NotebookLLMGraphBuild[nb]` | セッション履歴から強制再構築 |
 | `NotebookLLMGraphNodes[nb]` | 全ノードの Association |
-| `NotebookLLMGraphPlot[nb]` | DAG 可視化 |
+| `NotebookLLMGraphPlot[nb]` | DAG 可視化（カテゴリ別色分け） |
 | `NotebookLLMGraphValidate[nb]` | 整合性検証 |
 | `NotebookLLMGraphFetchResponse[nb, nodeID]` | フルレスポンス取得 |
 | `NotebookLLMGraphSubSteps[nb, nodeID]` | 内部ステップ履歴 |
@@ -773,6 +821,9 @@ $LLMGraphMaxConcurrency["cli"] = 2     (* CLI 呼び出しを同時2本に制限
 | `LLMGraphDAGCreate[nodes, taskDesc]` | DAG ジョブの作成 |
 | `LLMGraphDAGStatus[job]` | DAG ジョブのステータス取得 |
 | `LLMGraphDAGCancel[job]` | DAG ジョブのキャンセル |
+| `LLMGraphDAGStop[job]` | DAG ジョブの停止 |
+| `LLMGraphDAGRetry[job]` | DAG ジョブの再試行 |
+| `LLMGraphDAGRebuild[job]` / `LLMGraphDAGRebuild[job, nodeIds]` | 指定ノードの handler を差し替えた新 DAG を構成・起動 |
 | `LLMGraphExecute[graphSpec]` | LLMGraph ジョブの実行 |
 | `LLMGraphExecuteStatus[jobId]` | LLMGraph ジョブのステータス取得 |
 | `LLMGraphExecuteCancel[jobId]` | LLMGraph ジョブのキャンセル |
@@ -858,6 +909,117 @@ ClaudeFixSeparation["MyPackage"]
 9. **FrontEnd 状態操作**: `SelectionEvaluate`/`FrontEndTokenExecute` 等の直接使用
 10. **NBAccess 公開グローバルの破壊的更新**: `AppendTo`/`AssociateTo` 等による直接更新
 
+### ClaudeRuntime 統合（オプション）
+
+[ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) は claudecode とは独立したオプションパッケージです。ロードすると `ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になり、ターン追跡・スナップショット管理・承認フローなどの高度な制御が可能になります。
+
+#### ロードと基本的な使い方
+
+```mathematica
+(* ClaudeRuntime をロード（claudecode ロード後に実行） *)
+<< ClaudeRuntime`
+
+(* ロード後は ClaudeEval が自動的にランタイム経由で動作します *)
+ClaudeEval["放物線運動のグラフを描いて"]
+
+(* ランタイム一覧とステータス確認 *)
+Dataset[KeyValueMap[
+  Function[{id, rt}, <|
+    "RuntimeId"   -> id,
+    "Status"      -> rt["Status"],
+    "TurnCount"   -> rt["TurnCount"],
+    "Profile"     -> rt["Profile"],
+    "LastFailure" -> Lookup[rt, "LastFailure", None]
+  |>],
+  ClaudeRuntime`Private`$iClaudeRuntimes
+]]
+```
+
+#### ランタイムの状態フィールド
+
+各 ClaudeRuntime インスタンスは以下の状態を保持します。
+
+| フィールド | 説明 |
+|---|---|
+| `"RuntimeId"` | ランタイムの一意 ID |
+| `"Status"` | 現在の状態（`"Idle"`, `"Running"`, `"Failed"` 等） |
+| `"TurnCount"` | 実行したターン数 |
+| `"Profile"` | ランタイムのプロファイル設定 |
+| `"LastFailure"` | 最後の失敗情報（`None` または詳細 Association） |
+
+#### NeedsApproval（承認フロー）
+
+ClaudeRuntime が有効な場合、危険な操作（例: 内部変数の直接変更など、`NBAutoEvalProhibitedPatterns` に相当する操作）は `NeedsApproval` として検出され、自動実行がブロックされます。ノートブックには確認ダイアログまたは承認ボタンが表示され、ユーザーが明示的に承認した場合のみ実行されます。
+
+```mathematica
+(* 例: 内部変数の直接変更を試みると NeedsApproval が返る *)
+ClaudeEval["Assign {} to ClaudeRuntime`Private`$iClaudeRuntimes"]
+(* → NeedsApproval として処理がブロックされる *)
+
+(* 承認して実行を続ける場合 *)
+ClaudeApproveProposal[]
+```
+
+#### 主な API
+
+```mathematica
+(* ランタイムの起動 *)
+ClaudeStartRuntime[]
+
+(* ランタイム経由でコードを生成・実行 *)
+ClaudeEvalViaRuntime["タスク"]
+
+(* ランタイム経由でパッケージを更新 *)
+ClaudeUpdatePackageViaRuntime["MyPackage", "更新指示"]
+
+(* 承認待ち提案の承認 *)
+ClaudeApproveProposal[]
+
+(* スナップショット管理 *)
+ClaudeRuntimeSnapshot[]            (* 現在の状態をスナップショット保存 *)
+ClaudeRuntimeRestore["snapshotId"] (* スナップショットから復元 *)
+ClaudeRuntimeListSnapshots[]       (* スナップショット一覧を表示 *)
+ClaudeRuntimeRetry[]               (* 失敗したターンを再試行 *)
+
+(* アダプタの構築（カスタム統合用） *)
+ClaudeBuildRuntimeAdapter[opts]      (* ランタイムアダプタを構築 *)
+ClaudeBuildTransactionAdapter[opts]  (* トランザクションアダプタを構築 *)
+
+(* グローバル変数 *)
+$UseClaudeRuntime      (* True でランタイム有効、False で従来モード *)
+$ClaudeLastRuntimeId   (* 直前に使用したランタイムの ID *)
+```
+
+#### 後方互換性
+
+`ClaudeRuntime` をロードしない場合、`claudecode` は従来どおりの動作を完全に維持します。また、`ClaudeRuntime` をロード済みでも `$UseClaudeRuntime = False` を設定することで、ランタイムを介さない従来モードに随時切り替えられます。
+
+```mathematica
+(* ClaudeRuntime をロード済みでも従来モードに切り替え *)
+$UseClaudeRuntime = False
+ClaudeEval["タスク"]  (* 従来どおり ClaudeCode CLI を直接使用 *)
+
+(* ランタイムモードに戻す *)
+$UseClaudeRuntime = True
+```
+
+| 状態 | 動作 |
+|---|---|
+| `ClaudeRuntime` 未ロード | 従来の `ClaudeEval` 動作（CLI 直接呼び出し） |
+| `ClaudeRuntime` ロード済み + `$UseClaudeRuntime = True`（デフォルト） | ランタイム経由で実行、承認フロー有効 |
+| `$UseClaudeRuntime = False` | 従来モード（`ClaudeRuntime` ロード済みでも無効化） |
+
+### ClaudeTestKit（テストフレームワーク）
+
+[ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) は claudecode および ClaudeRuntime の動作を自動テストするための独立パッケージです。claudecode のパッケージ更新・検証フローを自動化されたテストスイートで検証する用途に使用します。
+
+```mathematica
+(* ClaudeTestKit をロード *)
+<< ClaudeTestKit`
+```
+
+ClaudeTestKit は claudecode の内部 API と ClaudeRuntime の承認フロー・スナップショット機構と連携し、再現性のあるテストシナリオを構築できます。詳細は [ClaudeTestKit リポジトリ](https://github.com/transreal/ClaudeTestKit) および [ClaudeRuntime_test リポジトリ](https://github.com/transreal/ClaudeRuntime_test) を参照してください。
+
 ### Git 連携機能
 
 `ClaudePrepareCommit` は前回の GitHub コミット以降の変更点をバックアップ履歴から収集し、コミットメッセージを自動生成して `GitHubRefreshAndCommit` 実行コマンドを出力します。
@@ -930,3 +1092,5 @@ ClaudeStatus[]
 
 - [NBAccess](https://github.com/transreal/NBAccess) — ノートブック読み書き・プライバシー管理
 - [GitHubREST](https://github.com/transreal/github) — GitHub パッケージ管理・PR 管理
+- [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) — ランタイムセッション管理・承認フロー・スナップショット機構（オプション）
+- [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) — claudecode / ClaudeRuntime の自動テストフレームワーク（オプション）

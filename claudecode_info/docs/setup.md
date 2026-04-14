@@ -56,6 +56,8 @@ claudecode パッケージは以下の依存関係があります：
 また、以下はオプションの依存パッケージです：
 
 - **[cuda](https://github.com/transreal/cuda)** パッケージ（CUDA 関連タスク用）― CUDA を必要とするプロンプトを送信すると自動的に検出・ロードが試みられます。`cuda.wl` が `$packageDirectory` に存在しない場合は警告が表示されます。
+- **[ClaudeRuntime](https://github.com/transreal/ClaudeRuntime)** パッケージ（永続ランタイム機能用）― `$UseClaudeRuntime = True` に設定した場合にのみ使用されます。未インストールでも従来の ClaudeEval/ClaudeQuery ワークフローは影響を受けません。
+- **[ClaudeTestKit](https://github.com/transreal/ClaudeTestKit)** パッケージ（自動テスト・回帰テスト用）― ClaudeRuntime を使ったコード生成の品質検証に利用します。通常の使用には不要です。
 
 これらのパッケージを `$packageDirectory` に配置してください。
 
@@ -80,6 +82,13 @@ Get["claudecode.wl"]
 
 初回読み込み時に node-pty が自動的にインストールされます。パッケージリロード時には旧バージョンの内部タスクが自動的に停止されるため、安全に再読み込みできます。
 
+ClaudeRuntime を使用する場合は、別途ロードしてください：
+
+```mathematica
+(* ClaudeRuntime の読み込み（オプション） *)
+<< ClaudeRuntime`
+```
+
 ## 初期設定
 
 ### 1. 基本設定の確認
@@ -102,7 +111,7 @@ $ClaudeTimeout = 1200
 $ClaudeWorkingDirectory = FileNameJoin[{$HomeDirectory, "Claude Working"}]
 
 (* アクセス可能ディレクトリの設定 *)
-$ClaudeAccessibleDirs = {$packageDirectory}
+$ClaudeAccessibleDirs = {$packageDirectory, "C:\\Users\\...\作業フォルダ"}
 ```
 
 ### 3. パッケージキーワードマップの設定
@@ -120,7 +129,36 @@ $ClaudePackageKeywordMap
 
 各パッケージは自身のロード時にキーワードを自動登録します。claudecode.wl 側はパッケージ非依存です。
 
-### 4. フォールバックモデルの設定（オプション）
+### 4. ClaudeRuntime の設定（オプション）
+
+ClaudeRuntime は永続的なランタイムコンテキストを保持し、複数ターンにわたる会話状態を管理する機能拡張パッケージです。**既存の `ClaudeEval`/`ClaudeQuery` ワークフローとの後方互換性は完全に確保されています**。ClaudeRuntime を使用しない場合、従来どおりの動作になります。
+
+```mathematica
+(* ClaudeRuntime を有効化する場合 *)
+$UseClaudeRuntime = True
+
+(* 有効化後、ClaudeEval は自動的に Runtime 経由でルーティングされる *)
+ClaudeEval["タスクの説明"]
+
+(* 最後に使用したランタイムの ID を確認 *)
+$ClaudeLastRuntimeId
+
+(* ランタイムの状態一覧を表示 *)
+Dataset[KeyValueMap[
+  Function[{id, rt}, <|
+    "RuntimeId" -> id,
+    "Status"    -> rt["Status"],
+    "TurnCount" -> rt["TurnCount"],
+    "Profile"   -> rt["Profile"],
+    "LastFailure" -> Lookup[rt, "LastFailure", None]
+  |>],
+  ClaudeRuntime`Private`$iClaudeRuntimes
+]]
+```
+
+`$UseClaudeRuntime = False`（デフォルト）の場合、ClaudeRuntime パッケージがインストールされていなくても claudecode の全機能を利用できます。
+
+### 5. フォールバックモデルの設定（オプション）
 
 Claude Code が利用できない場合のバックアップとして、他の LLM を設定できます：
 
@@ -133,7 +171,7 @@ $ClaudeFallbackModels = {
 }
 ```
 
-### 5. ドキュメント生成設定
+### 6. ドキュメント生成設定
 
 ```mathematica
 (* ドキュメント生成用モデル *)
@@ -146,6 +184,22 @@ $ClaudeDocRetryDelay = 60
 (* チャンク分割の最大文字数 *)
 $ClaudeDocMaxChunkChars = 60000
 ```
+
+### 7. LLMGraph DAG 並列度の設定
+
+LLMGraph DAG 実行における各カテゴリの最大並列度をグローバルに設定できます：
+
+```mathematica
+(* カテゴリ別の最大並列度（グローバルデフォルト） *)
+$LLMGraphMaxConcurrency["cli"]        = 2  (* CLI テキスト呼び出し *)
+$LLMGraphMaxConcurrency["cli-vision"] = 1  (* CLI 画像付き呼び出し *)
+```
+
+並列度の解決優先順位は以下のとおりです：
+
+1. `taskDescriptor["maxConcurrency"][abstractCat]`（ジョブ固有のオーバーライド）
+2. `$LLMGraphMaxConcurrency[abstractCat]`（グローバルデフォルト）
+3. `1`（フォールバック）
 
 ## 動作確認
 
@@ -195,6 +249,39 @@ ClaudeQuery["メールを処理するプログラムを作りたい"]
 (* パッケージ名を明示して継続 *)
 ContinueUpdate["testpkg", "追加の修正指示"]
 ```
+
+### 5. ClaudeRuntime の動作確認（オプション）
+
+ClaudeRuntime をインストールした場合は、以下で動作を確認できます：
+
+```mathematica
+(* ClaudeRuntime を読み込んで有効化 *)
+<< ClaudeRuntime`
+$UseClaudeRuntime = True
+
+(* 通常の ClaudeEval がランタイム経由で動作することを確認 *)
+ClaudeEval["斜方投射のグラフを描いてください"]
+
+(* ランタイム一覧を確認 *)
+Keys[ClaudeRuntime`Private`$iClaudeRuntimes]
+
+(* $UseClaudeRuntime を False に戻すと従来モードに復帰 *)
+$UseClaudeRuntime = False
+```
+
+## 後方互換性について
+
+claudecode は ClaudeRuntime および ClaudeTestKit の導入にあたり、**既存のワークフローへの影響がゼロになるよう設計**されています。
+
+| 機能 | 従来の動作 | ClaudeRuntime 有効時 |
+|------|-----------|----------------------|
+| `ClaudeEval["..."]` | CLI 経由で実行 | Runtime 経由で実行 |
+| `ClaudeQuery["..."]` | CLI 経由で実行 | 変更なし（ClaudeQuery は常に CLI 経由） |
+| `ClaudeUpdatePackage` | 従来どおり | `ClaudeUpdatePackageViaRuntime` にルーティング可 |
+| セッション履歴 | ノートブック TaggingRules に保存 | 変更なし |
+
+- `$UseClaudeRuntime` のデフォルト値は `False` であり、ClaudeRuntime パッケージが存在しない環境でも claudecode は正常に動作します。
+- ClaudeTestKit は開発・テスト用の独立したパッケージであり、claudecode 本体の動作には一切影響しません。
 
 ## 設定のカスタマイズ
 
@@ -312,6 +399,18 @@ ClaudeAbort[]
 Get["claudecode.wl"]
 ```
 
+#### 8. ClaudeRuntime が見つからない・ロードできない
+
+`$UseClaudeRuntime = True` に設定した状態で ClaudeRuntime が見つからない場合、警告が表示されますが claudecode 本体は引き続き動作します：
+
+```mathematica
+(* ClaudeRuntime パッケージの存在確認 *)
+FileExistsQ[FileNameJoin[{$packageDirectory, "ClaudeRuntime", "Kernel", "init.wl"}]]
+
+(* ClaudeRuntime を使用しない場合は False に設定 *)
+$UseClaudeRuntime = False
+```
+
 ### デバッグ情報の取得
 
 ```mathematica
@@ -385,6 +484,31 @@ ContinueUpdate[{"スクリーンショットを確認して修正して", image}
 ContinueUpdate["pkgName", "追加の修正指示"]
 ```
 
+### LLMGraph DAG の並列度制御
+
+`$LLMGraphMaxConcurrency` を使用して、LLMGraph DAG 実行時の抽象カテゴリごとの最大並列度をグローバルに制御できます：
+
+```mathematica
+(* CLI テキスト呼び出しの最大並列度を設定 *)
+$LLMGraphMaxConcurrency["cli"] = 2
+
+(* CLI 画像付き呼び出しの最大並列度を設定 *)
+$LLMGraphMaxConcurrency["cli-vision"] = 1
+```
+
+ジョブ実行時には以下の優先順位で並列度が解決されます：
+
+1. `taskDescriptor["maxConcurrency"][abstractCat]`（ジョブ固有のオーバーライド）
+2. `$LLMGraphMaxConcurrency[abstractCat]`（グローバルデフォルト）
+3. `1`（フォールバック）
+
+`LLMGraphDAGRebuild` を使うと、既存の DAG ジョブの特定ノードのハンドラを差し替えた新 DAG を構成・起動できます：
+
+```mathematica
+(* 指定ノードのハンドラを差し替えて DAG を再起動 *)
+LLMGraphDAGRebuild[jobId, nodeId, newHandler]
+```
+
 ### 遅延実行とスケジューリング
 
 ```mathematica
@@ -421,8 +545,8 @@ $ClaudeTestModel = "claude-sonnet-4-20250514"
 セットアップが完了したら、以下のドキュメントを参照してください：
 
 - **api.md** - 全関数の詳細なリファレンス
-- **user_manual.md** - 実用的な使用方法とワークフロー
-- **README.md** - パッケージの概要と基本情報
+- **user_manual.md** - 実用的な使用方法とワークフロー（ClaudeRuntime・ClaudeTestKit の活用方法を含む）
+- **README.md** - パッケージの概要と基本情報（ClaudeRuntime・ClaudeTestKit の位置付けを含む）
 
 より詳細な使用方法については：
 
@@ -435,3 +559,6 @@ ShowClaudePalette[]
 ?ClaudeUpdatePackage
 ?ContinueUpdate
 ?$ClaudePackageKeywordMap
+?$LLMGraphMaxConcurrency
+?$UseClaudeRuntime
+?$ClaudeLastRuntimeId

@@ -87,3 +87,115 @@ FileNameJoin[Flatten[{srcDir, FileNameSplit[path]}]]
 
 ## 判断
 - ユーザーが絶対パスを明示した場合はそれを優先する。
+
+## 永続データへのパス保存
+
+`Put` / `Export` 等で永続化するデータ（インデックス、メタデータ、設定ファイル等）には **絶対パスを埋め込まない**。`$packageDirectory` が変更された環境（Dropbox 同期先の別マシン、OneDrive 移行等）でデータが壊れるため。
+
+### 保存時: 相対パスに変換
+
+`$packageDirectory` 配下のパスは相対パスに変換して保存する。外部パスや URL はそのまま保持。
+
+```mathematica
+(* PDFIndex.wl の iMakeRelativePath を参照 *)
+"sourcePath" -> iMakeRelativePath[absPath]
+(* 結果例: "claude_attachments/file.pdf" *)
+```
+
+### 読み出し時: 現在の $packageDirectory で展開
+
+```mathematica
+(* PDFIndex.wl の iResolveSourcePath を参照 *)
+resolvedPath = iResolveSourcePath[storedPath]
+(* 相対パス → FileNameJoin[{$packageDirectory, storedPath}] *)
+(* 絶対パス・URL → そのまま返す (後方互換) *)
+```
+
+### 禁止パターン
+
+```mathematica
+(* ❌ 禁止: フルパスをそのまま永続化 *)
+docMeta = <|"sourcePath" -> absPath, ...|>;
+Put[docMeta, indexFile];
+
+(* ✅ 正しい: 相対パスで保存 *)
+docMeta = <|"sourcePath" -> iMakeRelativePath[absPath], ...|>;
+Put[docMeta, indexFile];
+```
+
+### 後方互換
+
+既存データに絶対パスが残っている場合、読み出し関数はドライブレター (`C:` 等) や `/` 始まりのパスをそのまま返す。再インデックス等で相対パスに移行できる。
+
+## 一時ファイルのディレクトリ制約
+
+一時ファイル（バッチファイル、プロンプトファイル、出力ファイル、レンダリング画像等）は **`$TemporaryDirectory` を使用してはならない**。すべて `$ClaudeWorkingDirectory/tmp` に作成する。
+
+`$ClaudeWorkingDirectory` と `$ClaudeAccessibleDirs` に登録されたディレクトリ以外は使用禁止。
+
+### 実装パターン
+
+```mathematica
+(* claudecode.wl: iClaudeTempDir[] を使用 *)
+outFile = FileNameJoin[{iClaudeTempDir[], "claude_out_" <> ts <> ".txt"}]
+
+(* PDFIndex.wl: iPdfTempDir[] を使用 (同じロジック) *)
+imgDir = FileNameJoin[{iPdfTempDir[], "pdfocr_" <> id}]
+```
+
+### 禁止パターン
+
+```mathematica
+(* ❌ 禁止: $TemporaryDirectory を直接使用 *)
+outFile = FileNameJoin[{$TemporaryDirectory, "output.txt"}]
+
+(* ✅ 正しい: $ClaudeWorkingDirectory 配下の tmp *)
+outFile = FileNameJoin[{iClaudeTempDir[], "output.txt"}]
+```
+
+## 使用可能ディレクトリの制約
+
+コード内でファイルの読み書き・一時ファイル作成・ディレクトリ操作を行う際、以下の **許可されたディレクトリのみ** を使用すること。
+
+### 許可されたディレクトリ
+
+| 変数 | 用途 |
+|------|------|
+| `$ClaudeWorkingDirectory` | Claude CLI 作業用。一時ファイルは `$ClaudeWorkingDirectory/tmp` |
+| `$packageDirectory` | パッケージ本体・設定・インデックスデータ |
+| `$ClaudeAccessibleDirs` | ユーザーが明示的に登録した追加ディレクトリ |
+
+### 禁止
+
+上記以外のディレクトリは **使用禁止**。特に以下は使ってはならない:
+
+- `$TemporaryDirectory` (`%TEMP%`)
+- `$HomeDirectory` 直下
+- `$UserDocumentsDirectory`
+- ハードコードされた絶対パス
+- `NotebookDirectory[]`（ただし bare filename 解決時は除く — 「bare filename の解決」セクション参照）
+
+### 新しいディレクトリが必要な場合
+
+どうしても上記以外のディレクトリを使用する必要がある場合は、**コードを書く前に** 以下を提案すること:
+
+1. `NBAccess.wl` に参照ディレクトリを格納する変数と、それを取得する関数を新設する
+2. ユーザーの承認を得てから NBAccess に実装する
+3. 実装後、新しい変数/関数を使ってコードを書く
+
+```mathematica
+(* ❌ 禁止: 許可外ディレクトリを直接使用 *)
+outputDir = "D:\\SharedData\\results"
+tmpFile = FileNameJoin[{$TemporaryDirectory, "work.txt"}]
+
+(* ❌ 禁止: 提案なしに新しいディレクトリパスを導入 *)
+$myNewDataDir = FileNameJoin[{$HomeDirectory, "MyData"}]
+
+(* ✅ 正しい: まず NBAccess への変数追加を提案 *)
+(*
+  提案: NBAccess.wl に以下を追加
+    $SharedDataDirectory — 共有データの保存先
+    NBGetSharedDataDir[] — 現在の共有データディレクトリを返す
+  承認後に実装します。
+*)
+```
