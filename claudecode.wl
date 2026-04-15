@@ -4368,12 +4368,14 @@ iIsAPIErrorResponse[_] := True;  (* 非文字列は常にエラー扱い *)
 iHTTPResponseBodyUTF8[resp_HTTPResponse] := Module[{bytes, body},
   bytes = Quiet @ Check[resp["BodyByteArray"], $Failed];
   If[Head[bytes] === ByteArray,
-    Return[
-      Quiet @ Check[
-        FromCharacterCode[Normal[bytes], "UTF-8"],
-        $Failed
-      ]
-    ]
+    (* ByteArrayToString は FromCharacterCode より堅牢:
+       不完全な UTF-8 シーケンスでもエラーにならず置換文字を使用 *)
+    Module[{str = Quiet @ Check[ByteArrayToString[bytes, "UTF-8"], $Failed]},
+      If[StringQ[str], Return[str]]];
+    (* フォールバック: FromCharacterCode *)
+    Module[{str2 = Quiet @ Check[
+        FromCharacterCode[Normal[bytes], "UTF-8"], $Failed]},
+      If[StringQ[str2], Return[str2]]]
   ];
   body = Quiet @ Check[resp["Body"], $Failed];
   If[StringQ[body], body, ToString[body]]
@@ -16947,12 +16949,13 @@ iLLMGraphOnUpdate[nb_NotebookObject, tag_String, updates_Association] :=
     nodes = Lookup[graph, "Nodes", <||>];
     (* このセッションタグに属する最新ノードを探す *)
     nodeIDs = Select[Keys[nodes],
-      StringStartsQ[#, tag <> "-"] &];
+      StringQ[#] && StringStartsQ[#, tag <> "-"] &];
     If[Length[nodeIDs] === 0, Return[]];
-    latestNodeID = Last @ SortBy[nodeIDs,
+    latestNodeID = Quiet @ Last @ SortBy[nodeIDs,
       Replace[
         Quiet @ ToExpression @ Last @ StringSplit[#, "-"],
         Except[_Integer] -> 0] &];
+    If[!StringQ[latestNodeID], Return[]];
 
     node = nodes[latestNodeID];
     If[!AssociationQ[node], Return[]];
@@ -19132,6 +19135,21 @@ iLLMGraphDAGRecordHistory[job_Association] :=
               Lookup[#, "Type", ""] === "DataFlow" &],
               orchestratorID = nid]]],
           Keys[graphNodes]];
+        
+        (* Phase 28 フォールバック: ターンノードが未作成の場合
+           (iRuntimeRecordTurnToLLMGraph が後から実行されるため)
+           RuntimeState の Metadata から直接オーケストレータを特定する *)
+        If[!StringQ[orchestratorID] && StringQ[runtimeId],
+          Module[{rt, rtMeta, rtTag, rtStep, candidateID},
+            rt = Quiet @ ClaudeRuntime`Private`$iClaudeRuntimes[runtimeId];
+            If[AssociationQ[rt],
+              rtMeta = Lookup[rt, "Metadata", <||>];
+              rtTag  = Lookup[rtMeta, "Tag", None];
+              rtStep = Lookup[rtMeta, "Step", None];
+              If[StringQ[rtTag] && IntegerQ[rtStep],
+                candidateID = rtTag <> "-" <> ToString[rtStep + 1];
+                If[KeyExistsQ[graphNodes, candidateID],
+                  orchestratorID = candidateID]]]]];
         
         (* オーケストレータ → 各ルート DAG ノードへ Produces エッジ追加 *)
         If[StringQ[orchestratorID],
@@ -22275,6 +22293,8 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
             "Error: " <> Lookup[failDetail, "ReasonClass", "?"]],
           "code" -> "",
           "cellCountAfter" -> NBAccess`NBCellCount[nb]|>]];
+      (* Phase 28: 失敗時でもターンノードをグラフに記録し DAG 接続を確保 *)
+      Quiet @ iRuntimeRecordTurnToLLMGraph[nb, runtimeId, st, tag, step];
       Quiet[CurrentValue[nb, WindowStatusArea] = ""];
       Return[]];
     
@@ -22290,6 +22310,8 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
             RGBColor[0.3, 0.6, 0.3]];
           $iJobActiveNb = None;
           NBAccess`NBEndJob[jobId]]];
+      (* Phase 28: レスポンスなし時もターンノードをグラフに記録 *)
+      Quiet @ iRuntimeRecordTurnToLLMGraph[nb, runtimeId, st, tag, step];
       Quiet[CurrentValue[nb, WindowStatusArea] = ""];
       Return[]];
     
@@ -22733,6 +22755,64 @@ iRuntimeRecordTurnToLLMGraph[nb_NotebookObject, runtimeId_String,
       
       prevNodeID = turnNodeID,
     {i, Length[msgs]}];
+    
+    (* ── Phase 28: 孤立 DAG ノードの遡及接続 ──
+       iLLMGraphDAGRecordHistory はタイミング上ターンノード作成前に
+       実行されることがあり（中間ターンの continuation 時）、
+       オーケストレータ → ルート DAG ノードの Produces 辺が欠落する。
+       ここでターンノード作成後に遡及的に接続する。
+       
+       検出方法: DAG ノード (dag-* prefix) の OutEdges に
+       このランタイムのターンノードへの Produces 辺があるが、
+       オーケストレータからの InEdges を持たないルート DAG ノード。 *)
+    If[KeyExistsQ[graphNodes, orchestratorNodeID],
+      Module[{allTurnIDs, dagPrefixesToFix = <||>},
+        (* このランタイムの全ターンノード ID を収集 *)
+        allTurnIDs = Table[
+          "rt-" <> runtimeId <> "-turn" <>
+            ToString[Lookup[msgs[[j]], "Turn", j]],
+          {j, Length[msgs]}];
+        
+        (* DAG ノードの OutEdges をスキャンし、
+           ターンノードへの Produces 辺を持つものを発見 *)
+        KeyValueMap[Function[{nid, node},
+          If[StringQ[nid] && StringStartsQ[nid, "dag-"],
+            Scan[Function[{edge},
+              If[Lookup[edge, "Type", ""] === "Produces" &&
+                 MemberQ[allTurnIDs, Lookup[edge, "To", ""]],
+                (* DAG prefix を抽出: "dag-TIMESTAMP" *)
+                Module[{parts = StringSplit[nid, "-"]},
+                  If[Length[parts] >= 3,
+                    dagPrefixesToFix[
+                      StringJoin[Riffle[Take[parts, 2], "-"]]] =
+                        True]]]],
+              Lookup[node, "OutEdges", {}]]]],
+          graphNodes];
+        
+        (* 各 DAG セットのルートノードを特定し接続 *)
+        Do[
+          Module[{dagNodeIDs, rootIDs},
+            dagNodeIDs = Select[Keys[graphNodes],
+              StringQ[#] && StringStartsQ[#, pfx <> "-"] &];
+            (* ルート DAG ノード: DAGDependency の InEdge を持たない *)
+            rootIDs = Select[dagNodeIDs, Function[{did},
+              !AnyTrue[Lookup[graphNodes[did], "InEdges", {}],
+                Lookup[#, "Type", ""] === "DAGDependency" &]]];
+            Do[
+              (* 重複防止: 既にオーケストレータからの辺があるか確認 *)
+              If[!AnyTrue[
+                   Lookup[graphNodes[rid], "InEdges", {}],
+                   Lookup[#, "From", ""] === orchestratorNodeID &&
+                   Lookup[#, "Type", ""] === "Produces" &],
+                graphNodes[orchestratorNodeID]["OutEdges"] = Append[
+                  Lookup[graphNodes[orchestratorNodeID], "OutEdges", {}],
+                  <|"To" -> rid, "Type" -> "Produces"|>];
+                graphNodes[rid]["InEdges"] = Append[
+                  Lookup[graphNodes[rid], "InEdges", {}],
+                  <|"From" -> orchestratorNodeID,
+                    "Type" -> "Produces"|>]],
+              {rid, rootIDs}]],
+          {pfx, Keys[dagPrefixesToFix]}]]];
     
     graph["Nodes"]       = graphNodes;
     graph["LastModified"] = AbsoluteTime[];

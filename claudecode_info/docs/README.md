@@ -134,7 +134,7 @@ SystemCredential["ANTHROPIC_API_KEY"] = "sk-ant-...";
 SystemCredential["OPENAI_API_KEY"] = "sk-...";
 ```
 
-LM Studio 等のローカル LLM を使用する場合は、API キーは不要です（`$ClaudeFallbackModels` にエンドポイント URL を指定します）。
+LM Studio 等のローカル LLM を使用する場合は、API キーは不要です（`$ClaudePrivateModel` や `$ClaudeFallbackModels` にエンドポイント URL を指定します）。
 
 ### クイックスタート
 
