@@ -44,6 +44,8 @@ AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImag
 
 **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすることで、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、内部状態を保持した複数ターンにわたる対話を可能にします。危険な操作（内部変数の直接書き換え等）に対しては自動的に承認フロー（`NeedsApproval`）を介挿し、意図しない破壊的操作を防止します。`$UseClaudeRuntime = False`（デフォルト）に設定するか、ClaudeRuntime パッケージをロードしないことで、従来の `ClaudeEval`/`ClaudeQuery` ワークフローに完全に後方互換します。
 
+**ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) と連携することで、複数の Claude セッションを並列管理・調整するオーケストレーション機能を利用できます。レート制限の自動検出・復旧・リトライスケジューリングなど、claudecode の上位レイヤーとして大規模な自動化タスクを安定して継続実行するための制御を担います。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断するため、長時間・高頻度タスクでの利用に適しています。claudecode 本体の動作には影響せず、インストールされていない環境でも全機能をそのまま利用できます。
+
 **ClaudeTestKit 統合**: オプションの独立パッケージ [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) は、ClaudeRuntime を利用したコード生成の品質を自動テスト・回帰テストで検証するためのフレームワークです。通常の ClaudeEval/ClaudeQuery 使用には不要であり、ClaudeTestKit がインストールされていない環境でも claudecode の全機能は影響を受けません。
 
 **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を記録・可視化するためのグラフ構造を導入しています。Mathematica 14.2 で導入された `LLMGraph` と類似の DAG（有向非巡回グラフ）構造を採用しており（将来的には `LLMGraph` そのものとの統合を目指しますが、現状では独自実装）、`ClaudeEval` / `ClaudeQuery` などを実行すると、自動的にノートブック固有の LLMGraph が生成されます。各ノードは LLM 呼び出しの命令・応答サマリー・アクセスレベル・ステータスなどを保持し、ノード間の関係（コンテキスト継承・データフロー）がエッジとして記録されます。`$LLMGraphMaxConcurrency` によりカテゴリ別（`"cli"`・`"cli-vision"` 等）の並列実行数を制御でき、`LLMGraphDAGCreate` / `LLMGraphExecute` 系 API によって DAG ジョブの作成・実行・キャンセルを行えます。`NotebookLLMGraphPlot[]` による DAG 可視化、`NotebookLLMGraphSummary[]` による統計表示、`NotebookLLMGraphExtractThread[]` による実行スレッドの抽出と再適用など、豊富な分析 API を備えています。この実装は、`claudecode_info/design/` にある 1992-WOOC'92.pdf および 1993-WOOC'93「信号処理に向いたオブジェクトモデルの提案と応用」で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。
@@ -99,6 +101,7 @@ claude コマンドを実行すると、対話形式でログイン手順が表�
 | `github.wl` | GitHub REST API 連携（[GitHub](https://github.com/transreal/github)） |
 | `cuda.wl` | CUDA 拡張（オプション・[GitHub](https://github.com/transreal/cuda)）。CUDA 関連プロンプト時に自動ロード |
 | `ClaudeRuntime` | 永続ランタイム機能（オプション・[GitHub](https://github.com/transreal/ClaudeRuntime)）。`$UseClaudeRuntime = True` 時に有効化 |
+| `ClaudeOrchestrator` | 複数 Claude セッションのオーケストレーション（オプション・[GitHub](https://github.com/transreal/ClaudeOrchestrator)）。レート制限の自動検出・復旧・リトライスケジューリングを担う上位レイヤー |
 | `ClaudeTestKit` | 自動テスト・回帰テストフレームワーク（オプション・[GitHub](https://github.com/transreal/ClaudeTestKit)）。ClaudeRuntime と組み合わせて使用 |
 
 #### 3. パッケージの読み込み
@@ -366,7 +369,7 @@ ShowClaudePalette[]
 
 ### 後方互換性について
 
-claudecode は [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) および [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) の導入にあたり、**既存のワークフローへの影響がゼロになるよう設計**されています。
+claudecode は [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime)、[ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator)、および [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) の導入にあたり、**既存のワークフローへの影響がゼロになるよう設計**されています。
 
 | 機能 | 従来の動作（`$UseClaudeRuntime = False`） | ClaudeRuntime 有効時（`$UseClaudeRuntime = True`） |
 |------|------------------------------------------|---------------------------------------------------|
@@ -376,7 +379,7 @@ claudecode は [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) お�
 | `ClaudeUpdatePackage[...]` | 直接パッケージ更新 | 変更なし |
 | 危険な操作の自動実行 | 禁止パターンでブロック | さらに `NeedsApproval` フローを介挿 |
 
-`$UseClaudeRuntime = False`（デフォルト）の場合、ClaudeRuntime パッケージがインストールされていなくても claudecode の全機能をそのまま利用できます。ClaudeRuntime を有効化するには、パッケージをロードしてから `$UseClaudeRuntime = True` を設定するだけです。ClaudeTestKit についても同様に、インストールされていない環境での動作に一切影響しません。
+`$UseClaudeRuntime = False`（デフォルト）の場合、ClaudeRuntime パッケージがインストールされていなくても claudecode の全機能をそのまま利用できます。ClaudeRuntime を有効化するには、パッケージをロードしてから `$UseClaudeRuntime = True` を設定するだけです。ClaudeOrchestrator および ClaudeTestKit についても同様に、インストールされていない環境での動作に一切影響しません。
 
 ```mathematica
 (* デフォルト: ClaudeRuntime なしで従来どおり動作 *)

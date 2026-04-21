@@ -57,6 +57,7 @@ claudecode パッケージは以下の依存関係があります：
 
 - **[cuda](https://github.com/transreal/cuda)** パッケージ（CUDA 関連タスク用）― CUDA を必要とするプロンプトを送信すると自動的に検出・ロードが試みられます。`cuda.wl` が `$packageDirectory` に存在しない場合は警告が表示されます。
 - **[ClaudeRuntime](https://github.com/transreal/ClaudeRuntime)** パッケージ（永続ランタイム機能用）― `$UseClaudeRuntime = True` に設定した場合にのみ使用されます。未インストールでも従来の ClaudeEval/ClaudeQuery ワークフローは影響を受けません。
+- **[ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator)** パッケージ（複数 Claude セッションのオーケストレーション用）― レート制限の自動検出・復帰やリトライタイミングの制御など、claudecode の上位レイヤーとして複数エージェントの並列管理・調整を行います。claudecode 本体の動作には影響しませんが、大規模な自動化タスクで活用できます。
 - **[ClaudeTestKit](https://github.com/transreal/ClaudeTestKit)** パッケージ（自動テスト・回帰テスト用）― ClaudeRuntime を使ったコード生成の品質検証に利用します。通常の使用には不要です。
 
 これらのパッケージを `$packageDirectory` に配置してください。
@@ -282,6 +283,7 @@ claudecode は ClaudeRuntime および ClaudeTestKit の導入にあたり、**�
 
 - `$UseClaudeRuntime` のデフォルト値は `False` であり、ClaudeRuntime パッケージが存在しない環境でも claudecode は正常に動作します。
 - ClaudeTestKit は開発・テスト用の独立したパッケージであり、claudecode 本体の動作には一切影響しません。
+- ClaudeOrchestrator は claudecode の上位レイヤーとして動作する独立したパッケージです。claudecode 本体の動作には影響しません。
 
 ## 設定のカスタマイズ
 
@@ -546,7 +548,7 @@ $ClaudeTestModel = "claude-sonnet-4-20250514"
 
 - **api.md** - 全関数の詳細なリファレンス
 - **user_manual.md** - 実用的な使用方法とワークフロー（ClaudeRuntime・ClaudeTestKit の活用方法を含む）
-- **README.md** - パッケージの概要と基本情報（ClaudeRuntime・ClaudeTestKit の位置付けを含む）
+- **README.md** - パッケージの概要と基本情報（ClaudeRuntime・ClaudeTestKit・ClaudeOrchestrator の位置付けを含む）
 
 より詳細な使用方法については：
 
