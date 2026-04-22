@@ -21684,6 +21684,42 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
           taskStr = origTask]];
       AppendTo[parts, iTaskOverviewBlock[taskStr]]];
     
+    (* \[HorizontalLine]\[HorizontalLine] Phase 30 (2026-04-22): \:30d1\:30c3\:30b1\:30fc\:30b8 docs / file access \:6ce8\:5165 \[HorizontalLine]\[HorizontalLine]
+       \:65e7 iClaudeEvalImpl \:3068\:540c\:69d8\:306b\:3001task \:306b\:95a2\:9023\:3059\:308b api.md / \:30d5\:30a1\:30a4\:30eb\:30a2\:30af\:30bb\:30b9\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8 /
+       \:30d1\:30c3\:30b1\:30fc\:30b8\:4f7f\:7528\:30ac\:30fc\:30c9\:3092\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:6ce8\:5165\:3059\:308b\:3002
+       
+       \:3053\:308c\:304c\:306a\:3044\:3068 LLM \:306f github.wl / claudecode.wl / documentation.wl \:7b49\:306e
+       api.md \:3092\:53c2\:7167\:3067\:304d\:305a\:3001GitHubListCommits \:306a\:3069\:30d1\:30c3\:30b1\:30fc\:30b8\:5c02\:6709\:306e\:95a2\:6570\:540d\:3092
+       \:8a8d\:8b58\:3067\:304d\:306a\:3044\:305f\:3081\:3001\:30bf\:30b9\:30af\:304c\:534a\:6b20\:843d\:3057\:305f\:307e\:307e\:5b8c\:4e86\:3059\:308b\:3002
+       
+       iPackageDocsContext \:306f task \:6587\:5b57\:5217\:306b\:542b\:307e\:308c\:308b\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:30fb\:30ad\:30fc\:30ef\:30fc\:30c9\:3092
+       \:691c\:51fa\:3057\:3066\:5bfe\:5fdc\:3059\:308b api.md \:3092\:5b8c\:5168\:6ce8\:5165\:3059\:308b\:3002\:65e7 Single \:30d1\:30b9\:3067\:6a5f\:80fd\:3057\:3066\:3044\:305f
+       \:300capi.md \:30d5\:30a1\:30fc\:30b9\:30c8\:539f\:5247\:300d\:3092 adapter \:7d4c\:8def\:3067\:3082\:6709\:52b9\:306b\:3059\:308b\:3002 *)
+    Module[{taskStr2, origTask2, fileCtx, pkgDocs, pkgGuard, symCtx, nbObj},
+      taskStr2 = If[AssociationQ[input],
+        ToString[Lookup[input, "OriginalTask",
+          Lookup[input, "Hint", ToString[input]]]],
+        ToString[input]];
+      If[AssociationQ[input] && Lookup[input, "Type", ""] === "RepairRequest",
+        origTask2 = Lookup[contextPacket, "OriginalTask",
+          Lookup[convState, "OriginalTask", None]];
+        If[StringQ[origTask2] && origTask2 =!= "",
+          taskStr2 = origTask2]];
+      
+      nbObj = Lookup[contextPacket, "Notebook", None];
+      
+      (* Quiet \@ Check \:3067\:4fdd\:8b77 \[LongDash] \:5404\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:95a2\:6570\:306e\:5931\:6557\:3067 prompt \:69cb\:7bc9\:304c\:5d29\:308c\:306a\:3044\:3088\:3046\:306b *)
+      fileCtx  = Quiet @ Check[iFileAccessContext[taskStr2], ""];
+      pkgDocs  = Quiet @ Check[iPackageDocsContext[taskStr2], ""];
+      pkgGuard = Quiet @ Check[iPackageUseGuard[taskStr2], ""];
+      symCtx   = If[Head[nbObj] === NotebookObject,
+        Quiet @ Check[iNotebookDefinedSymbolsContext[nbObj], ""], ""];
+      
+      If[StringQ[symCtx]   && symCtx   =!= "", AppendTo[parts, symCtx]];
+      If[StringQ[fileCtx]  && fileCtx  =!= "", AppendTo[parts, fileCtx]];
+      If[StringQ[pkgDocs]  && pkgDocs  =!= "", AppendTo[parts, pkgDocs]];
+      If[StringQ[pkgGuard] && pkgGuard =!= "", AppendTo[parts, pkgGuard]]];
+    
     (* \:30de\:30eb\:30c1\:30bf\:30fc\:30f3\:62e1\:5f35 \[LongDash] \:30a2\:30eb\:30b4\:30ea\:30ba\:30e0\:3068\:30c7\:30fc\:30bf\:306e\:5206\:96e2\:539f\:5247
        
        \:8a2d\:8a08\:539f\:5247:
@@ -24604,7 +24640,7 @@ End[];
 EndPackage[];
 
 (* Phase 33 Task 5 version marker *)
-ClaudeCode`$claudecodeVersion = "2026-04-20T19-dag-tick-subjobid-wait";
+ClaudeCode`$claudecodeVersion = "2026-04-22T03-phase30-adapter-docs-injection";
 (* v2026-04-21: \:30ed\:30fc\:30c9\:6642\:306e Print \:3092\:62d1\:58f0\:3002 Windows \:3067\:6587\:5b57\:5316\:3051\:306b\:306a\:308a\:3001
    \:30e1\:30c3\:30bb\:30fc\:30b8\:30a6\:30a3\:30f3\:30c9\:30a6\:304c\:8868\:793a\:3055\:308c\:305f\:307e\:307e\:306b\:306a\:3063\:3066\:771f\:306e\:30a8\:30e9\:30fc\:304c\:898b\:3048\:306a\:304f\:306a\:308b\:3002
    \:30d0\:30fc\:30b8\:30e7\:30f3\:306f $claudecodeVersion \:3067\:53c2\:7167\:53ef\:80fd\:3002 *)
