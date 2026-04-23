@@ -61,7 +61,7 @@ Quiet[Scan[
    "CreateClaudeSession","ClaudeRestoreSession","Inherit",
    "ClaudeListSessions","ClaudeDeleteSession","ClaudeShowHistory",
    "ClaudeAttach","ClaudeDetach","ClaudeAttachments","ClearAttachments",
-   "ClaudeRateLimitStatus",
+   "ClaudeRateLimitStatus","ClaudeRateLimitClear",
    "MarkConfidential","UnmarkConfidential","IsConfidential","Confidential","NonConfidential",
    "ScanConfidentialCells","ShowClaudePalette","ClaudeQueryShowContext",
    "ClaudeShowAccessConfig","ClaudeSessionStatus","ClaudeCompactHistory","ClaudeHistorySize",
@@ -557,6 +557,11 @@ ClaudeRateLimitStatus::usage =
   "    If[info[\"ResetsAt\"] > Now, \n" <>
   "      Print[\"\:5fa9\:65e7\:307e\:3067\:5f85\:6a5f: \", info[\"ResetsAt\"]]],\n" <>
   "    Print[\"rate-limit \:3067\:306f\:306a\:3044\"]]";
+
+ClaudeRateLimitClear::usage =
+  "ClaudeRateLimitClear[] \:306f \:5185\:90e8\:306b\:4fdd\:6301\:3055\:308c\:305f rate-limit \:60c5\:5831\:3092\:624b\:52d5\:3067\:30af\:30ea\:30a2\:3059\:308b\:3002\n" <>
+  "\:8aa4\:691c\:51fa\:3084 status=allowed \:306e\:9032\:6357\:901a\:77e5\:306b\:3088\:308a\:30d6\:30ed\:30c3\:30af\:304c\:304b\:304b\:3063\:3066\:3057\:307e\:3063\:305f\:969b\:306b\n" <>
+  "\:4f7f\:7528\:3059\:308b\:3002\:547c\:3073\:51fa\:3057\:5f8c\:306b ClaudeRateLimitStatus[] \:306f None \:3092\:8fd4\:3059\:3002";
 ClaudeAttachments::usage =
   "ClaudeAttachments[] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:4e00\:89a7\:3092\:8fd4\:3059\:3002\n" <>
   "ClaudeAttachments[session] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:4e00\:89a7\:3092\:8fd4\:3059\:3002";
@@ -4047,6 +4052,19 @@ iExtractRateLimitInfo[text_String] :=
         Developer`ReadRawJSONString[rateLine], None];
       If[AssociationQ[parsed],
         rateInfo = Lookup[parsed, "rate_limit_info", <||>];
+        (* Phase 30.3 fix (2026-04-22): rate_limit_event \:306f\:300c\:4f7f\:7528\:91cf\:9032\:6357\:300d
+           \:3092\:901a\:77e5\:3059\:308b\:5b9a\:671f\:30a4\:30d9\:30f3\:30c8\:3067\:3001status \:30d5\:30a3\:30fc\:30eb\:30c9\:3067\:5b9f\:969b\:306b
+           \:5236\:9650\:304c\:304b\:304b\:3063\:3066\:3044\:308b\:304b\:3092\:5224\:5225\:3059\:308b\:3002
+           
+           status \:306e\:5024:
+             \"allowed\"  : \:307e\:3060\:4f7f\:3048\:308b \:2192 \:8a18\:9332\:3057\:306a\:3044 (None \:3092\:8fd4\:3059)
+             \"limited\" / \"exceeded\" / \"rejected\" : \:5b9f\:969b\:306b\:30d2\:30c3\:30c8 \:2192 \:8a18\:9332\:3059\:308b
+           
+           \:4ee5\:524d\:306f status \:3092\:7121\:8996\:3057\:3066\:3059\:3079\:3066\:8a18\:9332\:3057\:3066\:3044\:305f\:305f\:3081\:3001
+           ResetsAt \:306b\:5c06\:6765\:306e\:30d0\:30b1\:30c3\:30c8\:5883\:754c\:304c\:5165\:3063\:3066 \"Rate limit active\"
+           \:304c\:8aa4\:3063\:3066\:8868\:793a\:3055\:308c\:308b\:30d0\:30b0\:304c\:3042\:3063\:305f (limit.nb)\:3002 *)
+        If[ToLowerCase[ToString[Lookup[rateInfo, "status", ""]]] === "allowed",
+          Return[None]];
         resetsAt = Lookup[rateInfo, "resetsAt", None];
         resetsDate = If[IntegerQ[resetsAt],
           Quiet @ Check[FromUnixTime[resetsAt], None], None];
@@ -4161,8 +4179,16 @@ iExtractStreamJsonResultText[x_] := x;
    \:5f15\:304d\:8d77\:3053\:3059\:3002AbsoluteTime \:3067\:6bd4\:8f03\:3059\:308c\:3070 TimeZone \:306b\:5de6\:53f3\:3055\:308c\:306a\:3044\:3002 *)
 ClaudeRateLimitStatus[] :=
   Module[{info = $iLastRateLimitInfo, resetsDate,
-          resetsAbs, nowAbs},
+          resetsAbs, nowAbs, statusLC},
     If[!AssociationQ[info], Return[None]];
+    (* Phase 30.3 fix (2026-04-22): Status="allowed" \:306f\:307e\:3060\:4f7f\:3048\:308b\:72b6\:614b\:306a\:306e\:3067
+       \:65e2\:5b58\:30ec\:30b3\:30fc\:30c9\:304c\:3042\:3063\:3066\:3082\:30af\:30ea\:30a2\:3057\:3066 None \:3092\:8fd4\:3059\:3002
+       iExtractRateLimitInfo \:5074\:3067\:3082 allowed \:3092\:30b9\:30ad\:30c3\:30d7\:3059\:308b\:304c\:3001
+       \:30a2\:30c3\:30d7\:30c7\:30fc\:30c8\:524d\:306b\:8a18\:9332\:3055\:308c\:305f\:65e7\:30ec\:30b3\:30fc\:30c9\:304c\:6b8b\:308b\:5834\:5408\:306e\:9632\:5fa1\:3002 *)
+    statusLC = ToLowerCase[ToString[Lookup[info, "Status", ""]]];
+    If[statusLC === "allowed",
+      $iLastRateLimitInfo = None;
+      Return[None]];
     resetsDate = Lookup[info, "ResetsAt", None];
     If[Head[resetsDate] === DateObject,
       resetsAbs = Quiet @ Check[AbsoluteTime[resetsDate], None];
@@ -4172,6 +4198,10 @@ ClaudeRateLimitStatus[] :=
         $iLastRateLimitInfo = None;
         Return[None]]];
     info];
+
+(* Phase 30.3 (2026-04-22): \:624b\:52d5\:30af\:30ea\:30a2 API *)
+ClaudeRateLimitClear[] :=
+  ($iLastRateLimitInfo = None; None);
 
 iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
   Module[{lines, i, line, trimmed, textBuf = {}, content,
@@ -21889,19 +21919,51 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
     (* \[HorizontalLine]\[HorizontalLine] \:30bf\:30b9\:30af / \:7d99\:7d9a\:6307\:793a \[HorizontalLine]\[HorizontalLine] *)
     Which[
       AssociationQ[input] && Lookup[input, "Type", ""] === "ToolResult",
-        (* \:30c4\:30fc\:30eb\:7d50\:679c\:3092\:6ce8\:5165\:3057\:3066\:6b21\:306e\:30a2\:30af\:30b7\:30e7\:30f3\:3092\:4fc3\:3059 *)
+        (* \:30c4\:30fc\:30eb\:7d50\:679c\:3092\:6ce8\:5165\:3057\:3066\:6b21\:306e\:30a2\:30af\:30b7\:30e7\:30f3\:3092\:4fc3\:3059\:3002
+           Phase 30.6 (2026-04-22): Phase 30.4 \:3067\:300c\:8ffd\:52a0 tool \:3092\:547c\:3076\:306a\:300d\:3068
+           \:5f37\:304f\:8a00\:3044\:3059\:304e\:305f\:7d50\:679c\:3001LLM \:304c\:7d50\:679c\:3092\:4fe1\:7528\:3057\:306a\:3044\:30e2\:30fc\:30c9\:306b
+           \:9665\:308a\:3001\:8c4a\:5bcc\:306a tool \:7d50\:679c (8000+ \:6587\:5b57) \:3092\:898b\:306a\:304c\:3089
+           \:300c\:4e0d\:5341\:5206\:300d\:3068\:5288\:308a\:6368\:3066\:3066\:30cf\:30eb\:30b7\:30cd\:30fc\:30b7\:30e7\:30f3\:3059\:308b\:7834\:7dbb
+           (result6b.nb: Automata Studies \:306b\:6368\:3066\:5149\:82b1\:7fc1\:3057) \:304c\:8d77\:304d\:305f\:3002
+           
+           \:5bfe\:7b56: \:300c\:5f15\:7528\:3057\:3066\:5fdc\:7b54\:305b\:3088\:300d\:3092\:30dd\:30b8\:30c6\:30a3\:30d6\:306b\:660e\:8a18\:3002 *)
         AppendTo[parts,
           iToolResultsToPromptText[
             Lookup[input, "ToolCalls", {}],
             Lookup[input, "ToolResults", {}]]];
         AppendTo[parts,
           "=== Continue Task ===\n" <>
-          "Original task: " <> ToString[Lookup[input, "OriginalTask", ""]] <> "\n" <>
-          "The tool results are shown above. " <>
-          "Based on these results, you may:\n" <>
-          "  1. Call more tools if needed\n" <>
-          "  2. Write a ```mathematica code block to compute something\n" <>
-          "  3. Provide a final text answer with [DONE] if the task is complete\n"],
+          "Original task: " <> ToString[Lookup[input, "OriginalTask", ""]] <> "\n\n" <>
+          "CRITICAL: The tool results above are your authoritative source of " <>
+          "information for this task. Your final answer MUST be based on the " <>
+          "specific facts (names, dates, acronyms, affiliations, locations, " <>
+          "quotes) that appear in those results. Do NOT substitute your own " <>
+          "general-knowledge guesses for facts that are already present in the " <>
+          "tool output.\n\n" <>
+          "Specifically:\n" <>
+          "  - If the tool result states an acronym expansion, use THAT expansion, " <>
+          "    not one you invented.\n" <>
+          "  - If the tool result gives a date, location, or organizer, quote it " <>
+          "    faithfully in your final answer.\n" <>
+          "  - If the tool result is in Japanese, your final answer should preserve " <>
+          "    the Japanese terminology used in the summary.\n\n" <>
+          "Your next response should be a COMPREHENSIVE final answer:\n" <>
+          "  - A ```mathematica code block (e.g. Column[{...}]) that DISPLAYS the " <>
+          "    tool-result facts to the user in an organized way, followed by " <>
+          "    [DONE] in text, OR\n" <>
+          "  - A detailed plain-text final answer (with [DONE]) that incorporates " <>
+          "    the key facts from the tool results.\n\n" <>
+          "Call another tool ONLY if:\n" <>
+          "  - The user's question has a distinct second sub-question that the " <>
+          "    previous tool calls did NOT address at all, or\n" <>
+          "  - The previous tool result explicitly says it failed or was empty " <>
+          "    (not just 'could be more detailed').\n\n" <>
+          "Do NOT call web_search again with a paraphrased or translated version of " <>
+          "the same query. Do NOT chain web_fetch calls hoping for 'more detail'. " <>
+          "Do NOT claim that 'the search did not return enough information' when " <>
+          "the tool results clearly contain the answer. " <>
+          "Trust the summary you already have and produce the final answer now, " <>
+          "using the facts from the tool output verbatim where appropriate.\n"],
       
       AssociationQ[input] && Lookup[input, "Type", ""] === "Continuation",
         AppendTo[parts,
@@ -22003,8 +22065,16 @@ iDefaultToolDefinitions[accessLevel_:0.5] := {
   |>,
   <|
     "Name"        -> "web_search",
-    "Description" -> "Search the web and return results. " <>
-                     "Use for finding current information, documentation, or references.",
+    "Description" -> "Search the web and return a comprehensive Japanese-language " <>
+                     "summary that itself already synthesizes multiple search results. " <>
+                     "This is a HIGH-LEVEL tool: one call typically produces a complete, " <>
+                     "ready-to-use answer covering the topic from several angles. " <>
+                     "Do NOT chain multiple web_search calls with minor query variations; " <>
+                     "the first result is already an LLM-synthesized summary and is " <>
+                     "normally sufficient to answer the user's question. " <>
+                     "Only call a second time if the user explicitly asks for more depth, " <>
+                     "or if the first result clearly missed a different meaning of an " <>
+                     "ambiguous term.",
     "InputSchema" -> <|
       "type" -> "object",
       "properties" -> <|
@@ -22013,7 +22083,8 @@ iDefaultToolDefinitions[accessLevel_:0.5] := {
           "description" -> "Search query"|>,
         "maxResults" -> <|
           "type" -> "integer",
-          "description" -> "Maximum number of results (default 5)"|>|>,
+          "description" -> "Desired upper bound on the number of results to cover " <>
+            "in the summary (default 5; hint only, not strictly enforced)"|>|>,
       "required" -> {"query"}|>
   |>,
   <|
@@ -22099,14 +22170,22 @@ iToolResultsToPromptText[toolCalls_List, toolResults_List] :=
                   "Error" -> "No result"|>],
               name, resultText},
         name = Lookup[call, "Name", "?"];
+        (* Phase 30.8 fix (2026-04-22): \:4ee5\:524d\:306f Summary \:3092\:6700\:512a\:5148\:3067\:62fe\:3063\:3066\:3044\:305f\:305f\:3081\:3001
+           web_search \:306a\:3069\:306e Summary ("Web search completed (1532 chars, pre-summarized)")
+           \:304c\:62fe\:308f\:308c\:3001\:672c\:6587 1500-2800 \:6587\:5b57\:306e\:5b9f\:30c7\:30fc\:30bf\:304c LLM \:306b\:898b\:3048\:305a\:3001
+           LLM \:304c\:300c\:904e\:53bb\:306e\:691c\:7d22\:7d50\:679c\:304c\:898b\:3048\:306a\:3044\:300d\:3068\:56f0\:60d1\:3057\:3066\:540c\:3058\:30af\:30a8\:30ea\:3092
+           \:4f55\:5ea6\:3082\:7e70\:308a\:8fd4\:3057\:547c\:3076\:4e8b\:6545\:304c\:767a\:751f\:3057\:305f (websearch-result8.nb)\:3002
+           
+           \:5bfe\:7b56: Result (\:5b9f\:30c7\:30fc\:30bf) \:3092\:6700\:512a\:5148\:306b\:305b\:3001Summary \:306f
+           \:304d\:8981\:7d04\:7528\:306e\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:306b\:5f15\:304d\:4e0b\:3052\:308b\:3002 *)
         resultText = If[TrueQ[Lookup[result, "Success", False]],
           Which[
-            StringQ[Lookup[result, "Summary", None]],
-              result["Summary"],
-            StringQ[Lookup[result, "RedactedResult", None]],
-              result["RedactedResult"],
             StringQ[Lookup[result, "Result", None]],
               result["Result"],
+            StringQ[Lookup[result, "RedactedResult", None]],
+              result["RedactedResult"],
+            StringQ[Lookup[result, "Summary", None]],
+              result["Summary"],
             True,
               ToString[Short[
                 Lookup[result, "RawResult",
@@ -22195,31 +22274,82 @@ iToolExecMathematica[input_Association, accessSpec_Association,
       "Error"          -> Lookup[execResult, "Error", None]|>
   ];
 
-(* \[HorizontalLine]\[HorizontalLine] web_search \[HorizontalLine]\[HorizontalLine] *)
+(* \[HorizontalLine]\[HorizontalLine] web_search \[HorizontalLine]\[HorizontalLine]
+   Phase 30.1 fix (2026-04-22): ClaudeWebSearch \:306e\:5b9f\:30b7\:30b0\:30cd\:30c1\:30e3\:306b\:6574\:5408\:3002
+   
+   \:65e7\:5b9f\:88c5\:306f ClaudeWebSearch[query, MaxItems -> n] \:3068\:3044\:3046\:5b58\:5728\:3057\:306a\:3044
+   2 \:5f15\:6570\:7248\:3092\:547c\:3073\:3001\:304b\:3064\:8fd4\:308a\:5024\:3092 {<|title, url, snippet|>, ...} \:306e
+   List \:3068\:3057\:3066\:671f\:5f85\:3057\:3066\:3044\:305f\:305f\:3081\:3001\:5e38\:306b !ListQ \:30d1\:30b9\:306b\:843d\:3061
+   \"Web search failed\" \:3092\:56fa\:5b9a\:3067\:8fd4\:3057\:3066\:3044\:305f\:3002
+   
+   ClaudeWebSearch \:306e\:5b9f\:5b9a\:7fa9 (L5227):
+     ClaudeWebSearch[query_String] \:2192 iDoWebSearch[prompt] \:2192 LLM \:8981\:7d04 String
+   
+   \:305d\:3053\:3067\:4ee5\:4e0b\:306b\:4fee\:6b63:
+     - 1 \:5f15\:6570\:547c\:3073\:51fa\:3057\:306b\:7d71\:4e00\:3002maxResults \:5f15\:6570\:306f\:8ffd\:52a0\:60c5\:5831\:3068\:3057\:3066
+       query \:672b\:5c3e\:306b\:4ed8\:4e0e (LLM \:306b\:5e0c\:671b\:4ef6\:6570\:3092\:4f1d\:3048\:308b)\:3002
+     - String \:8fd4\:5374\:3092 Result \:3068\:3057\:3066\:305d\:306e\:307e\:307e\:4f7f\:3046\:3002\"Error:\" \:3067\:59cb\:307e\:308b
+       \:6587\:5b57\:5217\:3068\:3001\:660e\:3089\:304b\:306b\:77ed\:3059\:304e\:308b \:5fdc\:7b54 (20 \:6587\:5b57\:672a\:6e80) \:306e\:307f\:3092 Error \:6271\:3044\:3068\:3059\:308b\:3002
+     - \:7531\:306a $Failed \:307e\:305f\:306f\:7a7a\:6587\:5b57\:5217\:306a\:3089\:5f53\:7136 Error\:3002 *)
 iToolExecWebSearch[input_Association] :=
-  Module[{query, maxResults, result},
+  Module[{query, maxResults, augmentedQuery, result},
     query      = Lookup[input, "query", ""];
     maxResults = Lookup[input, "maxResults", 5];
     If[!StringQ[query] || query === "",
       Return[<|"Success" -> False, "Error" -> "No query provided"|>]];
     
+    (* maxResults \:304c\:6307\:5b9a\:3055\:308c\:305f\:5834\:5408\:306f query \:306b\:6dfb\:3048\:3066 LLM \:306b\:4f1d\:3048\:308b\:3002
+       ClaudeWebSearch \:306f\:5185\:90e8\:3067 LLM \:306b\:8981\:7d04\:3092\:4f9d\:983c\:3059\:308b\:5b9f\:88c5\:306a\:306e\:3067\:3001
+       query \:6587\:5185\:306b\:542b\:3081\:3066\:304a\:3051\:3070 LLM \:304c\:9069\:5f53\:306b\:53cd\:6620\:3059\:308b\:3002 *)
+    augmentedQuery = If[IntegerQ[maxResults] && maxResults > 0 && maxResults =!= 5,
+      query <> " (\:4e0a\:4f4d " <> ToString[maxResults] <> " \:4ef6\:307e\:3067\:3092\:5bfe\:8c61\:3068\:3059\:308b)",
+      query];
+    
     result = Quiet @ Check[
-      ClaudeWebSearch[query, MaxItems -> maxResults],
+      ClaudeWebSearch[augmentedQuery],
       $Failed];
     
-    If[result === $Failed || !ListQ[result],
-      <|"Success" -> False,
-        "Error" -> "Web search failed"|>,
-      <|"Success" -> True,
-        "Result"  -> StringJoin[
-          MapIndexed[
-            Function[{r, idx},
-              ToString[idx[[1]]] <> ". " <>
-              Lookup[r, "title", ""] <> "\n   " <>
-              Lookup[r, "url", ""] <> "\n   " <>
-              StringTake[Lookup[r, "snippet", ""], UpTo[200]] <> "\n\n"],
-            Take[result, UpTo[maxResults]]]],
-        "Summary" -> ToString[Length[result]] <> " results found"|>]
+    Which[
+      result === $Failed,
+        <|"Success" -> False,
+          "Error" -> "Web search failed (ClaudeWebSearch returned $Failed)"|>,
+      
+      !StringQ[result],
+        <|"Success" -> False,
+          "Error" -> "Web search returned unexpected type: " <>
+            ToString[Head[result]]|>,
+      
+      StringLength[StringTrim[result]] === 0,
+        <|"Success" -> False,
+          "Error" -> "Web search returned empty result"|>,
+      
+      (* \"Error:\" \:3067\:59cb\:307e\:308b\:6587\:5b57\:5217\:306f ClaudeWebSearch \:5185\:90e8\:304b\:3089\:306e\:30a8\:30e9\:30fc\:4f1d\:64ad *)
+      StringStartsQ[StringTrim[result], "Error:" | "error:" | "ERROR:"],
+        <|"Success" -> False,
+          "Error" -> StringTake[StringTrim[result], UpTo[300]]|>,
+      
+      True,
+        <|"Success" -> True,
+          (* Phase 30.6 (2026-04-22): Phase 30.4 \:3067 [NOTE: ...] \:30d7\:30ec\:30d5\:30a3\:30c3\:30af\:30b9\:3092
+             \:672c\:6587\:5148\:982d\:306b\:7f6e\:3044\:305f\:305f\:3081 LLM \:304c\:300c\:7d50\:679c\:3092\:4fe1\:7528\:3057\:306a\:3044
+             \:30e2\:30fc\:30c9\:300d\:3067\:672c\:6587\:3092\:8aad\:307f\:3001\:5185\:5bb9\:304c\:8c4a\:5bcc\:306a\:306e\:306b
+             \:300c\:4e0d\:5341\:5206\:300d\:3068\:8a8d\:8b58\:3057\:3066\:518d\:691c\:7d22\:3084\:30cf\:30eb\:30b7\:30cd\:30fc\:30b7\:30e7\:30f3\:306b
+             \:9665\:308b\:4e8b\:6545\:304c\:8d77\:304d\:305f (result6b.nb: Asian Symposium \:3092
+             Automata Studies \:3068\:6368\:3066\:5149\:82b1\:7fc1\:3057\:305f)\:3002
+             
+             \:5bfe\:5fdc:
+             - \:672c\:6587\:3092\:5148\:306b\:898b\:305b\:308b\:3002\:672b\:5c3e\:306b\:63a7\:3048\:3081\:306a HINT \:3092\:7f6e\:304f\:3002
+             - \:300cdo NOT\:300d\:5f37\:5236\:3092\:7dd2\:3081\:3001\:4ee3\:308f\:308a\:306b\:300c\:4e0a\:8a18\:306e\:4e8b\:5b9f\:3092\:5f15\:7528\:3057\:3066
+               \:6700\:7d42\:5fdc\:7b54\:3092\:66f8\:3051\:300d\:3068\:80af\:5b9a\:7684\:306b\:8a3c\:4e8b\:3059\:308b\:3002 *)
+          "Result"  -> result <> "\n\n" <>
+            "[TOOL-HINT: The passage above is an LLM-prepared summary of " <>
+            "multiple web results. Treat the facts in it (names, dates, " <>
+            "acronyms, affiliations, locations) as the authoritative source " <>
+            "for your final answer, and incorporate them faithfully. " <>
+            "Typically a second web_search call is not needed.]",
+          "Summary" -> "Web search completed (" <>
+            ToString[StringLength[result]] <> " chars, pre-summarized)"|>
+    ]
   ];
 
 (* \[HorizontalLine]\[HorizontalLine] web_fetch \[HorizontalLine]\[HorizontalLine] *)
@@ -22238,9 +22368,14 @@ iToolExecWebFetch[input_Association] :=
       <|"Success" -> False,
         "Error" -> "Failed to fetch URL"|>,
       <|"Success" -> True,
-        "Result"  -> StringTake[result, UpTo[maxLen]],
+        (* Phase 30.6 (2026-04-22): web_fetch \:3082\:540c\:69d8\:306b\:672b\:5c3e HINT \:5316\:3002 *)
+        "Result"  -> StringTake[result, UpTo[maxLen]] <> "\n\n" <>
+          "[TOOL-HINT: The passage above is an LLM-prepared summary of " <>
+          "<" <> url <> ">. Use its contents as authoritative source for " <>
+          "your final answer. Re-fetching the same URL or chasing related " <>
+          "URLs is normally not needed.]",
         "Summary" -> "Fetched " <> ToString[StringLength[result]] <>
-          " chars from " <> url|>]
+          " chars from " <> url <> " (pre-summarized)"|>]
   ];
 
 (* \[HorizontalLine]\[HorizontalLine] iIsAccessiblePath: \:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:306e\:30a2\:30af\:30bb\:30b9\:53ef\:80fd\:6027\:30c1\:30a7\:30c3\:30af \[HorizontalLine]\[HorizontalLine]
@@ -23370,7 +23505,13 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
       "AccessLevel"      -> accessLevel,
       "Secrets"          -> If[AssociationQ[NBAccess`$NBConfidentialSymbols],
                               Keys[NBAccess`$NBConfidentialSymbols], {}],
-      "MaxContinuations" -> 1,
+      (* Phase 30.2 fix (2026-04-22): MaxContinuations \:3092 1 \:304b\:3089 3 \:306b\:5fa9\:5e30\:3002
+         \:65e7\:5024 1 \:3067\:306f tool \:3092\:547c\:3093\:3060\:5f8c\:306b LLM \:304c tool \:7d50\:679c\:3092\:53c2\:7167\:3057\:3066
+         \:6700\:7d42\:56de\:7b54\:3092\:66f8\:304f\:4f59\:5730\:304c\:306a\:304f\:3001tool_call \:306e\:751f\:30c6\:30ad\:30b9\:30c8\:304c
+         Committer \:306b\:6e21\:3063\:3066\:307e\:307e Column[{...}] \:306b\:8a70\:307e\:308c\:308b\:7834\:7dbb\:304c
+         \:8d77\:304d\:3066\:3044\:305f (websearch-result1.nb)\:3002\:305d\:306e\:4ed6\:306e adapter \:4f5c\:6210\:7b87\:6240\:306f
+         \:3059\:3079\:3066\:30c7\:30d5\:30a9\:30eb\:30c8 3 \:3092\:4f7f\:7528\:3057\:3066\:3044\:308b\:306e\:3067\:6574\:5408\:6027\:3082\:56de\:5fa9\:3002 *)
+      "MaxContinuations" -> 3,
       "SyncProvider"     -> False,
       "Provider"         -> Automatic,
       "Model"            -> modelSpec,
@@ -23821,6 +23962,25 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
     (* \:30c6\:30ad\:30b9\:30c8\:90e8\:5206\:3092\:6e96\:5099 *)
     textOnly = iStripContinueEvalGuidance @
       cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
+    
+    (* Phase 30.5 fix (2026-04-22): :after daemon \:306e\:6291\:5236\:304c\:904e\:5ea6\:306b
+       \:52b9\:304d\:3001\:30c4\:30fc\:30eb\:7d50\:679c\:3092\:53d7\:3051\:3066 LLM \:304c\:66f8\:3044\:305f\:5b8c\:5168\:306a\:8981\:7d04\:30c6\:30ad\:30b9\:30c8\:304c
+       [DONE] \:30de\:30fc\:30ab\:30fc\:3092\:542b\:3080\:3070\:304b\:308a\:306b\:9ed9\:6bba\:3055\:308c\:308b\:4e8b\:6545\:304c\:3042\:3063\:305f
+       (websearch-result4.nb)\:3002
+       
+       \:5bfe\:5fdc: textOnly (response \:304b\:3089 code block / guidance / markdown \:3092\:9664\:3044\:305f\:6b8b\:308a)\:3092
+       \:898b\:308c\:3070\:3001\:5b9f\:8cea\:7684\:5185\:5bb9\:306e\:6709\:7121\:304c\:5206\:304b\:308b\:3002\:30c6\:30ad\:30b9\:30c8\:304b\:3089 [DONE]
+       \:30de\:30fc\:30ab\:30fc\:3092\:9664\:3044\:305f\:9577\:3055\:304c\:4e00\:5b9a\:4ee5\:4e0a\:3042\:308c\:3070\:3001\:305d\:308c\:306f
+       \:300c\:771f\:306b\:5185\:5bb9\:306e\:3042\:308b\:6700\:7d42\:56de\:7b54\:300d\:3068\:307f\:306a\:3057\:30b9\:30ad\:30c3\:30d7\:3092\:5ffd\:9760\:3059\:308b\:3002 *)
+    If[TrueQ[isAfterDaemon] && StringQ[textOnly],
+      Module[{meaningfulText},
+        meaningfulText = StringTrim[
+          StringReplace[textOnly,
+            ("[DONE]" | "[done]" | "[Done]") -> ""]];
+        (* 20 \:6587\:5b57\:4ee5\:4e0a\:306e\:5b9f\:8cea\:30c6\:30ad\:30b9\:30c8\:304c\:6b8b\:308b\:306a\:3089\:8868\:793a\:3059\:308b *)
+        If[StringLength[meaningfulText] >= 20,
+          isAfterDaemon = False]]];
+    
     (* :after daemon \:6b63\:5e38\:5b8c\:4e86 \[RightArrow] \:30c6\:30ad\:30b9\:30c8\:51fa\:529b\:6291\:5236 *)
     If[!TrueQ[isAfterDaemon] && textOnly =!= "",
       AppendTo[queue, Function[
@@ -23840,7 +24000,7 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
        Phase 24 \:4fee\:6b63: \:6700\:7d42\:30bf\:30fc\:30f3\:304c Phase 20 \:30d1\:30bf\:30fc\:30f3\:3067\:65e2\:306b
        \:8868\:793a\:6e08\:307f\:306e\:5834\:5408\:3082\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:62bd\:51fa\:3092\:30b9\:30ad\:30c3\:30d7\:3002
        \:3053\:308c\:306b\:3088\:308a [DONE] \:30bf\:30fc\:30f3\:3067\:306e\:5197\:9577\:306a\:518d\:5b9f\:884c\:3092\:9632\:6b62\:3002 *)
-    Module[{lastMsg, msgs20, hasPriorCodeInMsgs = False},
+    Module[{lastMsg, msgs20, hasPriorCodeInMsgs = False, candidateBlocks},
       msgs20 = Lookup[Lookup[st, "ConversationState", <||>], "Messages", {}];
       If[Length[msgs20] > 0,
         lastMsg = Last[msgs20];
@@ -23850,18 +24010,32 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
         AnyTrue[Most[msgs20],
           (StringQ[Lookup[#, "ProposedCode", None]] ||
            ListQ[Lookup[#, "ToolCalls", None]]) &];
-      If[(TrueQ[lastTurnIsTextOnly] && hasPriorCodeInMsgs) ||
-         TrueQ[lastTurnRenderedByPhase20],
-        (* \:4e2d\:9593\:30bf\:30fc\:30f3\:3067\:30b3\:30fc\:30c9\:5b9f\:884c\:6e08\:307f\:3001\:307e\:305f\:306f Phase 20 \:3067\:6700\:7d42\:30bf\:30fc\:30f3\:8868\:793a\:6e08\:307f
+      (* \:5fdc\:7b54\:306b\:5b9f\:969b\:306b mathematica \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:304c\:3042\:308b\:304b\:5148\:306b\:8abf\:3079\:308b *)
+      candidateBlocks = If[StringQ[response],
+        StringCases[response,
+          RegularExpression[
+            "```(?:mathematica|wolfram)?\\n([\\s\\S]*?)```"] :> "$1"],
+        {}];
+      (* Phase 30.7 fix (2026-04-22): \:4ee5\:524d\:306f lastTurnIsTextOnly && hasPriorCodeInMsgs
+         \:3060\:3051\:3067 blocks={} \:306b\:3057\:3066\:3044\:305f\:305f\:3081\:3001LLM \:304c tool \:4f7f\:7528\:5f8c\:306b
+         \:6700\:7d42 turn \:3067\:65b0\:305f\:306a Mathematica \:30b3\:30fc\:30c9 (Column \:306a\:3069) \:3092\:66f8\:3044\:3066\:3082
+         \:305d\:308c\:304c\:6368\:3066\:3089\:308c\:3001textOnly (code block \:3092\:9664\:3044\:305f\:3082\:306e) \:304c
+         fallbackCode \:306e Column \:306b\:8a70\:3081\:8fbc\:307e\:308c\:3066\:3057\:307e\:3046\:7834\:7dbb\:304c
+         \:8d77\:304d\:305f (websearch-result7.nb: LLM \:306f\:7acb\:6d3e\:306a Column[{Style[...], 
+         Hyperlink[...]}] \:3092\:66f8\:3044\:305f\:306e\:306b\:3001notebook \:306b\:306f
+         Column[{\"\:307e\:3068\:3081\:307e\:3059\", \"\:518d\:5b9f\:884c\:3092\:300d, \"[DONE]\"}] \:304c\:8a70\:3081\:8fbc\:307e\:308c\:305f)\:3002
+         
+         \:5bfe\:7b56: \:5fdc\:7b54\:306b mathematica code block \:304c\:5b9f\:969b\:306b\:5b58\:5728\:3059\:308b\:306a\:3089
+         \:305d\:308c\:3092\:4f7f\:3046\:3002code block \:304c\:306a\:3044\:5834\:5408\:306e\:307f blocks={} \:3068\:3059\:308b\:3002 *)
+      If[((TrueQ[lastTurnIsTextOnly] && hasPriorCodeInMsgs) ||
+          TrueQ[lastTurnRenderedByPhase20]) &&
+         Length[candidateBlocks] === 0,
+        (* \:4e2d\:9593\:30bf\:30fc\:30f3\:3067\:30b3\:30fc\:30c9\:5b9f\:884c\:6e08\:307f\:3001\:304b\:3064\:5fdc\:7b54\:306b\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:306a\:3057
            \[RightArrow] \:6700\:7d42\:30bf\:30fc\:30f3\:306e\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:62bd\:51fa\:306f\:30b9\:30ad\:30c3\:30d7 *)
         blocks = {},
-        (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:62bd\:51fa: \:521d\:56de TextOnly \:3084\:30b3\:30fc\:30c9\:5fdc\:7b54\:6642 *)
-        blocks = StringCases[response,
-          RegularExpression[
-            "```(?:mathematica|wolfram)?\\n([\\s\\S]*?)```"] :> "$1"];
-        (* \:4f9d\:5b58\:95a2\:4fc2\:306e\:3042\:308b\:30d6\:30ed\:30c3\:30af\:3092\:7d50\:5408 *)
+        (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:62bd\:51fa *)
         blocks = iMergeDependentBlocks[
-          iFixUnicodeEscapes[StringTrim[#]] & /@ blocks]]];
+          iFixUnicodeEscapes[StringTrim[#]] & /@ candidateBlocks]]];
     
     (* ---- AutoEvaluate \:7981\:6b62\:64cd\:4f5c\:30ac\:30fc\:30c9 ----
        \:3044\:305a\:308c\:304b\:306e\:30d6\:30ed\:30c3\:30af\:306b\:7981\:6b62\:64cd\:4f5c\:304c\:542b\:307e\:308c\:308b\:5834\:5408\:3001
@@ -24640,7 +24814,7 @@ End[];
 EndPackage[];
 
 (* Phase 33 Task 5 version marker *)
-ClaudeCode`$claudecodeVersion = "2026-04-22T03-phase30-adapter-docs-injection";
+ClaudeCode`$claudecodeVersion = "2026-04-22T11-phase30-8-tool-result-body-priority";
 (* v2026-04-21: \:30ed\:30fc\:30c9\:6642\:306e Print \:3092\:62d1\:58f0\:3002 Windows \:3067\:6587\:5b57\:5316\:3051\:306b\:306a\:308a\:3001
    \:30e1\:30c3\:30bb\:30fc\:30b8\:30a6\:30a3\:30f3\:30c9\:30a6\:304c\:8868\:793a\:3055\:308c\:305f\:307e\:307e\:306b\:306a\:3063\:3066\:771f\:306e\:30a8\:30e9\:30fc\:304c\:898b\:3048\:306a\:304f\:306a\:308b\:3002
    \:30d0\:30fc\:30b8\:30e7\:30f3\:306f $claudecodeVersion \:3067\:53c2\:7167\:53ef\:80fd\:3002 *)
