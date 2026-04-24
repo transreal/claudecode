@@ -58,6 +58,14 @@ claudecode を使用している場合、`$Path` は自動的に設定されま�
 (* 使用するモデルの指定（空文字列で Claude Code のデフォルトモデル） *)
 $ClaudeModel = "claude-sonnet-4-20250514"
 
+(* $ClaudeModel を LM Studio に直接設定する例（Web 検索等を LM Studio で実行したい場合） *)
+$ClaudePrivateModel = {"lmstudio", "qwen/qwen3.6-27b", "http://127.0.0.1:1234"}
+$ClaudeModel = $ClaudePrivateModel
+
+(* LM Studio 使用時に有効にする MCP インテグレーション *)
+(* mcp.json に登録済みの MCP サーバー ID を指定する。LM Studio がサーバー側で tool-call を自動実行する。 *)
+$ClaudeLMStudioIntegrations = {"mcp/exa"}
+
 (* フォールバックモデルの設定 *)
 $ClaudeFallbackModels = {
   {"anthropic", "claude-opus-4-6"},
@@ -291,6 +299,55 @@ ClaudeCode は機密データを含むタスクに対して、自動的にロー
 - **`AutoPrivate -> True`**: 機密変数にアクセスするタスクで自動的にローカルモデルを使用します
 - **`PrivacySpec`**: アクセスレベルを明示的に制御します
 - **3段階フォールバック**: Claude Code CLI → アクセスレベル対応フォールバックモデル → エラーの順で試行します
+
+### LM Studio の直接使用
+
+`$ClaudeModel` に LM Studio のモデル仕様（リスト形式）を設定することで、Claude Code CLI を使わずに LM Studio をメインの推論エンジンとして直接使用できます。これにより、ローカル LLM を用いた Web 検索や MCP ツール連携が可能になります。
+
+#### 基本設定例
+
+```mathematica
+(* LM Studio をメインモデルとして設定 *)
+$ClaudePrivateModel = {"lmstudio", "qwen/qwen3.6-27b", "http://127.0.0.1:1234"};
+$ClaudeModel = $ClaudePrivateModel;
+
+(* MCP インテグレーションを設定（mcp.json に登録済みの ID を指定） *)
+$ClaudeLMStudioIntegrations = {"mcp/exa"};
+
+(* Web 検索を伴う質問を実行 — LM Studio が exa で検索して回答 *)
+ClaudeEval["Claude Code について最新の情報を調べてほしい。"]
+```
+
+`$ClaudeLMStudioIntegrations` に MCP サーバー ID を指定すると、LM Studio がサーバー側で tool-call ループを自動実行します。フロントエンドをブロックせずに MCP ツール（exa による Web 検索等）を利用できます。MCP 使用時はコンテキスト長として 16000 以上を推奨します。
+
+#### $ClaudeLMStudioIntegrations の指定形式
+
+| 形式 | 例 | 説明 |
+|---|---|---|
+| 文字列リスト | `{"mcp/exa"}` | `mcp.json` に登録済みの MCP サーバー ID を指定 |
+| Plugin 形式 | `{<|"type"->"plugin","id"->"mcp/exa",...|>}` | 詳細オプション付きで指定 |
+| Ephemeral MCP 形式 | `{<|"type"->"ephemeral_mcp",...|>}` | 一時的な MCP サーバーをインライン定義 |
+
+#### 認証設定（Require Authentication）
+
+LM Studio の **Server Settings** で **Require Authentication** を有効にすると、API キーが要求されます。このキーは NBAccess が管理する `SystemCredential` に登録することで、ClaudeCode が自動的に取得して使用します。
+
+**設定手順:**
+
+1. LM Studio を起動し、**Server Settings** を開く
+2. **Require Authentication** を **On** に切り替える
+3. 表示された API キーをコピーする
+4. Mathematica で以下を実行して登録する:
+
+```mathematica
+(* LM Studio の API キーを SystemCredential に登録 *)
+(* キー名は接続先 URL を含む形式: "lmstudio-<URL>" *)
+SystemCredential["lmstudio-http://127.0.0.1:1234"] = "your-lm-studio-api-key";
+```
+
+登録後は `ClaudeEval` 等の呼び出し時に API キーが自動取得されます。未登録の場合は認証なしのダミーキー（`"lm-studio"`）にフォールバックするため、Require Authentication が Off の通常利用では登録不要です。
+
+**注意**: キー名に含まれる URL は `$ClaudeModel` の第3要素（カスタム URL）と一致させてください。リモートの LM Studio サーバーを使用する場合はそのサーバーの URL に合わせてキー名を変更してください。
 
 ### 多言語対応（$Language ベースの言語切り替え）
 

@@ -26,6 +26,8 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 作業ディレクトリ (`$ClaudeWorkingDirectory`) 配下の CLAUDE.md やディレクティブ (rules/skills) が Claude Code に自動的に読み込まれ、プロジェクト固有のガイドラインを反映した応答が得られます。プロジェクトディレクティブ機構により、NotebookDirectory ごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。Claude Code CLI が利用できない場合のフォールバック機構として、Anthropic API や OpenAI API への直接呼び出しに加え、LM Studio 等のローカル LLM サーバーへの接続もサポートしています。フォールバックモデルは `$ClaudeFallbackModels` で優先順位付きで設定でき、`{provider, model, url}` の3要素形式でカスタム URL を指定できます。アクセスレベルに基づいて利用可能なモデルのみが選択されるプライバシー対応ルーティングにより、機密データの処理をローカルモデルへ自動転送できます。
 
+**LM Studio の主モデル利用と MCP ツール連携**: `$ClaudeModel` に LM Studio のエンドポイントを直接指定することで、すべての ClaudeEval/ClaudeQuery を LM Studio 経由で実行できます。さらに `$ClaudeLMStudioIntegrations` に MCP サーバー ID を指定すると、LM Studio がサーバー側で tool-call を自動実行し、Web 検索等の MCP ツールをローカル LLM から呼び出せます。これにより、プライバシーを優先しながら外部ツール統合を実現できます。
+
 パッケージ管理機能 (`ClaudeUpdatePackage`, `ClaudeRestorePackage`) では、既存の .wl パッケージを Claude の支援で更新し、差分ベースの自動バックアップにより安全なイテレーションを実現します。バックアップシステムは `SequenceAlignment` ベースの差分保存を採用し、`.cz`（ベースライン）・`.cdiff`（差分）・`.unchanged`（参照）の3形式でストレージ消費を大幅に削減します。差分チェーンの中間ノードを削除する際も依存関係を自動解決し、復元不能になることを防止します。既存の生バックアップは `ClaudeMigrateBackupHistory` で差分形式に一括変換できます。コード生成・マージ後には検証テストが自動生成・実行され（`===BEGIN_TESTS===` ～ `===END_TESTS===` ブロック）、意図した変更が正しく反映されているか確認します。
 
 パッケージキーワード自動注入システムにより、各外部パッケージが `$ClaudePackageKeywordMap` を通じて独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。これにより claudecode.wl はパッケージ非依存を保ちつつ、必要な API ドキュメントを自動的に提供できます。
@@ -196,9 +198,16 @@ ClaudeHistorySize[]
 (* セッションと全履歴を削除 *)
 ClaudeDeleteSession["セッション名", "All"]
 
-(* LM Studio のローカルモデルを使用 *)
+(* LM Studio のローカルモデルを使用（Model オプションで直接指定） *)
 ClaudeEval["階乗を計算して",
   Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
+
+(* $ClaudeModel を LM Studio に直接設定（すべての呼び出しを LM Studio で実行） *)
+$ClaudePrivateModel = {"lmstudio", "qwen/qwen3.6-27b", "http://127.0.0.1:1234"}
+$ClaudeModel = $ClaudePrivateModel
+
+(* LM Studio 経由で MCP ツールを有効化（mcp.json に登録済みのサーバー ID を指定） *)
+$ClaudeLMStudioIntegrations = {"mcp/exa"}
 
 (* LLMGraph のカテゴリ別並列度を設定 *)
 $LLMGraphMaxConcurrency["cli"] = 4
@@ -236,7 +245,7 @@ ShowClaudePalette[]
 
 | 変数 | デフォルト | 説明 |
 |------|-----------|------|
-| `$ClaudeModel` | `""` | Claude CLI に渡すモデル名。空文字は CLI デフォルト |
+| `$ClaudeModel` | `""` | Claude CLI に渡すモデル名。空文字は CLI デフォルト。`{"lmstudio", "モデル名", "http://host:port"}` 形式で LM Studio を主モデルとして直接指定することも可能 |
 | `$ClaudeTimeout` | `1200` | タイムアウト秒数 |
 | `$ClaudeVerbose` | `False` | `True` で履歴コンパクション等の詳細ログを出力 |
 | `$ClaudeWorkingDirectory` | `FileNameJoin[{$HomeDirectory, "Claude Working"}]` | 作業ディレクトリ |
@@ -246,6 +255,7 @@ ShowClaudePalette[]
 | `$ClaudeNBDirAccess` | `"list"` | NotebookDirectory のアクセスレベル（`"list"` / `"read"` / `"readwrite"`） |
 | `$ClaudeFallbackModels` | `{{"anthropic","claude-opus-4-6"},{"openai","gpt-5"}}` | フォールバックモデル優先順位。`{"lmstudio","modelName","http://host:port"}` 形式でローカル LLM も指定可能 |
 | `$ClaudePrivateModel` | `{}` | 秘密データ処理用のローカルモデル指定 |
+| `$ClaudeLMStudioIntegrations` | `{}` | LM Studio 使用時に有効にする MCP サーバー ID のリスト（例: `{"mcp/exa"}`）。mcp.json に登録済みのサーバーを指定すると、LM Studio がサーバー側で tool-call を自動実行する |
 | `$ClaudeTestModel` | `$ClaudeModel と同じ` | `ClaudeCheckSeparation` 等のテスト用モデル名 |
 | `$ClaudeImageModels` | `{{"openai","gpt-image-1"},{"openai","dall-e-3"}}` | 画像生成モデルのリスト |
 | `$ClaudeTTSModels` | `{{"openai","tts-1-hd"},{"openai","tts-1"}}` | 音声生成モデルのリスト |
@@ -420,7 +430,7 @@ ClaudeEval["タスクの説明"]   (* 再び CLI 経由 *)
 
 ### LM Studio 対応
 
-ローカルで動作する LLM サーバー（LM Studio 等）をフォールバックモデルとして使用できます。API キーは不要で、OpenAI 互換の Chat Completions API エンドポイントに接続します。
+ローカルで動作する LLM サーバー（LM Studio 等）を、フォールバックモデルとして使用するだけでなく、`$ClaudeModel` に直接指定して主モデルとして使用できます。API キーは不要で、OpenAI 互換の Chat Completions API エンドポイントに接続します。
 
 ```mathematica
 (* フォールバックモデルにローカルモデルを追加 *)
@@ -436,9 +446,27 @@ ClaudeEval["階乗を計算して", Fallback -> True]
 (* Model オプションで直接指定 *)
 ClaudeEval["1から10までのフィボナッチ数を計算して",
   Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
+
+(* $ClaudeModel に直接設定してすべての呼び出しを LM Studio で実行 *)
+$ClaudePrivateModel = {"lmstudio", "qwen/qwen3.6-27b", "http://127.0.0.1:1234"}
+$ClaudeModel = $ClaudePrivateModel
 ```
 
 `$ClaudeFallbackModels` の各エントリは `{provider, modelName}` または `{provider, modelName, url}` の形式です。`"lmstudio"` プロバイダーを指定すると、指定 URL（デフォルト `http://localhost:1234`）の `/v1/chat/completions` エンドポイントに接続します。
+
+#### MCP ツールの有効化
+
+`$ClaudeLMStudioIntegrations` を設定すると、LM Studio が `mcp.json` に登録済みの MCP サーバーと連携し、Web 検索等の MCP ツールを LM Studio 経由で呼び出せます。LM Studio がサーバー側で tool-call を自動実行するため、クラウド LLM を使用せずにツール統合を実現できます。
+
+```mathematica
+(* LM Studio 経由で MCP ツールを有効化 *)
+$ClaudeLMStudioIntegrations = {"mcp/exa"}
+
+(* 設定後は通常どおり ClaudeEval/ClaudeQuery を呼び出すだけ *)
+ClaudeQuery["最新の Mathematica のリリースノートを調べて"]
+```
+
+MCP サーバー ID は `mcp.json` に登録済みの ID を文字列リストで指定します。`$ClaudeModel` を LM Studio に設定した状態で `$ClaudeLMStudioIntegrations` を有効にすることで、プライバシーを重視しながら外部ツール呼び出し機能を統合した運用が可能です。
 
 ### 多言語対応
 

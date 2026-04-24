@@ -1034,6 +1034,39 @@ $ClaudeEvalAutoLLMMinNewlines::usage =
   "$ClaudeEvalAutoLLMMinNewlines \:306f \"Auto\" \:30e2\:30fc\:30c9\:3067 LLM planner \:3092\:8d77\:52d5\:3059\:308b\:6700\:5c0f\:6539\:884c\:6570\:3002\n" <>
   "\:65e2\:5b9a: 3\:3002\:6539\:884c\:6570\:304c\:3053\:308c\:4ee5\:4e0a\:304b\:3001\:6587\:5b57\:6570\:304c $ClaudeEvalAutoLLMMinLength \:4ee5\:4e0a\:306e\:3068\:304d LLM planner \:304c\:8d77\:52d5\:3002";
 
+(* ============================================================
+   LM Studio MCP \:7d71\:5408\:7528 Public \:5909\:6570 (2026-04-24 \:8ffd\:52a0)
+   ============================================================ *)
+
+$ClaudeLMStudioIntegrations::usage =
+  "$ClaudeLMStudioIntegrations \[LongDash] LM Studio /api/v1/chat \:547c\:3073\:51fa\:3057\:6642\:306b\n" <>
+  "integrations \:30d1\:30e9\:30e1\:30fc\:30bf\:3068\:3057\:3066\:9001\:308b MCP \:30b5\:30fc\:30d0\:30fc / \:30d7\:30e9\:30b0\:30a4\:30f3\:306e\:6307\:5b9a\:3002\n" <>
+  "None / {} \:306e\:5834\:5408\:306f\:5f93\:6765\:306e /v1/chat/completions \:7d4c\:7531 (MCP \:7121\:52b9)\:3002\n" <>
+  "\:4f8b 1: $ClaudeLMStudioIntegrations = {\"mcp/exa\"};   (* mcp.json \:767b\:9332\:6e08\:307f ID \:6307\:5b9a *)\n" <>
+  "\:4f8b 2: $ClaudeLMStudioIntegrations = {<|\"type\"->\"plugin\",\"id\"->\"mcp/exa\",\n" <>
+  "                \"allowed_tools\"->{\"web_search_exa\"}|>};\n" <>
+  "\:4f8b 3: $ClaudeLMStudioIntegrations = {<|\"type\"->\"ephemeral_mcp\",\n" <>
+  "                \"server_label\"->\"hf\",\"server_url\"->\"https://huggingface.co/mcp\"|>};";
+
+$ClaudeLMStudioAPIToken::usage =
+  "$ClaudeLMStudioAPIToken \[LongDash] LM Studio \:3078\:306e Authorization Bearer \:30c8\:30fc\:30af\:30f3\:3002\n" <>
+  "None \:306e\:5834\:5408\:306f \"lm-studio\" \:3092\:4f7f\:7528 (\:30ed\:30fc\:30ab\:30eb\:63a5\:7d9a\:3067\:306f\:901a\:5e38\:4e0d\:8981)\:3002";
+
+$ClaudeLMStudioContextLength::usage =
+  "$ClaudeLMStudioContextLength \[LongDash] /api/v1/chat \:306e context_length \:30d1\:30e9\:30e1\:30fc\:30bf\:3002\n" <>
+  "None / Automatic (\:65e2\:5b9a) \:306e\:5834\:5408\:306f context_length \:3092\:9001\:308a\:305a\:3001\n" <>
+  "LM Studio \:306e\:30e2\:30c7\:30eb\:8a2d\:5b9a (UI \:306e Context Length) \:304c\:305d\:306e\:307e\:307e\:4f7f\:308f\:308c\:308b\:3002\n" <>
+  "\:6574\:6570\:3092\:6307\:5b9a\:3059\:308b\:3068\:305d\:306e\:5024\:3067\:30e2\:30c7\:30eb\:5074\:8a2d\:5b9a\:3092\:4e0a\:66f8\:304d\:3059\:308b (MCP \:4f7f\:7528\:6642\:306f 16000+ \:63a8\:5968)\:3002";
+
+$ClaudeLMStudioTemperature::usage =
+  "$ClaudeLMStudioTemperature \[LongDash] /api/v1/chat \:306e temperature\:3002Automatic \:306a\:3089\:9001\:3089\:305a\:30e2\:30c7\:30eb\:306e\:65e2\:5b9a\:5024\:3092\:4f7f\:3046\:3002\n" <>
+  "tool \:5229\:7528\:6642\:306f 0 \[Tilde] 0.1 \:63a8\:5968 (\:30c4\:30fc\:30eb\:30b3\:30fc\:30eb\:306e JSON \:304c\:58ca\:308c\:306b\:304f\:3044)\:3002";
+
+$ClaudeLMStudioIncludeToolTrace::usage =
+  "$ClaudeLMStudioIncludeToolTrace \[LongDash] True \:306a\:3089\:3001iQueryLMStudioChat \:306e\:623b\:308a\:5024\:306b\n" <>
+  "tool_call \:306e\:30c8\:30ec\:30fc\:30b9 (\:30c4\:30fc\:30eb\:540d\:3001\:5f15\:6570\:3001\:7d50\:679c\:306e\:5148\:982d) \:3092\:5148\:982d\:306b\:4ed8\:52a0\:3059\:308b\:3002\n" <>
+  "\:30c7\:30d0\:30c3\:30b0\:7528\:3002\:901a\:5e38\:306f False \:63a8\:5968\:3002";
+
     Begin["`Private`"];(* ============================================================
    \:8a2d\:5b9a\:ff1a\:5fc5\:8981\:306b\:5fdc\:3058\:3066\:624b\:52d5\:3067\:4e0a\:66f8\:304d\:53ef\:80fd
    ============================================================ *)
@@ -1042,6 +1075,13 @@ If[!ValueQ[$ClaudeModel], $ClaudeModel = ""];
 If[!ValueQ[$ClaudeTimeout], $ClaudeTimeout = 1200];
 If[!ValueQ[$ClaudePrivateModel], $ClaudePrivateModel = {}];
 If[!AssociationQ[$ClaudePackageKeywordMap], $ClaudePackageKeywordMap = <||>];
+
+(* --- LM Studio MCP \:7d71\:5408\:5909\:6570\:306e\:65e2\:5b9a\:5024 (2026-04-24 \:8ffd\:52a0) --- *)
+If[!ValueQ[$ClaudeLMStudioIntegrations],     $ClaudeLMStudioIntegrations     = None];
+If[!ValueQ[$ClaudeLMStudioAPIToken],         $ClaudeLMStudioAPIToken         = None];
+If[!ValueQ[$ClaudeLMStudioContextLength],    $ClaudeLMStudioContextLength    = None];
+If[!ValueQ[$ClaudeLMStudioTemperature],      $ClaudeLMStudioTemperature      = Automatic];
+If[!ValueQ[$ClaudeLMStudioIncludeToolTrace], $ClaudeLMStudioIncludeToolTrace = False];
 
 (* ClaudeCode \:8a73\:7d30\:30ed\:30b0\:51fa\:529b\:30d5\:30e9\:30b0 (\:30c7\:30a3\:30d5\:30a9\:30eb\:30c8 False: \:91cd\:5927\:30a8\:30e9\:30fc\:4ee5\:5916\:306e\:30ed\:30b0\:3092\:6291\:5236) *)
 If[$ClaudeVerbose =!= True, $ClaudeVerbose = False];
@@ -1298,7 +1338,8 @@ iNBFileRunPrivateNode[nb_NotebookObject, tag_String,
     provider  = $ClaudePrivateModel[[1]];
     model     = $ClaudePrivateModel[[2]];
     customURL = If[Length[$ClaudePrivateModel] >= 3, $ClaudePrivateModel[[3]], ""];
-    apiKey = If[ToLowerCase[provider] === "lmstudio", "lm-studio",
+    apiKey = If[ToLowerCase[provider] === "lmstudio",
+      iResolveLMStudioAPIKey[customURL],
       Quiet[NBAccess`NBGetAPIKey[provider, PrivacySpec -> <|"AccessLevel"->1.0|>]]];
     If[!StringQ[apiKey],
       iSessionUpdateLast[nb, tag, <|"response"->"ERROR: No API key"|>];
@@ -5323,14 +5364,281 @@ iEnsureChatCompletionsPath[url_String] :=
       url <> "v1/chat/completions",
       url <> "/v1/chat/completions"]];
 
-iQueryViaAPI[provider_String, model_String, prompt_String, customURL_String:""] :=
-  Module[{apiKey, url, prov = ToLowerCase[provider]},
-    (* LM Studio \:7b49\:30ed\:30fc\:30ab\:30eb\:30e2\:30c7\:30eb: API \:30ad\:30fc\:4e0d\:8981 *)
+(* ============================================================
+   LM Studio REST API v1  /api/v1/chat  \:7d4c\:8def (2026-04-24 \:8ffd\:52a0)
+   integrations \:30d1\:30e9\:30e1\:30fc\:30bf\:3067 mcp.json \:767b\:9332\:6e08\:307f MCP \:30b5\:30fc\:30d0\:30fc\:3092
+   \:4f7f\:3046 (LM Studio \:304c\:30b5\:30fc\:30d0\:30fc\:5074\:3067 tool-call \:30eb\:30fc\:30d7\:3092\:81ea\:52d5\:5b9f\:884c)\:3002
+   ============================================================ *)
+
+(* ---- \:5171\:901a\:30d8\:30eb\:30d1: LM Studio \:306e API \:30c8\:30fc\:30af\:30f3\:3092 NBAccess \:7d4c\:7531\:3067\:89e3\:6c7a ----
+   LM Studio \:304c Authentication ON \:306a\:3089 SystemCredential \:7d4c\:7531\:306e\:30c8\:30fc\:30af\:30f3\:3092\:8fd4\:3059\:3002
+   \:672a\:767b\:9332\:306e\:5834\:5408\:306f\:5f93\:6765\:306e\:30c0\:30df\:30fc "lm-studio" \:3092\:8fd4\:3059\:3002
+   Claude Code CLI \:7d4c\:7531 / fallback chain / PS1 \:7d4c\:7531 \:306e\:5404\:7b87\:6240\:3067\:5171\:7528\:3059\:308b\:3002 *)
+
+iResolveLMStudioAPIKey[customURL_String:""] :=
+  Module[{effURL, k},
+    effURL = If[customURL =!= "", customURL, "http://localhost:1234"];
+    k = Quiet @ NBAccess`NBGetLocalLLMAPIKey["lmstudio", effURL,
+          PrivacySpec -> <|"AccessLevel" -> 1.0|>];
+    If[StringQ[k] && k =!= "", k, "lm-studio"]
+  ];
+
+(* ---- \:30bb\:30c3\:30b7\:30e7\:30f3\:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb\:89e3\:6c7a\:30d8\:30eb\:30d1 ----
+   Model \:30aa\:30d7\:30b7\:30e7\:30f3\:304c Automatic (\:307e\:305f\:306f\:975e\:30ea\:30b9\:30c8) \:306e\:3068\:304d\:3001
+   $ClaudeModel \:304c {provider, model, url} \:5f62\:5f0f\:306e\:30ea\:30b9\:30c8\:306a\:3089\:3001\:305d\:3061\:3089\:3092\:4f7f\:3046\:3002
+   \:6587\:5b57\:5217\:6307\:5b9a\:306e $ClaudeModel \:306f\:5f93\:6765\:901a\:308a\:7121\:8996 (\:5408\:81f4\:4e0d\:660e\:5f95\:30e2\:30c7\:30eb\:540d\:306f\:4f7f\:3048\:306a\:3044)\:3002
+   \:4f8b: $ClaudeModel = {"lmstudio", "qwen/qwen3.6-27b", "http://127.0.0.1:1234"} *)
+
+iResolveDefaultModelSpec[modelOpt_] :=
+  Which[
+    (* \:660e\:793a\:6307\:5b9a\:304c\:30ea\:30b9\:30c8\:5f62\:5f0f: \:305d\:308c\:3092\:4f7f\:3046 *)
+    ListQ[modelOpt] && Length[modelOpt] >= 2 &&
+        StringQ[modelOpt[[1]]] && StringQ[modelOpt[[2]]],
+      modelOpt,
+    (* \:660e\:793a\:6307\:5b9a\:304c\:3055\:308c\:3066\:3044\:306a\:3044 (Automatic \:7b49) \:3067 $ClaudeModel \:304c\:30ea\:30b9\:30c8\:5f62\:5f0f *)
+    ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 2 &&
+        StringQ[$ClaudeModel[[1]]] && StringQ[$ClaudeModel[[2]]],
+      $ClaudeModel,
+    (* \:305d\:308c\:4ee5\:5916\:306f\:7121\:5909\:63db\:3067\:8fd4\:3059 (Automatic / \:6587\:5b57\:5217 / \:305d\:306e\:4ed6) *)
+    True,
+      modelOpt
+  ];
+
+(* ---- \:30d1\:30ec\:30c3\:30c8\:8868\:793a\:7528\:306e\:30e2\:30c7\:30eb\:30e9\:30d9\:30eb ----
+   $ClaudeModel \:306e\:73fe\:5728\:5024\:3092\:4eba\:9593\:304c\:8aad\:3081\:308b\:77ed\:3044\:30e9\:30d9\:30eb\:306b\:5909\:63db\:3059\:308b\:3002
+   - \:30ea\:30b9\:30c8\:5f62\:5f0f {provider, model, url}: model \:306e\:30b9\:30e9\:30c3\:30b7\:30e5\:4ee5\:964d
+     (\:4f8b: {"lmstudio", "qwen/qwen3.6-27b", ...} -> "qwen3.6-27b")
+   - \:6587\:5b57\:5217\:304c $iModelOpus / $iModelSonnet \:3068\:4e00\:81f4: "Opus" / "Sonnet"
+   - \:7a7a\:6587\:5b57\:5217 \:307e\:305f\:306f\:672a\:8a2d\:5b9a: "Default"
+   - \:305d\:306e\:4ed6\:306e\:6587\:5b57\:5217: \:30b9\:30e9\:30c3\:30b7\:30e5\:4ee5\:964d\:3092\:5207\:308a\:51fa\:3057
+   - \:305d\:308c\:3067\:3082\:8a72\:5f53\:304c\:306a\:3044\:306a\:3089 $iPaletteModel \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af *)
+
+iPaletteModelLabel[] :=
+  Which[
+    ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 2 &&
+        StringQ[$ClaudeModel[[2]]],
+      Module[{m = $ClaudeModel[[2]], parts},
+        parts = StringSplit[m, "/"];
+        If[Length[parts] >= 2, Last[parts], m]],
+    StringQ[$ClaudeModel] && $ClaudeModel === $iModelOpus,
+      "Opus",
+    StringQ[$ClaudeModel] && $ClaudeModel === $iModelSonnet,
+      "Sonnet",
+    StringQ[$ClaudeModel] && StringTrim[$ClaudeModel] === "",
+      "Default",
+    StringQ[$ClaudeModel],
+      Module[{parts = StringSplit[$ClaudeModel, "/"]},
+        If[Length[parts] >= 2, Last[parts], $ClaudeModel]],
+    True,
+      Switch[$iPaletteModel, "opus", "Opus", "sonnet", "Sonnet", _, "Default"]
+  ];
+
+iEnsureLMStudioV1ChatPath[url_String] :=
+  Module[{u = url},
+    Which[
+      StringEndsQ[u, "/api/v1/chat"],
+        u,
+      StringEndsQ[u, "/api/v1/chat/"],
+        StringTrim[u, "/" ..],
+      StringContainsQ[u, "/v1/chat/completions"],
+        StringReplace[u, "/v1/chat/completions" -> "/api/v1/chat"],
+      StringEndsQ[u, "/"],
+        u <> "api/v1/chat",
+      True,
+        u <> "/api/v1/chat"
+    ]
+  ];
+
+ClearAll[iQueryLMStudioChat];
+Options[iQueryLMStudioChat] = {
+  "Integrations"      -> Automatic,
+  "SystemPrompt"      -> None,
+  "ContextLength"     -> Automatic,
+  "Temperature"       -> Automatic,
+  "APIToken"          -> Automatic,
+  "IncludeToolTrace"  -> Automatic,
+  "Timeout"           -> Automatic,
+  "DebugReturnRaw"    -> False
+};
+iQueryLMStudioChat[model_String, prompt_String, baseURL_String,
+                   opts:OptionsPattern[]] :=
+  Module[{url, integrations, sysPrompt, ctxLen, temp, token, includeTrace,
+          timeout, debugRaw, bodyAssoc, body, req, resp, statusCode, bodyStr,
+          json, outputs, msgs, traces, msgText, prefix},
+    url = iEnsureLMStudioV1ChatPath[
+      If[baseURL =!= "", baseURL, "http://localhost:1234"]];
+    integrations = OptionValue["Integrations"];
+    If[integrations === Automatic, integrations = $ClaudeLMStudioIntegrations];
+    sysPrompt = OptionValue["SystemPrompt"];
+    ctxLen = OptionValue["ContextLength"];
+    If[ctxLen === Automatic, ctxLen = $ClaudeLMStudioContextLength];
+    (* None / Automatic / \:975e\:6b63\:306a\:5024\:306f\:9001\:4fe1\:305b\:305a\:30e2\:30c7\:30eb\:5074\:8a2d\:5b9a\:3092\:4f7f\:3046 *)
+    temp = OptionValue["Temperature"];
+    If[temp === Automatic, temp = $ClaudeLMStudioTemperature];
+    token = OptionValue["APIToken"];
+    If[token === Automatic, token = $ClaudeLMStudioAPIToken];
+    (* NBAccess \:304b\:3089\:30c8\:30fc\:30af\:30f3\:3092\:53d6\:5f97 ({"lmstudio", baseURL} -> credName -> SystemCredential) *)
+    If[!StringQ[token] || token === "",
+      Module[{k = Quiet @ NBAccess`NBGetLocalLLMAPIKey["lmstudio",
+        If[baseURL =!= "", baseURL, "http://localhost:1234"],
+        PrivacySpec -> <|"AccessLevel" -> 1.0|>]},
+        If[StringQ[k] && k =!= "", token = k]]];
+    (* \:6700\:7d42\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af: LM Studio \:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:30c0\:30df\:30fc\:30ad\:30fc *)
+    If[!StringQ[token] || token === "", token = "lm-studio"];
+    includeTrace = OptionValue["IncludeToolTrace"];
+    If[includeTrace === Automatic, includeTrace = $ClaudeLMStudioIncludeToolTrace];
+    timeout = OptionValue["Timeout"];
+    If[!NumericQ[timeout] || timeout <= 0,
+      timeout = If[NumericQ[$ClaudeTimeout] && $ClaudeTimeout > 0,
+                   $ClaudeTimeout, 300]];
+    debugRaw = TrueQ[OptionValue["DebugReturnRaw"]];
+    bodyAssoc = <|
+      "model" -> model,
+      "input" -> prompt|>;
+    (* context_length \:306f\:6574\:6570\:304c\:6307\:5b9a\:3055\:308c\:305f\:3068\:304d\:306e\:307f\:9001\:4fe1\:3002
+       \:9001\:4fe1\:3057\:306a\:3044\:3068 LM Studio UI \:306e\:8a2d\:5b9a\:5024\:304c\:305d\:306e\:307e\:307e\:4f7f\:308f\:308c\:308b\:3002 *)
+    If[IntegerQ[ctxLen] && ctxLen > 0,
+      bodyAssoc = Join[bodyAssoc, <|"context_length" -> ctxLen|>]];
+    If[StringQ[sysPrompt] && sysPrompt =!= "",
+      bodyAssoc = Join[bodyAssoc, <|"system_prompt" -> sysPrompt|>]];
+    If[NumericQ[temp],
+      bodyAssoc = Join[bodyAssoc, <|"temperature" -> temp|>]];
+    If[ListQ[integrations] && Length[integrations] > 0,
+      bodyAssoc = Join[bodyAssoc, <|"integrations" -> integrations|>]];
+    body = Quiet @ Check[
+      ExportString[bodyAssoc, "RawJSON", "Compact" -> True], $Failed];
+    If[!StringQ[body],
+      body = Quiet @ Check[
+        Developer`WriteRawJSONString[bodyAssoc, "Compact" -> True], $Failed]];
+    If[!StringQ[body],
+      Return[iL[
+        "Error: LM Studio /api/v1/chat body \:30a8\:30f3\:30b3\:30fc\:30c9\:5931\:6557",
+        "Error: LM Studio /api/v1/chat body encoding failed"]]];
+    req = HTTPRequest[url, <|
+      "Method"  -> "POST",
+      "Headers" -> {
+        "Authorization" -> "Bearer " <> token,
+        "Content-Type"  -> "application/json"},
+      "Body" -> body|>];
+    resp = Quiet @ Check[
+      TimeConstrained[URLRead[req], timeout, $Failed], $Failed];
+    If[!MatchQ[resp, _HTTPResponse],
+      Return[iL[
+        "Error: LM Studio /api/v1/chat \:63a5\:7d9a\:5931\:6557 (URL=" <> url <> ")",
+        "Error: LM Studio /api/v1/chat connection failed (URL=" <> url <> ")"]]];
+    bodyStr = iHTTPResponseBodyUTF8[resp];
+    If[!StringQ[bodyStr],
+      bodyStr = resp["Body"];
+      If[!StringQ[bodyStr], bodyStr = ToString[bodyStr]]];
+    statusCode = resp["StatusCode"];
+    If[statusCode =!= 200,
+      Return["Error: LM Studio /api/v1/chat StatusCode=" <>
+        ToString[statusCode] <> " " <> StringTake[bodyStr, UpTo[400]]]];
+    If[debugRaw, Return[bodyStr]];
+    json = Quiet @ Developer`ReadRawJSONString[bodyStr];
+    If[!AssociationQ[json],
+      json = Quiet @ ImportString[bodyStr, "RawJSON"]];
+    If[!AssociationQ[json],
+      Return[iL[
+        "Error: LM Studio /api/v1/chat \:5fdc\:7b54\:30d1\:30fc\:30b9\:5931\:6557: ",
+        "Error: LM Studio /api/v1/chat response parse failed: "] <>
+        StringTake[bodyStr, UpTo[300]]]];
+    outputs = Lookup[json, "output", None];
+    If[!ListQ[outputs],
+      Return[iL[
+        "Error: LM Studio /api/v1/chat output \:914d\:5217\:304c\:3042\:308a\:307e\:305b\:3093: ",
+        "Error: LM Studio /api/v1/chat response has no output array: "] <>
+        StringTake[bodyStr, UpTo[300]]]];
+    msgs = {}; traces = {};
+    Do[
+      Which[
+        AssociationQ[item] && item["type"] === "message" &&
+            StringQ[item["content"]],
+          AppendTo[msgs, item["content"]],
+        AssociationQ[item] && item["type"] === "tool_call",
+          AppendTo[traces,
+            "[tool_call tool=" <> ToString @ Lookup[item, "tool", "?"] <>
+            " args=" <> StringTake[ToString @ Lookup[item, "arguments", <||>],
+                                    UpTo[200]] <>
+            " output=" <> StringTake[ToString @ Lookup[item, "output", ""],
+                                      UpTo[200]] <> "]"],
+        AssociationQ[item] && item["type"] === "invalid_tool_call",
+          AppendTo[traces,
+            "[invalid_tool_call reason=" <>
+            StringTake[ToString @ Lookup[item, "reason", "?"], UpTo[200]] <> "]"]
+      ],
+      {item, outputs}];
+    msgText = StringRiffle[msgs, "\n\n"];
+    If[!StringQ[msgText] || StringTrim[msgText] === "",
+      If[Length[traces] > 0,
+        Return[iL[
+          "Error: LM Studio /api/v1/chat \:304c message \:3092\:8fd4\:3055\:306a\:304b\:3063\:305f (tool_call \:306e\:307f):\n",
+          "Error: LM Studio /api/v1/chat returned no message (tool_call only):\n"] <>
+          StringRiffle[traces, "\n"]],
+        Return[iL[
+          "Error: LM Studio /api/v1/chat \:304c\:7a7a\:306e\:30ec\:30b9\:30dd\:30f3\:30b9\:3092\:8fd4\:3057\:307e\:3057\:305f",
+          "Error: LM Studio /api/v1/chat returned empty response"]]
+      ]
+    ];
+    If[includeTrace && Length[traces] > 0,
+      prefix = "[LM Studio MCP trace]\n" <> StringRiffle[traces, "\n"] <> "\n\n";
+      msgText = prefix <> msgText];
+    msgText
+  ];
+
+(* ============================================================
+   iQueryViaAPI  (2026-04-24 \:62e1\:5f35: LM Studio MCP \:5bfe\:5fdc)
+   $ClaudeLMStudioIntegrations \:304c\:975e\:7a7a\:30ea\:30b9\:30c8\:306e\:5834\:5408\:3001lmstudio \:7d4c\:8def\:306f
+   /api/v1/chat (MCP \:7d4c\:8def) \:3092\:4f7f\:3046\:3002\:305d\:308c\:4ee5\:5916\:306f\:5f93\:6765\:901a\:308a\:3002
+   ============================================================ *)
+
+ClearAll[iQueryViaAPI];
+Options[iQueryViaAPI] = {
+  "Integrations"  -> Automatic,
+  "SystemPrompt"  -> None,
+  "ContextLength" -> Automatic,
+  "Temperature"   -> Automatic,
+  "APIToken"      -> Automatic
+};
+iQueryViaAPI[provider_String, model_String, prompt_String,
+             customURL_String:"", opts:OptionsPattern[]] :=
+  Module[{apiKey, url, prov = ToLowerCase[provider],
+          integrations, useMCP, sysPrompt, ctxLen, temp, token,
+          effectiveURL, resolvedKey},
+    integrations = OptionValue["Integrations"];
+    If[integrations === Automatic, integrations = $ClaudeLMStudioIntegrations];
+    sysPrompt = OptionValue["SystemPrompt"];
+    ctxLen = OptionValue["ContextLength"];
+    temp = OptionValue["Temperature"];
+    token = OptionValue["APIToken"];
+    (* LM Studio \:7b49\:30ed\:30fc\:30ab\:30eb\:30e2\:30c7\:30eb *)
     If[prov === "lmstudio",
-      url = iEnsureChatCompletionsPath[
-        If[customURL =!= "", customURL, "http://localhost:1234"]];
-      Return[iQueryOpenAIAPI["lm-studio", model, prompt, url]]];
-    (* \:901a\:5e38\:30d7\:30ed\:30d0\:30a4\:30c0\:30fc *)
+      effectiveURL = If[customURL =!= "", customURL, "http://localhost:1234"];
+      useMCP = ListQ[integrations] && Length[integrations] > 0;
+      If[useMCP,
+        (* \:65b0\:7d4c\:8def: /api/v1/chat + MCP *)
+        Return @ iQueryLMStudioChat[model, prompt, effectiveURL,
+          "Integrations"  -> integrations,
+          "SystemPrompt"  -> sysPrompt,
+          "ContextLength" -> ctxLen,
+          "Temperature"   -> temp,
+          "APIToken"      -> token],
+        (* \:5f93\:6765\:7d4c\:8def: /v1/chat/completions
+           LM Studio \:306e Authentication \:304c ON \:306a\:3089 NBAccess \:7d4c\:7531\:3067\:30c8\:30fc\:30af\:30f3\:53d6\:5f97\:3059\:308b *)
+        url = iEnsureChatCompletionsPath[effectiveURL];
+        (* Option \:2192 \$ClaudeLMStudioAPIToken \:2192 NBAccess \:2192 "lm-studio" \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af *)
+        resolvedKey = token;
+        If[resolvedKey === Automatic, resolvedKey = $ClaudeLMStudioAPIToken];
+        If[!StringQ[resolvedKey] || resolvedKey === "",
+          Module[{k = Quiet @ NBAccess`NBGetLocalLLMAPIKey[
+            "lmstudio", effectiveURL,
+            PrivacySpec -> <|"AccessLevel" -> 1.0|>]},
+            If[StringQ[k] && k =!= "", resolvedKey = k]]];
+        If[!StringQ[resolvedKey] || resolvedKey === "", resolvedKey = "lm-studio"];
+        Return @ iQueryOpenAIAPI[resolvedKey, model, prompt, url]
+      ]
+    ];
+    (* \:901a\:5e38\:30d7\:30ed\:30d0\:30a4\:30c0\:30fc (\:672a\:5909\:66f4) *)
     apiKey = Quiet[NBAccess`NBGetAPIKey[provider,
       PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
     If[apiKey === $Failed || !StringQ[apiKey],
@@ -5345,6 +5653,8 @@ iQueryViaAPI[provider_String, model_String, prompt_String, customURL_String:""] 
       _,
         iL["Error: \:672a\:5bfe\:5fdc\:30d7\:30ed\:30d0\:30a4\:30c0: ", "Error: Unsupported provider: "] <> provider]
   ];
+SyntaxInformation[iQueryViaAPI] =
+  {"ArgumentsPattern" -> {_, _, _, _., OptionsPattern[]}};
 
 (* \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:901a\:77e5: nb===None \:306a\:3089 CellPrint (In/Out \:9593), NotebookObject \:306a\:3089 NotebookWrite *)
 iFallbackNotify[None, text_String, color_] :=
@@ -5588,6 +5898,98 @@ iReadAnthropicResult[outFile_String, errFile_String] :=
     "Error: API response unreadable."
   ];
 
+(* ============================================================
+   LM Studio MCP (/api/v1/chat) \:7528\:306e\:975e\:540c\:671f PS1 (2026-04-24 \:8ffd\:52a0)
+   - body \:5168\:4f53\:3092 Mathematica \:5074\:3067\:69cb\:7bc9\:3057 body.json \:306b\:4fdd\:5b58
+   - PS1 \:306f\:5358\:7d14\:306b POST \:3057\:3066\:3001 output[].message.content \:3092\:7d50\:5408
+   - \:6226\:7565: \:623b\:308a\:5024\:306e\:30d5\:30a3\:30fc\:30eb\:30c9\:540d\:3092 iPrepareAnthropicPS1 \:3068\:63c3\:3048\:308b\:3053\:3068\:3067\:3001
+     iStartFallbackAsync \:306e\:65e2\:5b58 StartProcess + ScheduledTask \:7d4c\:8def\:3092\:305d\:306e\:307e\:307e\:6d41\:7528\:3057\:3001
+     \:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:3092\:30d6\:30ed\:30c3\:30af\:305b\:305a\:306b MCP (integrations) \:304c\:4f7f\:3048\:308b\:3002
+   ============================================================ *)
+
+iPrepareLMStudioMCPPS1[apiKey_String, model_String, prompt_String,
+    url_String:"http://localhost:1234/api/v1/chat", psTimeout_Integer:300] :=
+  Module[{psExe, tmpDir, bodyFile, outFile, errFile, ps1File, strm, script,
+          bodyAssoc, bodyText, integrations, ctxLen, temp},
+    psExe = iResolvePowerShellExe[];
+    If[!StringQ[psExe], Return[$Failed]];
+    tmpDir = iMakeTempDir[];
+    (* \:540d\:79f0\:306f iPrepareAnthropicPS1 \:3068\:63c3\:3048\:308b (\:5f8c\:6bb5\:306e StartProcess \:3092\:5171\:901a\:5316\:3059\:308b\:305f\:3081) *)
+    bodyFile   = FileNameJoin[{tmpDir, "body.json"}];
+    outFile    = FileNameJoin[{tmpDir, "response.txt"}];
+    errFile    = FileNameJoin[{tmpDir, "error.txt"}];
+    ps1File    = FileNameJoin[{tmpDir, "fb_lmsmcp.ps1"}];
+    (* body \:5168\:4f53\:3092 Mathematica \:5074\:3067\:69cb\:7bc9 *)
+    integrations = $ClaudeLMStudioIntegrations;
+    ctxLen       = $ClaudeLMStudioContextLength;
+    temp         = $ClaudeLMStudioTemperature;
+    bodyAssoc = <|"model" -> model, "input" -> iHoistThinkPrefix[prompt]|>;
+    If[ListQ[integrations] && Length[integrations] > 0,
+      bodyAssoc = Join[bodyAssoc, <|"integrations" -> integrations|>]];
+    If[IntegerQ[ctxLen] && ctxLen > 0,
+      bodyAssoc = Join[bodyAssoc, <|"context_length" -> ctxLen|>]];
+    If[NumericQ[temp],
+      bodyAssoc = Join[bodyAssoc, <|"temperature" -> temp|>]];
+    bodyText = Quiet @ Check[
+      ExportString[bodyAssoc, "RawJSON", "Compact" -> True], $Failed];
+    If[!StringQ[bodyText],
+      bodyText = Quiet @ Check[
+        Developer`WriteRawJSONString[bodyAssoc, "Compact" -> True], $Failed]];
+    If[!StringQ[bodyText], Return[$Failed]];
+    (* body.json \:66f8\:304d\:51fa\:3057 *)
+    strm = OpenWrite[bodyFile, BinaryFormat -> True];
+    BinaryWrite[strm, ToCharacterCode[bodyText, "UTF-8"], "Byte"];
+    Close[strm];
+    (* PowerShell \:30b9\:30af\:30ea\:30d7\:30c8: body.json \:3092\:305d\:306e\:307e\:307e POST\:3001output[].message.content \:3092\:7d50\:5408 *)
+    script = StringJoin[
+      "param([string]$BodyFile,[string]$OutFile,[string]$ErrFile,[string]$ApiKey,[string]$Url,[string]$Model)\n",
+      "$ErrorActionPreference = 'Stop'\n",
+      "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13\n",
+      "$utf8 = New-Object System.Text.UTF8Encoding($false)\n",
+      "try {\n",
+      "  Add-Type -AssemblyName System.Net.Http\n",
+      "  $payloadBytes = [System.IO.File]::ReadAllBytes($BodyFile)\n",
+      "  $handler = New-Object System.Net.Http.HttpClientHandler\n",
+      "  $client = New-Object System.Net.Http.HttpClient($handler)\n",
+      "  $client.Timeout = [System.TimeSpan]::FromSeconds(", ToString[psTimeout * 2 + 120], ")\n",
+      "  $client.DefaultRequestHeaders.Add('Authorization', 'Bearer ' + $ApiKey)\n",
+      "  $content = New-Object System.Net.Http.ByteArrayContent -ArgumentList (,$payloadBytes)\n",
+      "  $content.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('application/json; charset=utf-8')\n",
+      "  $response = $client.PostAsync($Url, $content).GetAwaiter().GetResult()\n",
+      "  $respBytes = $response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()\n",
+      "  $respText = $utf8.GetString($respBytes)\n",
+      "  if (-not $response.IsSuccessStatusCode) { [System.IO.File]::WriteAllText($ErrFile, 'HTTP ' + [int]$response.StatusCode + ': ' + $respText, $utf8); exit 1 }\n",
+      "  $obj = $respText | ConvertFrom-Json\n",
+      "  $parts = [System.Collections.ArrayList]::new()\n",
+      "  if ($null -ne $obj.output) {\n",
+      "    foreach ($o in $obj.output) {\n",
+      "      if ($null -ne $o -and $o.type -eq 'message') {\n",
+      "        $c = $o.content\n",
+      "        if ($null -ne $c) { [void]$parts.Add([string]$c) }\n",
+      "      }\n",
+      "    }\n",
+      "  }\n",
+      "  $text = [string]::Join(\"`n\", $parts.ToArray())\n",
+      "  if ([string]::IsNullOrEmpty($text)) { $text = $respText }\n",
+      "  [System.IO.File]::WriteAllText($OutFile, $text, $utf8)\n",
+      "  $content.Dispose(); $client.Dispose(); $handler.Dispose(); exit 0\n",
+      "} catch {\n",
+      "  $msg = ($_ | Out-String)\n",
+      "  try { if ($null -ne $content) { $content.Dispose() } } catch {}\n",
+      "  try { if ($null -ne $client) { $client.Dispose() } } catch {}\n",
+      "  try { if ($null -ne $handler) { $handler.Dispose() } } catch {}\n",
+      "  [System.IO.File]::WriteAllText($ErrFile, $msg, $utf8); exit 1\n",
+      "}\n"
+    ];
+    Export[ps1File, script, "Text", CharacterEncoding -> "UTF-8"];
+    (* \:623b\:308a\:5024: iPrepareAnthropicPS1 \:3068\:540c\:3058\:5f62\:5f0f\:3002
+       promptFile \:306b body.json \:3092\:5165\:308c\:308b\:3053\:3068\:3067\:3001
+       \:65e2\:5b58 StartProcess \:306e\:5f15\:6570\:304c\:305d\:306e\:307e\:307e\:4f7f\:3048\:308b\:3002 *)
+    <|"psExe" -> psExe, "tmpDir" -> tmpDir, "ps1File" -> ps1File,
+      "promptFile" -> bodyFile, "outFile" -> outFile, "errFile" -> errFile,
+      "apiKey" -> apiKey, "url" -> url, "model" -> model|>
+  ];
+
 (* \:975e\:540c\:671f\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af: \:30e2\:30c7\:30eb\:30ea\:30b9\:30c8\:3092\:9806\:6b21\:8a66\:884c (\:30ab\:30fc\:30cd\:30eb\:975e\:30d6\:30ed\:30c3\:30af)
    modelIdx \:304b\:3089\:958b\:59cb\:3057\:3001\:6210\:529f\:3057\:305f\:3089 callback \:3092\:547c\:3076
    \:5168\:30e2\:30c7\:30eb\:5931\:6557\:6642\:306f callback[$Failed] \:3092\:547c\:3076 (\:547c\:3073\:51fa\:3057\:5074\:304c\:51e6\:7406) *)
@@ -5657,9 +6059,9 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
       provider = entry[[1]];
       model    = entry[[2]];
       customURL = If[Length[entry] >= 3, entry[[3]], ""]];
-    (* API \:30ad\:30fc\:53d6\:5f97: lmstudio \:306f\:30ad\:30fc\:4e0d\:8981 *)
+    (* API \:30ad\:30fc\:53d6\:5f97: lmstudio \:306f NBAccess \:7d4c\:7531\:3067\:89e3\:6c7a (Auth ON \:5bfe\:5fdc) *)
     If[ToLowerCase[provider] === "lmstudio",
-      apiKey = "lm-studio",
+      apiKey = iResolveLMStudioAPIKey[customURL],
       apiKey = Quiet[NBAccess`NBGetAPIKey[provider,
         PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
       If[!StringQ[apiKey],
@@ -5672,16 +6074,23 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
         Cell[noticeText, "Print",
           FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]],
       iFallbackNotifyAndLog[nb, noticeText, RGBColor[0.8, 0.4, 0]]]];
-    prepared = iPrepareAnthropicPS1[apiKey, model, prompt,
-      Which[
-        ToLowerCase[provider] === "anthropic" && customURL === "",
-          "https://api.anthropic.com/v1/messages",
-        ToLowerCase[provider] === "lmstudio",
-          iEnsureChatCompletionsPath[If[customURL =!= "", customURL, "http://localhost:1234"]],
-        customURL =!= "", customURL,
-        True, "https://api.openai.com/v1/chat/completions"],
-      If[ToLowerCase[provider] === "lmstudio", "openai", provider],
-      resolvedTimeout, mediaFiles];
+    (* \[HorizontalLine]\[HorizontalLine] PS1 \:6e96\:5099: lmstudio \:306f MCP \:5bfe\:5fdc\:7248 (/api/v1/chat), \:305d\:308c\:4ee5\:5916\:306f\:5f93\:6765\:7248 \[HorizontalLine]\[HorizontalLine] *)
+    prepared = If[ToLowerCase[provider] === "lmstudio",
+      (* LM Studio MCP \:7d4c\:8def: /api/v1/chat + integrations \:5bfe\:5fdc\:3002
+         StartProcess / ScheduledTask \:306f\:65e2\:5b58\:30ed\:30b8\:30c3\:30af\:3092\:305d\:306e\:307e\:307e\:4f7f\:3046\:305f\:3081
+         \:623b\:308a\:5024\:306f iPrepareAnthropicPS1 \:3068\:540c\:5f62\:5f0f (promptFile \:306b body.json) *)
+      iPrepareLMStudioMCPPS1[apiKey, model, prompt,
+        iEnsureLMStudioV1ChatPath[If[customURL =!= "", customURL, "http://localhost:1234"]],
+        resolvedTimeout],
+      iPrepareAnthropicPS1[apiKey, model, prompt,
+        Which[
+          ToLowerCase[provider] === "anthropic" && customURL === "",
+            "https://api.anthropic.com/v1/messages",
+          customURL =!= "", customURL,
+          True, "https://api.openai.com/v1/chat/completions"],
+        provider,
+        resolvedTimeout, mediaFiles]
+    ];
     If[prepared === $Failed,
       iStartFallbackAsync[prompt, nb, callback, models, modelIdx + 1, jobId, timeout, mediaFiles];
       Return[]];
@@ -6209,7 +6618,7 @@ Options[ClaudeQuerySync] = {
 ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
   Module[{modelSpec, response, nb, startTime, progressTask, label, elapsed,
           privLevel, useFallback},
-    modelSpec = OptionValue[Model];
+    modelSpec = iResolveDefaultModelSpec[OptionValue[Model]];
     privLevel = Replace[OptionValue[PrivacyLevel], Automatic -> 0.0];
     useFallback = TrueQ[OptionValue[Fallback]];
 
@@ -6324,7 +6733,7 @@ ClaudeQueryBg[prompt_String, opts:OptionsPattern[]] :=
            ScheduledTask/SocketListen \:5185\:3067\:3082\:5b89\:5168\:3002 *)
         iClaudeQueryRaw[prompt]],
       (* === Fallback -> True: Anthropic API \:76f4\:63a5\:547c\:3073\:51fa\:3057 (\:8ab2\:91d1\:3042\:308a) === *)
-      iClaudeQueryBgAPI[prompt, OptionValue[Model], OptionValue[Timeout]]
+      iClaudeQueryBgAPI[prompt, iResolveDefaultModelSpec[OptionValue[Model]], OptionValue[Timeout]]
     ]
   ];
 
@@ -6432,7 +6841,7 @@ ClaudeQueryBg[items_List, opts:OptionsPattern[]] :=
           iClaudeQueryRaw[items]],
         (* API \:30d1\:30b9: \:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb content \:914d\:5217\:3092\:69cb\:7bc9 *)
         iClaudeQueryBgAPIMultimodal[items,
-          OptionValue[Model], OptionValue[Timeout]]
+          iResolveDefaultModelSpec[OptionValue[Model]], OptionValue[Timeout]]
       ]
     ]
   ];
@@ -6600,7 +7009,7 @@ Options[ClaudeQueryAsync] = {
 ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPattern[]] :=
   Module[{modelSpec, privLevel, useFallback, availModels, useClaudeCode,
           jobId, wrappedCallback, accessLevel, norm, hasMedia, mediaFiles},
-    modelSpec = OptionValue[Model];
+    modelSpec = iResolveDefaultModelSpec[OptionValue[Model]];
     privLevel = Replace[OptionValue[PrivacyLevel], Automatic -> 0.0];
     useFallback = TrueQ[OptionValue[Fallback]];
     accessLevel = If[privLevel > 0, privLevel, 0.5];
@@ -6866,7 +7275,7 @@ ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
     $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
   With[{nb = Quiet[EvaluationNotebook[]],
         ae = OptionValue[AutoEvaluate],
-        mdl = OptionValue[Model],
+        mdl = iResolveDefaultModelSpec[OptionValue[Model]],
         ps = OptionValue[PrivacySpec],
         ap = TrueQ[OptionValue[AutoPrivate]],
         tmo = OptionValue[Timeout],
@@ -6894,7 +7303,7 @@ ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
     $iAllowWebSearch = TrueQ[OptionValue[ClaudeQuery, {opts}, WebSearch]];
   With[{nb = session["Notebook"],
         ae = OptionValue[ClaudeQuery, {opts}, AutoEvaluate],
-        mdl = OptionValue[ClaudeQuery, {opts}, Model],
+        mdl = iResolveDefaultModelSpec[OptionValue[ClaudeQuery, {opts}, Model]],
         ps = OptionValue[ClaudeQuery, {opts}, PrivacySpec],
         ap = TrueQ[OptionValue[ClaudeQuery, {opts}, AutoPrivate]],
         tmo = OptionValue[ClaudeQuery, {opts}, Timeout]},
@@ -6921,7 +7330,7 @@ ClaudeQuery[items_List, opts:OptionsPattern[]] := (
     $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
   With[{nb = Quiet[EvaluationNotebook[]],
         ae = OptionValue[AutoEvaluate],
-        mdl = OptionValue[Model],
+        mdl = iResolveDefaultModelSpec[OptionValue[Model]],
         ps = OptionValue[PrivacySpec],
         ap = TrueQ[OptionValue[AutoPrivate]],
         tmo = OptionValue[Timeout]},
@@ -6949,7 +7358,7 @@ ClaudeQuery[session_Association, items_List, opts:OptionsPattern[]] := (
     $iAllowWebSearch = TrueQ[OptionValue[ClaudeQuery, {opts}, WebSearch]];
   With[{nb = session["Notebook"],
         ae = OptionValue[ClaudeQuery, {opts}, AutoEvaluate],
-        mdl = OptionValue[ClaudeQuery, {opts}, Model],
+        mdl = iResolveDefaultModelSpec[OptionValue[ClaudeQuery, {opts}, Model]],
         ps = OptionValue[ClaudeQuery, {opts}, PrivacySpec],
         ap = TrueQ[OptionValue[ClaudeQuery, {opts}, AutoPrivate]],
         tmo = OptionValue[ClaudeQuery, {opts}, Timeout]},
@@ -8111,7 +8520,7 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, single
   With[{nb = EvaluationNotebook[], st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate],
         actualTask = iResolveWebFetchWithFallback[task, OptionValue[WebFetch], $currentUseFallback],
         ri = OptionValue[RepeatInterval],
-        mdl = Replace[OptionValue[Model], Except[_List] -> Automatic],
+        mdl = iResolveDefaultModelSpec[Replace[OptionValue[Model], Except[_List] -> Automatic]],
         ps = OptionValue[PrivacySpec], ap = TrueQ[OptionValue[AutoPrivate]],
         tmo = OptionValue[Timeout]},
     If[TrueQ[ClaudeCode`$ClaudeEvalVerbose],
@@ -8156,7 +8565,7 @@ ClaudeEval[items_List, opts:OptionsPattern[]] := Module[{dispatchResult},
     $iAllowReadTool = False;
     $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
   With[{nb = EvaluationNotebook[], st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate],
-        wf = OptionValue[WebFetch], ri = OptionValue[RepeatInterval], mdl = OptionValue[Model],
+        wf = OptionValue[WebFetch], ri = OptionValue[RepeatInterval], mdl = iResolveDefaultModelSpec[OptionValue[Model]],
         ps = OptionValue[PrivacySpec], ap = TrueQ[OptionValue[AutoPrivate]],
         fb = $currentUseFallback, tmo = OptionValue[Timeout]},
   Module[{norm},
@@ -8197,7 +8606,7 @@ ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := (
     $iAllowWebSearch = TrueQ[OptionValue[ClaudeEval, {opts}, WebSearch]];
   With[{st = OptionValue[ClaudeEval, {opts}, StartTime], ae = OptionValue[ClaudeEval, {opts}, AutoEvaluate],
         actualTask = iResolveWebFetchWithFallback[task, OptionValue[ClaudeEval, {opts}, WebFetch], $currentUseFallback],
-        ri = OptionValue[ClaudeEval, {opts}, RepeatInterval], mdl = OptionValue[ClaudeEval, {opts}, Model],
+        ri = OptionValue[ClaudeEval, {opts}, RepeatInterval], mdl = iResolveDefaultModelSpec[OptionValue[ClaudeEval, {opts}, Model]],
         ps = OptionValue[ClaudeEval, {opts}, PrivacySpec], ap = TrueQ[OptionValue[ClaudeEval, {opts}, AutoPrivate]],
         tmo = OptionValue[ClaudeEval, {opts}, Timeout]},
     (* \[HorizontalLine]\[HorizontalLine] $UseClaudeRuntime \:5206\:5c90: runtime \:7d4c\:7531 expression-proposal loop \[HorizontalLine]\[HorizontalLine] *)
@@ -8232,7 +8641,7 @@ ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := (
           ae = OptionValue[ClaudeEval, {opts}, AutoEvaluate],
           wf = OptionValue[ClaudeEval, {opts}, WebFetch],
           ri = OptionValue[ClaudeEval, {opts}, RepeatInterval],
-          mdl = OptionValue[ClaudeEval, {opts}, Model],
+          mdl = iResolveDefaultModelSpec[OptionValue[ClaudeEval, {opts}, Model]],
           ps = OptionValue[ClaudeEval, {opts}, PrivacySpec],
           ap = TrueQ[OptionValue[ClaudeEval, {opts}, AutoPrivate]],
           fb = $currentUseFallback,
@@ -8487,7 +8896,7 @@ ContinueEval[session_Association, instruction_String:"\:30a8\:30e9\:30fc\:3092\:
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = False;
     $iAllowWebSearch = TrueQ[OptionValue[WebSearch]];
-  With[{st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate], mdl = OptionValue[Model],
+  With[{st = OptionValue[StartTime], ae = OptionValue[AutoEvaluate], mdl = iResolveDefaultModelSpec[OptionValue[Model]],
         ps = OptionValue[PrivacySpec], ap = TrueQ[OptionValue[AutoPrivate]],
         tmo = OptionValue[Timeout]},
     (* \[HorizontalLine]\[HorizontalLine] $UseClaudeRuntime \:5206\:5c90: runtime \:7d4c\:7531 continuation \[HorizontalLine]\[HorizontalLine] *)
@@ -15537,8 +15946,7 @@ ShowClaudePalette[] := (
       Style[iL[" \:8a2d\:5b9a", " Settings"], Bold, 8, GrayLevel[0.3]],
       Dynamic[
         Button[
-          Style[iL["\:30e2\:30c7\:30eb: ", "Model: "] <>
-            Switch[$iPaletteModel, "opus", "Opus", "sonnet", "Sonnet", _, "Default"],
+          Style[iL["\:30e2\:30c7\:30eb: ", "Model: "] <> iPaletteModelLabel[],
             9, Bold, GrayLevel[0.2]],
           ($iPaletteModel = Switch[$iPaletteModel,
             "default", "opus", "opus", "sonnet", "sonnet", "default", _, "default"];
@@ -18661,7 +19069,7 @@ iILaunchChunkAsync[chunk_Association, prompt_String,
       MemberQ[{"anthropic","lmstudio","openai"}, ToLowerCase[provider]],
         Module[{apiKey, apiURL},
           apiKey = If[ToLowerCase[provider] === "lmstudio",
-            "lm-studio",
+            iResolveLMStudioAPIKey[],
             Quiet[NBAccess`NBGetAPIKey[provider,
               PrivacySpec -> <|"AccessLevel" -> 1.0|>]]];
           If[!StringQ[apiKey], Return[$Failed]];
@@ -21261,7 +21669,8 @@ iClaudeProcessFileLaunchNodeB[prompt_String] :=
 iClaudeProcessFileLaunchNodeA[prompt_String, provider_String,
                                model_String, customURL_String] :=
   Module[{apiKey, url, prepared, proc},
-    apiKey = If[ToLowerCase[provider] === "lmstudio", "lm-studio",
+    apiKey = If[ToLowerCase[provider] === "lmstudio",
+      iResolveLMStudioAPIKey[customURL],
       Quiet[NBAccess`NBGetAPIKey[provider,
         PrivacySpec -> <|"AccessLevel" -> 1.0|>]]];
     If[!StringQ[apiKey], Return[None]];
@@ -21520,7 +21929,7 @@ NBFileTranslate[inputPath_String, outputPath_String,
               customURL = If[Length[$ClaudePrivateModel] >= 3,
                 $ClaudePrivateModel[[3]], ""];
               apiKey = If[ToLowerCase[provider] === "lmstudio",
-                "lm-studio",
+                iResolveLMStudioAPIKey[customURL],
                 Quiet[NBAccess`NBGetAPIKey[provider,
                   PrivacySpec -> <|"AccessLevel"->1.0|>]]];
               If[!StringQ[apiKey],
@@ -24814,7 +25223,32 @@ End[];
 EndPackage[];
 
 (* Phase 33 Task 5 version marker *)
-ClaudeCode`$claudecodeVersion = "2026-04-22T11-phase30-8-tool-result-body-priority";
+ClaudeCode`$claudecodeVersion = "2026-04-24T09-palette-model-followup";
+(* v2026-04-24T09: \:30d1\:30ec\:30c3\:30c8\:306e\:30e2\:30c7\:30eb\:8868\:793a\:3092 $ClaudeModel \:306e\:73fe\:5728\:5024\:306b\:8ffd\:5f93\:3055\:305b\:308b\:3002
+   iPaletteModelLabel \:30d8\:30eb\:30d1\:65b0\:8a2d\:3002\:30ea\:30b9\:30c8\:5f62\:5f0f $ClaudeModel \:306e\:5834\:5408\:306f
+   2 \:756a\:76ee\:8981\:7d20\:306e\:30b9\:30e9\:30c3\:30b7\:30e5\:4ee5\:964d (\:4f8b: "qwen3.6-27b") \:3092\:8868\:793a\:3002 *)
+(* v2026-04-24T08: LM Studio MCP \:7d4c\:8def\:3092\:975e\:540c\:671f\:5316\:3002
+   iPrepareLMStudioMCPPS1 \:65b0\:8a2d: /api/v1/chat + integrations \:3092\:51fa\:3059 PS1 \:3092\:751f\:6210\:3002
+   iStartFallbackAsync \:306e lmstudio \:5206\:5c90\:304c\:65e2\:5b58 StartProcess + ScheduledTask
+   \:30d1\:30bf\:30fc\:30f3\:306b\:4e57\:308a\:3001\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:3092\:30d6\:30ed\:30c3\:30af\:305b\:305a\:306b MCP (exa) \:304c\:4f7f\:3048\:308b\:3002
+   T06 \:306e\:540c\:671f\:30b7\:30e7\:30fc\:30c8\:30ab\:30c3\:30c8\:306f\:524a\:9664\:3002 *)
+(* v2026-04-24T07: $ClaudeLMStudioContextLength \:306e\:65e2\:5b9a\:5024\:3092 8000 \:2192 None \:306b\:5909\:66f4\:3002
+   None / Automatic / \:975e\:6b63\:6574\:6570\:306e\:5834\:5408\:306f body \:306b context_length \:3092\:542b\:3081\:305a\:3001
+   LM Studio \:306e\:30e2\:30c7\:30eb\:8a2d\:5b9a (UI \:306e Context Length) \:304c\:305d\:306e\:307e\:307e\:4f7f\:308f\:308c\:308b\:3002
+   \:6574\:6570\:6307\:5b9a\:6642\:306e\:307f\:30e2\:30c7\:30eb\:5074\:8a2d\:5b9a\:3092\:4e0a\:66f8\:304d\:3059\:308b\:3002 *)
+(* v2026-04-24T06: iStartFallbackAsync \:306b LM Studio \:30b7\:30e7\:30fc\:30c8\:30ab\:30c3\:30c8\:3002 *)
+(* v2026-04-24T05: $ClaudeModel \:304c {provider, model, url} \:30ea\:30b9\:30c8\:5f62\:5f0f\:306e\:5834\:5408\:306e\:30b5\:30dd\:30fc\:30c8\:3002 *)
+(* v2026-04-24T04: \:5168 5 \:7b87\:6240\:306e "lm-studio" \:30ea\:30c6\:30e9\:30eb\:3092 NBAccess \:7d4c\:7531\:306e
+   iResolveLMStudioAPIKey \:30d8\:30eb\:30d1\:306b\:7f6e\:304d\:63db\:3048\:3002fallback chain (iStartFallbackAsync)\:3001
+   PS1 \:7d4c\:7531 launch\:3001\:7ffb\:8a33\:30eb\:30fc\:30d7\:306a\:3069\:5168\:7d4c\:8def\:3067 LM Studio Auth \:5bfe\:5fdc\:3002 *)
+(* v2026-04-24T03: \:5f93\:6765\:7d4c\:8def (/v1/chat/completions) \:306b\:3082 NBAccess \:7d4c\:7531\:306e
+   \:30c8\:30fc\:30af\:30f3\:89e3\:6c7a\:3092\:8ffd\:52a0\:3002 *)
+(* v2026-04-24T02: \:30d1\:30c3\:30c1\:5185\:306e \\u... \:30a8\:30b9\:30b1\:30fc\:30d7\:3092 \\:xxxx \:306b\:7f6e\:63db
+   (Wolfram Language \:306f\:6587\:5b57\:5217\:30ea\:30c6\:30e9\:30eb\:3067 \\u \:3092\:89e3\:91c8\:3057\:306a\:3044)\:3002 *)
+(* v2026-04-24T01: LM Studio \:30c8\:30fc\:30af\:30f3\:89e3\:6c7a\:3092 NBAccess\`NBGetLocalLLMAPIKey \:306b\:7d71\:5408\:3002 *)
+(* v2026-04-24T00: LM Studio MCP \:7d71\:5408\:3002$ClaudeLMStudioIntegrations \:304c\:975e\:7a7a\:306a\:3089
+   iQueryViaAPI (lmstudio) \:306f POST /api/v1/chat + integrations \:3092\:4f7f\:3046\:3002 *)
+(* v2026-04-22T11: Phase 30.8 tool-result body priority (\:4ee5\:524d\:306e\:5b89\:5b9a\:7248)\:3002 *)
 (* v2026-04-21: \:30ed\:30fc\:30c9\:6642\:306e Print \:3092\:62d1\:58f0\:3002 Windows \:3067\:6587\:5b57\:5316\:3051\:306b\:306a\:308a\:3001
    \:30e1\:30c3\:30bb\:30fc\:30b8\:30a6\:30a3\:30f3\:30c9\:30a6\:304c\:8868\:793a\:3055\:308c\:305f\:307e\:307e\:306b\:306a\:3063\:3066\:771f\:306e\:30a8\:30e9\:30fc\:304c\:898b\:3048\:306a\:304f\:306a\:308b\:3002
    \:30d0\:30fc\:30b8\:30e7\:30f3\:306f $claudecodeVersion \:3067\:53c2\:7167\:53ef\:80fd\:3002 *)
