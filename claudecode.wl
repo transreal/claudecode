@@ -106,7 +106,14 @@ Quiet[Scan[
    "License", "Model", "WebFetch", "WebSearch", "RepeatInterval", "PrivacySpec",
    "Keywords", "Title", "Refetch",
    "Owner", "Repository", "Branch", "BaseBranch",
-   "References", "Demos", "Disclaimer", "Acknowledgments"}
+   "References", "Demos", "Disclaimer", "Acknowledgments",
+   (* === merged from claudecode_editmodes.wl (Phase 36 stage2 restart) === *)
+   "$ClaudeEditModesVersion",
+   "$ClaudeEditModeAppendTagOpen", "$ClaudeEditModeAppendTagClose",
+   "$ClaudeEditModeInsertTagClose",
+   "ClaudeAppendBlockToPackage", "ClaudeInsertBeforeAnchorInPackage",
+   "ClaudeParseEditModeResponse", "ClaudeAutoDetectEditMode",
+   "ClaudeBuildEditModePromptInstructions", "ClaudeUpdatePackageWithMode"}
 ], Remove::ssym];
 
 ClaudeSpec::usage =
@@ -749,7 +756,7 @@ NotebookLLMGraphPlot::usage =
   "                         \:72ec\:7acb\:30eb\:30fc\:30c8\:3068\:3057\:3066\:8868\:793a\:3002False \:3067\:65e7\:633b\:52d5\:3002\n" <>
   "  \"OrderByTime\"       -> False (\:65e2\:5b9a): \:624b\:52d5\:5ea7\:6a19\:8a08\:7b97\:3092\:5207\:308a\:3001Mathematica \:306e\n" <>
   "                         LayeredDigraphEmbedding \:306b\:4efb\:305b\:308b (\:898b\:3084\:3059\:3044\:914d\:7f6e)\:3002\n" <>
-  "                         True \:3067\:6642\:523b\:9806\:6574\:5217 (\:5404 WCC \:3092\:5de6\:2192\:53f3)\:3002\n" <>
+  "                         True \:3067\:6642\:523b\:9806\:6574\:5217 (\:5404 WCC \:3092\:5de6\[RightArrow]\:53f3)\:3002\n" <>
   "  \"HiddenEdgeTypes\"   -> Automatic (\:65e2\:5b9a): \:63cf\:753b\:6642\:306b\:9664\:5916\:3059\:308b\:30a8\:30c3\:30b8\n" <>
   "                         Type \:306e\:30ea\:30b9\:30c8\:3002Automatic \:306f SplitHistoryChain \:304b\:3089\:6c7a\:5b9a\:3002\n" <>
   "                         \:660e\:793a\:6307\:5b9a: {\"ContextInheritance\"} / {} / \:4efb\:610f\:30ea\:30b9\:30c8\:3002\n" <>
@@ -1024,7 +1031,7 @@ $ClaudeEvalAutoThreshold::usage =
 
 $ClaudeEvalVerbose::usage =
   "$ClaudeEvalVerbose \:3092 True \:306b\:3059\:308b\:3068\:3001dispatch \:304c fallback \:3059\:308b\:969b\:306b\:8a3a\:65ad\:60c5\:5831\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
-  "\:65e2\:5b9a: False \:2014 Orchestration \:3068 Single \:306e\:9078\:629e\:3092\:9752\:3044\:6587\:5b57\:3067\:8868\:793a\:3002";
+  "\:65e2\:5b9a: False \[LongDash] Orchestration \:3068 Single \:306e\:9078\:629e\:3092\:9752\:3044\:6587\:5b57\:3067\:8868\:793a\:3002";
 
 $ClaudeEvalAutoLLMMinLength::usage =
   "$ClaudeEvalAutoLLMMinLength \:306f \"Auto\" \:30e2\:30fc\:30c9\:3067 LLM planner \:3092\:8d77\:52d5\:3059\:308b\:6700\:5c0f\:6587\:5b57\:6570\:3002\n" <>
@@ -1066,6 +1073,73 @@ $ClaudeLMStudioIncludeToolTrace::usage =
   "$ClaudeLMStudioIncludeToolTrace \[LongDash] True \:306a\:3089\:3001iQueryLMStudioChat \:306e\:623b\:308a\:5024\:306b\n" <>
   "tool_call \:306e\:30c8\:30ec\:30fc\:30b9 (\:30c4\:30fc\:30eb\:540d\:3001\:5f15\:6570\:3001\:7d50\:679c\:306e\:5148\:982d) \:3092\:5148\:982d\:306b\:4ed8\:52a0\:3059\:308b\:3002\n" <>
   "\:30c7\:30d0\:30c3\:30b0\:7528\:3002\:901a\:5e38\:306f False \:63a8\:5968\:3002";
+
+
+(* ============================================================
+   Merged from claudecode_editmodes.wl (Phase 36 stage2 restart)
+   ============================================================ *)
+
+(* \[FilledSquare] Public API \[FilledSquare] *)
+
+$ClaudeEditModesVersion::usage =
+  "$ClaudeEditModesVersion はパッケージバージョン文字列。";
+
+(* \[HorizontalLine] Tag constants \[HorizontalLine] *)
+
+$ClaudeEditModeAppendTagOpen::usage =
+  "$ClaudeEditModeAppendTagOpen は LLM 応答中の末尾追加開始タグ \"<<<APPEND_AT_END>>>\"。";
+
+$ClaudeEditModeAppendTagClose::usage =
+  "$ClaudeEditModeAppendTagClose は末尾追加終了タグ \"<<<END_APPEND>>>\"。";
+
+$ClaudeEditModeInsertTagClose::usage =
+  "$ClaudeEditModeInsertTagClose は位置指定挿入終了タグ \"<<<END_INSERT>>>\"。";
+
+(* \[HorizontalLine] Direct edit operations (no LLM) \[HorizontalLine] *)
+
+ClaudeAppendBlockToPackage::usage =
+  "ClaudeAppendBlockToPackage[pkgName, content] は\n" <>
+  "$packageDirectory/pkgName.wl の末尾に content (文字列) を追加する。\n" <>
+  "戻り値は <|\"Status\" -> \"OK\"|\"Failed\", \"Path\", \"BackupPath\", \"AppendedChars\"|>。\n" <>
+  "オプション:\n" <>
+  "  \"Backup\" -> True | False (既定 True)\n" <>
+  "  \"BackupSuffix\" -> 文字列 (既定 \"append-block\")\n" <>
+  "  \"EnsureLeadingNewline\" -> True | False (既定 True、ファイル末尾の改行を保証)";
+
+ClaudeInsertBeforeAnchorInPackage::usage =
+  "ClaudeInsertBeforeAnchorInPackage[pkgName, anchor, content] は\n" <>
+  "pkgName.wl 中に唯一存在するアンカー文字列の直前に content を挿入する。\n" <>
+  "戻り値は <|\"Status\" -> \"OK\"|\"Failed\", \"Reason\" (失敗時), \"Path\", \"BackupPath\", \"Position\", \"InsertedChars\"|>。\n" <>
+  "アンカーが見つからない/複数ヒット時は失敗 (\"AnchorNotFound\"|\"AnchorAmbiguous\")。";
+
+(* \[HorizontalLine] LLM response parsing \[HorizontalLine] *)
+
+ClaudeParseEditModeResponse::usage =
+  "ClaudeParseEditModeResponse[response] は LLM 応答からモードと内容を抽出する。\n" <>
+  "戻り値: <|\"Mode\" -> \"AppendBlock\"|\"InsertBefore\"|\"ReplaceFunction\",\n" <>
+  "         \"Content\" -> 文字列, \"Anchor\" -> 文字列|None|>。\n" <>
+  "応答中のタグを優先判定し、タグが無い場合は ReplaceFunction にフォールバック。";
+
+ClaudeAutoDetectEditMode::usage =
+  "ClaudeAutoDetectEditMode[response] は応答からモード名のみを返す軽量版。";
+
+(* \[HorizontalLine] LLM prompt template builder \[HorizontalLine] *)
+
+ClaudeBuildEditModePromptInstructions::usage =
+  "ClaudeBuildEditModePromptInstructions[mode] は LLM プロンプトに付与する応答形式仕様を返す。\n" <>
+  "mode: \"AppendBlock\" | \"InsertBefore\" | \"ReplaceFunction\" | Automatic (既定)。\n" <>
+  "Automatic の場合は 3 形式すべてを LLM に提示し、ユーザー指示文から選ばせる。";
+
+(* \[HorizontalLine] LLM round-trip integration \[HorizontalLine] *)
+
+ClaudeUpdatePackageWithMode::usage =
+  "ClaudeUpdatePackageWithMode[pkgName, prompt, mode] は\n" <>
+  "明示的な編集モードで LLM に問い合わせ、応答を解析して該当経路に振り分ける。\n" <>
+  "オプション:\n" <>
+  "  \"Backup\" -> True | False (既定 True)\n" <>
+  "  \"DryRun\" -> True | False (既定 False、True なら実書き込みせず計画のみ返す)\n" <>
+  "  \"QueryFunction\" -> Automatic | Function (既定 Automatic = ClaudeCode`ClaudeQuerySync)\n" <>
+  "  \"AdditionalInstructions\" -> 文字列 (既定 \"\"、プロンプトに追記する補助指示)";
 
     Begin["`Private`"];(* ============================================================
    \:8a2d\:5b9a\:ff1a\:5fc5\:8981\:306b\:5fdc\:3058\:3066\:624b\:52d5\:3067\:4e0a\:66f8\:304d\:53ef\:80fd
@@ -1604,22 +1678,17 @@ iLoadClaudeMD[];
 
 (* \\:30d7\\:30ed\\:30f3\\:30d7\:30c8\\:5148\\:982d\:306b CLAUDE.md \\:3092\\:7d44\\:307f\\:8fbc\\:3080\\:30d8\:30eb\\:30d1\\:30fc *)
 iClaudeSysPrompt[] :=
-  If[$ClaudeMDContent =!= "",
-    "## Project guidelines (CLAUDE.md)\n\n" <> $ClaudeMDContent <> "\n\n---\n\n",
-    ""
-  ] <> $claudeMathPromptPrefix;
-
-
-(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
-   \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:51fa\:529b\:30d8\:30eb\:30d1\:30fc
-   \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
-(* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:51fa\:529b\:30d8\:30eb\:30d1\:30fc (\:5185\:90e8\:4e92\:63db\:5c64) \[RightArrow] NBAccess\:306b\:59d4\:8b72
-   \:975e\:540c\:671f\:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:4e2d\:306b\:30e6\:30fc\:30b6\:30fc\:304c\:5225\:306e\:30bb\:30eb\:3092\:7de8\:96c6\:3057\:3066\:3044\:3066\:3082\:3001
-   \:5e38\:306b\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:672b\:5c3e\:306b\:8ffd\:8a18\:3059\:308b\:3053\:3068\:3067\:30bb\:30eb\:7834\:640d\:3092\:9632\:6b62\:3059\:308b\:3002 *)
-(* Job active \:4e2d\:306f SelectionMove[After, Notebook] \:3092\:30b9\:30ad\:30c3\:30d7\:3059\:308b\:30d5\:30e9\:30b0\:3002
-   NBJobMoveToAnchor \:5f8c\:306f Job \:304c\:30ab\:30fc\:30bd\:30eb\:4f4d\:7f6e\:3092\:5236\:5fa1\:3057\:3066\:3044\:308b\:305f\:3081\:3001
-   nbPrint \:304c\:672b\:5c3e\:306b\:98db\:3070\:3059\:3068\:51fa\:529b\:4f4d\:7f6e\:304c\:305a\:308c\:308b\:3002
-   \:975e Job \:30d1\:30b9 (ClaudeUpdateDocumentation \:7b49) \:3067\:306f\:672b\:5c3e\:79fb\:52d5\:304c\:5fc5\:8981\:3002 *)
+  Module[{base},
+    base = Which[
+      iClaudeDirectivesAvailableQ[],
+        iClaudeSysPromptViaDirectives[ToString[$ClaudeModel], ""],
+      $ClaudeMDContent =!= "",
+        "## Project guidelines (CLAUDE.md)\n\n" <> $ClaudeMDContent <> "\n\n---\n\n",
+      True,
+        ""
+    ];
+    base <> $claudeMathPromptPrefix
+  ];
 $iJobActiveNb = None;
 
 (* EvaluationCell \:3092\:516c\:958b\:95a2\:6570\:306e\:5192\:982d\:3067\:6355\:6349\:3057\:3001NBBeginJob \:306b\:6e21\:3059\:3002
@@ -2850,7 +2919,7 @@ iMakeBat[promptFile_String, outFile_String, imageDirs_List:{},
          "cd /d \"" <> workDir <> "\"\r\n" <>
          iClaudeCallPrefix[] <>
          "\"" <> $ClaudeExe <> "\" --print" <>
-         If[$ClaudeModel =!= "", " --model \"" <> $ClaudeModel <> "\"", ""] <>
+         If[StringQ[$ClaudeModel] && $ClaudeModel =!= "", " --model \"" <> $ClaudeModel <> "\"", ""] <>  (* B-\:03b2 fix3: $ClaudeModel=Automatic \:6642\:306b\:6587\:5b57\:5217\:9023\:7d50\:30a8\:30e9\:30fc\:3067 bat \:304c\:58ca\:308c\:3066\:3044\:305f *)
          If[$iPaletteEffort =!= "medium", " --effort " <> $iPaletteEffort, ""] <>
          permFlags <>
          addDirFlags <>
@@ -2916,7 +2985,7 @@ iMakeBatStreamJson[promptFile_String, outFile_String, imageDirs_List:{},
          " --output-format stream-json" <>
          " --verbose" <>
          " --include-partial-messages" <>
-         If[$ClaudeModel =!= "", " --model \"" <> $ClaudeModel <> "\"", ""] <>
+         If[StringQ[$ClaudeModel] && $ClaudeModel =!= "", " --model \"" <> $ClaudeModel <> "\"", ""] <>  (* B-\:03b2 fix3: $ClaudeModel=Automatic \:6642\:306b\:6587\:5b57\:5217\:9023\:7d50\:30a8\:30e9\:30fc\:3067 bat \:304c\:58ca\:308c\:3066\:3044\:305f *)
          If[$iPaletteEffort =!= "medium", " --effort " <> $iPaletteEffort, ""] <>
          permFlags <>
          addDirFlags <>
@@ -3106,7 +3175,7 @@ iMakeBatVerbose[promptFile_String, outFile_String, logFile_String] :=
          "cd /d \"" <> workDir <> "\"\r\n" <>
          iClaudeCallPrefix[] <>
          "\"" <> $ClaudeExe <> "\" --print --verbose" <>
-         If[$ClaudeModel =!= "", " --model \"" <> $ClaudeModel <> "\"", ""] <>
+         If[StringQ[$ClaudeModel] && $ClaudeModel =!= "", " --model \"" <> $ClaudeModel <> "\"", ""] <>  (* B-\:03b2 fix3: $ClaudeModel=Automatic \:6642\:306b\:6587\:5b57\:5217\:9023\:7d50\:30a8\:30e9\:30fc\:3067 bat \:304c\:58ca\:308c\:3066\:3044\:305f *)
          If[$iPaletteEffort =!= "medium", " --effort " <> $iPaletteEffort, ""] <>
          permFlags <>
          addDirFlags <>
@@ -4098,8 +4167,8 @@ iExtractRateLimitInfo[text_String] :=
            \:5236\:9650\:304c\:304b\:304b\:3063\:3066\:3044\:308b\:304b\:3092\:5224\:5225\:3059\:308b\:3002
            
            status \:306e\:5024:
-             \"allowed\"  : \:307e\:3060\:4f7f\:3048\:308b \:2192 \:8a18\:9332\:3057\:306a\:3044 (None \:3092\:8fd4\:3059)
-             \"limited\" / \"exceeded\" / \"rejected\" : \:5b9f\:969b\:306b\:30d2\:30c3\:30c8 \:2192 \:8a18\:9332\:3059\:308b
+             \"allowed\"  : \:307e\:3060\:4f7f\:3048\:308b \[RightArrow] \:8a18\:9332\:3057\:306a\:3044 (None \:3092\:8fd4\:3059)
+             \"limited\" / \"exceeded\" / \"rejected\" : \:5b9f\:969b\:306b\:30d2\:30c3\:30c8 \[RightArrow] \:8a18\:9332\:3059\:308b
            
            \:4ee5\:524d\:306f status \:3092\:7121\:8996\:3057\:3066\:3059\:3079\:3066\:8a18\:9332\:3057\:3066\:3044\:305f\:305f\:3081\:3001
            ResetsAt \:306b\:5c06\:6765\:306e\:30d0\:30b1\:30c3\:30c8\:5883\:754c\:304c\:5165\:3063\:3066 \"Rate limit active\"
@@ -5626,7 +5695,7 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
         (* \:5f93\:6765\:7d4c\:8def: /v1/chat/completions
            LM Studio \:306e Authentication \:304c ON \:306a\:3089 NBAccess \:7d4c\:7531\:3067\:30c8\:30fc\:30af\:30f3\:53d6\:5f97\:3059\:308b *)
         url = iEnsureChatCompletionsPath[effectiveURL];
-        (* Option \:2192 \$ClaudeLMStudioAPIToken \:2192 NBAccess \:2192 "lm-studio" \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af *)
+        (* Option \[RightArrow] \$ClaudeLMStudioAPIToken \[RightArrow] NBAccess \[RightArrow] "lm-studio" \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af *)
         resolvedKey = token;
         If[resolvedKey === Automatic, resolvedKey = $ClaudeLMStudioAPIToken];
         If[!StringQ[resolvedKey] || resolvedKey === "",
@@ -5996,7 +6065,7 @@ iPrepareLMStudioMCPPS1[apiKey_String, model_String, prompt_String,
 $iFallbackDone = False;
 $iFallbackActiveTasks = {};
 $iFallbackLastError = ""; (* \:6700\:5f8c\:306e API \:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8 *)
-$iFallbackTimeout = 600; (* \:79d2: \:30ed\:30fc\:30ab\:30eb\:5927\:578b\:63a8\:8ad6\:30e2\:30c7\:30eb\:ff08Qwen 122B, DeepSeek-R1\:7b49\:ff09\:3092\:8003\:616e *)
+$iFallbackTimeout = 3600; (* \:79d2: \:30ed\:30fc\:30ab\:30eb\:5927\:578b\:63a8\:8ad6\:30e2\:30c7\:30eb\:ff08Qwen 122B, DeepSeek-R1\:7b49\:ff09\:3092\:8003\:616e *)
 $iFallbackProgress = <||>;
 
 (* \:524d\:56de\:306e\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:30c1\:30a7\:30fc\:30f3\:3092\:5168\:3066\:505c\:6b62 *)
@@ -8454,7 +8523,7 @@ iClaudeEvalTryDispatch[task_, optsList_List] :=
     If[Head[hook] =!= Function, Return[$iClaudeEvalNotDispatched]];
     stVal = OptionValue[ClaudeEval, optsList, StartTime];
     riVal = OptionValue[ClaudeEval, optsList, RepeatInterval];
-    (* StartTime \:30c7\:30d5\:30a9\:30eb\:30c8\:306f Now (\:5373\:6642\:5b9f\:884c) \:2014 Now \:3084\:904e\:53bb\:306f dispatch \:53ef\:3002
+    (* StartTime \:30c7\:30d5\:30a9\:30eb\:30c8\:306f Now (\:5373\:6642\:5b9f\:884c) \[LongDash] Now \:3084\:904e\:53bb\:306f dispatch \:53ef\:3002
        5 \:79d2\:3088\:308a\:5148\:306e\:6642\:523b\:306a\:3089\:30b9\:30b1\:30b8\:30e5\:30fc\:30eb\:5b9f\:884c\:3068\:5224\:5b9a\:3057\:3066 dispatch \:3092\:30b9\:30ad\:30c3\:30d7\:3002 *)
     stIsFuture = Quiet @ Check[
       AbsoluteTime[stVal] > AbsoluteTime[] + 5,
@@ -10569,12 +10638,152 @@ iExtractFunctions[code_String] :=
 
 (* \:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:542b\:307e\:308c\:308b\:95a2\:6570\:540d\:3092\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30a8\:30af\:30b9\:30dd\:30fc\:30c8\:540d\:4e00\:89a7\:3068\:7167\:5c04\:3057\:3066\:63a8\:5b9a *)
 
+(* ============================================================
+   \:88dc\:52a9 API \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8 (api_*.md) \:7528\:30d8\:30eb\:30d1\:30fc\:7fa4
+   \:88dc\:52a9\:30d1\:30c3\:30b1\:30fc\:30b8 <pkg>_<aux>.wl \:306b\:5bfe\:5fdc\:3059\:308b api_<aux>.md \:3092\:6271\:3046\:3002
+   ============================================================ *)
+
+(* api_<aux>.md \:5f62\:5f0f\:306e\:30d5\:30a1\:30a4\:30eb\:540d\:304b\:3092\:5224\:5b9a *)
+iIsAuxApiName[s_String] :=
+  StringMatchQ[s, "api_" ~~ (LetterCharacter | DigitCharacter | "_") ..];
+iIsAuxApiName[___] := False;
+
+(* api_<aux>.md \:307e\:305f\:306f api_<aux> \:304b\:3089 <aux> \:3092\:62bd\:51fa\:3002\:8a72\:5f53\:3057\:306a\:3051\:308c\:3070 None *)
+iExtractAuxNameFromApiDoc[docFile_String] :=
+  Module[{base = FileBaseName[docFile]},
+    If[iIsAuxApiName[base],
+      StringDrop[base, 4],  (* "api_" \:524a\:9664 \[RightArrow] "directives" \:7b49 *)
+      None
+    ]
+  ];
+iExtractAuxNameFromApiDoc[___] := None;
+
+(* \:88dc\:52a9\:30d1\:30c3\:30b1\:30fc\:30b8\:30bd\:30fc\:30b9\:30d5\:30a1\:30a4\:30eb\:3092\:63a2\:7d22\:3002\:898b\:3064\:304b\:3089\:306a\:3051\:308c\:3070 $Failed *)
+iFindAuxPackageSource[packageName_String, auxName_String] :=
+  Module[{pkgDir = Global`$packageDirectory, candidates},
+    If[!StringQ[pkgDir] || pkgDir === "", Return[$Failed]];
+    candidates = {
+      FileNameJoin[{pkgDir, packageName <> "_" <> auxName <> ".wl"}],
+      FileNameJoin[{pkgDir, packageName, "Kernel", packageName <> "_" <> auxName <> ".wl"}]
+    };
+    SelectFirst[candidates, FileExistsQ, $Failed]
+  ];
+iFindAuxPackageSource[___] := $Failed;
+
+(* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:30fb\:66f4\:65b0\:6642\:306b docFile \:306b\:5fdc\:3058\:305f sourceCode \:3092\:89e3\:6c7a\:3002
+   \:8fd4\:5024 Association:
+     "isAux"          -> True/False (\:88dc\:52a9 api_*.md \:304b)
+     "auxName"        -> \:88dc\:52a9\:540d (None \:307e\:305f\:306f String)
+     "sourceCode"     -> \:4f7f\:7528\:3059\:3079\:304d\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9 (None \:306a\:3089\:88dc\:52a9\:30bd\:30fc\:30b9\:6b20\:843d)
+     "effectiveName"  -> \:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:5185\:3067\:8868\:793a\:3059\:308b\:30d1\:30c3\:30b1\:30fc\:30b8\:540d
+     "srcFile"        -> \:53c2\:7167\:3057\:305f\:30bd\:30fc\:30b9\:30d5\:30a1\:30a4\:30eb (Missing[] \:3082\:3042\:308a\:5f97)
+   \:88dc\:52a9 api_*.md \:3060\:304c\:88dc\:52a9\:30bd\:30fc\:30b9\:304c\:898b\:3064\:304b\:3089\:306a\:3044\:5834\:5408\:306f sourceCode \:3092 None \:306b\:3057\:3066\:8fd4\:3059
+   \:ff08\:547c\:3073\:51fa\:3057\:5074\:3067\:30b9\:30ad\:30c3\:30d7\:51e6\:7406\:3092\:3055\:305b\:308b\:ff09\:3002 *)
+iResolveSourceForDoc[packageName_String, docFile_String, defaultSourceCode_String] :=
+  Module[{aux, auxSrcFile, src},
+    aux = iExtractAuxNameFromApiDoc[docFile];
+    If[aux === None,
+      Return[<|
+        "isAux" -> False, "auxName" -> None,
+        "sourceCode" -> defaultSourceCode,
+        "effectiveName" -> packageName,
+        "srcFile" -> Missing["Default"]|>]];
+    auxSrcFile = iFindAuxPackageSource[packageName, aux];
+    If[auxSrcFile === $Failed,
+      Return[<|
+        "isAux" -> True, "auxName" -> aux,
+        "sourceCode" -> None,
+        "effectiveName" -> packageName <> "_" <> aux,
+        "srcFile" -> Missing["NotFound"]|>]];
+    src = Quiet @ Check[Import[auxSrcFile, "Text"], None];
+    If[!StringQ[src],
+      Return[<|
+        "isAux" -> True, "auxName" -> aux,
+        "sourceCode" -> None,
+        "effectiveName" -> packageName <> "_" <> aux,
+        "srcFile" -> auxSrcFile|>]];
+    <|
+      "isAux" -> True, "auxName" -> aux,
+      "sourceCode" -> src,
+      "effectiveName" -> packageName <> "_" <> aux,
+      "srcFile" -> auxSrcFile|>
+  ];
+
+(* \:88dc\:52a9\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30bd\:30fc\:30b9\:30d5\:30a1\:30a4\:30eb\:540d\:3092\:5168\:3066\:30b9\:30ad\:30e3\:30f3\:3057\:3001\:88dc\:52a9\:540d\:30ea\:30b9\:30c8\:3092\:8fd4\:3059\:3002
+   \:898b\:3064\:304b\:3089\:306a\:3051\:308c\:3070\:7a7a\:30ea\:30b9\:30c8\:3002 *)
+iScanAuxPackages[packageName_String] :=
+  Module[{pkgDir = Global`$packageDirectory, files, prefix, names},
+    If[!StringQ[pkgDir] || pkgDir === "", Return[{}]];
+    prefix = packageName <> "_";
+    files = Join[
+      FileNames[prefix <> "*.wl", pkgDir],
+      FileNames[prefix <> "*.wl",
+        FileNameJoin[{pkgDir, packageName, "Kernel"}]]
+    ];
+    names = StringDrop[FileBaseName[#], StringLength[prefix]] & /@ files;
+    DeleteDuplicates[Select[names, StringLength[#] > 0 &]]
+  ];
+iScanAuxPackages[___] := {};
+
+(* \:88dc\:52a9 api_*.md \:3092\:66f4\:65b0\:5bfe\:8c61\:306b\:5165\:308c\:308b\:3079\:304d\:304b\:5224\:5b9a\:3002
+     - \:88dc\:52a9\:30bd\:30fc\:30b9 <pkg>_<aux>.wl \:304c\:898b\:3064\:304b\:3089\:306a\:3044 \[RightArrow] False (\:5bfe\:8c61\:5916)
+     - \:88dc\:52a9 api \:30d5\:30a1\:30a4\:30eb\:304c\:5b58\:5728\:3057\:306a\:3044 \[RightArrow] True (\:65b0\:898f\:4f5c\:6210\:5fc5\:8981)
+     - \:4e21\:65b9\:5b58\:5728 \[RightArrow] \:30bd\:30fc\:30b9 mtime > api.md mtime \:306a\:3089 True *)
+iIsAuxApiFresh[packageName_String, auxName_String, docsDir_String] :=
+  Module[{auxSrcFile, auxDocFile},
+    auxSrcFile = iFindAuxPackageSource[packageName, auxName];
+    If[auxSrcFile === $Failed, Return[False]];
+    auxDocFile = FileNameJoin[{docsDir, "api_" <> auxName <> ".md"}];
+    If[!FileExistsQ[auxDocFile], Return[True]];
+    Quiet @ Check[
+      AbsoluteTime @ FileDate[auxSrcFile, "Modification"] >
+      AbsoluteTime @ FileDate[auxDocFile, "Modification"],
+      False]
+  ];
+iIsAuxApiFresh[___] := False;
+
+(* TargetFiles \:30ea\:30b9\:30c8\:306b "api.md" \:304c\:542b\:307e\:308c\:3066\:3044\:308b\:5834\:5408\:3001
+   \:88dc\:52a9 api_*.md (\:30bd\:30fc\:30b9\:304c\:65b0\:9bae\:306a\:3082\:306e) \:3092\:8ffd\:52a0\:3059\:308b\:3002
+   "api.md" \:304c\:306a\:3044\:5834\:5408\:306f\:5165\:529b\:3092\:305d\:306e\:307e\:307e\:8fd4\:3059\:3002 *)
+iExpandApiInTargetFiles[targetFiles_List, packageName_String, docsDir_String] :=
+  Module[{result = targetFiles, auxNames, auxFile, added = {}},
+    If[!MemberQ[result, "api.md"], Return[result]];
+    auxNames = iScanAuxPackages[packageName];
+    Do[
+      auxFile = "api_" <> auxName <> ".md";
+      If[!MemberQ[result, auxFile] && iIsAuxApiFresh[packageName, auxName, docsDir],
+        AppendTo[result, auxFile];
+        AppendTo[added, auxFile]],
+      {auxName, auxNames}];
+    result
+  ];
+iExpandApiInTargetFiles[targetFiles_, _, _] := targetFiles;
+
+(* Automatic \:7d4c\:8def\:7528: \:65e2\:5b58\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30ea\:30b9\:30c8\:306b\:5bfe\:3057\:3066
+     - \:65e2\:5b58\:306e\:88dc\:52a9 api_*.md \:306e\:3046\:3061\:30bd\:30fc\:30b9\:304c\:53e4\:3044\:3082\:306e\:3092\:9664\:5916
+     - \:88dc\:52a9\:30bd\:30fc\:30b9\:306f\:5b58\:5728\:3059\:308b\:304c\:88dc\:52a9 api \:304c\:672a\:4f5c\:6210\:306a\:3082\:306e\:3092\:8ffd\:52a0 *)
+iFilterAndExpandAuxApi[docs_List, packageName_String, docsDir_String] :=
+  Module[{result, auxNames, auxFile},
+    result = Select[docs, Function[doc,
+      Module[{auxName = iExtractAuxNameFromApiDoc[FileNameTake[doc]]},
+        If[auxName === None, True,
+          iIsAuxApiFresh[packageName, auxName, docsDir]]]]];
+    auxNames = iScanAuxPackages[packageName];
+    Do[
+      auxFile = "api_" <> auxName <> ".md";
+      If[!MemberQ[result, auxFile] && iIsAuxApiFresh[packageName, auxName, docsDir],
+        AppendTo[result, auxFile]],
+      {auxName, auxNames}];
+    result
+  ];
+iFilterAndExpandAuxApi[docs_, _, _] := docs;
+
 (* \:4f9d\:5b58\:30d1\:30c3\:30b1\:30fc\:30b8\:306e api.md \:3092\:53ce\:96c6\:3059\:308b\:3002
    \:5bfe\:8c61\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30bd\:30fc\:30b9\:304b\:3089 Needs["Pkg`"] \:3092\:691c\:51fa\:3057\:3001\:5404\:4f9d\:5b58\:306e api.md \:3092\:8aad\:3080\:3002
    ClaudeUpdatePackage \:306e\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:4ed8\:52a0\:3057\:3066\:30d1\:30c3\:30b1\:30fc\:30b8\:5883\:754c\:3092\:8d8a\:3048\:305f\:539f\:56e0\:8ffd\:8de1\:3092\:53ef\:80fd\:306b\:3059\:308b\:3002 *)
 iCollectDependencyApis[sourceCode_String] :=
   Module[{needsPkgs, apiTexts = {}, pkgDir = Global`$packageDirectory,
-          docsDir, apiFile, content},
+          docsDir, apiFiles, content},
     If[!StringQ[pkgDir] || pkgDir === "", Return[""]];
     (* Needs["PackageName`"] \:304b\:3089\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:62bd\:51fa *)
     needsPkgs = StringCases[sourceCode,
@@ -10584,15 +10793,21 @@ iCollectDependencyApis[sourceCode_String] :=
     Do[
       docsDir = iPackageDocsDir[pkg];
       If[StringQ[docsDir] && DirectoryQ[docsDir],
-        apiFile = FileNameJoin[{docsDir, "api.md"}];
-        If[FileExistsQ[apiFile],
-          content = Quiet @ Check[Import[apiFile, "Text"], ""];
+        (* api.md \:3068\:88dc\:52a9 api_*.md \:3092\:5168\:4ef6\:53ce\:96c6\:3002api.md \:3092\:5148\:982d\:306b *)
+        apiFiles = Join[
+          Select[{FileNameJoin[{docsDir, "api.md"}]}, FileExistsQ],
+          Sort @ FileNames["api_*.md", docsDir]
+        ];
+        Do[
+          content = Quiet @ Check[Import[apiF, "Text"], ""];
           If[StringQ[content] && StringLength[content] > 0,
             AppendTo[apiTexts,
-              "=== Dependency API: " <> pkg <> " ===\n" <>
+              "=== Dependency API: " <> pkg <> " (" <> FileNameTake[apiF] <> ") ===\n" <>
               "(This package is used by the target package via Needs[\"" <> pkg <> "`\"]. " <>
               "Use this API reference to understand available functions when tracing call chains.)\n\n" <>
-              content <> "\n\n"]]]],
+              content <> "\n\n"]],
+          {apiF, apiFiles}]
+      ],
     {pkg, needsPkgs}];
     StringJoin[apiTexts]
   ];
@@ -12261,7 +12476,11 @@ iBuildChunkedSource[split_Association, docFile_String] :=
     pub = split["public"];
     secs = split["sections"];
     maxC = $ClaudeDocMaxChunkChars;
-    kws = Lookup[$iDocSectionKW, docFile, {}];
+    kws = Lookup[$iDocSectionKW, docFile, Missing["KeyAbsent"]];
+    (* \:88dc\:52a9 api_*.md \:306f api.md \:3068\:540c\:3058\:304f All \:30bb\:30af\:30b7\:30e7\:30f3\:6271\:3044 *)
+    If[MatchQ[kws, _Missing] && iIsAuxApiName[FileBaseName[docFile]],
+      kws = All];
+    If[MatchQ[kws, _Missing], kws = {}];
     (* All \[RightArrow] \:5168\:30bb\:30af\:30b7\:30e7\:30f3\:9078\:629e (api.md \:7b49)\:3001{} \[RightArrow] \:30bb\:30af\:30b7\:30e7\:30f3\:306a\:3057 (README\:7b49)\:3001
        \:30ea\:30b9\:30c8 \[RightArrow] \:30ad\:30fc\:30ef\:30fc\:30c9\:30de\:30c3\:30c1\:3067\:30d5\:30a3\:30eb\:30bf *)
     selIdx = Which[
@@ -12293,7 +12512,7 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     outDir_String, queue_List, idx_Integer, retryCount_Integer:0,
     splitCache_Association:<||>] :=
   Module[{spec, outFile, docTitle, promptTemplate, fullPrompt, subDir,
-          split, chunked},
+          split, chunked, srcResolved, useSource, useName, effectiveCache},
     If[idx > Length[queue],
       (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:6c38\:7d9a\:5316 *)
       iSaveDocOptions[packageName];
@@ -12304,24 +12523,41 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     subDir = DirectoryName[FileNameJoin[{outDir, outFile}]];
     If[!DirectoryQ[subDir],
       CreateDirectory[subDir, CreateIntermediateDirectories -> True]];
+    (* \:88dc\:52a9 api_*.md \:5bfe\:5fdc: outFile \:306b\:5fdc\:3058\:3066 sourceCode \:3068 packageName \:3092\:5207\:308a\:66ff\:3048\:308b *)
+    srcResolved = iResolveSourceForDoc[packageName, outFile, sourceCode];
+    If[TrueQ[srcResolved["isAux"]] && srcResolved["sourceCode"] === None,
+      (* \:88dc\:52a9\:30bd\:30fc\:30b9\:304c\:898b\:3064\:304b\:3089\:306a\:3044 \[RightArrow] \:8b66\:544a\:3057\:3066\:30b9\:30ad\:30c3\:30d7 *)
+      nbPrint[nb, Style[
+        "\:26a0 [" <> ToString[idx] <> "/" <> ToString[Length[queue]] <> "] " <>
+        outFile <> " \:3092\:30b9\:30ad\:30c3\:30d7: \:88dc\:52a9\:30d1\:30c3\:30b1\:30fc\:30b8 " <>
+        packageName <> "_" <> srcResolved["auxName"] <>
+        ".wl \:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002",
+        FontColor -> RGBColor[0.8, 0.4, 0]]];
+      iGenDocNext[sourceCode, packageName, nb, outDir, queue, idx + 1, 0, splitCache];
+      Return[]];
+    useSource = srcResolved["sourceCode"];
+    useName = srcResolved["effectiveName"];
+    (* \:88dc\:52a9\:30bd\:30fc\:30b9\:306f splitCache \:3092\:5171\:6709\:3057\:306a\:3044 *)
+    effectiveCache = If[TrueQ[srcResolved["isAux"]], <||>, splitCache];
     If[retryCount > 0,
       nbPrint[nb, "\[HorizontalLine] [" <> ToString[idx] <> "/" <> ToString[Length[queue]] <>
         "] " <> docTitle <> " \:30ea\:30c8\:30e9\:30a4 " <> ToString[retryCount] <> "/" <>
         ToString[$ClaudeDocMaxRetries]],
       nbPrint[nb, "\[HorizontalLine] [" <> ToString[idx] <> "/" <> ToString[Length[queue]] <>
-        "] " <> docTitle <> " (" <> outFile <> ") \:3092\:751f\:6210\:4e2d..."]];
+        "] " <> docTitle <> " (" <> outFile <> ") \:3092\:751f\:6210\:4e2d..." <>
+        If[TrueQ[srcResolved["isAux"]], " [\:88dc\:52a9: " <> useName <> "]", ""]]];
     (* \:30bd\:30fc\:30b9\:5206\:5272 (\:30ad\:30e3\:30c3\:30b7\:30e5\:518d\:5229\:7528) *)
-    split = If[splitCache =!= <||>, splitCache, iSplitSource[sourceCode]];
+    split = If[effectiveCache =!= <||>, effectiveCache, iSplitSource[useSource]];
     chunked = iBuildChunkedSource[split, outFile];
-    nbPrint[nb, "  (\:30bd\:30fc\:30b9 " <> ToString[StringLength[sourceCode]] <>
+    nbPrint[nb, "  (\:30bd\:30fc\:30b9 " <> ToString[StringLength[useSource]] <>
       " \[RightArrow] \:30c1\:30e3\:30f3\:30af " <> ToString[StringLength[chunked]] <> " chars)"];
     fullPrompt = If[promptTemplate === "SPECIAL_README_WITH_OVERVIEW",
-      iBuildReadmePrompt[sourceCode, packageName, outDir],
+      iBuildReadmePrompt[useSource, packageName, outDir],
       "You are an expert Wolfram Language / Mathematica documentation writer.\n" <>
       "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n" <>
-      "You are documenting the package \"" <> packageName <> "\".\n\n" <>
+      "You are documenting the package \"" <> useName <> "\".\n\n" <>
       (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:30bf\:30b9\:30af\:6982\:8981\:3092\:5192\:982d\:306b\:914d\:7f6e *)
-      iTaskOverviewBlock["Generate " <> docTitle <> " (" <> outFile <> ") for package " <> packageName] <>
+      iTaskOverviewBlock["Generate " <> docTitle <> " (" <> outFile <> ") for package " <> useName] <>
       "CRITICAL RULE: \:8b1d\:8f9e (Acknowledgments), \:514d\:8cac\:4e8b\:9805 (Disclaimer) and \:30e9\:30a4\:30bb\:30f3\:30b9 (License) sections MUST ONLY exist in README.md.\n" <>
       "Do NOT add any \:8b1d\:8f9e, \:514d\:8cac\:4e8b\:9805 or \:30e9\:30a4\:30bb\:30f3\:30b9 section to this file.\n\n" <>
       iDocGlobalInstructionPrompt[packageName] <>
@@ -12422,7 +12658,7 @@ iCheckDocResumption[packageName_String, outDir_String, srcFile_String] :=
       "sourceModified" -> (backupTime > 0 && srcTime > backupTime)|>
   ];
 
-Options[ClaudeCreateDocumentation] = {Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, Acknowledgments -> {}, License -> ""};
+Options[ClaudeCreateDocumentation] = {Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, Acknowledgments -> {}, License -> "", IncludeAuxiliaryAPIs -> Automatic};
 
 (* 1\:5f15\:6570\:7248: \:6307\:793a\:306a\:3057 *)
 ClaudeCreateDocumentation[packageName_String, opts:OptionsPattern[]] :=
@@ -12525,6 +12761,38 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       nbPrint[nb, "\:51fa\:529b\:5148: " <> outDir];
       nbPrint[nb, iL["\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Backup: "] <> histDir]
     ];
+    (* \:88dc\:52a9 API \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306e\:81ea\:52d5\:8ffd\:52a0:
+       IncludeAuxiliaryAPIs == False \:306a\:3089\:30b9\:30ad\:30c3\:30d7\:3002Automatic \:307e\:305f\:306f True \:306a\:3089
+       <pkg>_*.wl \:3092\:8d70\:67fb\:3057\:3001\:898b\:3064\:304b\:3063\:305f\:88dc\:52a9\:306b\:5bfe\:5fdc\:3059\:308b api_<aux>.md \:3092
+       README.md \:306e\:76f4\:524d\:306b\:633f\:5165\:3059\:308b\:3002 *)
+    Module[{auxNames, apiTemplate, includeAux, auxEntries, readmeIdx, validNames},
+      includeAux = OptionValue[IncludeAuxiliaryAPIs];
+      If[includeAux =!= False,
+        auxNames = iScanAuxPackages[packageName];
+        apiTemplate = SelectFirst[$iDocQueue, #[[1]] === "api.md" &, None];
+        If[apiTemplate =!= None && Length[auxNames] > 0,
+          (* resume \:306e\:5834\:5408\:306f\:65e2\:5b58 valid \:306b\:542b\:307e\:308c\:308b\:88dc\:52a9\:306f\:9664\:5916 *)
+          validNames = If[resumeInfo["isResumption"] && !resumeInfo["sourceModified"],
+            resumeInfo["valid"], {}];
+          auxNames = Select[auxNames,
+            !MemberQ[validNames, "api_" <> # <> ".md"] &];
+          auxEntries = ({
+            "api_" <> # <> ".md",
+            "API \:30ea\:30d5\:30a1\:30ec\:30f3\:30b9 (\:88dc\:52a9: " <> # <> ")",
+            apiTemplate[[3]]
+          } &) /@ auxNames;
+          If[Length[auxEntries] > 0,
+            readmeIdx = FirstPosition[filteredQueue,
+              e_ /; e[[1]] === "README.md", Missing["NotFound"], {1}, Heads -> False];
+            filteredQueue = If[ListQ[readmeIdx] && Length[readmeIdx] > 0,
+              Insert[filteredQueue, Sequence @@ auxEntries, readmeIdx[[1]]],
+              Join[filteredQueue, auxEntries]];
+            nbPrint[nb, "\:88dc\:52a9 API \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:8ffd\:52a0: " <>
+              StringRiffle[#[[1]] & /@ auxEntries, ", "]]
+          ]
+        ]
+      ]
+    ];
     nbPrint[nb, "\:751f\:6210\:5bfe\:8c61: " <> ToString[Length[filteredQueue]] <> " \:30d5\:30a1\:30a4\:30eb\n"];
 
     iGenDocNext[sourceCode, packageName, nb, outDir, filteredQueue, 1, 0, <||>]
@@ -12562,6 +12830,13 @@ iDocsAvailableAndFresh[packageName_String] :=
     docsTime >= srcTime
   ];
 
+(* DEPRECATED (Phase 33, 2026-04): \:3053\:306e\:95a2\:6570\:306f claudecode_directives.wl \:306e
+   ClaudeSelectSkillsForTask + ClaudeProjectDirectives \:6a5f\:69cb\:306b\:5f79\:5272\:3092\:79fb\:8b72\:6e08\:307f\:3002
+   \:73fe\:72b6\:3067 iPackageDocsContext \:3092\:547c\:3093\:3067\:3044\:308b\:95a2\:6570\:306f claudecode.wl \:5185\:306b\:5b58\:5728\:3057\:306a\:3044
+   (referencing_syms = {}, iClaudeSysPrompt \:306f\:547c\:3070\:306a\:3044)\:3002$ClaudePackageKeywordMap
+   \:3078\:306e\:767b\:9332 (\:4f8b: maildb.wl) \:306f\:6b8b\:3063\:3066\:3044\:308b\:304c\:3001\:672c\:95a2\:6570\:81ea\:4f53\:306f dead code \:3068\:3057\:3066\:6b8b\:7f6e\:3002
+   \:5c06\:6765\:7684\:306b\:524a\:9664\:3059\:308b\:5834\:5408\:306f\:3001$ClaudePackageKeywordMap \:3092\:53c2\:7167\:3057\:3066\:3044\:308b\:30d1\:30c3\:30b1\:30fc\:30b8\:5074\:306e
+   \:521d\:671f\:5316\:30b3\:30fc\:30c9\:3078\:306e\:5f71\:97ff\:3092\:78ba\:8a8d\:3057\:3066\:304b\:3089\:884c\:3046\:3053\:3068\:3002 *)
 (* \:30bf\:30b9\:30af\:6587\:304b\:3089\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:691c\:51fa\:3057\:3001\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3068\:3057\:3066\:8fd4\:3059 *)
 iPackageDocsContext[task_String] :=
   Module[{pkgDir, wlFiles, pacletDirs, allNames, mentioned, ctx = ""},
@@ -12598,26 +12873,35 @@ iPackageDocsContext[task_String] :=
         {kv, kwMap}]];
     If[Length[mentioned] === 0, Return[""]];
     (* \:5404\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306b\:542b\:3081\:308b
-       api.md \:3092\:6700\:512a\:5148\:3067\:5b8c\:5168\:306b\:8aad\:307f\:8fbc\:3080\:ff08\:30c8\:30fc\:30af\:30f3\:7bc0\:7d04\:306e\:305f\:3081\:4ed6\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:6982\:8981\:306e\:307f\:ff09 *)
+       api.md \:3068\:88dc\:52a9 api_*.md \:3092\:6700\:512a\:5148\:3067\:5b8c\:5168\:306b\:8aad\:307f\:8fbc\:3080\:ff08\:30c8\:30fc\:30af\:30f3\:7bc0\:7d04\:306e\:305f\:3081\:4ed6\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:6982\:8981\:306e\:307f\:ff09 *)
     Do[
       With[{docsDir = iPackageDocsDir[pkg]},
       If[StringQ[docsDir] && DirectoryQ[docsDir],
-        Module[{docFiles, apiFile, apiContent, summary, isFresh},
+        Module[{docFiles, apiFiles, apiContent, summary, isFresh, fileLabel},
           isFresh = iDocsAvailableAndFresh[pkg];
-          apiFile = FileNameJoin[{docsDir, "api.md"}];
+          (* api.md \:3068 api_*.md \:3092\:5168\:4ef6\:53ce\:96c6\:3002api.md \:3092\:5148\:982d\:306b *)
+          apiFiles = Join[
+            Select[{FileNameJoin[{docsDir, "api.md"}]}, FileExistsQ],
+            Sort @ FileNames["api_*.md", docsDir]
+          ];
           Which[
-            (* api.md \:304c\:5b58\:5728: api.md \:3092\:30d5\:30eb\:8aad\:307f\:8fbc\:307f\:ff08\:6700\:512a\:5148\:ff09 *)
-            FileExistsQ[apiFile],
-              apiContent = Quiet @ Check[Import[apiFile, "Text"], ""];
-              ctx = ctx <>
-                "=== \:30d1\:30c3\:30b1\:30fc\:30b8 API \:30ea\:30d5\:30a1\:30ec\:30f3\:30b9: " <> pkg <> " ===\n" <>
-                If[isFresh,
-                  "(\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3088\:308a\:65b0\:3057\:3044\:305f\:3081\:53c2\:8003\:60c5\:5831\:3068\:3057\:3066\:6709\:52b9)\n",
-                  "(\:30bd\:30fc\:30b9\:304c\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3088\:308a\:65b0\:3057\:3044\:304c\:3001API \:30b7\:30b0\:30cd\:30c1\:30e3\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:306f\:6709\:52b9)\n"] <>
-                "IMPORTANT: \:30b3\:30fc\:30c9\:3092\:751f\:6210\:3059\:308b\:969b\:306f\:3001\:3053\:306e api.md \:306b\:8a18\:8f09\:3055\:308c\:305f\:95a2\:6570\:540d\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:30fb\:5f15\:6570\:306e\:307f\:3092\:4f7f\:7528\:3059\:308b\:3053\:3068\:3002" <>
-                "\:5b58\:5728\:3057\:306a\:3044\:95a2\:6570\:3092\:751f\:6210\:3057\:306a\:3044\:3053\:3068\:3002api.md \:3067\:4e0d\:660e\:306a\:70b9\:304c\:3042\:308b\:5834\:5408\:306e\:307f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3092\:53c2\:7167\:3059\:308b\:3053\:3068\:3002\n\n" <>
-                apiContent <> "\n\n",
-            (* api.md \:304c\:306a\:3044\:304c\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304c\:65b0\:9bae: \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306e\:6982\:8981 *)
+            (* api.md \:307e\:305f\:306f api_*.md \:304c\:5b58\:5728: \:5168\:90e8\:30d5\:30eb\:8aad\:307f\:8fbc\:307f\:ff08\:6700\:512a\:5148\:ff09 *)
+            Length[apiFiles] > 0,
+              Do[
+                apiContent = Quiet @ Check[Import[apiF, "Text"], ""];
+                If[StringQ[apiContent] && StringLength[apiContent] > 0,
+                  fileLabel = FileNameTake[apiF];
+                  ctx = ctx <>
+                    "=== \:30d1\:30c3\:30b1\:30fc\:30b8 API \:30ea\:30d5\:30a1\:30ec\:30f3\:30b9: " <> pkg <> " (" <> fileLabel <> ") ===\n" <>
+                    If[isFresh,
+                      "(\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3088\:308a\:65b0\:3057\:3044\:305f\:3081\:53c2\:8003\:60c5\:5831\:3068\:3057\:3066\:6709\:52b9)\n",
+                      "(\:30bd\:30fc\:30b9\:304c\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3088\:308a\:65b0\:3057\:3044\:304c\:3001API \:30b7\:30b0\:30cd\:30c1\:30e3\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:306f\:6709\:52b9)\n"] <>
+                    "IMPORTANT: \:30b3\:30fc\:30c9\:3092\:751f\:6210\:3059\:308b\:969b\:306f\:3001\:3053\:306e " <> fileLabel <>
+                    " \:306b\:8a18\:8f09\:3055\:308c\:305f\:95a2\:6570\:540d\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:30fb\:5f15\:6570\:306e\:307f\:3092\:4f7f\:7528\:3059\:308b\:3053\:3068\:3002" <>
+                    "\:5b58\:5728\:3057\:306a\:3044\:95a2\:6570\:3092\:751f\:6210\:3057\:306a\:3044\:3053\:3068\:3002\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3067\:4e0d\:660e\:306a\:70b9\:304c\:3042\:308b\:5834\:5408\:306e\:307f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3092\:53c2\:7167\:3059\:308b\:3053\:3068\:3002\n\n" <>
+                    apiContent <> "\n\n"],
+                {apiF, apiFiles}],
+            (* api \:7cfb\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304c\:306a\:3044\:304c\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304c\:65b0\:9bae: \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306e\:6982\:8981 *)
             isFresh,
               docFiles = FileNames["*.md", docsDir];
               summary = StringJoin[
@@ -12633,15 +12917,6 @@ iPackageDocsContext[task_String] :=
     {pkg, mentioned}];
     ctx
   ];
-
-(* ============================================================
-   \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0: \:6307\:793a\:306b\:5f93\:3063\:3066\:65e2\:5b58\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0
-   ============================================================ *)
-
-(* \:66f4\:65b0\:6307\:793a\:304b\:3089\:8a72\:5f53\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:81ea\:52d5\:5224\:5b9a *)
-(* README.md \:3092\:5e38\:306b\:30ea\:30b9\:30c8\:306e\:6700\:5f8c\:306b\:79fb\:52d5\:3059\:308b\:3002
-   README.md \:306f\:4ed6\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306e\:5185\:5bb9\:3092\:53c2\:7167\:3057\:3066\:6982\:8981\:3092\:69cb\:6210\:3059\:308b\:305f\:3081\:3001
-   \:5fc5\:305a\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210/\:66f4\:65b0\:5f8c\:306b\:6700\:5f8c\:306b\:51e6\:7406\:3059\:308b\:5fc5\:8981\:304c\:3042\:308b\:3002 *)
 iEnsureReadmeLast[docs_List] :=
   Module[{withoutReadme, hasReadme},
     hasReadme = MemberQ[docs, "README.md"];
@@ -12653,6 +12928,7 @@ iEnsureReadmeLast[docs_List] :=
 (* TargetFiles \:306e\:30d0\:30ea\:30c7\:30fc\:30b7\:30e7\:30f3\:3068\:6b63\:898f\:5316\:3002
    \:8a31\:53ef\:3055\:308c\:308b\:30d5\:30a1\:30a4\:30eb\:540d: "api.md", "README.md", "setup.md", "user_manual.md", "example.md"
    \:62e1\:5f35\:5b50\:306a\:3057 ("api","README","setup","user_manual","example") \:306f\:81ea\:52d5\:7684\:306b .md \:3092\:4ed8\:4e0e\:3002
+   \:88dc\:52a9 api: "api_<aux>.md" \:307e\:305f\:306f "api_<aux>" \:306e\:5f62\:3082\:8a31\:53ef\:3059\:308b\:3002
    \:4e0d\:6b63\:306a\:30d5\:30a1\:30a4\:30eb\:540d\:304c\:542b\:307e\:308c\:308b\:5834\:5408\:306f $Failed \:3092\:8fd4\:3059\:3002 *)
 $iAllowedTargetBases = {"api", "README", "setup", "user_manual", "example"};
 $iAllowedTargetFiles = (# <> ".md") & /@ $iAllowedTargetBases;
@@ -12661,6 +12937,10 @@ iNormalizeOneTargetFile[f_String] :=
   Which[
     MemberQ[$iAllowedTargetFiles, f], f,
     MemberQ[$iAllowedTargetBases, f], f <> ".md",
+    (* \:88dc\:52a9 api: api_<aux>.md \:5f62\:5f0f *)
+    iIsAuxApiName[FileBaseName[f]] && FileExtension[f] === "md", f,
+    (* \:88dc\:52a9 api: api_<aux> \:62e1\:5f35\:5b50\:306a\:3057 *)
+    iIsAuxApiName[f], f <> ".md",
     True, $Failed
   ];
 
@@ -12685,7 +12965,7 @@ iValidateTargetFiles[tf_List] :=
 iValidateTargetFiles[_] := Automatic;
 
 ClaudeUpdateDocumentation::badtarget =
-  "TargetFiles \:306b\:4e0d\:6b63\:306a\:30d5\:30a1\:30a4\:30eb\:540d `1` \:304c\:542b\:307e\:308c\:3066\:3044\:307e\:3059\:3002\:8a31\:53ef\:3055\:308c\:308b\:30d5\:30a1\:30a4\:30eb: `2`";
+  "TargetFiles \:306b\:4e0d\:6b63\:306a\:30d5\:30a1\:30a4\:30eb\:540d `1` \:304c\:542b\:307e\:308c\:3066\:3044\:307e\:3059\:3002\:8a31\:53ef\:3055\:308c\:308b\:30d5\:30a1\:30a4\:30eb: `2` (\:88dc\:52a9 api_*.md \:3082\:53ef)";
 
 $iDocKeywords = <|
   "README.md"       -> {"README", "readme", "\:6982\:8981", "\:306f\:3058\:3081",
@@ -12699,12 +12979,24 @@ $iDocKeywords = <|
 |>;
 
 iGuessTargetDocs[instruction_String, docsDir_String, skipExistCheck_:False] :=
-  Module[{hits = {}},
+  Module[{hits = {}, auxApiFiles, auxKw, auxFile},
     Do[
       If[(TrueQ[skipExistCheck] || FileExistsQ[FileNameJoin[{docsDir, docFile}]]) &&
          AnyTrue[keywords, StringContainsQ[instruction, #, IgnoreCase -> True] &],
         AppendTo[hits, docFile]],
     {docFile, Keys[$iDocKeywords]}, {keywords, {$iDocKeywords[docFile]}}];
+    (* \:88dc\:52a9 api_*.md \:30d5\:30a1\:30a4\:30eb\:3092\:8d70\:67fb\:3057\:3066\:88dc\:52a9\:540d\:3092\:30ad\:30fc\:30ef\:30fc\:30c9\:3068\:3057\:3066\:30de\:30c3\:30c1\:5224\:5b9a\:3002
+       \:5b58\:5728\:3057\:306a\:3044\:30d5\:30a1\:30a4\:30eb\:3082 skipExistCheck=True \:306a\:3089 instruction \:304c\:8a8d\:8b58\:53ef\:80fd\:306a\:308a\:5f97\:308b\:304c\:3001
+       \:73fe\:5b9f\:7684\:306b\:306f docsDir \:5185\:306b\:65e2\:5b58\:306e\:88dc\:52a9 api_*.md \:304c\:3042\:308b\:5834\:5408\:306e\:307f\:691c\:5165\:3002 *)
+    auxApiFiles = If[DirectoryQ[docsDir],
+      FileNames["api_*.md", docsDir], {}];
+    Do[
+      auxFile = FileNameTake[apiF];
+      auxKw = StringDrop[FileBaseName[apiF], 4];  (* "api_directives" \[RightArrow] "directives" *)
+      If[StringLength[auxKw] > 0 &&
+         StringContainsQ[instruction, auxKw, IgnoreCase -> True],
+        AppendTo[hits, auxFile]],
+      {apiF, auxApiFiles}];
     (* \:8a72\:5f53\:306a\:3057\:306a\:3089\:8b66\:544a\:3057\:3066 README.md \:306e\:307f\:3092\:5bfe\:8c61\:306b\:3059\:308b\:ff08\:5168\:30d5\:30a1\:30a4\:30eb\:66f4\:65b0\:3092\:9632\:6b62\:ff09 *)
     If[Length[hits] === 0,
       Print[Style["\:8b66\:544a: \:66f4\:65b0\:5bfe\:8c61\:3092\:81ea\:52d5\:5224\:5b9a\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002README.md \:306e\:307f\:66f4\:65b0\:3057\:307e\:3059\:3002\n" <>
@@ -12863,9 +13155,13 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
       tf = OptionValue[TargetFiles];
       vtf = iValidateTargetFiles[tf];
       If[ListQ[vtf],
-        Return[iEnsureReadmeLast[vtf], Module]];
+        (* "api.md" \:304c\:542b\:307e\:308c\:3066\:3044\:308c\:3070\:88dc\:52a9 api \:3082\:81ea\:52d5\:5c55\:958b (\:65b0\:9bae\:306a\:3082\:306e\:306e\:307f) *)
+        Return[iEnsureReadmeLast[
+          iExpandApiInTargetFiles[vtf, packageName, docsDir]], Module]];
       (* Automatic: \:5168\:30d5\:30a1\:30a4\:30eb\:3092\:691c\:51fa *)
       rootDocs = FileNameTake /@ FileNames["*.md", docsDir];
+      (* \:88dc\:52a9 api: \:30bd\:30fc\:30b9\:304c\:53e4\:3044\:3082\:306e\:306f\:9664\:5916\:3057\:3001\:672a\:4f5c\:6210\:306a\:3082\:306e\:306f\:8ffd\:52a0 *)
+      rootDocs = iFilterAndExpandAuxApi[rootDocs, packageName, docsDir];
       rootNames = rootDocs;
       (* examples/ \:306a\:3069\:306e\:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:5185\:306e .md *)
       subDocs = Module[{subFiles},
@@ -12972,7 +13268,11 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     If[vtf === $Failed, Return[$Failed]];
     targetDocs = If[ListQ[vtf],
       nbPrint[nb, "TargetFiles \:6307\:5b9a: " <> StringRiffle[vtf, ", "]];
-      iEnsureReadmeLast[vtf],
+      Module[{expanded = iExpandApiInTargetFiles[vtf, packageName, docsDir]},
+        If[expanded =!= vtf,
+          nbPrint[nb, "  \[RightArrow] \:88dc\:52a9 API \:3092\:81ea\:52d5\:5c55\:958b: " <>
+            StringRiffle[Complement[expanded, vtf], ", "]]];
+        iEnsureReadmeLast[expanded]],
       (* \:81ea\:52d5\:5224\:5b9a: Create \:30e2\:30fc\:30c9\:306a\:3089\:30d5\:30a1\:30a4\:30eb\:5b58\:5728\:30c1\:30a7\:30c3\:30af\:3092\:30b9\:30ad\:30c3\:30d7 *)
       iGuessTargetDocs[instruction, docsDir, mode === "Create"]];
     (* \:4eca\:56de\:306e\:547c\:3073\:51fa\:3057\:3067 Demos/References \:304c\:660e\:793a\:7684\:306b\:6e21\:3055\:308c\:305f\:5834\:5408\:306e\:307f README.md \:3092\:5f37\:5236\:8ffd\:52a0 *)
@@ -13080,7 +13380,8 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     mode_String:"Update", docMediaFiles_List:{}] :=
   Module[{docFile, docPath, currentContent, fullPrompt, histDir,
           split, chunkedSource, narrowQ, savedModel, isReadme, isApi,
-          promptParts, useInstruction},
+          promptParts, useInstruction,
+          srcResolved, useSource, useName, effectiveCache},
     If[idx > Length[targetDocs],
       (* \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:5b8c\:4e86 \[RightArrow] \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:4f5c\:6210 *)
       If[StringQ[srcFile] && srcFile =!= "",
@@ -13092,11 +13393,28 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       Return[]];
     docFile = targetDocs[[idx]];
     docPath = FileNameJoin[{docsDir, docFile}];
+    (* \:88dc\:52a9 api_*.md \:5bfe\:5fdc: outFile \:306b\:5fdc\:3058\:3066 sourceCode \:3068 packageName \:3092\:5207\:308a\:66ff\:3048\:308b *)
+    srcResolved = iResolveSourceForDoc[packageName, docFile, sourceCode];
+    If[TrueQ[srcResolved["isAux"]] && srcResolved["sourceCode"] === None,
+      (* \:88dc\:52a9\:30bd\:30fc\:30b9\:304c\:898b\:3064\:304b\:3089\:306a\:3044 \[RightArrow] \:8b66\:544a\:3057\:3066\:30b9\:30ad\:30c3\:30d7 *)
+      nbPrint[nb, Style[
+        "\:26a0 [" <> ToString[idx] <> "/" <> ToString[Length[targetDocs]] <> "] " <>
+        docFile <> " \:3092\:30b9\:30ad\:30c3\:30d7: \:88dc\:52a9\:30d1\:30c3\:30b1\:30fc\:30b8 " <>
+        packageName <> "_" <> srcResolved["auxName"] <>
+        ".wl \:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002",
+        FontColor -> RGBColor[0.8, 0.4, 0]]];
+      iUpdateDocNext[sourceCode, packageName, nb, docsDir, instruction, targetDocs,
+        idx + 1, diffText, srcFile, splitCache, mode, docMediaFiles];
+      Return[]];
+    useSource = srcResolved["sourceCode"];
+    useName = srcResolved["effectiveName"];
+    effectiveCache = If[TrueQ[srcResolved["isAux"]], <||>, splitCache];
     (* Mode -> "Create" \:306a\:3089\:65e2\:5b58\:5185\:5bb9\:3092\:7121\:8996\:3057\:3066\:65b0\:898f\:4f5c\:6210 *)
     currentContent = If[mode === "Create", "",
       If[FileExistsQ[docPath], Import[docPath, "Text"], ""]];
     isReadme = (docFile === "README.md");
-    isApi = (docFile === "api.md");
+    (* api.md \:307e\:305f\:306f api_*.md \:306f\:5168\:3066 API \:30ea\:30d5\:30a1\:30ec\:30f3\:30b9\:6271\:3044 *)
+    isApi = (docFile === "api.md") || iIsAuxApiName[FileBaseName[docFile]];
     narrowQ = iIsNarrowScopeInstruction[instruction];
 
     (* api.md \:306b\:306f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306f\:4e0d\:8981 \[RightArrow] \:9664\:53bb *)
@@ -13114,10 +13432,10 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       "You are an expert Wolfram Language / Mathematica documentation writer.\n",
       "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n",
       "You are " <> If[isApi, "generating", "updating"] <>
-        " the documentation for package \"" <> packageName <> "\"\n\n",
+        " the documentation for package \"" <> useName <> "\"\n\n",
       (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:30bf\:30b9\:30af\:6982\:8981\:3092\:5192\:982d\:306b\:914d\:7f6e *)
       iTaskOverviewBlock[
-        If[isApi, "Generate api.md (LLM-optimized API reference) from source code",
+        If[isApi, "Generate " <> docFile <> " (LLM-optimized API reference) from source code",
           "Update " <> docFile <> ": " <> useInstruction]]
     };
 
@@ -13190,7 +13508,7 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
 
     (* --- api.md / user_manual / setup / examples: \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:6dfb\:4ed8 --- *)
     If[!isReadme,
-      split = If[splitCache =!= <||>, splitCache, iSplitSource[sourceCode]];
+      split = If[effectiveCache =!= <||>, effectiveCache, iSplitSource[useSource]];
       chunkedSource = iBuildChunkedSource[split, docFile];
       AppendTo[promptParts,
         "PACKAGE SOURCE CODE (chunked for token efficiency):\n" <> chunkedSource <> "\n\n"];
@@ -17121,7 +17439,7 @@ iLLMGraphEndSubgraph[finalStatus_String:"Completed"] := Module[
                              NotebookLLMGraphPlot \:306f\:3053\:306e Type \:3092
                              SplitHistoryChain=True \:4e0b\:3067\:3082\:63cf\:753b\:3059\:308b
                              (HiddenEdgeTypes Automatic \:306b\:542b\:307e\:306a\:3044)\:3002
-                             \:691c\:51fa\:30ed\:30b8\:30c3\:30af\:306f\:672a\:5b9f\:88c5\:2014\:4ee5\:4e0b\:306e\:3069\:3053\:304b\:306b
+                             \:691c\:51fa\:30ed\:30b8\:30c3\:30af\:306f\:672a\:5b9f\:88c5\[LongDash]\:4ee5\:4e0b\:306e\:3069\:3053\:304b\:306b
                              \:5c06\:6765\:8ffd\:52a0\:4e88\:5b9a:
                                1. ClaudeEval \:5185\:90e8\:3067 history \:3092 iBuildContext
                                   \:3059\:308b\:969b\:3001\:524d\:30bf\:30fc\:30f3\:306e response/\:6210\:679c\:7269\:3092
@@ -18017,7 +18335,7 @@ Options[NotebookLLMGraphPlot] = {
   "HiddenEdgeTypes"   -> Automatic
 };
 
-(* \:2500\:2500\:2500\:2500 iResolveHiddenEdgeTypes \:2500\:2500\:2500\:2500
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] iResolveHiddenEdgeTypes \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
    \:30aa\:30d7\:30b7\:30e7\:30f3\:304b\:3089 SplitHistoryChain \:3068 HiddenEdgeTypes \:3092\:53c2\:7167\:3057\:3001
    \:63cf\:753b\:6642\:306b\:9664\:5916\:3059\:308b\:30a8\:30c3\:30b8 Type \:306e\:30ea\:30b9\:30c8\:3092\:8fd4\:3059\:3002
    
@@ -18040,7 +18358,7 @@ iResolveHiddenEdgeTypes[splitChain_, hiddenOpt_] :=
     True,
       {}];
 
-(* \:2500\:2500\:2500\:2500 iComputeTimeOrderedCoords \:2500\:2500\:2500\:2500
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] iComputeTimeOrderedCoords \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
    \:30ce\:30fc\:30c9\:3068\:30a8\:30c3\:30b8\:304b\:3089\:3001\:5f31\:9023\:7d50\:6210\:5206 (WCC) \:3054\:3068\:306b
    \:6700\:65e9\:30ce\:30fc\:30c9\:6642\:523b\:3092\:30ad\:30fc\:3068\:3057\:3066\:6642\:7cfb\:5217\:9806\:306b\:4e26\:3079\:3001
    \:5404 WCC \:5185\:306f LayeredDigraphEmbedding \:306e\:5ea7\:6a19\:3092\:5229\:7528\:3057\:3066
@@ -19789,7 +20107,7 @@ LLMGraphDAGMarkFailed[jobId_String, nodeIds_List, reason_String:"Manual"] :=
    handler (Function) \:306f Put/Get \:3067\:30b7\:30ea\:30a2\:30e9\:30a4\:30ba\:53ef\:80fd\:3002
    \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
-(* \[HorizontalLine]\[HorizontalLine] NotebookLLMGraph \:00d7 Snapshot \:30de\:30fc\:30b8 \:8a2d\:5099 \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+(* \[HorizontalLine]\[HorizontalLine] NotebookLLMGraph \[Times] Snapshot \:30de\:30fc\:30b8 \:8a2d\:5099 \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
    Snapshot \:6642\:306b LLMGraph \:306e subset (\:307e\:305f\:306f\:5168\:90e8) \:3092\:4e26\:7f6e\:4fdd\:5b58\:3057\:3001
    Restore \:6642\:306b notebook \:306e LLMGraph \:3068\:30de\:30fc\:30b8\:3059\:308b\:305f\:3081\:306e helper \:7fa4\:3002
    iLLMGraphExtractSubsetForJob: job \:306b\:7d10\:3065\:304f\:30ce\:30fc\:30c9\:3060\:3051\:3092\:62bd\:51fa
@@ -20432,7 +20750,7 @@ iLLMGraphDAGRecordHistory[job_Association] :=
           detail = Lookup[res, "VisibleExplanation",
             Lookup[res, "Reason", None]],
           dec = None; outc = None; reason = None; detail = None];
-        (* \:30b5\:30de\:30ea\:30fc\:6587\:5b57\:5217\:306e\:4e0a\:9650\:3092 80\:2192240\:306b\:62e1\:5927 *)
+        (* \:30b5\:30de\:30ea\:30fc\:6587\:5b57\:5217\:306e\:4e0a\:9650\:3092 80\[RightArrow]240\:306b\:62e1\:5927 *)
         summaryStr = If[statusStr === "Failed",
           "Error: " <> ToString[Lookup[dagNode, "error", ""]],
           StringTake[ToString[res], UpTo[240]]];
@@ -20676,7 +20994,7 @@ iLLMGraphDAGTick[jobId_String] :=
     elapsed  = Round[AbsoluteTime[] - Lookup[job, "startTime", AbsoluteTime[]]];
     totalCount = Length[nodes];
 
-    (* \:2500\:2500 v2026-04-20 T12: rate-limit active \:306a\:3089 DAG \:5373\:30ad\:30e3\:30f3\:30bb\:30eb \:2500\:2500
+    (* \[HorizontalLine]\[HorizontalLine] v2026-04-20 T12: rate-limit active \:306a\:3089 DAG \:5373\:30ad\:30e3\:30f3\:30bb\:30eb \[HorizontalLine]\[HorizontalLine]
        T10/T11 \:306f Runtime Status \:3084 iRecordFatalFailure \:3092\:7d4c\:7531\:3057\:305f\:304c\:3001
        context \:53c2\:7167\:3084\:30d1\:30c3\:30b1\:30fc\:30b8\:9593\:53c2\:7167\:306e\:554f\:984c\:3067\:52b9\:304b\:306a\:304b\:3063\:305f\:3002
        T12 \:306f\:540c\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:516c\:958b API \:3067\:3042\:308b ClaudeRateLimitStatus[] \:3092\:76f4\:63a5
@@ -20724,7 +21042,7 @@ iLLMGraphDAGTick[jobId_String] :=
           $iLLMGraphDAGJobs = KeyDrop[$iLLMGraphDAGJobs, jobId];
           Return[]]]];
 
-    (* \:2500\:2500 v2026-04-20 T10: Runtime \:5931\:6557\:6642\:306e\:65e9\:671f\:505c\:6b62\:2500\:2500
+    (* \[HorizontalLine]\[HorizontalLine] v2026-04-20 T10: Runtime \:5931\:6557\:6642\:306e\:65e9\:671f\:505c\:6b62\[HorizontalLine]\[HorizontalLine]
        \:3053\:306e DAG \:304c ClaudeRuntime \:7d4c\:7531\:3067\:3001\:5bfe\:5fdc\:3059\:308b Runtime \:304c
        Status=Failed \:306b\:306a\:3063\:3066\:3044\:305f\:3089\:3001\:6b8b\:308a\:306e\:30ce\:30fc\:30c9\:3092\:5168\:3066
        cancelled \:6271\:3044\:306b\:3057\:3066\:30b8\:30e7\:30d6\:3092\:5373\:4e86\:3059\:308b\:3002
@@ -22692,7 +23010,7 @@ iToolExecMathematica[input_Association, accessSpec_Association,
    \"Web search failed\" \:3092\:56fa\:5b9a\:3067\:8fd4\:3057\:3066\:3044\:305f\:3002
    
    ClaudeWebSearch \:306e\:5b9f\:5b9a\:7fa9 (L5227):
-     ClaudeWebSearch[query_String] \:2192 iDoWebSearch[prompt] \:2192 LLM \:8981\:7d04 String
+     ClaudeWebSearch[query_String] \[RightArrow] iDoWebSearch[prompt] \[RightArrow] LLM \:8981\:7d04 String
    
    \:305d\:3053\:3067\:4ee5\:4e0b\:306b\:4fee\:6b63:
      - 1 \:5f15\:6570\:547c\:3073\:51fa\:3057\:306b\:7d71\:4e00\:3002maxResults \:5f15\:6570\:306f\:8ffd\:52a0\:60c5\:5831\:3068\:3057\:3066
@@ -22914,11 +23232,21 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
     modelSpec   = OptionValue["Model"];
     timeoutOpt  = OptionValue["Timeout"];   (* Phase 31.0 *)
     
-    (* Model \:6307\:5b9a\:304c List \:306e\:5834\:5408: \:5f37\:5236\:7684\:306b SyncProvider=True \:306b\:3059\:308b\:3002
-       iQueryViaAPI \:306f\:540c\:671f HTTP \:547c\:3073\:51fa\:3057\:306e\:305f\:3081\:3001
-       CLI \:975e\:540c\:671f\:30d1\:30b9 (iMakeBatStreamJson) \:3092\:4f7f\:308f\:306a\:3044\:3002 *)
+    (* Phase A6 B-α (2026-04-27): Model 指定が List の場合の強制 sync 化を
+       lmstudio に限り解除する。lmstudio は claudecode で iPrepareLMStudioMCPPS1
+       (v2026-04-24T08) の async 経路が利用可能なため、SyncProvider=False を
+       許容し QueryProviderAsync 経由でフロントエンドブロックを回避する。
+       それ以外の List 形式 (anthropic/openai 等で URL 指定など) は従来どおり
+       同期 HTTP (iQueryViaAPI) を使うため強制 sync を維持する。
+       
+       注意: B-α 単独では QueryProviderAsync は依然 Claude CLI 用なので、
+       実際には async 経路に切り替わっても CLI が起動される。B-β で
+       QueryProviderAsync に lmstudio 分岐を追加して完成する。*)
     If[ListQ[modelSpec] && Length[modelSpec] >= 2,
-      syncProv = True];
+      If[StringQ[modelSpec[[1]]] &&
+         ToLowerCase[modelSpec[[1]]] === "lmstudio",
+        syncProv = False,
+        syncProv = True]];
     
     accessSpec = <|
       "AccessLevel"          -> accessLevel,
@@ -23020,13 +23348,76 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
          \:65e7 iClaudeQueryAsyncWithProgress \:3068\:540c\:3058\:51fa\:529b\:5f62\:5f0f\:3002
          iICollectChunkResult \:304c raw text \:3068\:3057\:3066\:56de\:53ce\:3057\:305f\:5f8c\:3001
          collectProvider \:304c iExtractResultFromStreamJsonText \:3067
-         \:5b9f\:969b\:306e\:30ec\:30b9\:30dd\:30f3\:30b9\:30c6\:30ad\:30b9\:30c8\:3092\:62bd\:51fa\:3059\:308b\:3002 *)
+         \:5b9f\:969b\:306e\:30ec\:30b9\:30dd\:30f3\:30b9\:30c6\:30ad\:30b9\:30c8\:3092\:62bd\:51fa\:3059\:308b\:3002
+         
+         Phase A6 B-\:03b2 (2026-04-27): modelSpec \:304c {lmstudio, model, [url]}
+         \:30ea\:30b9\:30c8\:5f62\:5f0f\:306e\:5834\:5408\:3001Claude CLI \:306e\:4ee3\:308f\:308a\:306b
+         iPrepareLMStudioMCPPS1 \:7d4c\:7531\:3067 PowerShell + StartProcess \:3092\:8d77\:52d5\:3002
+         \:8fd4\:308a\:5024\:306e providerKind \:3067 lmstudio / claude-cli \:3092\:533a\:5225\:3057\:3001
+         B-\:03b3 \:3067\:7d50\:679c\:56de\:53ce\:5074\:304c\:5b9f\:969b\:306e\:51fa\:529b\:30d5\:30a9\:30fc\:30de\:30c3\:30c8\:5dee\:7570 (stream-json
+         vs LMStudio \:751f JSON) \:306b\:5408\:308f\:305b\:3066\:30c7\:30b3\:30fc\:30c0\:3092\:5207\:308a\:66ff\:3048\:308b\:3002 *)
       "QueryProviderAsync" -> Function[{contextPacket, convState},
         Module[{prompt, routeAdvice, ts, outFile, promptFile, batFile,
                 proc, finalText, strm, norm},
           prompt = iAdapterBuildPrompt[contextPacket, convState];
           routeAdvice = Lookup[contextPacket, "RouteAdvice",
             <|"Route" -> "CloudLLM"|>];
+          
+          (* \[HorizontalLine]\[HorizontalLine] Phase A6 B-\:03b2 fix3 (2026-04-27): \:5143\:30b3\:30fc\:30c9\:5fe0\:5b9f\:30e2\:30fc\:30c9 \[HorizontalLine]\[HorizontalLine]
+             lmstudio \:30b1\:30fc\:30b9\:3060\:3051\:3092\:5148\:982d\:3067 Return\:3057\u3001\:305d\:308c\:4ee5\:5916\:306f
+             \:6539\:9020\:524d\:30b3\:30fc\:30c9\:3092\:6587\:5b57\:901a\:308a\:6e29\:5b58\:3059\u308b\u3002fix1/fix2 \:3067 If \:306e\:3088\:3046\:306b
+             \:5b9f\:884c\:30d5\:30ed\:30fc\:3092\:518d\:69cb\:9020\:3057\:305f\:3053\:3068\:304c CLI \:7d4c\:8def\:7834\:640d\:306e\:539f\:56e0\:3060\:3063\:305f\u3002
+             Return \:306f\:6700\:5916\:5074 Function \:307e\:3067\:6e21\:308a\:3001
+             \:6539\:9020\:524d\:3068\:5b8c\:5168\:540c\:7b49\:306e\:5b9f\:884c\:6319\:52d5\:3092\:7dad\:6301\:3059\u308b\u3002 *)
+          
+          (* lmstudio \:5206\:5c90: \:6210\:529f\:6642\:306f\:65e9\:671f Return\u3001\:5931\:6557\:6642\:306f $Failed \u3092 Return *)
+          If[ListQ[modelSpec] && Length[modelSpec] >= 2 &&
+             StringQ[modelSpec[[1]]] &&
+             ToLowerCase[modelSpec[[1]]] === "lmstudio",
+            Module[{lmstudioModel2, customURL2, label2, apiKey2, prepared2, proc2},
+              lmstudioModel2 = modelSpec[[2]];
+              customURL2 = If[Length[modelSpec] >= 3, modelSpec[[3]],
+                "http://localhost:1234"];
+              label2 = "lmstudio/" <> lmstudioModel2;
+              
+              Quiet[CurrentValue[nb, WindowStatusArea] =
+                label2 <> " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s",
+                                    " querying... 0s"]];
+              
+              apiKey2 = iResolveLMStudioAPIKey[customURL2];
+              If[!StringQ[apiKey2], apiKey2 = "lm-studio"];
+              
+              prepared2 = iPrepareLMStudioMCPPS1[apiKey2, lmstudioModel2, prompt,
+                iEnsureLMStudioV1ChatPath[customURL2],
+                Replace[timeoutOpt, Automatic -> $iFallbackTimeout]];
+              
+              If[prepared2 === $Failed,
+                Print["  [RT-Async] ERROR: iPrepareLMStudioMCPPS1 returned $Failed"];
+                Return[$Failed]];
+              
+              proc2 = StartProcess[{
+                prepared2["psExe"], "-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", prepared2["ps1File"],
+                prepared2["promptFile"], prepared2["outFile"], prepared2["errFile"],
+                prepared2["apiKey"], prepared2["url"], prepared2["model"]}];
+              
+              Return[<|
+                "proc"         -> proc2,
+                "outFile"      -> prepared2["outFile"],
+                "errFile"      -> prepared2["errFile"],
+                "tmpDir"       -> prepared2["tmpDir"],
+                "ps1File"      -> prepared2["ps1File"],
+                "promptFile"   -> prepared2["promptFile"],
+                "startTime"    -> AbsoluteTime[],
+                "timeout"      -> Replace[timeoutOpt,
+                                    Automatic -> $iFallbackTimeout],
+                "providerKind" -> "lmstudio",
+                "lmstudioURL"  -> customURL2,
+                "lmstudioModel"-> lmstudioModel2|>]
+            ]
+          ];
+          
+          (* \[HorizontalLine]\[HorizontalLine] \:4ee5\:4e0b\:306f\:6539\:9020\:524d\:30b3\:30fc\:30c9\:3092\:5b8c\:5168\:6e29\:5b58 (Claude CLI \:7d4c\:8def) \[HorizontalLine]\[HorizontalLine] *)
           
           (* WindowStatusArea: \:975e\:540c\:671f\:30d7\:30ed\:30bb\:30b9\:8d77\:52d5 *)
           Quiet[CurrentValue[nb, WindowStatusArea] =
@@ -24484,35 +24875,57 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
     (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:304c\:306a\:3044\:5834\:5408\:306e\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af
        Phase 23 \:4fee\:6b63: lastTurnIsTextOnly \:3067\:3082\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3092\:9069\:7528\:3002
        \:4e2d\:9593\:30bf\:30fc\:30f3\:306e\:30b3\:30fc\:30c9\:5b9f\:884c\:6e08\:307f\:30b1\:30fc\:30b9\:306f isAfterDaemon \:3067\:65e2\:306b\:30ac\:30fc\:30c9\:3055\:308c\:3066\:3044\:308b\:3002
-       Column[...] Input \:30bb\:30eb\:306f\:65e7\:30d1\:30b9\:3068\:540c\:7b49\:306e\:8868\:793a\:3092\:63d0\:4f9b\:3059\:308b\:3002 *)
-    If[Length[blocks] === 0 && !TrueQ[isAfterDaemon],
-      lines = Select[StringSplit[textOnly, "\n"],
-        StringTrim[#] =!= "" &];
-      If[Length[lines] > 0,
-        fallbackCode = "Column[{\n" <>
-          StringJoin[Riffle[
-            ("  " <> ToString[#, InputForm]) & /@ lines,
-            ",\n"]] <>
-          "\n}, Spacings -> 0.5]";
-        AppendTo[queue, With[{fc = fallbackCode}, Function[
-          Module[{result, box, cell},
-            result = Quiet @ Check[
-              MathLink`CallFrontEnd[
-                FrontEnd`UndocumentedTestFEParserPacket[fc, False]],
-              $Failed];
-            box = Which[
-              MatchQ[result, {_BoxData, ___}],            First[result],
-              MatchQ[result, {Cell[_BoxData, ___], ___}], First[result][[1]],
-              MatchQ[result, _BoxData],                   result,
-              True,                                       $Failed];
-            cell = If[MatchQ[box, _BoxData],
-              Cell[box, "Input"],
-              Cell[fc, "Input", CellAutoOverwrite -> True]];
-            NBAccess`NBWriteCell[nb, cell]]]]];
-        If[TrueQ[ae] && !iIsAutoEvalProhibited[fallbackCode],
-          AppendTo[queue, Function[
-            NBAccess`NBEvaluatePreviousCell[nb]]]];
-        blocks = {fallbackCode}]];
+       Column[...] Input \:30bb\:30eb\:306f\:65e7\:30d1\:30b9\:3068\:540c\:7b49\:306e\:8868\:793a\:3092\:63d0\:4f9b\:3059\:308b\:3002
+       
+       Phase A6 B-\:03b2 fix4 (2026-04-27): LMStudio \:7d4c\:8def\:3067\:306e Out \:6c5a\:67d3\:3092\:9632\:6b62\u3002
+       \:30b7\:30ca\:30ea\:30aa: \:4e2d\:9593\:30bf\:30fc\:30f3\:3067 Sum[i,{i,1,100}] \:5b9f\:884c\:6e08\:307f (Phase 20 \:8868\:793a\:6e08\:307f)\u3001
+       \:6700\:7d42\:30bf\:30fc\:30f3\:304c TextOnly \:3067 "1\:304b\:3089100\:306e\:548c\:306f 5050 \:3067\:3059\u3002 [DONE]" \:306e\:5834\u3002
+         - blocks = {} (\:6700\:7d42\:30bf\:30fc\:30f3\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:62bd\:51fa\:30b9\:30ad\:30c3\:30d7\:6e08\u3001L24505)
+         - isAfterDaemon = False (textOnly \:5b9f\:8cea 23 \:6587\:5b57 \[GreaterEqual] 20 \:3067\:89e3\:9664\u3001L24454)
+         - \:7d50\:679c: \:4ee5\:4e0b\:306e fallbackCode \:304c "Column[{...DONE}]" \:3092\:751f\:6210\u3001AutoEvaluate \:3055\:308c\:3066
+           \:6700\:7d42 Out \:304c GridBox \:306b\:306a\u308a\u3001Sum \:306e\:5b9f\:884c\:7d50\:679c (5050) \:304c Out \:304b\:3089\:6d88\:3048\:308b\u3002
+       
+       \:5bfe\:7b56: \:6700\:7d42\:30bf\:30fc\:30f3\:304c TextOnly \:304b\:3064\:4e2d\:9593\:30bf\:30fc\:30f3\:306b\:5b9f\:30b3\:30fc\:30c9\:5b9f\:884c\:304c
+       \:3042\:308b\:5834\:5408\u3001fallbackCode \:306e\:751f\:6210\:3092\:30b9\:30ad\:30c3\:30d7\u3002textOnly \:306f L24463 \:3067
+       Text \:30bb\:30eb\:3068\:3057\:3066\:65e2\:306b\:66f8\:304b\:308c\:3066\:3044\:308b\:305f\:3081\u3001\:8aac\:660e\:306f\:6b8b\:308b\u3002
+       \:6700\:7d42 Out \:306f\:4e2d\:9593\:30bf\:30fc\:30f3\:306e\:5b9f\:30b3\:30fc\:30c9\:7d50\:679c (e.g. 5050) \:304c\:6b8b\u308a\u3001
+       claudecode \:5358\:72ec ClaudeEval \:3068\:540c\:3058\:632f\:308b\:821e\:3044\:306b\:306a\u308b\u3002 *)
+    Module[{suppressFallback = False, msgsFB},
+      msgsFB = Lookup[Lookup[st, "ConversationState", <||>], "Messages", {}];
+      suppressFallback = TrueQ[lastTurnIsTextOnly] &&
+        Length[msgsFB] > 1 &&
+        AnyTrue[Most[msgsFB],
+          (StringQ[Lookup[#, "ProposedCode", None]] ||
+           ListQ[Lookup[#, "ToolCalls", None]]) &];
+      
+      If[Length[blocks] === 0 && !TrueQ[isAfterDaemon] && !suppressFallback,
+        lines = Select[StringSplit[textOnly, "\n"],
+          StringTrim[#] =!= "" &];
+        If[Length[lines] > 0,
+          fallbackCode = "Column[{\n" <>
+            StringJoin[Riffle[
+              ("  " <> ToString[#, InputForm]) & /@ lines,
+              ",\n"]] <>
+            "\n}, Spacings -> 0.5]";
+          AppendTo[queue, With[{fc = fallbackCode}, Function[
+            Module[{result, box, cell},
+              result = Quiet @ Check[
+                MathLink`CallFrontEnd[
+                  FrontEnd`UndocumentedTestFEParserPacket[fc, False]],
+                $Failed];
+              box = Which[
+                MatchQ[result, {_BoxData, ___}],            First[result],
+                MatchQ[result, {Cell[_BoxData, ___], ___}], First[result][[1]],
+                MatchQ[result, _BoxData],                   result,
+                True,                                       $Failed];
+              cell = If[MatchQ[box, _BoxData],
+                Cell[box, "Input"],
+                Cell[fc, "Input", CellAutoOverwrite -> True]];
+              NBAccess`NBWriteCell[nb, cell]]]]];
+          If[TrueQ[ae] && !iIsAutoEvalProhibited[fallbackCode],
+            AppendTo[queue, Function[
+              NBAccess`NBEvaluatePreviousCell[nb]]]];
+          blocks = {fallbackCode}]]];
     
     (* \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7 *)
     If[TrueQ[autoMark],
@@ -25217,6 +25630,573 @@ ClaudeRuntimeListSnapshots[] :=
       {d, SortBy[dirs, -FileDate[#, "Modification"] &]}];
     Dataset[rows]
   ];
+iClaudeDirectivesAvailableQ[] :=
+  Length[Names["ClaudeDirectives`ClaudeBuildDirectivePromptForSingle"]] > 0 &&
+  ValueQ[ClaudeDirectives`$ClaudeDirectiveRepository] &&
+  ClaudeDirectives`$ClaudeDirectiveRepository =!= None;
+
+iClaudeSysPromptViaDirectives[modelName_String, taskHint_String] :=
+  Module[{result},
+    result = Quiet @ Check[
+      ClaudeDirectives`ClaudeBuildDirectivePromptForSingle[modelName, taskHint],
+      ""];
+    If[StringQ[result] && result =!= "",
+      result <> "\n\n---\n\n",
+      ""]
+  ];
+
+
+
+
+(* ============================================================
+   Private 実装: claudecode_editmodes.wl からマージ
+   (Phase 36 stage2 restart)
+
+   元ファイル: claudecode_editmodes.wl
+   元コンテキスト: ClaudeEditModes`Private`
+   マージ後: ClaudeCode`Private`
+
+   設計上の不変条件:
+     - 編集前バックアップ取得は必須 (Backup -> False は明示時のみ)
+     - 編集経路は OpenAppend / StringInsert + 一時ファイル経由の atomic write
+     - claudecode 本体への依存は Names["ClaudeCode`..."] による文字列参照のみ
+   ============================================================ *)
+
+$ClaudeEditModesVersion = "0.1.0-phase34-stage-d1";
+
+(* タグ定数 *)
+$ClaudeEditModeAppendTagOpen   = "<<<APPEND_AT_END>>>";
+$ClaudeEditModeAppendTagClose  = "<<<END_APPEND>>>";
+$ClaudeEditModeInsertTagClose  = "<<<END_INSERT>>>";
+
+(* InsertBefore タグはアンカーを含むため正規表現マッチ用 *)
+$insertOpenPattern = RegularExpression["<<<INSERT_BEFORE:\\s*([^>]+?)>>>"];
+
+(* ============================================================
+   1. iL バイリンガル
+   ============================================================ *)
+
+iL[ja_String, en_String] := If[$Language === "Japanese", ja, en];
+
+(* ============================================================
+   2. パッケージパス解決
+   
+   pkgName が
+     - 絶対パス・相対パスの .wl ファイル: そのまま使う
+     - 拡張子なし: $packageDirectory または NotebookDirectory[] / Directory[]
+       との組み合わせで .wl を試す
+   ============================================================ *)
+
+iResolvePackagePath[pkgName_String] :=
+  Module[{candidates},
+    candidates = {
+      (* 1. そのままパスとして存在 *)
+      pkgName,
+      (* 2. .wl 拡張子付加 *)
+      pkgName <> ".wl",
+      (* 3. $packageDirectory との組み合わせ *)
+      If[ValueQ[Global`$packageDirectory] && StringQ[Global`$packageDirectory],
+        FileNameJoin[{Global`$packageDirectory, pkgName <> ".wl"}],
+        Nothing],
+      If[ValueQ[Global`$packageDirectory] && StringQ[Global`$packageDirectory],
+        FileNameJoin[{Global`$packageDirectory, pkgName}],
+        Nothing],
+      (* 4. NotebookDirectory との組み合わせ *)
+      Quiet @ Check[FileNameJoin[{NotebookDirectory[], pkgName <> ".wl"}], Nothing],
+      Quiet @ Check[FileNameJoin[{NotebookDirectory[], pkgName}], Nothing],
+      (* 5. 現在のディレクトリ *)
+      FileNameJoin[{Directory[], pkgName <> ".wl"}],
+      FileNameJoin[{Directory[], pkgName}]
+    };
+    SelectFirst[Select[candidates, StringQ], FileExistsQ, $Failed]
+  ];
+
+iResolvePackagePath[___] := $Failed;
+
+(* ============================================================
+   3. バックアップ取得
+   
+   Phase 33 §5.3 のスクリプトと同じパターンを関数化。
+   タイムスタンプ付きで衝突回避。
+   ============================================================ *)
+
+iBackupBeforeEdit[path_String, suffix_String:""] :=
+  Module[{backupPath, ts, suffixPart},
+    ts = DateString[Now,
+      {"Year", "Month", "Day", "T", "Hour24", "Minute", "Second"}];
+    suffixPart = If[suffix =!= "", "-" <> suffix, ""];
+    backupPath = path <> ".backup-" <> ts <> suffixPart;
+    Quiet @ Check[
+      CopyFile[path, backupPath, OverwriteTarget -> True];
+      backupPath,
+      $Failed]
+  ];
+
+iBackupBeforeEdit[___] := $Failed;
+
+(* ============================================================
+   4. 原子的書き込み (一時ファイル経由のリネーム)
+   
+   電源断や Mathematica クラッシュで部分書き込みファイルが残るのを防ぐ。
+   ============================================================ *)
+
+iWriteFileAtomic[path_String, content_String] :=
+  Module[{tmpPath, strm, byteCount = 0},
+    tmpPath = path <> ".tmp." <> ToString[$ProcessID] <> "-" <>
+      ToString[Round[1000 * AbsoluteTime[]]];
+    strm = Quiet @ Check[
+      OpenWrite[tmpPath, BinaryFormat -> True],
+      $Failed];
+    If[strm === $Failed, Return[$Failed]];
+    byteCount = Quiet @ Check[
+      BinaryWrite[strm,
+        ExportString[content, "Text", CharacterEncoding -> "UTF-8"]];
+      Close[strm];
+      StringLength[content],
+      Close[strm]; $Failed];
+    If[byteCount === $Failed,
+      Quiet @ DeleteFile[tmpPath];
+      Return[$Failed]];
+    (* 既存ファイルを削除してから tmp をリネーム *)
+    Quiet @ DeleteFile[path];
+    Quiet @ Check[
+      RenameFile[tmpPath, path];
+      path,
+      Quiet @ DeleteFile[tmpPath];
+      $Failed]
+  ];
+
+iWriteFileAtomic[___] := $Failed;
+
+(* ============================================================
+   5. 末尾追加の生実装 (OpenAppend)
+   
+   Phase 33 §5.3 のパターンを流用。
+   ファイル末尾の改行を保証してから content を追加する。
+   ============================================================ *)
+
+iAppendBlockRaw[path_String, content_String,
+    ensureLeadingNewline_:True] :=
+  Module[{strm, finalContent, currentEnd},
+    (* 末尾が改行で終わっていない場合は先頭に改行を追加 *)
+    finalContent = content;
+    If[ensureLeadingNewline,
+      currentEnd = Quiet @ Check[
+        Module[{src = Import[path, "Text", CharacterEncoding -> "UTF-8"]},
+          If[StringQ[src] && StringLength[src] > 0,
+            StringTake[src, -1], ""]],
+        ""];
+      If[currentEnd =!= "\n" && currentEnd =!= "",
+        finalContent = "\n" <> finalContent]];
+    (* content 末尾改行も補う *)
+    If[!StringEndsQ[finalContent, "\n"],
+      finalContent = finalContent <> "\n"];
+    
+    strm = Quiet @ Check[
+      OpenAppend[path, BinaryFormat -> True],
+      $Failed];
+    If[strm === $Failed, Return[$Failed]];
+    
+    Quiet @ Check[
+      BinaryWrite[strm,
+        ExportString[finalContent, "Text", CharacterEncoding -> "UTF-8"]];
+      Close[strm];
+      path,
+      Close[strm]; $Failed]
+  ];
+
+iAppendBlockRaw[___] := $Failed;
+
+(* ============================================================
+   6. アンカー前挿入の生実装
+   
+   StringPosition でアンカーを検索。複数ヒット時は失敗 (誤挿入回避)。
+   発見時は Atomic write で先頭〜アンカー直前 + content + アンカー以降 を書き戻し。
+   ============================================================ *)
+
+iInsertBeforeAnchorRaw[path_String, anchor_String, content_String] :=
+  Module[{src, positions, insertPos, before, after, finalContent, writeResult},
+    src = Quiet @ Check[
+      Import[path, "Text", CharacterEncoding -> "UTF-8"],
+      $Failed];
+    If[!StringQ[src],
+      Return[<|"Status" -> "Failed",
+        "Reason" -> "ImportError",
+        "Anchor" -> anchor|>]];
+    
+    positions = StringPosition[src, anchor];
+    If[Length[positions] === 0,
+      Return[<|"Status" -> "Failed",
+        "Reason" -> "AnchorNotFound",
+        "Anchor" -> anchor|>]];
+    If[Length[positions] > 1,
+      Return[<|"Status" -> "Failed",
+        "Reason" -> "AnchorAmbiguous",
+        "Anchor" -> anchor,
+        "Occurrences" -> Length[positions]|>]];
+    
+    insertPos = First[positions][[1]];
+    before = If[insertPos > 1, StringTake[src, insertPos - 1], ""];
+    after  = StringTake[src, insertPos ;;];
+    
+    (* content 末尾改行を保証 *)
+    finalContent = If[StringEndsQ[content, "\n"],
+      content, content <> "\n"];
+    
+    writeResult = iWriteFileAtomic[path, before <> finalContent <> after];
+    If[writeResult === $Failed,
+      Return[<|"Status" -> "Failed",
+        "Reason" -> "WriteError",
+        "Anchor" -> anchor|>]];
+    
+    <|"Status" -> "OK",
+      "Anchor" -> anchor,
+      "Position" -> insertPos|>
+  ];
+
+iInsertBeforeAnchorRaw[___] :=
+  <|"Status" -> "Failed", "Reason" -> "InvalidArguments"|>;
+
+(* ============================================================
+   7. Public: ClaudeAppendBlockToPackage
+   ============================================================ *)
+
+Options[ClaudeAppendBlockToPackage] = {
+  "Backup"               -> True,
+  "BackupSuffix"         -> "append-block",
+  "EnsureLeadingNewline" -> True
+};
+
+ClaudeAppendBlockToPackage[pkgName_String, content_String,
+    opts:OptionsPattern[]] :=
+  Module[{path, backupPath = None, result},
+    path = iResolvePackagePath[pkgName];
+    If[path === $Failed,
+      Return[<|"Status"  -> "Failed",
+        "Reason"  -> "PackageNotFound",
+        "Package" -> pkgName|>]];
+    
+    If[TrueQ[OptionValue["Backup"]],
+      backupPath = iBackupBeforeEdit[path, OptionValue["BackupSuffix"]];
+      If[backupPath === $Failed,
+        Return[<|"Status" -> "Failed",
+          "Reason" -> "BackupFailed",
+          "Path"   -> path|>]]];
+    
+    result = iAppendBlockRaw[path, content,
+      TrueQ[OptionValue["EnsureLeadingNewline"]]];
+    
+    If[result === $Failed,
+      <|"Status"     -> "Failed",
+        "Reason"     -> "WriteError",
+        "Path"       -> path,
+        "BackupPath" -> backupPath|>,
+      <|"Status"        -> "OK",
+        "Path"          -> path,
+        "BackupPath"    -> backupPath,
+        "AppendedChars" -> StringLength[content]|>]
+  ];
+
+ClaudeAppendBlockToPackage[___] :=
+  <|"Status" -> "Failed", "Reason" -> "InvalidArguments"|>;
+
+(* ============================================================
+   8. Public: ClaudeInsertBeforeAnchorInPackage
+   ============================================================ *)
+
+Options[ClaudeInsertBeforeAnchorInPackage] = {
+  "Backup"       -> True,
+  "BackupSuffix" -> "insert-before"
+};
+
+ClaudeInsertBeforeAnchorInPackage[pkgName_String, anchor_String,
+    content_String, opts:OptionsPattern[]] :=
+  Module[{path, backupPath = None, result},
+    path = iResolvePackagePath[pkgName];
+    If[path === $Failed,
+      Return[<|"Status"  -> "Failed",
+        "Reason"  -> "PackageNotFound",
+        "Package" -> pkgName|>]];
+    
+    If[TrueQ[OptionValue["Backup"]],
+      backupPath = iBackupBeforeEdit[path, OptionValue["BackupSuffix"]];
+      If[backupPath === $Failed,
+        Return[<|"Status" -> "Failed",
+          "Reason" -> "BackupFailed",
+          "Path"   -> path|>]]];
+    
+    result = iInsertBeforeAnchorRaw[path, anchor, content];
+    
+    If[result["Status"] === "OK",
+      <|"Status"        -> "OK",
+        "Path"          -> path,
+        "BackupPath"    -> backupPath,
+        "Anchor"        -> anchor,
+        "Position"      -> result["Position"],
+        "InsertedChars" -> StringLength[content]|>,
+      Append[result, "BackupPath" -> backupPath]]
+  ];
+
+ClaudeInsertBeforeAnchorInPackage[___] :=
+  <|"Status" -> "Failed", "Reason" -> "InvalidArguments"|>;
+
+(* ============================================================
+   9. LLM 応答からタグブロックを抽出
+   
+   StringCases + 非貪欲マッチ。Overlaps -> False で重複防止。
+   ============================================================ *)
+
+iExtractAppendBlock[response_String] :=
+  Module[{matches},
+    matches = StringCases[response,
+      RegularExpression[
+        "(?s)<<<APPEND_AT_END>>>\\s*\\n?(.*?)\\s*<<<END_APPEND>>>"] :>
+      "$1",
+      Overlaps -> False];
+    If[Length[matches] > 0, First[matches], None]
+  ];
+
+iExtractAppendBlock[___] := None;
+
+iExtractInsertBlock[response_String] :=
+  Module[{matches},
+    matches = StringCases[response,
+      RegularExpression[
+        "(?s)<<<INSERT_BEFORE:\\s*([^>]+?)>>>\\s*\\n?(.*?)\\s*<<<END_INSERT>>>"] :>
+      {"$1", "$2"},
+      Overlaps -> False];
+    If[Length[matches] > 0, First[matches], None]
+  ];
+
+iExtractInsertBlock[___] := None;
+
+(* ============================================================
+   10. Public: ClaudeAutoDetectEditMode
+   ============================================================ *)
+
+ClaudeAutoDetectEditMode[response_String] :=
+  Which[
+    iExtractAppendBlock[response] =!= None,
+      "AppendBlock",
+    iExtractInsertBlock[response] =!= None,
+      "InsertBefore",
+    True,
+      "ReplaceFunction"
+  ];
+
+ClaudeAutoDetectEditMode[___] := "ReplaceFunction";
+
+(* ============================================================
+   11. Public: ClaudeParseEditModeResponse
+   ============================================================ *)
+
+ClaudeParseEditModeResponse[response_String] :=
+  Module[{mode, content, parsed},
+    mode = ClaudeAutoDetectEditMode[response];
+    Switch[mode,
+      "AppendBlock",
+        content = iExtractAppendBlock[response];
+        <|"Mode"    -> "AppendBlock",
+          "Content" -> If[StringQ[content], content, ""],
+          "Anchor"  -> None|>,
+      "InsertBefore",
+        parsed = iExtractInsertBlock[response];
+        If[ListQ[parsed] && Length[parsed] === 2,
+          <|"Mode"    -> "InsertBefore",
+            "Anchor"  -> StringTrim[parsed[[1]]],
+            "Content" -> parsed[[2]]|>,
+          (* フォールバック: parse 失敗時 *)
+          <|"Mode"    -> "ReplaceFunction",
+            "Content" -> response,
+            "Anchor"  -> None|>],
+      _,
+        <|"Mode"    -> "ReplaceFunction",
+          "Content" -> response,
+          "Anchor"  -> None|>
+    ]
+  ];
+
+ClaudeParseEditModeResponse[___] :=
+  <|"Mode" -> "ReplaceFunction", "Content" -> "", "Anchor" -> None|>;
+
+(* ============================================================
+   12. Public: ClaudeBuildEditModePromptInstructions
+   
+   LLM プロンプトに付与する応答形式仕様。
+   Automatic の場合は 3 形式提示 + ユーザー指示からの判定指針。
+   ============================================================ *)
+
+ClaudeBuildEditModePromptInstructions[mode_:Automatic] :=
+  Switch[mode,
+    "AppendBlock",
+      iL[
+        "応答は以下の形式で返してください:\n" <>
+        "<<<APPEND_AT_END>>>\n" <>
+        "(* ここに追加するコードブロック *)\n" <>
+        "<<<END_APPEND>>>\n\n" <>
+        "タグの外側にテキストを出力しないでください。",
+        "Respond in the following format ONLY:\n" <>
+        "<<<APPEND_AT_END>>>\n" <>
+        "(* code block to append at end of file *)\n" <>
+        "<<<END_APPEND>>>\n\n" <>
+        "Do not include any text outside the tags."],
+    "InsertBefore",
+      iL[
+        "応答は以下の形式で返してください:\n" <>
+        "<<<INSERT_BEFORE: アンカー文字列>>>\n" <>
+        "(* 挿入するコードブロック *)\n" <>
+        "<<<END_INSERT>>>\n\n" <>
+        "アンカーは元ファイル中で一意に出現する文字列を指定してください。\n" <>
+        "関数定義の先頭行 (例: \"iSomeFunction[\") や独自コメントが適切です。",
+        "Respond in the following format ONLY:\n" <>
+        "<<<INSERT_BEFORE: anchor-string>>>\n" <>
+        "(* code block to insert before anchor *)\n" <>
+        "<<<END_INSERT>>>\n\n" <>
+        "The anchor must appear EXACTLY ONCE in the source file.\n" <>
+        "Function definition headers or unique comments work well as anchors."],
+    "ReplaceFunction",
+      iL[
+        "応答は通常の Mathematica 関数定義として返してください。\n" <>
+        "既存関数の本体置換または新規関数追加の場合に使います。",
+        "Respond with normal Mathematica function definitions.\n" <>
+        "Use this for replacing existing function bodies or adding new functions."],
+    Automatic | _,
+      iL[
+        "応答は以下のいずれかの形式で返してください:\n\n" <>
+        "1. 関数本体の置換 (既定): 通常の関数定義を Mathematica コードブロックで\n\n" <>
+        "2. ファイル末尾への追加:\n" <>
+        "<<<APPEND_AT_END>>>\n" <>
+        "(* code *)\n" <>
+        "<<<END_APPEND>>>\n\n" <>
+        "3. 位置指定挿入:\n" <>
+        "<<<INSERT_BEFORE: anchor>>>\n" <>
+        "(* code *)\n" <>
+        "<<<END_INSERT>>>\n\n" <>
+        "ユーザー指示が「末尾に追加」「ファイルの最後に」を含むなら形式 2、\n" <>
+        "「\[CenterDot]\[CenterDot]の前に追加/挿入」「\[CenterDot]\[CenterDot]の直前に」を含むなら形式 3 を使ってください。",
+        "Respond in ONE of the following formats:\n\n" <>
+        "1. Function replacement (default): Mathematica function definitions in code blocks\n\n" <>
+        "2. Append at end of file:\n" <>
+        "<<<APPEND_AT_END>>>\n" <>
+        "(* code *)\n" <>
+        "<<<END_APPEND>>>\n\n" <>
+        "3. Insert before anchor:\n" <>
+        "<<<INSERT_BEFORE: anchor>>>\n" <>
+        "(* code *)\n" <>
+        "<<<END_INSERT>>>\n\n" <>
+        "Use format 2 when the user asks to append/add-at-end.\n" <>
+        "Use format 3 when the user asks to insert-before/add-before-X."]
+  ];
+
+ClaudeBuildEditModePromptInstructions[___] :=
+  ClaudeBuildEditModePromptInstructions[Automatic];
+
+(* ============================================================
+   13. Public: ClaudeUpdatePackageWithMode
+   
+   LLM ラウンドトリップ込みの統合 API。
+   - prompt にモード指示を付与して LLM に問い合わせ
+   - 応答からタグを検出してモード判定
+   - 該当経路 (AppendBlock / InsertBefore / ReplaceFunction) に振り分け
+   - DryRun 時は LLM 応答とパース結果のみ返し、ファイル書き込みはしない
+   ============================================================ *)
+
+Options[ClaudeUpdatePackageWithMode] = {
+  "Backup"                  -> True,
+  "DryRun"                  -> False,
+  "QueryFunction"           -> Automatic,
+  "AdditionalInstructions"  -> ""
+};
+
+ClaudeUpdatePackageWithMode[pkgName_String, prompt_String,
+    mode_:Automatic, opts:OptionsPattern[]] :=
+  Module[{path, instructions, fullPrompt, response, parsed, result, queryFn,
+          dryRun, actualMode, addInst, modeForInstructions},
+    path = iResolvePackagePath[pkgName];
+    If[path === $Failed,
+      Return[<|"Status"  -> "Failed",
+        "Reason"  -> "PackageNotFound",
+        "Package" -> pkgName|>]];
+    
+    dryRun  = TrueQ[OptionValue["DryRun"]];
+    queryFn = OptionValue["QueryFunction"];
+    addInst = OptionValue["AdditionalInstructions"];
+    modeForInstructions = If[MatchQ[mode,
+      "AppendBlock"|"InsertBefore"|"ReplaceFunction"],
+      mode, Automatic];
+    
+    instructions = ClaudeBuildEditModePromptInstructions[
+      modeForInstructions];
+    fullPrompt = prompt <> "\n\n---\n\n" <> instructions <>
+      If[StringQ[addInst] && addInst =!= "",
+        "\n\n" <> addInst, ""];
+    
+    (* QueryFunction 解決 *)
+    response = Which[
+      queryFn === Automatic &&
+        Length[Names["ClaudeCode`ClaudeQuerySync"]] > 0,
+        Quiet @ Check[
+          ToExpression["ClaudeCode`ClaudeQuerySync"][fullPrompt],
+          ""],
+      queryFn === Automatic,
+        Return[<|"Status" -> "Failed",
+          "Reason" -> "NoQueryFunction (ClaudeCode not loaded)"|>],
+      True,
+        Quiet @ Check[queryFn[fullPrompt], ""]];
+    
+    If[!StringQ[response] || response === "",
+      Return[<|"Status" -> "Failed",
+        "Reason" -> "EmptyResponse"|>]];
+    
+    parsed = ClaudeParseEditModeResponse[response];
+    actualMode = parsed["Mode"];
+    
+    (* モード明示指定があった場合は判定結果と一致するかチェック *)
+    If[MatchQ[mode, "AppendBlock"|"InsertBefore"] &&
+       actualMode =!= mode,
+      Return[<|"Status" -> "Failed",
+        "Reason" -> "ModeMismatch",
+        "RequestedMode" -> mode,
+        "DetectedMode"  -> actualMode,
+        "Response" -> response|>]];
+    
+    If[dryRun,
+      Return[<|"Status"   -> "DryRun",
+        "Mode"     -> actualMode,
+        "Content"  -> parsed["Content"],
+        "Anchor"   -> parsed["Anchor"],
+        "Path"     -> path,
+        "Response" -> response|>]];
+    
+    result = Switch[actualMode,
+      "AppendBlock",
+        ClaudeAppendBlockToPackage[pkgName, parsed["Content"],
+          "Backup" -> OptionValue["Backup"]],
+      "InsertBefore",
+        ClaudeInsertBeforeAnchorInPackage[pkgName, parsed["Anchor"],
+          parsed["Content"], "Backup" -> OptionValue["Backup"]],
+      "ReplaceFunction",
+        (* 既存の ClaudeUpdatePackage に委譲 *)
+        If[Length[Names["ClaudeCode`ClaudeUpdatePackage"]] > 0,
+          <|"Status" -> "Delegated",
+            "Reason" -> "ReplaceFunction route requires ClaudeCode`ClaudeUpdatePackage call. " <>
+              "Call it directly: ClaudeUpdatePackage[\"" <> pkgName <> "\", ...]"|>,
+          <|"Status" -> "Failed",
+            "Reason" -> "ReplaceFunction requires ClaudeCode loaded"|>],
+      _,
+        <|"Status" -> "Failed",
+          "Reason" -> "UnknownMode",
+          "Mode"   -> actualMode|>
+    ];
+    
+    Append[
+      If[AssociationQ[result], result,
+        <|"Status" -> "Failed", "Reason" -> "InvalidResult"|>],
+      "Mode" -> actualMode]
+  ];
+
+ClaudeUpdatePackageWithMode[___] :=
+  <|"Status" -> "Failed", "Reason" -> "InvalidArguments"|>;
 
 End[];
 
@@ -25224,6 +26204,91 @@ EndPackage[];
 
 (* Phase 33 Task 5 version marker *)
 ClaudeCode`$claudecodeVersion = "2026-04-24T09-palette-model-followup";
+(* v2026-04-27 (Phase A6 B-α): ClaudeBuildRuntimeAdapter で Model リストが
+   lmstudio のときの強制 SyncProvider=True を解除。lmstudio は async 経路
+   (iPrepareLMStudioMCPPS1 + StartProcess) が使えるため、SyncProvider=False
+   で QueryProviderAsync 経由でフロントエンドブロックを回避する基盤。
+   B-α 単独では QueryProviderAsync は依然 Claude CLI 用なので、Model
+   リストでも CLI が起動される回帰がありうる。観察用 stage。
+   B-β で QueryProviderAsync に lmstudio 分岐を追加して完成。 *)
+(* v2026-04-27 (Phase A6 B-β): QueryProviderAsync に lmstudio 分岐追加。
+   modelSpec={lmstudio,model,[url]} で iPrepareLMStudioMCPPS1 + PowerShell
+   StartProcess を起動。providerKind で lmstudio/claude-cli を区別。 *)
+(* v2026-04-27 (Phase A6 B-β fix1): Return スコープ曖昧バグ修正。
+   旧版の Return[<|...|>] が Module の入れ子で Function 全体を抜けず
+   Module から抜けただけになり、CLI 経路が誤って走ることがあった。
+   result70.nb で modelSpec=Automatic 時に "[RT-Async] Launch failed:
+   launchResult = $Failed" が再現。
+   修正: Return を全廃し If[cond, then, else] の三引数形式で完全分岐。
+   各分岐は inner Module の値を返し、それが If, 外側 Module, Function の
+   値として伝播する。 *)
+(* v2026-04-27 (Phase A6 B-β fix2): If[c, t, e] の引数境界バグを修正。
+   旧 (fix1):
+     If[batFile === $Failed,
+       Print[...]; $Failed,            ← then = CompoundExpression OK
+       proc = StartProcess[...];        ← arg 3 (else)
+       <|...|>                          ← ★ arg 4 になっていた!★
+     ]
+   この場合 If[c,t,e,u] の u 引数として <|...|> が消費され、
+   else の値は proc = StartProcess の戻り値 (ProcessObject) のみとなり
+   runState から outFile/batFile/promptFile キーが欠落していた。
+   結果: result71.nb で elapsed=698, fileSize=0, status="?" となった。
+   
+   修正: If の各分岐を ( ; ; ) で明示的に括り、CompoundExpression を
+   1 つの引数として確実にバインドする。 *)
+(* v2026-04-27 (Phase A6 B-β fix3): $ClaudeModel = Automatic 時の bat 破損
+   バグを修正。
+   
+   既存バグ (Phase A6 改造とは無関係、長年潜在):
+     iMakeBatStreamJson 等の bat 生成箇所 (3 箇所: L2848/L2914/L3104) で
+       If[$ClaudeModel =!= "", " --model \"" <> $ClaudeModel <> "\"", ""]
+     と書かれていた。$ClaudeModel = "" のときは else で空文字、
+     $ClaudeModel が文字列のときは then でフラグ生成、までは正常。
+     しかし $ClaudeModel = Automatic のときは:
+       =!= "" が True になり then の "..." <> Automatic <> "..." が走る
+       → StringJoin が文字列以外を渡されて未評価のまま残る
+       → bat ファイルの "claude.exe --print --model" 行に Automatic 混入
+       → bat が壊れて claude.exe が起動できず fileSize=0 のまま停止
+   
+   なぜ顕在化したか:
+     Phase A6 以前は $ClaudeModel = Automatic でも、Runtime 経由の場合は
+     adapter の SyncProvider 強制 True で iQueryViaAPI (同期) 経路を
+     走っていたため bat 生成箇所には到達しなかった。
+     B-α/B-β で Async 経路への切り替えが起きたことで、
+     QueryProviderAsync 経由の bat 経路に到達するようになり、
+     長年潜伏していたバグが顕在化した。
+   
+   修正:
+     If[StringQ[$ClaudeModel] && $ClaudeModel =!= "", ..., ""]
+     と StringQ guard を追加。Automatic / その他 non-string は
+     --model フラグなし扱いとなり CLI のデフォルトモデルが使われる。
+     これは $ClaudeModel = "" と等価動作。 *)
+(* v2026-04-27 (Phase A6 B-β fix4): LMStudio 経路で最終 Out が GridBox/Column
+   になり中間ターンの実コード結果 (e.g. 5050) が消える問題を修正。
+   
+   症状 (result73.nb):
+     ClaudeEval["1から100の和"] (Runtime + LMStudio 経路) で
+     - 中間ターン: ProposedCode = "Sum[i,{i,1,100}]" → AutoEvaluate で 5050
+     - 最終ターン: ProposedCode = None,
+                  TextResponse = "1から100の和は 5050 です。 [DONE]"
+     → iRuntimeDisplayResult の fallbackCode 経路 (L24554) が
+       Column[{"...5050です。", "[DONE]"}] を AutoEvaluate
+     → 最終 Out が GridBox 表示に汚染、5050 が見えなくなる。
+     ClaudeEval の Out を見て次の処理をする使い方が困難になっていた。
+   
+   原因: Phase 30.5 fix の isAfterDaemon 抑制が
+       textOnly (DONE 除く) が 20 文字以上で解除される設計のため、
+       中間ターンに実コードあり + 最終ターン TextOnly のケースで
+       fallbackCode が走ってしまう。
+   
+   修正: fallbackCode 生成条件に suppressFallback を追加。
+     suppressFallback = lastTurnIsTextOnly &&
+                         (中間ターンに ProposedCode/ToolCalls あり)
+   このとき fallbackCode の Column 生成と AutoEvaluate を skip。
+   textOnly は L24463 で Text セルとして既に書かれているので説明は残る。
+   最終 Out は中間ターンの実コード結果がそのまま残り、claudecode 単独
+   ClaudeEval と同じ振る舞いになる。 *)
+ClaudeCode`$claudecodeVersion = "2026-04-27-phase-a6-b-beta-fix4";
 (* v2026-04-24T09: \:30d1\:30ec\:30c3\:30c8\:306e\:30e2\:30c7\:30eb\:8868\:793a\:3092 $ClaudeModel \:306e\:73fe\:5728\:5024\:306b\:8ffd\:5f93\:3055\:305b\:308b\:3002
    iPaletteModelLabel \:30d8\:30eb\:30d1\:65b0\:8a2d\:3002\:30ea\:30b9\:30c8\:5f62\:5f0f $ClaudeModel \:306e\:5834\:5408\:306f
    2 \:756a\:76ee\:8981\:7d20\:306e\:30b9\:30e9\:30c3\:30b7\:30e5\:4ee5\:964d (\:4f8b: "qwen3.6-27b") \:3092\:8868\:793a\:3002 *)
@@ -25232,7 +26297,7 @@ ClaudeCode`$claudecodeVersion = "2026-04-24T09-palette-model-followup";
    iStartFallbackAsync \:306e lmstudio \:5206\:5c90\:304c\:65e2\:5b58 StartProcess + ScheduledTask
    \:30d1\:30bf\:30fc\:30f3\:306b\:4e57\:308a\:3001\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:3092\:30d6\:30ed\:30c3\:30af\:305b\:305a\:306b MCP (exa) \:304c\:4f7f\:3048\:308b\:3002
    T06 \:306e\:540c\:671f\:30b7\:30e7\:30fc\:30c8\:30ab\:30c3\:30c8\:306f\:524a\:9664\:3002 *)
-(* v2026-04-24T07: $ClaudeLMStudioContextLength \:306e\:65e2\:5b9a\:5024\:3092 8000 \:2192 None \:306b\:5909\:66f4\:3002
+(* v2026-04-24T07: $ClaudeLMStudioContextLength \:306e\:65e2\:5b9a\:5024\:3092 8000 \[RightArrow] None \:306b\:5909\:66f4\:3002
    None / Automatic / \:975e\:6b63\:6574\:6570\:306e\:5834\:5408\:306f body \:306b context_length \:3092\:542b\:3081\:305a\:3001
    LM Studio \:306e\:30e2\:30c7\:30eb\:8a2d\:5b9a (UI \:306e Context Length) \:304c\:305d\:306e\:307e\:307e\:4f7f\:308f\:308c\:308b\:3002
    \:6574\:6570\:6307\:5b9a\:6642\:306e\:307f\:30e2\:30c7\:30eb\:5074\:8a2d\:5b9a\:3092\:4e0a\:66f8\:304d\:3059\:308b\:3002 *)
@@ -25252,3 +26317,28 @@ ClaudeCode`$claudecodeVersion = "2026-04-24T09-palette-model-followup";
 (* v2026-04-21: \:30ed\:30fc\:30c9\:6642\:306e Print \:3092\:62d1\:58f0\:3002 Windows \:3067\:6587\:5b57\:5316\:3051\:306b\:306a\:308a\:3001
    \:30e1\:30c3\:30bb\:30fc\:30b8\:30a6\:30a3\:30f3\:30c9\:30a6\:304c\:8868\:793a\:3055\:308c\:305f\:307e\:307e\:306b\:306a\:3063\:3066\:771f\:306e\:30a8\:30e9\:30fc\:304c\:898b\:3048\:306a\:304f\:306a\:308b\:3002
    \:30d0\:30fc\:30b8\:30e7\:30f3\:306f $claudecodeVersion \:3067\:53c2\:7167\:53ef\:80fd\:3002 *)
+
+(* === claudecode_directives.wl (sub-module) optional autoload === *)
+Quiet @ Check[
+  Block[{$CharacterEncoding = "UTF-8"},
+    Get["claudecode_directives.wl"]];
+  If[ValueQ[ClaudeDirectives`$ClaudeDirectiveRepository] &&
+       ClaudeDirectives`$ClaudeDirectiveRepository === None,
+    Quiet @ Check[
+      ClaudeDirectives`ClaudeLoadDirectiveRepository[],
+      Null]],
+  Null];
+
+
+(* === claudecode_editmodes.wl は claudecode.wl 本体にマージ済み (Phase 36 stage2 restart, 2026-04-29) ===
+   旧 sub-module ClaudeEditModes` のシンボル群は ClaudeCode` 配下に統合されている。
+   詳細は L110 (Quiet[Scan[...]]), L1079 (Public usage),
+   L25401 (Private 実装) を参照。
+   Public シンボル (10 個):
+     $ClaudeEditModesVersion,
+     $ClaudeEditModeAppendTagOpen, $ClaudeEditModeAppendTagClose,
+     $ClaudeEditModeInsertTagClose,
+     ClaudeAppendBlockToPackage, ClaudeInsertBeforeAnchorInPackage,
+     ClaudeParseEditModeResponse, ClaudeAutoDetectEditMode,
+     ClaudeBuildEditModePromptInstructions, ClaudeUpdatePackageWithMode
+*)

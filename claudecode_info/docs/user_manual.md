@@ -12,6 +12,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **多言語対応**: `$Language` 設定に基づいてプロンプトの言語指示を動的に生成します。`$Language` が `"Japanese"` の場合は日本語で応答するよう指示し、それ以外の場合は英語に切り替わります。
 - **AI 生成機能**: OpenAI Images API による画像生成（`ClaudeImageGenerate`）と OpenAI TTS API による音声生成（`ClaudeSpeech`）を統合しています。
 - **プロジェクト固有ディレクティブ**: ノートブックディレクトリごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。
+- **claudecode_directives 連携**: オプションの独立パッケージ [claudecode_directives](https://github.com/transreal/claudecode_directives) をロードすることで、`rules/` および `skills/` ディレクトリのデフォルトセットが自動的にインストールされます。ロード後は Claude Code CLI のコンテキストに rules/ の制約と skills/ の手順が自動的に注入され、Claude がスキルを呼び出せるようになります。claudecode.wl 本体はディレクティブの内容に非依存であり、claudecode_directives がその管理を担います。
 - **スマートドキュメント管理**: ドキュメント生成・更新時のモード制御（新規作成・既存更新）、部分更新対象の指定、差分検出による効率的な更新処理を提供します。
 - **分離原則検証**: NBAccess パッケージとの適切な分離を維持するため、コード内の分離原則違反を自動検出・修正する機能を備えています。
 - **パッケージキーワード自動注入**: 各パッケージが独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。
@@ -20,7 +21,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **非同期スケジューリング規約の自動注入**: `ClaudeUpdatePackage` のプロンプトに、非同期タスクのスケジューリング規約（claudecode/NBAccess 公開 API の使用義務・例外条件・根拠）を自動注入します。LLM が生成するパッケージコードが正しい非同期パターンに従うよう誘導します。
 - **Windows エンコーディング安全な API 通信（マルチモーダル対応）**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス（`Fallback -> True`）では Anthropic API のマルチモーダル `content` 配列を構築して送信します。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換（ShiftJIS 等）による日本語文字化けが発生しません。
 - **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすると、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、危険な操作に対して承認フロー（`NeedsApproval`）を提供します。`$UseClaudeRuntime = False` で無効化することで後方互換性を維持できます。
-- **ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) と連携することで、rate-limit 検出・自動復旧・リトライスケジューリングなどのオーケストレーション機能を利用できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断するなど、長時間・大規模なタスク実行を安定して継続するための制御をサポートします。
+- **ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすると、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。rate-limit 検出・自動待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断します。
 - **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG（有向非巡回グラフ）として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。`$LLMGraphMaxConcurrency` によりカテゴリ別の並列度を制御でき、DAG ジョブの作成・実行・キャンセル・再構築を行う `LLMGraphDAGCreate` / `LLMGraphDAGRebuild` 系の API も提供されます。
 - **[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージする機能を提供します。
 
@@ -51,6 +52,14 @@ Block[{$CharacterEncoding = "UTF-8"},
 ```
 
 claudecode を使用している場合、`$Path` は自動的に設定されます。
+
+ディレクティブ管理機能を使用する場合は、[claudecode_directives](https://github.com/transreal/claudecode_directives) パッケージ（`claudecode_directives.wl`）をオプションでロードします。
+
+```mathematica
+(* ディレクティブ管理機能を使用する場合（オプション） *)
+Block[{$CharacterEncoding = "UTF-8"},
+  Needs["ClaudeCodeDirectives`", "claudecode_directives.wl"]];
+```
 
 ### 基本設定
 
@@ -622,6 +631,84 @@ ClaudePromoteProjectDirectives[DryRun -> True]
 
 `ClaudePromoteProjectDirectives[]` は `.claude-project/` 内のディレクティブをメインの Claude Directives フォルダにコピーします。
 
+### claudecode_directives 連携（オプション）
+
+[claudecode_directives](https://github.com/transreal/claudecode_directives) は claudecode とは独立したオプションパッケージで、`rules/` および `skills/` ディレクトリのデフォルトコンテンツを管理します。このパッケージをロードすることで、claudecode が参照する標準的なルールセット・スキルセットが自動的にインストールされます。
+
+claudecode.wl 本体はディレクティブの内容に依存せず、claudecode_directives がその管理を担う分離設計になっています。
+
+#### ロードと基本的な使い方
+
+```mathematica
+(* claudecode_directives をロード（claudecode ロード後に実行） *)
+Block[{$CharacterEncoding = "UTF-8"},
+  Needs["ClaudeCodeDirectives`", "claudecode_directives.wl"]];
+```
+
+ロード後は、`ClaudeUpdateDirective`・`ClaudeAddDirective`・`ClaudeSyncDirectives` などのディレクティブ操作関数が `claudecode_directives.wl` が提供する rules/skills の定義を参照します。
+
+#### 提供されるディレクティブ構造
+
+`claudecode_directives.wl` が管理するディレクトリ構造は以下の通りです。
+
+```
+$ClaudeWorkingDirectory/.claude/
+  CLAUDE.md          — メインのグローバルディレクティブ
+  rules/             — 絶対に破ってはいけない設計・安全・アクセス制約
+  skills/            — 特定の解析・修正・レビューの具体手順とパターン集
+```
+
+#### rules/ ディレクトリの利用
+
+`claudecode_directives.wl` がロードされると、claudecode の標準的な制約定義が `rules/` に自動配置されます。各ルールファイルは Markdown 形式で、Claude Code CLI が起動するたびに CLAUDE.md コンテキストの一部として自動的に読み込まれます。
+
+- **自動インストール**: ロード時に標準ルールセットが `rules/` に書き込まれます。既存ファイルよりロード済みバージョンが新しい場合のみ上書きされます。
+- **パッケージ操作制約**: `rules/80-package-operations.md` に代表されるルールが `ClaudeUpdatePackage` 等の操作時に Claude の判断を制約します。
+- **プロジェクト固有ルール**: `ClaudeInitProject[]` や `ClaudeAddDirective` で追加したプロジェクト固有のルールは `rules/` の既存ファイルを上書きせず、別ファイルとして共存します。
+
+```mathematica
+(* 現在インストール済みのルール一覧を確認 *)
+ClaudeListDirectives[]
+
+(* 新しいルールを追加 *)
+ClaudeAddDirective["rules/my-rule.md", "Import時は必ずUTF-8を指定すること"]
+```
+
+#### skills/ ディレクトリの利用
+
+`skills/` には特定の作業手順・パターン集がスキルファイルとして格納されます。各スキルファイルは先頭に `name:` フィールドを持つ Markdown ファイルで、Claude Code の Skill ツールから名前で呼び出せます。
+
+`claudecode_directives.wl` がロードされると、以下の標準スキルが `skills/` に自動配置されます。
+
+| スキル名 | 内容 |
+|---|---|
+| `wolfram-general` | Wolfram Language コーディング手順・出力方針 |
+| `notebook-path-policy` | ファイルパス解決パターン |
+| `nbaccess-notebook-access` | NBAccess API リファレンスと推奨パターン |
+| `nbaccess-separation-check` | NBAccess 分離原則の検証・修正手順 |
+| `api-key-handling` | API キー取得の正しい実装手順 |
+| `wl-encoding-and-regex` | エスケープ・正規表現の検証手順 |
+| `pde-modeling` | PDE 実装ステップ |
+| `confidential-data-handling` | 機密データのラッピング手順 |
+| `confidential-structure-probe` | 秘密変数の構造調査と ContinueEval 連携手順 |
+| `external-language-output` | R/Python 等の外部言語コードの出力パターン |
+| `doc-generation` | ドキュメント生成の継続・README 構造ルール |
+
+スキルは Claude Code CLI のセッション中に `/skill-name` 形式で呼び出されるか、タスクの内容に応じて Claude が自動的に参照します。たとえば Wolfram Language コードの生成タスクでは `wolfram-general` スキルが自動的に適用され、出力方針や推奨パターンに従ったコードが生成されます。
+
+```mathematica
+(* カスタムスキルを追加 *)
+ClaudeAddDirective["skills/my-skill.md",
+  "name: my-analysis\n\n## 分析手順\n1. データを読み込む\n2. 統計量を計算する"]
+
+(* スキルの更新（テキスト指示で自動解釈） *)
+ClaudeUpdateDirective["データ分析スキルにクラスタリング手順を追加して"]
+```
+
+#### claudecode_directives を使わない場合
+
+`claudecode_directives.wl` をロードしない場合、rules/skills の管理はユーザーが手動で行います。`ClaudeAddDirective`・`ClaudeUpdateDirective`・`ClaudeSyncDirectives` は引き続き使用できますが、デフォルトのルール・スキルセットは提供されません。
+
 ### ディレクティブのテキスト指示更新
 
 `ClaudeUpdateDirective[text]` は自然言語のテキスト指示を Claude が解釈し、CLAUDE.md / rules / skills の適切なファイルに反映します。
@@ -1067,6 +1154,75 @@ $UseClaudeRuntime = True
 | `ClaudeRuntime` ロード済み + `$UseClaudeRuntime = True`（デフォルト） | ランタイム経由で実行、承認フロー有効 |
 | `$UseClaudeRuntime = False` | 従来モード（`ClaudeRuntime` ロード済みでも無効化） |
 
+### ClaudeOrchestrator 統合（オプション）
+
+[ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) は claudecode とは独立したオプションパッケージです。ロードすると `ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わり、複数タスクのジョブキュー管理・rate-limit 自動待機・リトライスケジューリングが透過的に行われます。
+
+#### ロードと基本的な使い方
+
+```mathematica
+(* ClaudeOrchestrator をロード（claudecode ロード後に実行） *)
+<< ClaudeOrchestrator`
+
+(* ロード後は ClaudeEval がオーケストレーター管理下で非同期実行されます *)
+ClaudeEval["長時間かかる分析タスクを実行"]
+
+(* rate-limit 状態の確認 *)
+info = ClaudeRateLimitStatus[];
+If[AssociationQ[info],
+  Print["復旧予定: ", info["ResetsAt"]],
+  Print["rate-limit なし"]]
+```
+
+#### ClaudeEval の非同期化
+
+ClaudeOrchestrator をロードすると、`ClaudeEval` の動作が根本的に変わります。呼び出しはオーケストレーターのジョブキューに追加されて**即座に返り**、カーネルをブロックしません。以下の機能が自動的に有効になります。
+
+- **ノンブロッキング実行**: `ClaudeEval` が呼び出されるとジョブキューへの登録のみ行い、すぐに制御を返します。ノートブックの操作は妨げられません。実行の進捗は `WindowStatusArea` にリアルタイム表示されます。
+- **rate-limit 検出と自動待機**: Claude Code CLI が rate-limit に達した場合、`ClaudeRateLimitStatus[]` の `"ResetsAt"` フィールドが示す復旧予定時刻まで自動的に待機し、復旧後にタスクを再開します。ユーザーが手動で監視する必要はありません。
+- **ジョブキュー管理**: 複数の `ClaudeEval` 呼び出しをオーケストレーターが順次・並列に管理し、実行の安定性と継続性を確保します。
+- **自動リトライスケジューリング**: 一時的な失敗（rate-limit・ネットワークエラー等）に対して自動リトライを行い、長時間・大規模なタスクを途中で中断させません。
+
+ClaudeOrchestrator をロードしない場合は、`ClaudeEval` は従来どおりの動作（直接 CLI 呼び出し）を維持します。
+
+```mathematica
+(* 複数タスクを連続して投入 — オーケストレーターがキュー管理 *)
+ClaudeEval["タスク1: データ前処理"]
+ClaudeEval["タスク2: モデル学習"]
+ClaudeEval["タスク3: 結果のグラフ化"]
+(* 3つとも即座に返り、ノートブックは操作可能な状態を保つ *)
+(* オーケストレーターが順次実行し、rate-limit 時は自動待機して再開する *)
+```
+
+#### rate-limit 情報の活用
+
+`ClaudeRateLimitStatus[]` は最後に検出された rate-limit 情報を Association で返します。ClaudeOrchestrator はこの情報を参照してリトライタイミングを自動判断しますが、ユーザーが直接参照することも可能です。
+
+```mathematica
+info = ClaudeRateLimitStatus[];
+(* → <|
+     "Detected"      -> DateObject[...],
+     "ResetsAt"      -> DateObject[...],
+     "RateLimitType" -> "five_hour",
+     "HttpStatus"    -> 429,
+     "Message"       -> "You've hit your limit..."
+   |> *)
+
+(* rate-limit でない場合は None が返る *)
+ClaudeRateLimitStatus[]
+(* → None *)
+
+(* 手動でクリアする場合 *)
+ClaudeRateLimitClear[]
+```
+
+#### 後方互換性
+
+| 状態 | 動作 |
+|---|---|
+| ClaudeOrchestrator 未ロード | 従来の `ClaudeEval` 動作（CLI 直接呼び出し・ブロッキング） |
+| ClaudeOrchestrator ロード済み | オーケストレーター管理下の非同期実行モード（ノンブロッキング・rate-limit 自動待機・リトライ有効） |
+
 ### ClaudeTestKit（テストフレームワーク）
 
 [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) は claudecode および ClaudeRuntime の動作を自動テストするための独立パッケージです。claudecode のパッケージ更新・検証フローを自動化されたテストスイートで検証する用途に使用します。
@@ -1150,6 +1306,7 @@ ClaudeStatus[]
 
 - [NBAccess](https://github.com/transreal/NBAccess) — ノートブック読み書き・プライバシー管理
 - [GitHubREST](https://github.com/transreal/github) — GitHub パッケージ管理・PR 管理
+- [claudecode_directives](https://github.com/transreal/claudecode_directives) — rules/skills ディレクトリのデフォルトコンテンツ管理（オプション）
 - [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) — ランタイムセッション管理・承認フロー・スナップショット機構（オプション）
-- [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) — rate-limit 検出・自動復旧・リトライスケジューリングなどのオーケストレーション機能（オプション）
+- [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) — rate-limit 検出・自動復旧・リトライスケジューリング・ClaudeEval 非同期化（オプション）
 - [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) — claudecode / ClaudeRuntime の自動テストフレームワーク（オプション）

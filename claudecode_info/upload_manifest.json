@@ -1,7 +1,8 @@
 {
 	"packageName":"claudecode",
 	"files":[
-		"claudecode.wl"
+		"claudecode.wl",
+		"claudecode_directives.wl"
 	],
 	"directories":[
 		"claudecode_info",

@@ -42,6 +42,17 @@ description: Use for Wolfram Language / Mathematica coding, editing, notebook ou
 - 例外: FrontEnd 通信を一切行わない純粋計算タスク、またはリアルタイム対話が必要なインタラクティブプログラム（PresentationListener 等）では独自 ScheduledTask を許可する。ただしドキュメントに明記すること。
 - 理由: 複数の ScheduledTask が同時に FrontEnd 操作を行うと「動的評価の放棄」ダイアログが発生しシステムがフリーズする。
 
+### LLM 呼び出しを含む非同期処理を書く前に rules/95 を読む
+
+複数 LLM 呼び出しを並列・依存関係付きで実行する場合、または LMStudio 等のローカル LLM を非ブロックで呼び出す場合は、必ず **rules/95-scheduled-task-safety** の節 C, D, E を参照すること。特に:
+
+- **`RunProcess[..., "Process"]` は無効引数** で常に `$Failed` を返す → `StartProcess` を使う(節 D)
+- **`Pause` ループでの完了待機**はフロントエンドをブロックする → 同期 API 内で非同期処理を待たず、`xxxAsync` という別 API を提供する(節 D)
+- **DAG node handler は deferred sync runState** (`<|"proc", "outFile", "parseFn", ...|>`) を返す(節 D)
+- **ローカル LLM (LMStudio 等)** は `iStartFallbackAsync` + 「ダミー proc + outFile 書込」パターンで deferred sync に変換する(節 E)
+
+これらは動作実証しないと気づきにくい落とし穴で、知らずに実装すると「最初は応答するがすぐフリーズする」「Plot などが評価できなくなる」「動的評価の放棄ダイアログが出る」といった症状になる。
+
 ## パッケージロード時のメッセージ
 
 ロード完了メッセージは `CellPrint` ではなく `Print` を使う。タイトルは `Style[..., Bold]` で強調し、一覧は改行つき文字列で出す。
