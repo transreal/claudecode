@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-## ⛔ 最優先ルール: AutoEvaluate 禁止操作 (`rules/00-autoeval-prohibited.md`)
+## ⛔ 最優先ルール 1: AutoEvaluate 禁止操作 (`rules/00-autoeval-prohibited.md`)
 
 **以下の操作は `AutoEvaluate -> True` で自動実行されるコードに絶対に含めてはならない。このルールは他のすべてのルール・スキルに優先する。**
 
@@ -10,6 +10,27 @@
 
 これらの操作が必要な場合は `AutoEvaluate -> False` で出力し、ユーザーに手動実行を促すこと。詳細は `rules/00-autoeval-prohibited.md` を参照。
 
+## ⛔ 最優先ルール 2: LLM 指示文・スキル・慣習を `.wl` にハードコードしない (`rules/02-llm-instructions-not-in-source.md`)
+
+**LLM にコード生成・分析・推論を指示するテキスト、特にシステム外要因 (モデルのバージョンアップ、API 仕様変更、ベストプラクティス更新等) で変更されうる情報は `.wl` ソースコードに直書きせず、`Claude Directives` の `skills/` または `rules/` に置く。** このルールは他のすべてのルール (00 を除く) に優先する。
+
+ハードコードしてはいけないものの例:
+
+- **モデル枝番** (`gpt-5`, `gpt-4.1`, `claude-opus-4.7` 等の具体名) — `iPrefixMatchCapability` のようなコード分岐に枝番を書かない。`Provider` (anthropic / openai / lm-studio) と `Class` (Heavy/Mid/Light × Cloud/Local) の汎用判定だけを残し、具体モデル名は `$ClaudeModelCapabilities` のテーブル登録に閉じる。
+- **LLM 生成プロンプト本体** (`$petriNetGuide`, `$petriNetGuideExtras` 等) — テンプレート文字列で LLM に「こう書け」と指示する内容は skill ファイルに置く。`.wl` ロード時に skill ファイルから読み込んで動的に組み立てる。
+- **ベストプラクティス・命名規約・反パターン・言い回し** — 「`Quiet@Check` を使うな」「`gpt-5` を `gpt-4o` に書き換えるな」のような **LLM が読むべき指示** は skill / rules。
+- **API キー名・環境変数名以外の認証情報の扱い** — 個別のプロバイダ手順書は skill。
+
+`.wl` に書いてよいもの:
+
+- 構造化データ (Capability Association、Schema 定義、enum 値)
+- ロジック (関数本体、状態遷移、データ変換)
+- 公開 API のシグネチャと usage 文字列
+
+判定が迷う場合: **「これは半年後にも有効か?」** が `No` または `わからない` なら skill。**「これは LLM が読んで真似る雛形か?」** が `Yes` なら skill。
+
+詳細は `rules/02-llm-instructions-not-in-source.md` を参照。関連 skill: `skills/llm-instruction-separation`。
+
 ## セッション開始時の基本方針
 
 - まず対象ファイルとその周辺依存を読んでから編集する。
@@ -18,8 +39,10 @@
 ## ディレクティブ構造
 
 - `rules/` — 絶対に破ってはいけない設計・安全・アクセス制約。
-- `skills/` — 特定の解析・修正・レビューの具体手順とパターン集。
+- `skills/` — 特定の解析・修正・レビューの具体手順とパターン集。LLM への生成指示文も含む。
 - タスクに最も近いスキルを参照し、常に rules の制約を遵守する。
+
+将来的には `knowledge/` (汎用知識データベース) も併設する想定。skill より長期不変な「特定パッケージとは独立な背景知識」(数学、計算機科学の基礎、Wolfram Language の言語仕様抜粋等) を置く。導入時期は別途判断。
 
 ## インストール済みスキル
 
@@ -36,8 +59,20 @@
 - `doc-generation` — ドキュメント生成の継続・README 構造ルール
 - `github-operations` — GitHub パッケージ管理・PR 管理・インストール手順
 - `package-merge-pattern` — LLM レスポンスによるパッケージ部分更新のマージ・安全検証パターン
+- `package-namespace-migration` — 既存パッケージから新パッケージへの関数移管時の context path / shadowing 罠と回避パターン
+- `llmgraph-dag-job-lifecycle` — LLMGraphDAG ジョブの自動削除挙動と registry 観察パターン (onComplete 経由 / handler 内部観察)
+- `notebook-llmgraph-update-pattern` — 外部パッケージから NotebookLLMGraph にノードを追加する際の正しいキャッシュ更新 + Flush パターン
+- `wolfram-syntax-pitfalls` — `Module` 閉じ位置誤りや `Quiet` のエラー隠蔽など、LLM ベースの大規模 .wl 編集で頻発する構文上の罠と診断手順
 - `maildb-operations` — maildb パッケージの API 使用パターン（showMails/searchFromMails は MailDBObject 必須）
 - `system-open` — SystemOpen によるファイル・フォルダ・ノートブックの開き方
+- `runtime-orchestrator-boundary` — ClaudeRuntime と ClaudeOrchestrator の責務境界、特に並列化の許容範囲（Workflow Migration プロジェクト）
+- `association-mutation-patterns` — Mathematica で Association を更新するときの安全パターン（`ReplacePart` 罠、`Append`/`Join` の使い分け）
+- `llm-instruction-separation` — LLM 生成指示文・モデル名・慣習を `.wl` にハードコードしない原則と移行手順
+- `petri-multi-provider-generation` — petri_from_prompt 系で multi-provider レビューネットを生成する際の Provider/Model 指定ルール (旧 `$petriNetGuideExtras` の置き場)
+- `petri-and-xor-merge` — petri_from_prompt 系で AND-merge / XOR-merge / AND-distribute / XOR-distribute を選択する設計指針 (peer review は AND-merge)
+- `petri-retry-patterns` — petri_from_prompt 系で fan-out 並列 worker の失敗を retry する Petri net を生成する際の正しい配線指針 (per-worker retry vs Verdict 下流 rerun antipattern の区別)
+- `petri-template-and-validation` — proposePetriNet をテンプレート化 + 検証ノード入りメタワークフロー化する長期設計提案 (引き継ぎ書類)
+- `async-tool-execution` — `$UseClaudeRuntime = True` 経路で `iToolUseAndContinue` の hybrid 化により tool (web_search 等) を別 OS プロセスで並列実行する Phase 32k Step 3 (Phase A〜D2) の設計・運用・デバッグ
 
 ## ファイル読み込みルール
 
@@ -273,6 +308,25 @@ claudecode の **LLMGraph DAG フレームワーク** を使用すること:
 - ❌ 独自 ScheduledTask で LLM プロセスをポーリングする実装は禁止
 
 詳細は `rules/95-scheduled-task-safety.md` セクション C を参照。
+
+### 1 turn 内 tool call の並列実行: AsyncToolExec(Phase 32k Step 3)
+
+`$UseClaudeRuntime = True` + `ClaudeRuntime\`$ClaudeRuntimeToolAsyncDefault = True` のとき、`iToolUseAndContinue` は hybrid 経路に入り、tool 呼び出しを sync / async に振り分けて async tool (web_search 等) を別 OS プロセスで並列実行する。
+
+- **メインカーネル解放**: tool 実行中も別セル評価可能
+- **3 秒間隔 polling**: 既存 `ClaudeRegisterPollingTick` 基盤を再利用、独自 ScheduledTask を作らない (rule 95 §B 違反を避ける)
+- **`StartProcess` ベース**: Phase 32j v1 の SessionSubmit + ScheduledTask クラッシュ実績を回避
+- **state machine**: Queue / Running / Collected の 3 段、MaxConcurrent=4
+
+実証済みフラグ組み合わせ (3 種類のみ、それ以外は想定外):
+
+| `$UseClaudeRuntime` | `$ClaudeRuntimeAsyncExecution` | `$ClaudeRuntimeToolAsyncDefault` | 用途 |
+|---|---|---|---|
+| False | True (default) | False (default) | claudecode 旧経路(常時) |
+| True | False | True | DAG + Phase D 単独 (result11 で 54.4s 実証) |
+| True | True (default) | True | DAG + Phase 32 + Phase D 統合(本流) |
+
+詳細は `skills/async-tool-execution` および `rules/100-async-tool-execution.md`。デバッグは `skills/adapter-tool-flow-debugging` の症状カタログと §7 (AsyncToolExec の状態を見る) を参照。
 
 ## バックアップ・履歴管理
 

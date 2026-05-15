@@ -290,6 +290,8 @@ LLMGraphDAGCreate のノード handler は以下のいずれかの戻り値を�
 
 deferred sync runState は **sync ノードでも async 実行できる**仕組みで、Orchestrator の Plan / Worker / Reduce / Commit フェーズの非同期化に使われている。
 
+**AsyncToolExec (Phase 32k Step 3) もこのパターンの応用**: `web_search` 等の tool 実行を `StartProcess` で別 OS プロセスとして起動し、`ClaudeRegisterPollingTick` (LLMGraphDAG の `iICollectChunkResult` と同等の機構) で結果をポーリングする。詳細は skill `async-tool-execution` と rule `100-async-tool-execution`。
+
 ### deferred sync runState の正確な仕様
 
 handler が以下の形の Association を返すと、DAG tick が `iICollectChunkResult` で自動的に完了監視する:

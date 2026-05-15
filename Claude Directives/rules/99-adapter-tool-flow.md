@@ -175,6 +175,8 @@ LLM の応答に以下の表現が 2 回以上現れたら **過去 turn tool �
 
 ## 関連参照
 
-- Skill: `adapter-tool-flow-debugging` - 診断手順と ClaudeTurnTrace の読み方
-- Rule: `95-scheduled-task-safety` - ScheduledTask 内からの禁止操作
+- Rule: `100-async-tool-execution` - AsyncToolExec (Phase D の hybrid 経路) の必須ルール。本ルール (99) は sync 経路を含む adapter 全般の規範、100 は AsyncToolExec 特有の規範
+- Skill: `adapter-tool-flow-debugging` - 診断手順と ClaudeTurnTrace の読み方 (AsyncToolExec の trace パターン含む)
+- Skill: `async-tool-execution` - Phase 32k Step 3 (Phase A〜D2) の設計とフロー
+- Rule: `95-scheduled-task-safety` - ScheduledTask 内からの禁止操作、D節 deferred sync runState (AsyncToolExec の基礎パターン)
 - Rule: `11-core-package-dependency` - 基盤パッケージの依存方向

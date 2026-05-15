@@ -44,6 +44,28 @@ import re
 content = re.sub(r'\\u([0-9a-fA-F]{4})', lambda m: chr(int(m.group(1), 16)), content)
 ```
 
+### 修正例 (Python、.wl ファイル向け `\u` → `\:`)
+
+`.wl` パッケージファイル内では `\:XXXX` 形式を維持する必要がある (Windows ShiftJIS 対策)。リテラル日本語に置換すると新たな encoding 問題を引き起こすため、`\u` を `\:` に置換するだけに留める:
+
+```python
+import re
+# \uXXXX (4桁hex) を \:XXXX に置換
+new_content = re.sub(r'\\u([0-9a-fA-F]{4})', r'\\:\1', content)
+```
+
+### 実際にあった例 (Stage B Week 2c-4 prelude、罠 #11)
+
+`ClaudeOrchestrator_workflow_diff_harness.wl` の末尾 Print 文と `ClaudeRuntime_stategraph.wl` の usage 出力で、Python/JS の感覚で `\u3001` (、) や `\u3002` (。) を書いてしまい、ロード時に「未知のエスケープ文字列\u」エラー。`.wl` ファイル全体に対する一括置換で復旧した。
+
+検出時は次のコマンドで全 `.wl` を一括チェックすると安全:
+
+```bash
+for f in *.wl; do
+  grep -l '\\u[0-9a-fA-F]\{4\}' "$f"
+done
+```
+
 ## B. RegularExpression 二重エスケープの検証
 
 | .wl ファイル内 | PCRE の意味 | 正否 |

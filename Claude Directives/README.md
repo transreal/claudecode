@@ -30,6 +30,8 @@ Claude Directives/
     90-api-error-handling.md    API エラー・利用制限ハンドリング
     95-scheduled-task-safety.md ScheduledTask・非同期処理の安全制約（デッドロック防止＋独自タスク作成禁止）
     96-web-search-recommendation.md Web 検索推奨ルール
+    99-adapter-tool-flow.md     adapter 経由 tool-based ClaudeEval の実装ルール（R1〜R7）
+    100-async-tool-execution.md AsyncToolExec(Phase 32k Step 3 Phase A〜D2)の必須ルール
 
   skills/                    ← 特定タスクの具体手順とパターン集
     wolfram-general/            Wolfram Language コーディング手順・出力方針
@@ -47,6 +49,9 @@ Claude Directives/
     package-merge-pattern/      LLM レスポンスによるパッケージ部分更新のマージ・安全検証パターン
     maildb-operations/          maildb パッケージの API 使用パターン
     system-open/                SystemOpen によるファイル・フォルダ・ノートブックの開き方
+    adapter-tool-flow-debugging/ adapter 経路 ClaudeEval の異常診断手順
+    async-tool-execution/       AsyncToolExec(Phase 32k Step 3)の設計・運用・デバッグ
+    runtime-orchestrator-boundary/ ClaudeRuntime と ClaudeOrchestrator の責務境界
 ```
 
 ## 主要な設計原則
@@ -60,6 +65,9 @@ claudecode.wl と NBAccess.wl は他のパッケージ（maildb, GitHubREST 等�
 
 ### ScheduledTask・非同期処理の安全制約 (`rules/95-scheduled-task-safety.md`)
 ScheduledTask に関する2つの制約を統合: (A) ClaudeEval の ScheduledTask チェーン内から ClaudeQuery / ExternalEvaluate を呼ぶことの禁止（デッドロック防止）、(B) パッケージが UI ポーリング用に独自の CreateScheduledTask を作成することの禁止（動的評価オーバーフロー防止）。FrontEnd 通信を行わない純粋計算タスクや、リアルタイム性が必要なインタラクティブプログラムは例外だが、ドキュメントに明記が必要。
+
+### AsyncToolExec 経路の必須ルール (`rules/100-async-tool-execution.md`)
+`$UseClaudeRuntime = True` 経路で 1 turn 内に複数 tool (web_search 等) を別 OS プロセスで並列実行する Phase 32k Step 3 (Phase A〜D2) の規範。`ParallelSubmit` / `SessionSubmit` / 独自 `ScheduledTask` を禁止し `StartProcess` + 既存 polling tick 基盤を使うこと、`AsyncToolExecScheduled` 返却時の callback 早期 return、`Index` キーによる tool 順序保持、API key の file 経由など 11 ルール。詳細手順は `skills/async-tool-execution`。
 
 ### Fallback 絶対順守要件 (`rules/90-api-error-handling.md`)
 `Fallback -> True` を明示的に指定しない限り、LLM のレート制限エラー時に代替処理を行ってはならない。エラーは `Failure[...]` として上位に伝播させ、処理を確実に停止する。エラーメッセージをデータとして利用する（リポジトリ名やファイル内容に変換する等）ことは禁止。

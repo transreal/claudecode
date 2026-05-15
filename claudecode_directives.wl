@@ -3,6 +3,14 @@
 (* ClaudeDirectives.wl -- Directive Repository / Projection Layer
    
    Phase 33 (2026-04-25)
+   Phase 28 (2026-05-12): $ClaudeModelCapabilities \:30b9\:30ad\:30fc\:30de\:5909\:66f4
+     - \:30ad\:30fc\:3092 String \:304b\:3089 {provider, model} tuple \:306b\:5909\:66f4\:3002
+     - \\\"Paid\\\" -> True|False \:30d5\:30a3\:30fc\:30eb\:30c9\:3092\:8ffd\:52a0\:3002
+     - Anthropic CLI Opus (\\\"claudecode\\\" provider\\, Paid=False) \:3068
+       Anthropic API Opus (\\\"anthropic\\\" provider\\, Paid=True) \:3092\:5225\:30e2\:30c7\:30eb\:3068\:3057\:3066\:4e21\:65b9\:767b\:9332\:3002
+     - lm-studio -> lmstudio \:306b provider \:540d\:3092\:6b63\:898f\:5316\:3002
+     - $ClaudeRoleDefaultModels \:306e\:5024\:3082 {provider, model} tuple \:306b\:5909\:66f4\:3002
+     - ClaudeRegisterModelCapability \:306f tuple \:30ad\:30fc\:4e3b\:30fb String \:30ad\:30fc\:4e92\:63db\:306e\:4e21\:65b9\:3092 accept\:3002
    
    \:8cac\:52d9:
      1. .claude/CLAUDE.md, .claude/rules/, .claude/skills/ \:306e\:8aad\:307f\:8fbc\:307f\:30fb\:30d1\:30fc\:30b9\:30fb\:30ad\:30e3\:30c3\:30b7\:30e5
@@ -41,12 +49,16 @@ $ClaudeDirectivesVersion::usage =
 (* \[HorizontalLine] \:30e2\:30c7\:30eb\:80fd\:529b\:30c6\:30fc\:30d6\:30eb \[HorizontalLine] *)
 
 $ClaudeModelCapabilities::usage =
-  "$ClaudeModelCapabilities \:306f Association: \:30e2\:30c7\:30eb\:540d -> <|\"ContextWindow\" -> Integer,\n" <>
+  "$ClaudeModelCapabilities \:306f Association: {provider, model} -> <|\"ContextWindow\" -> Integer,\n" <>
   "  \"Class\" -> \"Heavy-Cloud\"|\"Heavy-Local\"|\"Mid-Local\"|\"Light-Cloud\"|\"Light-Local\",\n" <>
   "  \"DefaultMode\" -> \"Full\"|\"Summary\"|\"Index\"|\"Lazy\",\n" <>
   "  \"Strengths\" -> {\"Code\",\"Reasoning\",\"Search\",\"ToolUse\",...},\n" <>
-  "  \"PreserveThinking\" -> True|False, \"Provider\" -> String|>\n" <>
-  "Phase 33 \:3067 qwen3.6-27b \:3092\:542b\:3080\:767b\:9332\:6e08\:307f\:30e2\:30c7\:30eb\:3092\:4fdd\:6301\:3059\:308b\:3002";
+  "  \"PreserveThinking\" -> True|False,\n" <>
+  "  \"Paid\" -> True|False (\:8ab2\:91d1 API \:304b\:5426\:304b\:3001Phase 28 \:3067\:8ffd\:52a0)|>\n" <>
+  "Phase 28 (2026-05-12): \:30ad\:30fc\:3092 String \:304b\:3089 {provider, model} tuple \:306b\:5909\:66f4\:3002\n" <>
+  "Anthropic CLI Opus \:3068 Anthropic API Opus \:3092\:5225\:30e2\:30c7\:30eb\:3068\:3057\:3066\:4e21\:65b9\:767b\:9332\:3059\:308b\:305f\:3081\:3002\n" <>
+  "provider \:540d: \\\"claudecode\\\" (CLI\:3001\:8ab2\:91d1\:306a\:3057), \\\"anthropic\\\" (API\:3001\:8ab2\:91d1), \n" <>
+  "  \\\"openai\\\" (API\:3001\:8ab2\:91d1), \\\"lmstudio\\\" (\:30ed\:30fc\:30ab\:30eb\:3001\:8ab2\:91d1\:306a\:3057)\:3002";
 
 $ClaudeRoleDefaultModels::usage =
   "$ClaudeRoleDefaultModels \:306f Role -> \:30e2\:30c7\:30eb\:540d \:306e\:30de\:30c3\:30d4\:30f3\:30b0\:3002\n" <>
@@ -167,7 +179,23 @@ ClaudeDirectivesParseFrontmatter::usage =
 
 Begin["`Private`"];
 
-$ClaudeDirectivesVersion = "0.1.10-phase35-stage1-rule-selection";
+$ClaudeDirectivesVersion = "0.1.12-phase35-stage1-provider-generic-resolve";
+
+(* v0.1.12: iPrefixMatchCapability \:3092\:30e2\:30c7\:30eb\:679d\:756a\:30cf\:30fc\:30c9\:30b3\:30fc\:30c9\:304b\:3089
+   Provider \:5358\:4f4d\:306e\:6c4e\:7528\:5224\:5b9a\:306b\:30ea\:30d5\:30a1\:30af\:30bf (rules/02-llm-instructions-not-in-source.md \:6e96\:62e0)\:3002
+   - \:65e7: StringStartsQ[name, "gpt-5"], StringStartsQ[name, "gpt-4.1"], ... 
+         \:306e\:3088\:3046\:306b\:5177\:4f53\:30e2\:30c7\:30eb\:540d\:3092 Which \:5206\:5c90\:306b\:66f8\:3044\:3066\:3044\:305f \[RightArrow] \:30cf\:30fc\:30c9\:30b3\:30fc\:30c9
+   - \:65b0: iGuessProvider \:3067 Provider \:306e\:307f\:5224\:5b9a \[RightArrow] iSelectFallbackForProvider \:3067
+         \:540c Provider \:306e\:6700\:5f37\:767b\:9332\:30e2\:30c7\:30eb\:3092 Class \:30e9\:30f3\:30af\:3067\:9078\:629e\:3002
+   - \:7d50\:679c: \:65b0\:3057\:3044\:30e2\:30c7\:30eb\:679d\:756a\:304c\:51fa\:3066\:304d\:3066\:3082 $ClaudeModelCapabilities \:306b\:767b\:9332\:3059\:308b
+     \:3060\:3051\:3067\:6e08\:307f\:3001\:95a2\:6570\:672c\:4f53\:306b\:624b\:3092\:5165\:308c\:308b\:5fc5\:8981\:304c\:306a\:3044\:3002
+   - rules/02 \:3067\:7981\:6b62\:3055\:308c\:305f\:30d1\:30bf\:30fc\:30f3\:306e\:9664\:53bb\:3002
+
+   v0.1.11: OpenAI Cloud \:30e2\:30c7\:30eb (gpt-5, gpt-4.1, gpt-4o, gpt-4o-mini) \:3092
+   $ClaudeModelCapabilities \:306b\:8ffd\:52a0 (2026-05-10, result3.nb \:3067 gpt-4.5-preview
+   \:30a8\:30e9\:30fc\:3092\:539f\:56e0\:8ffd\:8de1)\:3002
+
+   v0.1.10: Phase 35 Stage 1 rule selection scoring \:8ffd\:52a0\:3002 *)
 
 (* v0.1.9-fix2: iEstimateBundleTokens \:306e Summary mode \:8a08\:7b97\:4fee\:6b63
    (Phase 34 result49.nb \:3067\:767a\:898b)\:3002
@@ -240,7 +268,7 @@ $ClaudeDirectivesVersion = "0.1.10-phase35-stage1-rule-selection";
 (* v0.1.5: $ClaudeModel = "" (Anthropic Claude \:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb\:6307\:5b9a\:306e\:6163\:7fd2) \:3067
    \:4fdd\:5b88\:7684\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:306b\:843d\:3061\:3066 Index mode \:306b\:964d\:683c\:3059\:308b\:554f\:984c\:3092\:4fee\:6b63\:3002
    - iPrefixMatchCapability \:306e\:5148\:982d\:3067\:7a7a\:6587\:5b57\:5217 / \:7a7a\:767d\:306e\:307f\:306e normalized \:3092
-     claude-opus-4.7 (Heavy-Cloud) \:3068\:3057\:3066\:6271\:3046\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3092\:8ffd\:52a0\:3002
+     claude-opus-4-7 (Heavy-Cloud) \:3068\:3057\:3066\:6271\:3046\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3092\:8ffd\:52a0\:3002
    - \:6ce8: $ClaudeModel \:304c List \:5f62\:5f0f ({\"lmstudio\", \"qwen/qwen3.6-27b\", ...}) \:306e
      ToString \:7d50\:679c \"{...}\" \:306f\:4f9d\:7136\:3068\:3057\:3066 Unknown \:6271\:3044\:306b\:306a\:308b\:3002
      \:3053\:308c\:306f claudecode.wl \:5074\:306e P1.5 (iClaudeSysPrompt[] \:3067\:306e
@@ -268,46 +296,91 @@ iL[ja_String, en_String] := If[$Language === "Japanese", ja, en];
    \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
 
 $ClaudeModelCapabilities = <|
-  
-  (* \[HorizontalLine] Cloud (Anthropic) \[HorizontalLine] *)
-  "claude-opus-4.7" -> <|
+
+  (* \[HorizontalLine] Anthropic CLI (claudecode \:30b3\:30de\:30f3\:30c9\:7d4c\:7531\:3001\:8ab2\:91d1\:306a\:3057 = Pro/Max \:30b5\:30d6\:30b9\:30af\:30ea\:30d7\:30b7\:30e7\:30f3\:5185) \[HorizontalLine] *)
+  {"claudecode", "claude-opus-4-7"} -> <|
     "ContextWindow"    -> 200000,
     "Class"            -> "Heavy-Cloud",
     "DefaultMode"      -> "Summary",
     "Strengths"        -> {"Code", "Reasoning", "JSON", "LongContext", "ToolUse"},
     "PreserveThinking" -> True,
-    "Provider"         -> "anthropic"
+    "Provider"         -> "claudecode",
+    "Paid"             -> False
   |>,
-  
-  "claude-opus-4.6" -> <|
+
+  {"claudecode", "claude-opus-4-6"} -> <|
     "ContextWindow"    -> 200000,
     "Class"            -> "Heavy-Cloud",
     "DefaultMode"      -> "Summary",
     "Strengths"        -> {"Code", "Reasoning", "JSON", "LongContext"},
     "PreserveThinking" -> True,
-    "Provider"         -> "anthropic"
+    "Provider"         -> "claudecode",
+    "Paid"             -> False
   |>,
-  
-  "claude-sonnet-4.6" -> <|
+
+  {"claudecode", "claude-sonnet-4-6"} -> <|
     "ContextWindow"    -> 200000,
     "Class"            -> "Mid-Cloud",
     "DefaultMode"      -> "Summary",
     "Strengths"        -> {"Code", "Reasoning", "JSON"},
     "PreserveThinking" -> True,
-    "Provider"         -> "anthropic"
+    "Provider"         -> "claudecode",
+    "Paid"             -> False
   |>,
-  
-  "claude-haiku-4.5" -> <|
+
+  {"claudecode", "claude-haiku-4-5"} -> <|
     "ContextWindow"    -> 200000,
     "Class"            -> "Light-Cloud",
     "DefaultMode"      -> "Summary",
     "Strengths"        -> {"Search", "Triage", "Summarize"},
     "PreserveThinking" -> False,
-    "Provider"         -> "anthropic"
+    "Provider"         -> "claudecode",
+    "Paid"             -> False
   |>,
-  
-  (* \[HorizontalLine] Local (LM Studio / Ollama) \[HorizontalLine] *)
-  "qwen3.6-27b" -> <|
+
+  (* \[HorizontalLine] Anthropic API \:76f4\:63a5 (anthropic \:30d7\:30ed\:30d0\:30a4\:30c0\:3001\:8ab2\:91d1\:3042\:308a) \[HorizontalLine] *)
+  {"anthropic", "claude-opus-4-7"} -> <|
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "LongContext", "ToolUse"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "anthropic",
+    "Paid"             -> True
+  |>,
+
+  {"anthropic", "claude-opus-4-6"} -> <|
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "LongContext"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "anthropic",
+    "Paid"             -> True
+  |>,
+
+  {"anthropic", "claude-sonnet-4-6"} -> <|
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Mid-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "anthropic",
+    "Paid"             -> True
+  |>,
+
+  {"anthropic", "claude-haiku-4-5"} -> <|
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Light-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Search", "Triage", "Summarize"},
+    "PreserveThinking" -> False,
+    "Provider"         -> "anthropic",
+    "Paid"             -> True
+  |>,
+
+  (* \[HorizontalLine] LM Studio / \:30ed\:30fc\:30ab\:30eb LLM (\:8ab2\:91d1\:306a\:3057) \[HorizontalLine] *)
+  {"lmstudio", "qwen3.6-27b"} -> <|
     "ContextWindow"    -> 131072,                (* RTX 4090 \:5b9f\:7528\:5024 *)
     "Class"            -> "Heavy-Local",
     "DefaultMode"      -> "Summary",
@@ -316,34 +389,79 @@ $ClaudeModelCapabilities = <|
     "PreserveThinking" -> True,
     "ThinkingMode"     -> "Hybrid",              (* Qwen3.6 hybrid-thinking *)
     "ToolCallParser"   -> "qwen3_coder",
-    "Provider"         -> "lm-studio"
+    "Provider"         -> "lmstudio",
+    "Paid"             -> False
   |>,
-  
-  "qwen3.5-27b" -> <|
+
+  {"lmstudio", "qwen3.5-27b"} -> <|
     "ContextWindow"    -> 131072,
     "Class"            -> "Mid-Local",
     "DefaultMode"      -> "Summary",
     "Strengths"        -> {"Code", "Reasoning"},
     "PreserveThinking" -> False,
-    "Provider"         -> "lm-studio"
+    "Provider"         -> "lmstudio",
+    "Paid"             -> False
   |>,
-  
-  "qwen3-coder-30b" -> <|
+
+  {"lmstudio", "qwen3-coder-30b"} -> <|
     "ContextWindow"    -> 128000,
     "Class"            -> "Mid-Local",
     "DefaultMode"      -> "Summary",
     "Strengths"        -> {"Code"},
     "PreserveThinking" -> False,
-    "Provider"         -> "lm-studio"
+    "Provider"         -> "lmstudio",
+    "Paid"             -> False
   |>,
-  
-  "gpt-oss-120b" -> <|
+
+  {"lmstudio", "gpt-oss-120b"} -> <|
     "ContextWindow"    -> 32768,
     "Class"            -> "Light-Local",
     "DefaultMode"      -> "Index",
     "Strengths"        -> {"Search", "Summarize"},
     "PreserveThinking" -> False,
-    "Provider"         -> "lm-studio"
+    "Provider"         -> "lmstudio",
+    "Paid"             -> False
+  |>,
+
+  (* \[HorizontalLine] OpenAI API \:76f4\:63a5 (\:8ab2\:91d1\:3042\:308a\:3001\:5c06\:6765\:7121\:6599\:30d7\:30e9\:30f3\:5bfe\:5fdc\:6642\:306b Paid -> False \:306e entry \:8ffd\:52a0\:3082\:53ef\:80fd) \[HorizontalLine] *)
+  {"openai", "gpt-5.5"} -> <|
+    "ContextWindow"    -> 128000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "ToolUse"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "openai",
+    "Paid"             -> True
+  |>,
+
+  {"openai", "gpt-5.5-pro"} -> <|
+    "ContextWindow"    -> 128000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON"},
+    "PreserveThinking" -> False,
+    "Provider"         -> "openai",
+    "Paid"             -> True
+  |>,
+
+  {"openai", "gpt-5-mini"} -> <|
+    "ContextWindow"    -> 128000,
+    "Class"            -> "Mid-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "Multimodal"},
+    "PreserveThinking" -> False,
+    "Provider"         -> "openai",
+    "Paid"             -> True
+  |>,
+
+  {"openai", "gpt-5-nano"} -> <|
+    "ContextWindow"    -> 128000,
+    "Class"            -> "Light-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Search", "Triage"},
+    "PreserveThinking" -> False,
+    "Provider"         -> "openai",
+    "Paid"             -> True
   |>
 |>;
 
@@ -353,13 +471,15 @@ $ClaudeModelCapabilities = <|
    \:5206\:96e2\:3057\:3001\:5fc5\:305a\:30ed\:30fc\:30ab\:30eb\:3078\:632f\:308b\:3002 *)
 
 $ClaudeRoleDefaultModels = <|
-  "Plan"              -> "claude-opus-4.7",
-  "Draft"             -> "claude-opus-4.7",
-  "Reduce"            -> "claude-opus-4.7",
-  "Commit"            -> "claude-opus-4.7",
-  "Explore"           -> "qwen3.6-27b",
-  "Verify"            -> "qwen3.6-27b",
-  "ConfidentialDraft" -> "qwen3.6-27b"
+  (* Phase 28: \:5024\:3092 {provider, model} tuple \:306b\:5909\:66f4\:3002
+     \:30c7\:30d5\:30a9\:30eb\:30c8\:306f Anthropic CLI (\:8ab2\:91d1\:306a\:3057) \:3092\:6307\:3059\:3002 *)
+  "Plan"              -> {"claudecode", "claude-opus-4-7"},
+  "Draft"             -> {"claudecode", "claude-opus-4-7"},
+  "Reduce"            -> {"claudecode", "claude-opus-4-7"},
+  "Commit"            -> {"claudecode", "claude-opus-4-7"},
+  "Explore"           -> {"lmstudio", "qwen3.6-27b"},
+  "Verify"            -> {"lmstudio", "qwen3.6-27b"},
+  "ConfidentialDraft" -> {"lmstudio", "qwen3.6-27b"}
 |>;
 
 (* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
@@ -421,8 +541,17 @@ $ClaudeRoleMaxSkills = <|
   "ConfidentialDraft" -> 2
 |>;
 
+(* Phase 28: tuple \:30ad\:30fc {provider, model} \:5bfe\:5fdc\:3002
+   \:65e7 String \:30ad\:30fc\:7248\:3082\:4e92\:63db\:6027\:306e\:305f\:3081\:6b8b\:3057\:3001
+   \:305d\:306e\:5834\:5408\:306f spec \:306e Provider \:30d5\:30a3\:30fc\:30eb\:30c9\:304b\:3089 tuple \:3092\:69cb\:7bc9\:3057\:3066\:767b\:9332\:3059\:308b\:3002 *)
+ClaudeRegisterModelCapability[{provider_String, model_String}, spec_Association] :=
+  ($ClaudeModelCapabilities[{provider, model}] = spec);
+
 ClaudeRegisterModelCapability[name_String, spec_Association] :=
-  ($ClaudeModelCapabilities[name] = spec);
+  Module[{prov},
+    prov = Lookup[spec, "Provider", "anthropic"];
+    $ClaudeModelCapabilities[{prov, name}] = spec
+  ];
 
 (* iNormalizeModelName: provider/model \:5f62\:5f0f\:304b\:3089 model \:90e8\:5206\:3060\:3051\:53d6\:308a\:51fa\:3059 *)
 iNormalizeModelName[name_String] :=
@@ -431,52 +560,84 @@ iNormalizeModelName[name_String] :=
     name];
 iNormalizeModelName[_] := "";
 
-(* iPrefixMatchCapability: \:5b8c\:5168\:4e00\:81f4\:304c\:306a\:3044\:5834\:5408\:306e\:30d7\:30ec\:30d5\:30a3\:30c3\:30af\:30b9\:30de\:30c3\:30c1\:3002
-   "claude-opus-4-6" \:3084 "claude-opus-4.5" \:306a\:3069\:306e\:30d0\:30ea\:30a2\:30f3\:30c8\:3001
-   "qwen/qwen3.6-27b" \:306e\:3088\:3046\:306a provider \:4ed8\:304d\:540d\:524d\:306b\:3082\:5bfe\:5fdc\:3059\:308b\:3002
-   \:3055\:3089\:306b "" (\:7a7a\:6587\:5b57\:5217) \:306f claudecode.wl \:306e\:6163\:7fd2\:3068\:3057\:3066
-   "Anthropic Claude \:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb\:3092\:4f7f\:3046" \:3092\:610f\:5473\:3059\:308b\:306e\:3067
-   Heavy-Cloud (claude-opus-4.7) \:306b\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3059\:308b\:3002 *)
+(* iGuessProvider: \:6b63\:898f\:5316\:6e08\:307f\:30e2\:30c7\:30eb\:540d\:304b\:3089 Provider \:540d\:3092\:63a8\:5b9a\:3059\:308b\:3002
+   provider \:540d\:306f\:534a\:5e74\:301c\:6570\:5e74\:5358\:4f4d\:3067\:5b89\:5b9a (anthropic/openai/lm-studio) \:306a\:306e\:3067
+   \:30b3\:30fc\:30c9\:306b\:66f8\:3044\:3066\:3088\:3044\:3002\:30e2\:30c7\:30eb\:679d\:756a\:306f\:66f8\:304b\:306a\:3044 (rules/02 \:6e96\:62e0)\:3002 *)
+iGuessProvider[name_String] :=
+  Which[
+    StringTrim[name] === "",          "anthropic",
+    StringStartsQ[name, "claude-"] ||
+      StringStartsQ[name, "claude/"], "anthropic",
+    StringStartsQ[name, "qwen"],      "lm-studio",
+    StringStartsQ[name, "gpt-oss"],   "lm-studio",     (* OSS \:7cfb: OpenAI \:3088\:308a\:512a\:5148 *)
+    StringStartsQ[name, "gpt-"] ||
+      StringStartsQ[name, "gpt"],     "openai",
+    StringStartsQ[name, "o1-"] ||
+      StringStartsQ[name, "o3-"],     "openai",        (* OpenAI \:63a8\:8ad6\:30e2\:30c7\:30eb\:7cfb *)
+    True,                             "unknown"
+  ];
+iGuessProvider[_] := "unknown";
+
+(* iClassRank: Class \:6587\:5b57\:5217\:304b\:3089\:512a\:5148\:5ea6\:3092\:8fd4\:3059\:3002Heavy > Mid > Light\:3002
+   \:540c\:4e00 Provider \:5185\:3067\:300c\:6700\:5f37\:306e\:767b\:9332\:30e2\:30c7\:30eb\:300d\:3092\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:5148\:3068\:3057\:3066\:9078\:3076\:306e\:306b\:4f7f\:3046\:3002 *)
+iClassRank[class_String] :=
+  Which[
+    StringContainsQ[class, "Heavy"], 3,
+    StringContainsQ[class, "Mid"],   2,
+    StringContainsQ[class, "Light"], 1,
+    True,                            0
+  ];
+iClassRank[_] := 0;
+
+(* iSelectFallbackForProvider: \:6307\:5b9a Provider \:306e\:767b\:9332\:6e08\:307f\:30e2\:30c7\:30eb\:304b\:3089
+   Class \:304c\:6700\:3082\:5f37\:3044\:3082\:306e\:3092 1 \:3064\:9078\:3093\:3067\:8fd4\:3059\:3002\:540c Provider \:306b\:767b\:9332\:30e2\:30c7\:30eb\:304c
+   \:7121\:3051\:308c\:3070 None\:3002 *)
+iSelectFallbackForProvider[provider_String] :=
+  Module[{candidates, sorted},
+    candidates = Select[
+      Normal[$ClaudeModelCapabilities],
+      Lookup[Last[#], "Provider", ""] === provider &];
+    If[candidates === {}, Return[None]];
+    sorted = SortBy[candidates,
+      -iClassRank[Lookup[Last[#], "Class", ""]] &];
+    Last[First[sorted]]
+  ];
+iSelectFallbackForProvider[_] := None;
+
+(* iPrefixMatchCapability: \:5b8c\:5168\:4e00\:81f4\:3057\:306a\:3044\:30e2\:30c7\:30eb\:540d\:3092 Capability \:306b\:89e3\:6c7a\:3059\:308b\:3002
+   \:30e2\:30c7\:30eb\:679d\:756a\:3092\:30b3\:30fc\:30c9\:5206\:5c90\:306b\:66f8\:304b\:305a\:3001Provider \:5358\:4f4d\:306e\:6c4e\:7528\:5224\:5b9a\:3060\:3051\:3067\:51e6\:7406\:3059\:308b
+   (rules/02-llm-instructions-not-in-source.md \:6e96\:62e0)\:3002
+
+   \:65b9\:91dd:
+     1. \:540d\:524d\:304b\:3089 Provider \:3092\:63a8\:5b9a
+     2. \:540c Provider \:306b\:767b\:9332\:3055\:308c\:305f\:6700\:5f37\:30e2\:30c7\:30eb (Heavy > Mid > Light) \:3092\:8fd4\:3059
+     3. Provider \:304c unknown \:306a\:3089 conservative default
+
+   \:7d50\:679c: \:65b0\:3057\:3044\:30e2\:30c7\:30eb\:679d\:756a\:304c\:51fa\:3066\:304d\:3066\:3082\:3001Capability \:30c6\:30fc\:30d6\:30eb\:306b\:767b\:9332\:3059\:308b\:3060\:3051\:3067
+   \:3053\:306e\:30b3\:30fc\:30c9\:306b\:624b\:3092\:5165\:308c\:308b\:5fc5\:8981\:304c\:306a\:3044\:3002 *)
 iPrefixMatchCapability[modelName_String] :=
-  Module[{normalized},
+  Module[{normalized, provider, fallback},
     normalized = iNormalizeModelName[modelName];
-    Which[
-      (* \:7a7a\:6587\:5b57\:5217 / \:7a7a\:767d\:306e\:307f: Anthropic Claude \:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb\:60f3\:5b9a *)
-      !StringQ[normalized] || StringTrim[normalized] === "",
-        $ClaudeModelCapabilities["claude-opus-4.7"],
-      
-      (* Anthropic Claude family *)
-      StringStartsQ[normalized, "claude-opus"],
-        $ClaudeModelCapabilities["claude-opus-4.7"],
-      StringStartsQ[normalized, "claude-sonnet"],
-        $ClaudeModelCapabilities["claude-sonnet-4.6"],
-      StringStartsQ[normalized, "claude-haiku"],
-        $ClaudeModelCapabilities["claude-haiku-4.5"],
-      
-      (* Qwen family *)
-      StringStartsQ[normalized, "qwen3.6"] ||
-        StringStartsQ[normalized, "qwen3-6"],
-        $ClaudeModelCapabilities["qwen3.6-27b"],
-      StringStartsQ[normalized, "qwen3.5"] ||
-        StringStartsQ[normalized, "qwen3-5"],
-        $ClaudeModelCapabilities["qwen3.5-27b"],
-      StringStartsQ[normalized, "qwen3-coder"] ||
-        StringStartsQ[normalized, "qwen3.coder"],
-        $ClaudeModelCapabilities["qwen3-coder-30b"],
-      
-      (* GPT-OSS *)
-      StringStartsQ[normalized, "gpt-oss"],
-        $ClaudeModelCapabilities["gpt-oss-120b"],
-      
-      (* Unknown -> conservative default *)
-      True,
-        <|"ContextWindow"    -> 32000,
-          "Class"            -> "Unknown",
-          "DefaultMode"      -> "Summary",
-          "Strengths"        -> {},
-          "PreserveThinking" -> False,
-          "Provider"         -> "unknown"|>
-    ]
+
+    (* \:7a7a\:6587\:5b57\:5217 / \:7a7a\:767d\:306e\:307f: claudecode.wl \:306e\:6163\:7fd2\:3068\:3057\:3066
+       Anthropic Claude \:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb\:60f3\:5b9a *)
+    If[!StringQ[normalized] || StringTrim[normalized] === "",
+      provider = "anthropic",
+      provider = iGuessProvider[normalized]
+    ];
+
+    fallback = iSelectFallbackForProvider[provider];
+    If[AssociationQ[fallback], Return[fallback]];
+
+    (* \:5305\:62ec Provider \:5224\:5b9a\:306f\:3067\:304d\:305f\:304c\:305d\:306e Provider \:306e\:30e2\:30c7\:30eb\:304c
+       \:4e00\:3064\:3082\:767b\:9332\:3055\:308c\:3066\:3044\:306a\:3044 / \:307e\:305f\:306f provider="unknown"\:306e\:5834\:5408\:3001
+       conservative default \:3092\:8fd4\:3059 *)
+    <|"ContextWindow"    -> 32000,
+      "Class"            -> "Unknown",
+      "DefaultMode"      -> "Summary",
+      "Strengths"        -> {},
+      "PreserveThinking" -> False,
+      "Provider"         -> provider|>
   ];
 
 ClaudeResolveModelCapability[modelName_String] :=
@@ -1177,7 +1338,7 @@ ClaudeResolveDirectiveBundle[opts:OptionsPattern[]] :=
     If[modelName === Automatic,
       modelName = If[StringQ[role] && KeyExistsQ[$ClaudeRoleDefaultModels, role],
         $ClaudeRoleDefaultModels[role],
-        "claude-opus-4.7"]];
+        "claude-opus-4-7"]];
     
     capability = ClaudeResolveModelCapability[modelName];
     strengths  = Lookup[capability, "Strengths", {}];
@@ -1436,7 +1597,7 @@ ClaudeBuildDirectivePromptForRole[role_String, modelName_String,
 ClaudeBuildDirectivePromptForRole[role_, model_, ___] :=
   ClaudeBuildDirectivePromptForRole[
     If[StringQ[role], role, ""],
-    If[StringQ[model], model, "claude-opus-4.7"], ""];
+    If[StringQ[model], model, "claude-opus-4-7"], ""];
 
 ClaudeBuildDirectivePromptForSingle[modelName_String, taskHint_String] :=
   Module[{bundle},

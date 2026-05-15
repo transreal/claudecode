@@ -46,7 +46,7 @@ AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImag
 
 **claudecode_directives 連携**: オプションの独立パッケージ [claudecode_directives](https://github.com/transreal/claudecode_directives) をロードすることで、`rules/` および `skills/` ディレクトリのデフォルトセットが自動的にインストールされます。ロード後は Claude Code CLI のコンテキストに `rules/` の制約と `skills/` の手順が自動的に注入され、Claude がスキルを呼び出せるようになります。これらのディレクティブは Claude Code の振る舞いを規定するルールとスキルを体系的に提供し、claudecode.wl 本体はディレクティブの内容に非依存のまま、claudecode_directives がその管理・配布を担います。NotebookDirectory ごとに独立したプロジェクト固有のルール・スキルを定義してメインのディレクティブと自動マージすることも可能です。
 
-**ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすることで、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、内部状態を保持した複数ターンにわたる対話を可能にします。危険な操作（内部変数の直接書き換え等）に対しては自動的に承認フロー（`NeedsApproval`）を介挿し、意図しない破壊的操作を防止します。`$UseClaudeRuntime = False`（デフォルト）に設定するか、ClaudeRuntime パッケージをロードしないことで、従来の `ClaudeEval`/`ClaudeQuery` ワークフローに完全に後方互換します。
+**ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすることで、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、内部状態を保持した複数ターンにわたる対話を可能にします。危険な操作(内部変数の直接書き換え等)に対しては自動的に承認フロー(`NeedsApproval`)を介挿し、意図しない破壊的操作を防止します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、以降の `ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode を単独でロードした場合はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。
 
 **ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすることで、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。複数タスクのジョブキュー管理・レート制限の自動検出と待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断するため、高頻度タスクでの利用に適しています。claudecode 本体の動作には影響せず、インストールされていない環境でも全機能をそのまま利用できます。
 
@@ -132,12 +132,11 @@ Block[{$CharacterEncoding = "UTF-8"},
   Needs["ClaudeCodeDirectives`", "claudecode_directives.wl"]];
 ```
 
-ClaudeRuntime を使用する場合も、claudecode のロード後に別途ロードしてください。
+ClaudeRuntime を使用する場合も、claudecode のロード後に別途ロードしてください。ロード時に `$UseClaudeRuntime = True` が自動的に設定されます。
 
 ```mathematica
-(* ClaudeRuntime の読み込み（オプション） *)
+(* ClaudeRuntime の読み込み(オプション) — \$UseClaudeRuntime = True が自動設定される *)
 << ClaudeRuntime`
-$UseClaudeRuntime = True
 ```
 
 #### 4. API キーの設定
@@ -228,9 +227,8 @@ $LLMGraphMaxConcurrency["cli-vision"] = 1
 Block[{$CharacterEncoding = "UTF-8"},
   Needs["ClaudeCodeDirectives`", "claudecode_directives.wl"]];
 
-(* ClaudeRuntime を有効化して使用する（オプション） *)
+(* ClaudeRuntime を有効化して使用する(オプション) — ロード時に \$UseClaudeRuntime = True が自動設定される *)
 << ClaudeRuntime`
-$UseClaudeRuntime = True
 ClaudeEval["斜方投射のグラフを描いてください"]
 
 (* ランタイム一覧の確認 *)
@@ -281,12 +279,12 @@ ShowClaudePalette[]
 | `$ClaudeEvalMaxDepth` | `5` | ClaudeEval が再帰的に ClaudeEval/ContinueEval を生成する際の最大深度。0 で再帰禁止 |
 | `$ClaudePackageKeywordMap` | `<\|\|>` | パッケージ API 自動注入用のキーワードマップ |
 | `$LLMGraphMaxConcurrency` | カテゴリ別設定 | LLMGraph のカテゴリ別並列実行数（`"cli"`・`"cli-vision"` 等） |
-| `$UseClaudeRuntime` | `False` | `True` で ClaudeRuntime パッケージ経由の実行を有効化。`False`（デフォルト）で従来モードのまま動作し、後方互換性を完全に維持 |
+| `$UseClaudeRuntime` | `False` | `True` で ClaudeRuntime パッケージ経由の実行を有効化。claudecode 単独ロード時はデフォルトの `False`(従来動作)。ClaudeRuntime をロードすると自動的に `True` が設定される |
 
 ### 主な機能
 
 **クエリ・コード生成**
-- `ClaudeQuery[prompt]` — Claude に問い合わせ、テキスト応答を返す（非同期）。`ClaudeQuery[{text, Image[...], File[path], ...}]` でマルチモーダル入力も可能。リッチレスポンスモードにより、安全なコード（プロット・計算等）は自動評価される
+- `ClaudeQuery[prompt]` — Claude に問い合わせ、テキスト応答を返す(同期)。`ClaudeQuery[{text, Image[...], File[path], ...}]` でマルチモーダル入力も可能。リッチレスポンスモードにより、安全なコード(プロット・計算等)は自動評価される
 - `ClaudeQuerySync[prompt]` — Claude に問い合わせ、応答文字列を同期的に返す軽量版。セッション履歴やノートブック書き込みは行わない
 - `ClaudeQueryBg[prompt]` — FrontEnd 操作・ScheduledTask 生成なしで同期問い合わせする軽量版。`{text, Image[...], File[path], ...}` のリスト形式によるマルチモーダル入力に対応。SocketListen ハンドラや ScheduledTask コールバック等の非同期コンテキストから安全に呼び出せる
 - `ClaudeMath[task]` — Mathematica コード生成に特化したクエリ
@@ -396,15 +394,15 @@ ShowClaudePalette[]
 
 claudecode は [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime)、[ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator)、および [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) の導入にあたり、**既存のワークフローへの影響がゼロになるよう設計**されています。
 
-| 機能 | 従来の動作（各パッケージ未ロード） | ClaudeOrchestrator ロード時 | ClaudeRuntime 有効時（`$UseClaudeRuntime = True`） |
+| 機能 | 従来の動作(各パッケージ未ロード) | ClaudeOrchestrator ロード時 | ClaudeRuntime ロード時(`$UseClaudeRuntime = True` 自動設定) |
 |------|----------------------------------|----------------------------|---------------------------------------------------|
-| `ClaudeEval["..."]` | CLI 経由で直接実行 | 非同期実行モードに切替（呼び出しがジョブキューに追加されて即座に返り、カーネルをブロックしない。ジョブキュー・レート制限管理が透過的に処理される） | Runtime 経由でルーティングして実行 |
-| `ClaudeQuery["..."]` | CLI 経由で直接実行 | 変更なし | 変更なし（ClaudeQuery は常に CLI 経由） |
+| `ClaudeEval["..."]` | CLI 経由で直接実行 | 非同期実行モードに切替(呼び出しがジョブキューに追加されて即座に返り、カーネルをブロックしない。ジョブキュー・レート制限管理が透過的に処理される) | Runtime 経由でルーティングして実行 |
+| `ClaudeQuery["..."]` | CLI 経由で直接実行 | 変更なし | 変更なし(ClaudeQuery は常に CLI 経由) |
 | `ContinueEval[...]` | セッション履歴を参照して継続 | 変更なし | 変更なし |
 | `ClaudeUpdatePackage[...]` | 直接パッケージ更新 | 変更なし | 変更なし |
 | 危険な操作の自動実行 | 禁止パターンでブロック | 変更なし | さらに `NeedsApproval` フローを介挿 |
 
-`$UseClaudeRuntime = False`（デフォルト）の場合、ClaudeRuntime パッケージがインストールされていなくても claudecode の全機能をそのまま利用できます。ClaudeOrchestrator および ClaudeTestKit についても同様に、インストールされていない環境での動作に一切影響しません。
+claudecode を単独でロードした場合は `$UseClaudeRuntime = False`(デフォルト)のままで、ClaudeRuntime パッケージがインストールされていなくても claudecode の全機能をそのまま利用できます。ClaudeOrchestrator および ClaudeTestKit についても同様に、インストールされていない環境での動作に一切影響しません。
 
 ```mathematica
 (* デフォルト: 各パッケージなしで従来どおり動作 *)
@@ -414,12 +412,11 @@ ClaudeEval["タスクの説明"]   (* 従来どおり CLI 経由 *)
 << ClaudeOrchestrator`
 ClaudeEval["タスクの説明"]   (* ジョブキューに追加されて即座に返る。カーネルをブロックしない *)
 
-(* ClaudeRuntime を有効化する場合のみ追加で設定 *)
+(* ClaudeRuntime をロードすると $UseClaudeRuntime = True が自動設定される *)
 << ClaudeRuntime`
-$UseClaudeRuntime = True
 ClaudeEval["タスクの説明"]   (* Runtime 経由でルーティング *)
 
-(* いつでも従来モードに戻せる *)
+(* どうしても従来モードに戻したい場合は明示的に False を設定 *)
 $UseClaudeRuntime = False
 ClaudeEval["タスクの説明"]   (* 再び CLI 経由 *)
 ```
