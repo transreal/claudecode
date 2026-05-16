@@ -490,6 +490,38 @@ $iPaletteModel = "opus";  (* \:65e7\:5f62\:5f0f\:3001\:4e92\:63db\:306e\:305f\:3
 $iPaletteEffort = "medium";
 $iPaletteFallback = False;
 
+(* Phase 28+ (2026-05): \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:5358\:4f4d\:306e\:8ab2\:91d1API\:8a31\:53ef\:30d5\:30e9\:30b0\:3092 NBAccess \:7d4c\:7531
+   (absolute truth) \:3067\:6271\:3046\:65b9\:91dd\:3060\:304c\:3001Phase 21 fa\[CCedilla]ade pre 5471 \:884c\:7248
+   NBAccess.wl \:306b\:306f NBGetNotebookPaidAPIAllowed / NBSetNotebookPaidAPIAllowed
+   \:304c\:307e\:3060\:5b9f\:88c5\:3055\:308c\:3066\:3044\:306a\:3044\:3002\:672a\:5b9a\:7fa9\:306e\:307e\:307e\:3060\:3068
+   iSavePaletteSettings \:306e\:66f8\:304d\:8fbc\:307f\:304c\:7121\:8996\:3055\:308c\:3001iLoadPaletteSettings \:306e
+   \:8aad\:307f\:8fbc\:307f\:304c\:5e38\:306b False \:3092\:8fd4\:3057\:3066\:300c\:8a31\:53ef\:300d\:304c\:6c38\:7d9a\:5316\:3055\:308c\:306a\:3044\:30d0\:30b0\:3068\:306a\:308b\:3002
+   \:672a\:5b9a\:7fa9\:306a\:3089 claudecode.wl \:5074\:3067 TaggingRules \:30d9\:30fc\:30b9\:306e\:5b9f\:88c5\:3092\:88dc\:586b\:3059\:308b\:3002
+
+   \:4ed5\:69d8 (Imai \:5148\:751f\:6307\:793a):
+   \:30fb \:30c7\:30d5\:30a9\:30eb\:30c8\:3067\:306f\:8ab2\:91d1 API \:7981\:6b62\:3001\:65b0\:898f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3092\:958b\:3044\:305f\:6642\:306f\:5fc5\:305a\:7981\:6b62\:3002
+   \:30fb \:30d1\:30ec\:30c3\:30c8\:3067\:300c\:8a31\:53ef\:300d\:6307\:5b9a\:6642\:306f\:305d\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e TaggingRules \:306b
+     "paidAPIAllowed" -> True \:3092\:6c38\:7d9a\:5316\:3057\:3001\:518d\:5ea6\:540c\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3092\:958b\:3044\:305f
+     \:6642\:306f\:3053\:308c\:304c\:30c7\:30d5\:30a9\:30eb\:30c8\:6307\:5b9a\:3092\:30aa\:30fc\:30d0\:30fc\:30e9\:30a4\:30c9\:3057\:3066\:300c\:8a31\:53ef\:300d\:3068\:306a\:308b\:3002
+   \:30fb \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b TaggingRules \:30ad\:30fc\:304c\:7121\:3044\:65b0\:898f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3067\:306f
+     CurrentValue[...] \:304c Inherited (\:5b9f\:8cea\:7684\:306b\:6b20\:5024) \:3092\:8fd4\:3059\:305f\:3081\:3001
+     TrueQ \:7d4c\:7531\:3067\:81ea\:52d5\:7684\:306b False (\:7981\:6b62) \:306b\:306a\:308a\:30c7\:30d5\:30a9\:30eb\:30c8\:4ed5\:69d8\:3092\:6e80\:305f\:3059\:3002
+
+   \:5c06\:6765 NBAccess.wl \:3067\:3053\:308c\:3089\:304c\:5b9f\:88c5\:3055\:308c\:305f\:5834\:5408\:306f\:305d\:3061\:3089\:3092\:5c0a\:91cd\:3057\:3001
+   \:3053\:3053\:3067\:306f\:6db2\:53d6\:308a\:3057\:306a\:3044\:3088\:3046 DownValues \:304c\:7a7a\:306e\:6642\:3060\:3051\:88dc\:586b\:3059\:308b\:3002 *)
+If[Quiet[DownValues[NBAccess`NBGetNotebookPaidAPIAllowed]] === {},
+  NBAccess`NBGetNotebookPaidAPIAllowed[nb_NotebookObject] :=
+    TrueQ @ Quiet @ CurrentValue[nb, {TaggingRules, "claudecode", "paidAPIAllowed"}];
+  NBAccess`NBGetNotebookPaidAPIAllowed[___] := False;
+];
+If[Quiet[DownValues[NBAccess`NBSetNotebookPaidAPIAllowed]] === {},
+  NBAccess`NBSetNotebookPaidAPIAllowed[nb_NotebookObject, val_] := (
+    Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paidAPIAllowed"}] = TrueQ[val]];
+    TrueQ[val]
+  );
+  NBAccess`NBSetNotebookPaidAPIAllowed[___] := $Failed;
+];
+
 (* Phase 28 (2026-05-12): \:30d1\:30ec\:30c3\:30c8\:30c7\:30b6\:30a4\:30f3\:3092 Provider + Model \:306e 2 \:30dc\:30bf\:30f3\:306b\:62e1\:5f35\:3002
    \:65e7 $iPaletteModel ("opus"/"sonnet"/"default") \:3068\:306f\:72ec\:7acb\:3057\:3066\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:3092\:7ba1\:7406\:3059\:308b\:3002 *)
 $iPaletteProvider  = "claudecode";    (* "claudecode" | "anthropic" | "openai" | "lmstudio" *)
