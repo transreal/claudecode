@@ -14,24 +14,66 @@ petri_from_prompt_chatgpt.wl の `parsePetriCode` がパース可能な形を保
 
 # Source token Payload convention (CRITICAL)
 
-The user submits a token to the SourcePlace via ClaudeSubmitToken. The
-submitted token's Payload contains application-specific keys that the
-FIRST worker(s) must read. UNLESS the goal explicitly specifies otherwise,
-ASSUME the Payload has a single key named EXACTLY "Text" with the input
-text:
+The user submits a token to the SourcePlace either via the low-level
+`ClaudeSubmitToken[wid, WorkflowToken[...]]` or via the helper
+`ClaudeBindAndSubmit[wid, var1, var2, ...]` (HoldRest). The submitted
+token's Payload contains application-specific keys that the FIRST
+worker(s) must read.
 
-  ClaudeSubmitToken[wid,
-    WorkflowToken["Kind" -> "Task", "Payload" -> <|"Text" -> "..."|>],
-    "Source"]
+## Key naming convention (ClaudeBindAndSubmit)
 
-So the FIRST worker / Distribute handler should read:
-  inputText = Lookup[binding[["Source", "Payload"]], "Text", ""]
+`ClaudeBindAndSubmit` uses `SymbolName[var]` **verbatim** as the
+Payload key. Mathematica symbols are case-sensitive, and identifiers
+may include CJK / Unicode characters, so NO case transformation is
+applied (no capitalization, no camelCase split, no underscore
+conversion).
 
-DO NOT invent unrelated key names like "Plan" or "Input" or "Data" for
-the Source token's Payload. The convention is "Text".
+| Call                                          | Resulting Payload                                         |
+|-----------------------------------------------|-----------------------------------------------------------|
+| `ClaudeBindAndSubmit[wid, text]`              | `<\|"text" -> text\|>`                                     |
+| `ClaudeBindAndSubmit[wid, title, text]`       | `<\|"title" -> title, "text" -> text\|>`                   |
+| `ClaudeBindAndSubmit[wid, inputData]`         | `<\|"inputData" -> inputData\|>`                           |
+| `ClaudeBindAndSubmit[wid, 本文]`              | `<\|"本文" -> 本文\|>`                                     |
+| `ClaudeBindAndSubmit[wid, srcCode, hint]`     | `<\|"srcCode" -> srcCode, "hint" -> hint\|>`               |
 
-If the goal explicitly mentions different input keys (e.g. "the token has
-keys X, Y, Z"), use those. Otherwise: "Text".
+Rule: take `SymbolName[var]` exactly as it is. The Payload key has the
+SAME case and SAME characters as the Mathematica symbol the user wrote.
+
+## Inferring Payload keys from the user goal
+
+When you write the FIRST worker / Distribute handler, INFER the Payload
+keys by reading the user goal and identifying which Mathematica
+variables are mentioned. Use those exact names (case-sensitive) as
+Payload keys:
+
+  goal: "textに代入されたテキストを..."
+    → Payload key "text"  (lowercase, matches the variable `text`)
+    → text = Lookup[binding[["Source", "Payload"]], "text", ""]
+
+  goal: "titleとtextを連結し..."
+    → Payload keys "title", "text"
+    → title = Lookup[binding[["Source", "Payload"]], "title", ""]
+    → text  = Lookup[binding[["Source", "Payload"]], "text", ""]
+
+  goal: "inputData を処理し..."
+    → Payload key "inputData"  (camelCase preserved exactly)
+    → inputData = Lookup[binding[["Source", "Payload"]], "inputData", ""]
+
+  goal: "本文を要約し..."
+    → Payload key "本文"  (CJK identifiers are valid Mathematica symbols)
+    → 本文 = Lookup[binding[["Source", "Payload"]], "本文", ""]
+
+If the goal uses a noun-phrase rather than an identifier (e.g. "the
+input text", "the article body"), default to the single key "text" and
+note the fallback in a comment.
+
+If the goal explicitly mentions different input keys (e.g. "the token
+has keys X, Y, Z"), use those instead.
+
+DO NOT invent unrelated key names like "Plan" or "Input" or "Data" when
+the user goal does not mention them. DO NOT capitalize, lowercase, or
+otherwise transform the variable name — Mathematica is case-sensitive
+and the helper preserves the symbol name verbatim.
 
 # Provider selection for LLM calls
 

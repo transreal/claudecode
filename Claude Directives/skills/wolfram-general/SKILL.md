@@ -36,23 +36,6 @@ description: Use for Wolfram Language / Mathematica coding, editing, notebook ou
 - サンプルコードで `Clear["Global`*"]` や `Remove["Global`*"]` のような全消去をしない。
 - 物理 PDE を、自前の手書き差分式・有限差分・統計サンプリングで安易に置き換えない。
 
-## 非同期タスクスケジューリング規約
-
-- UI フィードバック（`WindowStatusArea`、`NotebookWrite`、`Dynamic` 等）を伴う非同期処理は、claudecode / NBAccess の公開 API を経由する。パッケージ側で個別に `CreateScheduledTask` を作成しない。
-- 例外: FrontEnd 通信を一切行わない純粋計算タスク、またはリアルタイム対話が必要なインタラクティブプログラム（PresentationListener 等）では独自 ScheduledTask を許可する。ただしドキュメントに明記すること。
-- 理由: 複数の ScheduledTask が同時に FrontEnd 操作を行うと「動的評価の放棄」ダイアログが発生しシステムがフリーズする。
-
-### LLM 呼び出しを含む非同期処理を書く前に rules/95 を読む
-
-複数 LLM 呼び出しを並列・依存関係付きで実行する場合、または LMStudio 等のローカル LLM を非ブロックで呼び出す場合は、必ず **rules/95-scheduled-task-safety** の節 C, D, E を参照すること。特に:
-
-- **`RunProcess[..., "Process"]` は無効引数** で常に `$Failed` を返す → `StartProcess` を使う(節 D)
-- **`Pause` ループでの完了待機**はフロントエンドをブロックする → 同期 API 内で非同期処理を待たず、`xxxAsync` という別 API を提供する(節 D)
-- **DAG node handler は deferred sync runState** (`<|"proc", "outFile", "parseFn", ...|>`) を返す(節 D)
-- **ローカル LLM (LMStudio 等)** は `iStartFallbackAsync` + 「ダミー proc + outFile 書込」パターンで deferred sync に変換する(節 E)
-
-これらは動作実証しないと気づきにくい落とし穴で、知らずに実装すると「最初は応答するがすぐフリーズする」「Plot などが評価できなくなる」「動的評価の放棄ダイアログが出る」といった症状になる。
-
 ## パッケージロード時のメッセージ
 
 ロード完了メッセージは `CellPrint` ではなく `Print` を使う。タイトルは `Style[..., Bold]` で強調し、一覧は改行つき文字列で出す。
@@ -81,3 +64,99 @@ Print["
   - 例: `Import[file, "Dataset"] // First`
   - 例: `Import[file, {"XLSX", 1}]`
 - シート数が不明な場合は `First @ Import[...]` をデフォルトとする。
+
+## Wolfram トラップ一覧
+
+実機で何度も踏んだ落とし穴。新規コードを書くときに該当箇所がないか必ず確認する。
+
+### #9: UnsameQ は `=!=`、`!==` ではない
+```mathematica
+(* NG: Wolfram に !== はない *)
+If[a !== b, ...]
+(* OK *)
+If[a =!= b, ...]
+```
+
+### #10: TestResultObject は indexed access、Lookup は使わない
+```mathematica
+(* NG: TestResultObject に Lookup は通らない *)
+Lookup[testResult, "Outcome"]
+(* OK *)
+testResult["Outcome"]
+```
+
+### #11: Unicode escape は `\:XXXX`、`\uXXXX` ではない
+```mathematica
+(* NG: \u は文字列解釈で通らない、Get 時にエラー *)
+"テスト\u3001"
+(* OK *)
+"テスト\:3001"
+```
+`grep -E '\\u[0-9a-f]{4}' file.wl` でチェックする習慣をつける。
+
+### #13: `Needs[..., "Pkg.wl"]` は `$Path` に依存する
+ファイル名指定の `Needs[name_, file_]` はファイル探索に `$Path` を使う。フルパス指定または `Get` を使うほうが安全。
+
+### #14: `&` の優先順位は低い
+```mathematica
+(* 期待と違う: f & は (f) & ではなく Function[Slot[1], f] *)
+Map[g[f, #] &, list]    (* OK: Function 全体を囲む & *)
+Map[g[f, #] & , list]   (* 同じ *)
+```
+複雑な `&` は `Function[...]` の明示形のほうがバグらない。
+
+### #15: Map+Function+Return/Throw は不可
+```mathematica
+(* NG: Map の中の Function 内 Return は外側 Module まで届かない、$Failed が返る *)
+result = Map[Function[x, If[bad[x], Return[$Failed]]; x], list]
+(* OK: Scan + Throw/Catch、または If 分岐で明示処理 *)
+```
+これは #16 の `Quiet@Check` 偽陰性と組み合わさるとさらに分かりにくくなる。
+
+### #16: `Quiet @ Check[expr, $Failed]` は偽陰性
+`Quiet` は Message を抑制するが、`Check` は Message 出現を検知して `$Failed` を返す。Quiet で Message が隠されていると Check は何も検知せず `expr` の評価結果を返す。
+```mathematica
+(* NG: 期待: $Failed   実際: 評価続行 *)
+Quiet @ Check[badExpr, $Failed]
+(* OK: Quiet のみ (例外として Message 出るだけは無視する場合) *)
+Quiet[expr]
+```
+両方の意図がある場合は順序を入れ替える: `Check[Quiet[expr, msg::tag], $Failed]`。
+
+### #17: コメント内の bare `*)` がコメントを早期終端する
+```mathematica
+(* NG: pattern Blank の例 *)
+(* 例: f[x_, y_]) のような書き方   *)
+(*                ↑ ここで早期終端 *)
+```
+コメント内に `*)` を含む引用が必要な場合はスペースで分ける: `* )`。
+
+### #18: `ValueQ` は OwnValues のみ判定
+Mathematica 14.x の `ValueQ[sym]` は **OwnValues** (`sym = value` 形式の代入) のみ判定する。`f[args] := body` 形式の本体定義 (DownValues) は **無視される**。
+```mathematica
+f[x_] := x^2;
+ValueQ[f]               (* False  ← 落とし穴 *)
+Length[DownValues[f]]   (* 1      ← こちらで判定する *)
+```
+本体定義の有無を判定したい場合は `Length[DownValues[sym]] > 0` を使う。
+
+### #19: `Function[var, Module[{...}, body]]` の close `]` を見落とす
+```mathematica
+(* NG: Function を閉じる ] が欠落、Module は閉じてるが Function が未閉鎖 *)
+Scan[
+  Function[entry,
+    Module[{a, b},
+      ...body...
+    ]],         (* ← Module の ] と Scan の , の間に Function の ] が必要 *)
+  list]
+```
+`Scan[Function[..., Module[...]], list]` の構造で `]],` のように `]` が 2 個並ぶときは、
+- 1 つ目: Module の close
+- 2 つ目: Function の close
+となるのを忘れない。深いネストでは Python などで括弧バランスを静的検証するのが確実 (例えば `(`, `)`, `[`, `]`, `{`, `}`, `<|`, `|>` の各々の閉じ忘れ判定)。
+
+### その他: Association 関連
+- `ReplacePart` は **既存のキー** に対する置換のみ。Association に **新しいキー** を追加するときは `Append[assoc, <|"new" -> val|>]` を使う。`ReplacePart[assoc, "new" -> val]` は silently に無視される。
+
+### その他: StringExpression
+- 文字列パターンの `_` は **Pattern Blank** (任意の文字列)。「任意の 1 文字」のつもりで使うとマッチが広すぎる。「任意の 1 文字」は `_String /; StringLength[#] == 1` か、`LetterCharacter`/`DigitCharacter` 等の文字クラスを使う。

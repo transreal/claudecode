@@ -110,7 +110,7 @@ Quiet[Scan[
   Function[name,
     If[MemberQ[Names["Global`" <> name], "Global`" <> name],
       Quiet[Remove["Global`" <> name], Remove::ssym]]],
-  {"ClaudeQuery","ClaudeQuerySync","ClaudeQueryBg","ClaudeQueryAsync","ClaudeWriteResponse","ClaudeMath","ClaudeExtractCode","ClaudeExtractAllCode",
+  {"ClaudeQuery","ClaudeQuerySync","ClaudeQueryBg","ClaudeQueryAsync","ClaudeQueryAsyncSilent","ClaudeEnsureSilentNotebook","ClaudeWriteResponse","ClaudeMath","ClaudeExtractCode","ClaudeExtractAllCode",
    "ClaudeEval","ContinueEval","ContinueUpdate","ClaudeSpec","ClaudeDebug","ClaudeReview","ClaudeReviewChunked",
    (* Phase Q-3 \:79fb\:7ba1: ClaudeBackupDataset, ClaudeMigrateBackupHistory
       \:306f ClaudePackageManager.wl \:3078\:5b8c\:5168\:79fb\:7ba1 (alias \:7d4c\:7531\:3067\:3082\:5f15\:304d\:7d9a\:304d\:547c\:3073\:51fa\:3057\:53ef) *)
@@ -1417,6 +1417,32 @@ ClaudePollingTickKeys::usage =
   "ClaudePollingTickKeys[] \:306f\:73fe\:5728\:767b\:9332\:3055\:308c\:3066\:3044\:308b polling tick \:306e key \:4e00\:89a7\:3092\n" <>
   "List \:3067\:8fd4\:3059\:3002registry \:304c\:672a\:521d\:671f\:5316\:306e\:3068\:304d\:306f {} \:3092\:8fd4\:3059\:3002";
 
+(* === Z 案 (2026-05-17): Public usage を Begin Private 前に配置 ===
+   ClaudeEnsureSilentNotebook と ClaudeQueryAsyncSilent の usage 宣言は
+   元々 L8299/L8325 (Begin Private 内) にしか置かれていなかったため、
+   シンボルが ClaudeCode`Private` context に登録され Public context から
+   見えなかった。本体定義も Private 内だが、ここで先にシンボルを Public
+   側に登録しておくと、Begin Private 内の
+     ClaudeEnsureSilentNotebook[..] := ..
+     ClaudeQueryAsyncSilent[..] := ..
+   が $ContextPath 経由で Public シンボルを解決し、そちらに DownValues
+   が付与される。L8299/L8325 での usage 宣言は冪等の上書きとなり同一
+   シンボル (Public) の usage を更新するので無害。 *)
+ClaudeEnsureSilentNotebook::usage =
+  "ClaudeEnsureSilentNotebook[] \:306f Workflow handler \:7d4c\:7531\:306e\n" <>
+  "ClaudeQueryAsyncSilent \:304c\:4f7f\:3046 hidden notebook \:3092\:78ba\:4fdd\:3059\:308b\:3002\n" <>
+  "\:30e1\:30a4\:30f3\:30b9\:30ec\:30c3\:30c9\:3067 1 \:56de\:547c\:3076\:3053\:3068\:3092\:63a8\:5968 (scheduled task \:5185\:3067\:306e\n" <>
+  "CreateNotebook \:3092\:907f\:3051\:308b\:305f\:3081)\:3002\:9806\:5e38\:306b\:5b58\:5728\:3059\:308b\:306a\:3089\:305d\:306e\:307e\:307e\:8fd4\:3059\:3002";
+
+ClaudeQueryAsyncSilent::usage =
+  "ClaudeQueryAsyncSilent[prompt_String, callback_, opts] \:306f notebook \:5f15\:6570\:306a\:3057\:3067\n" <>
+  "Claude \:306b\:975e\:540c\:671f\:3067\:554f\:3044\:5408\:308f\:305b\:308b\:3002\:5b8c\:4e86\:6642\:306b callback[\:5fdc\:7b54\:6587\:5b57\:5217] \:3092\:547c\:3076\:3002\n" <>
+  "internal: hidden \:306a\:8a55\:4fa1\:7528 notebook \:3092\:5229\:7528\:3057\:3066 ClaudeQueryAsync \:306b\:59d4\:8b72\:3002\n" <>
+  "Workflow handler \:5185\:304b\:3089\:547c\:3076\:300cZ \:6848\:300d\:30d1\:30bf\:30fc\:30f3\:306e\:4e3b\:8981 API\:3002\n" <>
+  "Options: ClaudeQueryAsync \:3068\:540c\:3058 (Fallback, Model, PrivacyLevel, Timeout)\n" <>
+  "\:4f8b: ClaudeQueryAsyncSilent[prompt, callback]\n" <>
+  "      ClaudeQueryAsyncSilent[prompt, callback, Model -> {\"anthropic\", \"claude-opus-4-7\"}]";
+
     Begin["`Private`"];(* ============================================================
    \:8a2d\:5b9a\:ff1a\:5fc5\:8981\:306b\:5fdc\:3058\:3066\:624b\:52d5\:3067\:4e0a\:66f8\:304d\:53ef\:80fd
    ============================================================ *)
@@ -1995,11 +2021,43 @@ iCaptureEvalCell[] := (
   $iCurrentEvalCell = Quiet @ EvaluationCell[];
   If[Head[$iCurrentEvalCell] =!= CellObject, $iCurrentEvalCell = None]);
 
+(* === Z\:6848 (2026-05-16) silent\:30e2\:30fc\:30c9\:7528 \:5224\:5b9a\:30d8\:30eb\:30d1\:30fc ===
+   Visible -> False \:306e notebook (\:307e\:305f\:306f$ClaudeSilentNotebook \:8a72\:5f53) \:3092\:691c\:51fa\:3057\:3001
+   Job \:30b7\:30b9\:30c6\:30e0\:3092\:30d0\:30a4\:30d1\:30b9\:3055\:305b\:308b\:305f\:3081\:306e predicate\:3002 *)
+
+(* $iClaudeSilentNotebook \:306e\:5148\:884c\:521d\:671f\:5316 (\:672c\:5b9f\:88c5\:306f L8200+ \:3067\:518d\:5b9a\:7fa9) *)
+If[!ValueQ[$iClaudeSilentNotebook], $iClaudeSilentNotebook = None];
+
+iIsHiddenNotebookQ[nb_NotebookObject] :=
+  Module[{vis},
+    (* (1) \:500b\:4f53\:3068\:3057\:3066\:4fdd\:6301\:3055\:308c\:305f\:30b5\:30a4\:30ec\:30f3\:30c8 notebook \:306a\:3089\:78ba\:5b9a *)
+    If[ValueQ[$iClaudeSilentNotebook] &&
+       Head[$iClaudeSilentNotebook] === NotebookObject &&
+       nb === $iClaudeSilentNotebook,
+      Return[True]];
+    (* (2) CurrentValue \:7d4c\:7531\:3067 Visible \:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:78ba\:8a8d\:3002
+       \:53d6\:5f97\:306b\:5931\:6557 (FrontEnd \:7121\:3057\:7b49) \:306a\:3089 visible \:6271\:3044\:3002 *)
+    vis = Quiet @ Check[CurrentValue[nb, Visible], True];
+    TrueQ[vis === False]
+  ];
+iIsHiddenNotebookQ[_] := False;
+
 iBeginJobAtCapturedCell[nb_NotebookObject] :=
   Module[{cell = $iCurrentEvalCell},
     $iCurrentEvalCell = None;
+    (* Z\:6848 (2026-05-16): hidden notebook \:7d4c\:7531\:306f Job \:30b7\:30b9\:30c6\:30e0\:3092\:30b9\:30ad\:30c3\:30d7\:3002
+       jobId = "" \:3092\:8fd4\:3057 useJob = (jobId =!= "") \:306e\:65e2\:5b58\:30ac\:30fc\:30c9\:3067
+       \:305d\:306e\:5f8c\:306e NBAccess\:64cd\:4f5c\:3092\:4e00\:62ec\:3067\:30d0\:30a4\:30d1\:30b9\:3055\:305b\:308b\:3002 *)
+    If[iIsHiddenNotebookQ[nb], Return[""]];
     NBAccess`NBBeginJob[nb, cell]
   ];
+
+(* hidden notebook \:5b89\:5168\:306a SelectionMove \:30e9\:30c3\:30d1\:30fc\:3002
+   hidden notebook \:306b\:5bfe\:3057\:3066\:306f Quiet[SelectionMove[...]] \:3067\:3082
+   FrontEnd \:30a8\:30b9\:30e9\:30b3\:30ad\:3092\:30d6\:30ed\:30c3\:30af\:3059\:308b\:30ea\:30b9\:30af\:304c\:3042\:308b\:305f\:3081\:3001\:660e\:793a\:7684\:306b skip \:3059\:308b\:3002 *)
+iSafeSelectionMoveAfter[nb_NotebookObject] :=
+  If[!iIsHiddenNotebookQ[nb], Quiet[SelectionMove[nb, After, Notebook]]];
+iSafeSelectionMoveAfter[_] := Null;
 
 nbPrint[nb_, text_String, style_String:"Text"] := (
   If[nb =!= $iJobActiveNb,
@@ -3277,7 +3335,18 @@ iSharedPollingTick[] := Module[{keys, tickFn, entry, suppressible,
       (* UI \:512a\:5148\:30e2\:30fc\:30c9\:4e2d\:306f Suppressible == True \:306e tick \:3092\:30b9\:30ad\:30c3\:30d7 *)
       If[!(highPrio && suppressible),
         tickFn = Lookup[entry, "tickFn", None];
-        If[tickFn =!= None, Quiet @ Check[tickFn[], Null]]]],
+        If[tickFn =!= None,
+          (* 2026-05-16: tick \:5b9f\:884c\:3092 SessionSubmit \:3067\:80cc\:666f\:30bf\:30b9\:30af\:5316\:3002
+             \:65e7\:5b9f\:88c5\:306f Quiet @ Check[tickFn[], Null] \:306e\:540c\:671f\:5b9f\:884c\:3067\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057\:305f\:3002
+             tick \:5185\:306e handler \:304c ClaudeQueryBg \:7b49\:540c\:671f LLM \:547c\:3073\:51fa\:3057\:3092\:884c\:3046\:5834\:5408\:3001
+             \:540c\:671f\:5b9f\:884c\:3060\:3068 LLM \:5fdc\:7b54\:5f85\:3061\:306e\:9593 ScheduledTask \:30bf\:30b9\:30af\:304c\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092
+             \:6291\:3048\:3001\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:306e\:52d5\:7684\:8a55\:4fa1\:304c\:30d6\:30ed\:30c3\:30af\:3055\:308c\:300c\:52d5\:7684\:8a55\:4fa1\:306e\:653e\:68c4\:300d\:30c0\:30a4\:30a2\:30ed\:30b0\:3092
+             \:8a98\:767a\:3059\:308b\:3002SessionSubmit \:7d4c\:7531\:306b\:3057\:3001\:30bf\:30b9\:30af\:5883\:754c\:3067\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:5fdc\:7b54\:3092\:8a31\:3059\:3002
+
+             ClaudeQuery / ClaudeEval (rule 95) \:3068\:540c\:69d8\:306e\:5bfe\:5fdc\:3002With \:3067 fn \:3092\:9759\:7684\:306b
+             \:675f\:7e1b\:3057\:3001Module \:5c40\:6240\:5909\:6570 tickFn$nnnn \:306e\:30b9\:30b3\:30fc\:30d7\:5916\:8a55\:4fa1\:3092\:9632\:3050\:3002 *)
+          With[{fn = tickFn},
+            iScheduleAtAsync[Quiet @ Check[fn[], Null], Now]]]]],
     {k, sortedKeys}]];
 
 
@@ -3956,9 +4025,12 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
     |>;
 
     With[{k = ts, jid = jobId, uj = useJob},
-      (* \:5168\:30d5\:30a7\:30fc\:30ba\:3067 WindowStatusArea \:3092\:4f7f\:7528: \:30ab\:30fc\:30bd\:30eb\:4f4d\:7f6e\:306b\:5f71\:97ff\:3057\:306a\:3044 *)
+      (* \:5168\:30d5\:30a7\:30fc\:30ba\:3067 WindowStatusArea \:3092\:4f7f\:7528: \:30ab\:30fc\:30bd\:30eb\:4f4d\:7f6e\:306b\:5f71\:97ff\:3057\:306a\:3044\:3002
+         Z\:6848 (2026-05-16): silent\:30e2\:30fc\:30c9 (jobId = "", uj = False) \:306e\:6642\:306f
+         hidden notebook \:3092\:3055\:308f\:3089\:306a\:3044\:3088\:3046 WindowStatusArea \:8a2d\:5b9a\:3082\:30b9\:30ad\:30c3\:30d7\:3059\:308b\:3002 *)
       $claudeProgress[k]["disp"] = iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s", "Querying Claude... 0s"];
-      Quiet[CurrentValue[nb, WindowStatusArea] = iL[iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s", "Querying Claude... 0s"], "Querying Claude... 0s"]]
+      If[uj,
+        Quiet[CurrentValue[nb, WindowStatusArea] = iL[iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s", "Querying Claude... 0s"], "Querying Claude... 0s"]]]
     ];
 
     $claudeProgress[ts]["tickFn"] =
@@ -3972,12 +4044,16 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
           elapsed = Round[AbsoluteTime[] - t0, 1];
           phase = Lookup[$claudeProgress[k], "phase", "polling"];
 
-          (* === \:9032\:6357\:30c6\:30ad\:30b9\:30c8\:66f4\:65b0\:30d8\:30eb\:30d1\:30fc: WindowStatusArea \:306b\:7d71\:4e00 + \:30b9\:30ed\:30c3\:30c8\:30ea\:30f3\:30b0 === *)
+          (* === \:9032\:6357\:30c6\:30ad\:30b9\:30c8\:66f4\:65b0\:30d8\:30eb\:30d1\:30fc: WindowStatusArea \:306b\:7d71\:4e00 + \:30b9\:30ed\:30c3\:30c8\:30ea\:30f3\:30b0 ===
+             Z\:6848 (2026-05-16): uj = False (silent\:30e2\:30fc\:30c9, hidden notebook) \:306e\:6642\:306f
+             FrontEnd \:64cd\:4f5c\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:3066\:30cf\:30f3\:30b0\:3092\:907f\:3051\:308b\:3002 *)
           iUpdateDisp[text_String, color_:RGBColor[0.8, 0.4, 0]] :=
-            Module[{now = AbsoluteTime[]},
-              If[now - Lookup[$claudeProgress[k], "lastDispTime", 0] < 1.0, Return[]];
-              $claudeProgress[k]["lastDispTime"] = now;
-              Quiet[CurrentValue[pNb, WindowStatusArea] = text]];
+            If[!uj,
+              (* silent: no-op *) Null,
+              Module[{now = AbsoluteTime[]},
+                If[now - Lookup[$claudeProgress[k], "lastDispTime", 0] < 1.0, Return[]];
+                $claudeProgress[k]["lastDispTime"] = now;
+                Quiet[CurrentValue[pNb, WindowStatusArea] = text]]];
 
           Which[
             (* === Phase: polling \[LongDash] \:30d7\:30ed\:30bb\:30b9\:5b9f\:884c\:4e2d === *)
@@ -4005,7 +4081,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                   If[uj,
                     NBAccess`NBAbortJob[jid,
                       iL["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08", "Error: Timeout ("] <> ToString[$ClaudeTimeout] <> iL["\:79d2\:ff09", " sec)"]],
-                    Quiet[SelectionMove[pNb, After, Notebook]];
+                    iSafeSelectionMoveAfter[pNb];
                     cb[iL["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08", "Error: Timeout ("] <> ToString[$ClaudeTimeout] <> iL["\:79d2\:ff09\:3057\:307e\:3057\:305f\:3002", " sec)."]]],
                   (* \:6b63\:5e38\:5b8c\:4e86: \:7d50\:679c\:30d5\:30a1\:30a4\:30eb\:3092\:8aad\:307f\:53d6\:308a *)
                   Module[{retries2 = 0, result2, isEmpty2},
@@ -4023,12 +4099,12 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                           iStartFallbackAsync[norm["text"], pNb,
                             Function[fbResult,
                               If[StringQ[fbResult] && fbResult =!= $Failed,
-                                If[!uj, Quiet[SelectionMove[pNb, After, Notebook]]];
+                                If[!uj, iSafeSelectionMoveAfter[pNb]];
                                 cb[fbResult],
                                 If[uj,
                                   NBAccess`NBAbortJob[jid, result2],
                                   iFlushFallbackLog[pNb];
-                                  Quiet[SelectionMove[pNb, After, Notebook]];
+                                  iSafeSelectionMoveAfter[pNb];
                                   NBAccess`NBWriteCell[pNb, Cell[result2, "Text"]]]]],
                             fbModels2, 1, jid]],
                         (* Fallback=False \:306e\:5834\:5408 *)
@@ -4039,7 +4115,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                           $claudeProgress[k]["phase"] = "done";
                           If[uj,
                             NBAccess`NBAbortJob[jid, result2],
-                            Quiet[SelectionMove[pNb, After, Notebook]];
+                            iSafeSelectionMoveAfter[pNb];
                             Quiet @ cb[result2]],
                           (* \:6b63\:5e38\:7d50\:679c: \:6b21\:306e\:30c6\:30a3\:30c3\:30af\:3067 callback \:5b9f\:884c *)
                           $claudeProgress[k]["result"] = result2;
@@ -4048,7 +4124,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                       $claudeProgress[k]["phase"] = "done";
                       If[uj,
                         NBAccess`NBAbortJob[jid, iL["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f", "Error: Output file was not generated"]],
-                        Quiet[SelectionMove[pNb, After, Notebook]];
+                        iSafeSelectionMoveAfter[pNb];
                         cb[iL["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f", "Error: Output file was not generated"]]]
                     ]]]],
 
@@ -4057,7 +4133,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
               If[uj, NBAccess`NBJobResetSlotWritten[jid, 1]];
               (* \:975e Job \:30d1\:30b9: \:30ab\:30fc\:30bd\:30eb\:3092\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:672b\:5c3e\:306b\:79fb\:52d5\:3057\:3066\:304b\:3089 cb \:3092\:547c\:3076\:3002
                  Job \:30d1\:30b9\:306f callback \:5185\:306e NBJobMoveToAnchor \:304c\:4f4d\:7f6e\:3092\:5236\:5fa1\:3059\:308b\:3002 *)
-              If[!uj, Quiet[SelectionMove[pNb, After, Notebook]]];
+              If[!uj, iSafeSelectionMoveAfter[pNb]];
               Module[{queue = {}, t1 = AbsoluteTime[], dt},
                 (* \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:3092\:4f8b\:5916\:5b89\:5168\:306b\:547c\:3073\:51fa\:3059\:3002
                    cb \:304c\:4f8b\:5916\:3092\:30b9\:30ed\:30fc\:3057\:3066\:3082 queue={} \:306e\:307e\:307e \[RightArrow] phase="done" \:306b\:9077\:79fb\:3057
@@ -4131,12 +4207,17 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                     $claudeProgress[k]["writeSub"] = "disp"]]],
 
             (* === Phase: done \[LongDash] \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7\:306e\:307f ===
-               \:5171\:6709\:30dd\:30fc\:30ea\:30f3\:30b0\:30bf\:30b9\:30af\:304c\:30a8\:30f3\:30c8\:30ea\:6d88\:53bb\:5f8c\:306b\:81ea\:52d5\:505c\:6b62\:3059\:308b\:3002 *)
+               \:5171\:6709\:30dd\:30fc\:30ea\:30f3\:30b0\:30bf\:30b9\:30af\:304c\:30a8\:30f3\:30c8\:30ea\:6d88\:53bb\:5f8c\:306b\:81ea\:52d5\:505c\:6b62\:3059\:308b\:3002
+               Z\:6848 (2026-05-16): hidden notebook \:7d4c\:7531\:6642\:306f WindowStatusArea \:66f4\:65b0\:3068
+               \:30bb\:30eb\:524a\:9664\:3092 skip\:3059\:308b\:3002 *)
             phase === "done",
-              Module[{deferred = Quiet @ $iDeferredWork[jid]},
+              Module[{deferred = Quiet @ $iDeferredWork[jid],
+                      isHidden = iIsHiddenNotebookQ[pNb]},
                 $claudeProgress = KeyDrop[$claudeProgress, k];
-                Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
-                If[!uj, NBAccess`NBDeleteCellsByTag[pNb, ptag]];
+                If[!isHidden,
+                  Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
+                  If[!uj, NBAccess`NBDeleteCellsByTag[pNb, ptag]]
+                ];
                 (* \:91cd\:3044\:51e6\:7406\:3092\:5b8c\:5168\:306b\:5225\:306e ScheduledTask \:3067\:975e\:540c\:671f\:5b9f\:884c\:3002
                    \:73fe\:5728\:306e\:30c6\:30a3\:30c3\:30af\:306f\:5373\:5ea7\:306b\:5b8c\:4e86\:3057\:3001FrontEnd \:306b\:5236\:5fa1\:304c\:623b\:308b\:3002 *)
                 If[Head[deferred] === Function,
@@ -8052,7 +8133,8 @@ iParseAnthropicBgResponse[parsed_Association] :=
 (* String \:7248: ByteArrayToString \:7d4c\:7531\:306e\:65e7\:30d1\:30b9 (\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:7528) *)
 iParseAnthropicBgResponse[respStr_String] :=
   Module[{parsed, content, errData},
-    (* Developer`ReadRawJSONString (WL 11.1+) \:306f \n, \\, \u \:7b49\:306e JSON \:30a8\:30b9\:30b1\:30fc\:30d7\:3092
+    (* Developer`ReadRawJSONString (WL 11.1+) \:306f 
+, \\, \u \:7b49\:306e JSON \:30a8\:30b9\:30b1\:30fc\:30d7\:3092
        \:6b63\:3057\:304f\:51e6\:7406\:3067\:304d\:308b\:3002ImportString["JSON"] \:306f\:3053\:308c\:3089\:3067\:5931\:6557\:3059\:308b\:30b1\:30fc\:30b9\:304c\:3042\:308b\:3002 *)
     parsed = Quiet @ Check[Developer`ReadRawJSONString[respStr], $Failed];
     If[parsed === $Failed,
@@ -8168,16 +8250,24 @@ ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPatter
     availModels = If[useFallback && !hasMedia,
       NBAccess`NBGetAvailableFallbackModels[accessLevel], {}];
 
-    (* === \:30b3\:30fc\:30eb\:30d0\:30c3\:30af: Job \:30e9\:30a4\:30d5\:30b5\:30a4\:30af\:30eb\:7ba1\:7406\:4ed8\:304d === *)
+    (* === \:30b3\:30fc\:30eb\:30d0\:30c3\:30af: Job \:30e9\:30a4\:30d5\:30b5\:30a4\:30af\:30eb\:7ba1\:7406\:4ed8\:304d ===
+       Z\:6848 (2026-05-16): jobId = "" (= iBeginJobAtCapturedCell \:304c hidden notebook
+       \:691c\:51fa\:3057 silent\:30e2\:30fc\:30c9\:3067\:8fd4\:3057\:305f\:5024) \:306e\:5834\:5408\:306f NBAccess Job \:64cd\:4f5c\:3092
+       \:4e00\:62ec\:3067\:30d0\:30a4\:30d1\:30b9\:3057\:3001userCb \:3060\:3051\:3092\:4f8b\:5916\:5b89\:5168\:306b\:547c\:3076\:3002\:3053\:308c\:306b\:3088\:308a hidden notebook \:4e0a\:3067\:306e
+       FrontEnd \:64cd\:4f5c (SelectionMove / NotebookWrite / CellTags \:691c\:7d22) \:306e\:30cf\:30f3\:30b0\:3092\:907f\:3051\:308b\:3002 *)
     wrappedCallback = With[{nb2 = nb, jid = jobId, userCb = callback},
       Function[response,
         Module[{},
-          NBAccess`NBJobMoveToAnchor[jid];
-          $iJobActiveNb = nb2;
-          userCb[response];
-          NBAccess`NBJobResetSlotWritten[jid, 1];
-          $iJobActiveNb = None;
-          NBAccess`NBEndJob[jid]
+          If[jid =!= "",
+            NBAccess`NBJobMoveToAnchor[jid];
+            $iJobActiveNb = nb2;
+            Quiet @ Check[userCb[response], Null];
+            NBAccess`NBJobResetSlotWritten[jid, 1];
+            $iJobActiveNb = None;
+            NBAccess`NBEndJob[jid],
+            (* silent\:30e2\:30fc\:30c9: NBAccess Job \:30d1\:30b9\:3092\:30b9\:30ad\:30c3\:30d7 *)
+            Quiet @ Check[userCb[response], Null]
+          ]
         ]]
     ];
 
@@ -8218,6 +8308,81 @@ ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPatter
         $iJobActiveNb = None;
         NBAccess`NBEndJob[jobId]
     ];
+  ];
+
+(* ============================================================
+   ClaudeQueryAsyncSilent (2026-05-16, Z\:6848): nb \:5f15\:6570\:306a\:3057\:306e\:975e\:540c\:671f LLM \:30af\:30a8\:30ea
+   ----
+   workflow \:306e handler \:5185\:304b\:3089\:547c\:3076\:3053\:3068\:3092\:60f3\:5b9a\:3057\:305f\:6700\:5c0f\:30a4\:30f3\:30bf\:30d5\:30a7\:30fc\:30b9\:3002
+   \:6238\:308a\:5024 None (\:5373\:6642 return)\:3001callback[response_String] \:304c\:5b8c\:4e86\:6642\:306b\:547c\:3070\:308c\:308b\:3002
+   internal: \:30b0\:30ed\:30fc\:30d0\:30eb hidden notebook ($iClaudeSilentNotebook) \:3092\:5099\:3048\:3001
+   \:305d\:308c\:3092\:4f7f\:3063\:3066 ClaudeQueryAsync \:306b\:59d4\:8b72\:3059\:308b\:3002
+   ============================================================ *)
+
+If[!ValueQ[$iClaudeSilentNotebook],
+  $iClaudeSilentNotebook = None];
+
+ClaudeEnsureSilentNotebook::usage =
+  "ClaudeEnsureSilentNotebook[] \:306f Workflow handler \:7d4c\:7531\:306e\n" <>
+  "ClaudeQueryAsyncSilent \:304c\:4f7f\:3046 hidden notebook \:3092\:78ba\:4fdd\:3059\:308b\:3002\n" <>
+  "\:30e1\:30a4\:30f3\:30b9\:30ec\:30c3\:30c9\:3067 1 \:56de\:547c\:3076\:3053\:3068\:3092\:63a8\:5968 (scheduled task \:5185\:3067\:306e\n" <>
+  "CreateNotebook \:3092\:907f\:3051\:308b\:305f\:3081)\:3002\:9806\:5e38\:306b\:5b58\:5728\:3059\:308b\:306a\:3089\:305d\:306e\:307e\:307e\:8fd4\:3059\:3002";
+
+ClaudeEnsureSilentNotebook[] :=
+  Module[{nb},
+    If[Head[$iClaudeSilentNotebook] === NotebookObject,
+      $iClaudeSilentNotebook,
+      nb = Quiet @ Check[
+        CreateNotebook["Default",
+          Visible      -> False,
+          WindowSize   -> {200, 100},
+          WindowTitle  -> "Claude Silent (workflow async handler)",
+          DockedCells  -> {}
+        ],
+        $Failed];
+      If[Head[nb] === NotebookObject,
+        $iClaudeSilentNotebook = nb,
+        $iClaudeSilentNotebook = None;
+        $Failed
+      ]
+    ]
+  ];
+
+ClaudeQueryAsyncSilent::usage =
+  "ClaudeQueryAsyncSilent[prompt_String, callback_, opts] \:306f notebook \:5f15\:6570\:306a\:3057\:3067\n" <>
+  "Claude \:306b\:975e\:540c\:671f\:3067\:554f\:3044\:5408\:308f\:305b\:308b\:3002\:5b8c\:4e86\:6642\:306b callback[\:5fdc\:7b54\:6587\:5b57\:5217] \:3092\:547c\:3076\:3002\n" <>
+  "internal: hidden \:306a\:8a55\:4fa1\:7528 notebook \:3092\:5229\:7528\:3057\:3066 ClaudeQueryAsync \:306b\:59d4\:8b72\:3002\n" <>
+  "Workflow handler \:5185\:304b\:3089\:547c\:3076\:300cZ \:6848\:300d\:30d1\:30bf\:30fc\:30f3\:306e\:4e3b\:8981 API\:3002\n" <>
+  "Options: ClaudeQueryAsync \:3068\:540c\:3058 (Fallback, Model, PrivacyLevel, Timeout)\n" <>
+  "\:4f8b: ClaudeQueryAsyncSilent[prompt, callback]\n" <>
+  "      ClaudeQueryAsyncSilent[prompt, callback, Model -> {\"anthropic\", \"claude-opus-4-7\"}]";
+
+Options[ClaudeQueryAsyncSilent] = Options[ClaudeQueryAsync];
+
+ClaudeQueryAsyncSilent[prompt_String, callback_,
+                      opts:OptionsPattern[]] :=
+  Module[{nb, safeCallback},
+    (* \:307e\:305a hidden notebook \:3092\:78ba\:4fdd\:3002\:5931\:6557\:306a\:3089 callback \:306b\:30a8\:30e9\:30fc\:3092\:8fd4\:3059\:3002 *)
+    nb = ClaudeEnsureSilentNotebook[];
+    If[Head[nb] =!= NotebookObject,
+      Quiet @ Check[callback[
+        "Error: ClaudeQueryAsyncSilent failed to create hidden notebook. " <>
+        "Call ClaudeEnsureSilentNotebook[] from the main kernel first."],
+        Null];
+      Return[$Failed]
+    ];
+
+    (* callback \:3092 Quiet \:3067\:5305\:3093\:3067\:4f8b\:5916\:306f silent \:306b\:3002 *)
+    safeCallback = With[{cb = callback},
+      Function[response, Quiet @ Check[cb[response], Null]]];
+
+    (* Stage 1.7 (2026-05-17): SessionSubmit \:30e9\:30c3\:30d7\:3092\:5916\:3057\:3066\:76f4\:63a5\:547c\:3093\:3060\:3002
+       ClaudeQueryAsync \:81ea\:8eab\:304c StartProcess + iEnsureSharedPollingTask \:3067
+       \:975e\:540c\:671f\:5316\:3055\:308c\:308b\:306e\:3067 SessionSubmit \:30e9\:30c3\:30d7\:306f\:4e0d\:8981\:3002
+       \:9006\:306b\:4f59\:5206\:306a\:30b9\:30b1\:30b8\:30e5\:30fc\:30eb\:5c64\:304c\:589e\:3048\:308b\:3068 ClaudeWaitWorkflow \:306e
+       Pause \:30eb\:30fc\:30d7\:5883\:754c\:3067 1 \:5c64\:305a\:3064\:3057\:304b\:6d88\:5316\:3055\:308c\:305a\:3001
+       \:5b8c\:4e86\:524d\:306b MaxWait \:3092\:8d85\:3048\:308b\:53ef\:80fd\:6027\:304c\:3042\:308b\:3002 *)
+    ClaudeQueryAsync[prompt, safeCallback, nb, opts]
   ];
 
 Options[ClaudeQuery] = {Fallback -> False, WebFetch -> False, WebSearch -> True, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False, AutoEvaluate -> False, Timeout -> Automatic};
@@ -8392,7 +8557,7 @@ ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
           prompt, OptionValue[WebFetch], $currentUseFallback]},
   (* \[HorizontalLine]\[HorizontalLine] $UseClaudeRuntime \:5206\:5c90 \[HorizontalLine]\[HorizontalLine] *)
   If[TrueQ[$UseClaudeRuntime],
-    iScheduleAt[
+    iScheduleAtAsync[
       iClaudeEvalViaRuntimeBridge[nb, iSessionTag[], actualPrompt,
         {}, ae, mdl, ps, ap, tmo],
       Now],
@@ -8419,7 +8584,7 @@ ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
         ap = TrueQ[OptionValue[ClaudeQuery, {opts}, AutoPrivate]],
         tmo = OptionValue[ClaudeQuery, {opts}, Timeout]},
   If[TrueQ[$UseClaudeRuntime],
-    iScheduleAt[
+    iScheduleAtAsync[
       iClaudeEvalViaRuntimeBridge[nb, session["SessionTag"], prompt,
         {}, ae, mdl, ps, ap, tmo],
       Now],
@@ -8453,7 +8618,7 @@ ClaudeQuery[items_List, opts:OptionsPattern[]] := (
     tag     = session["SessionTag"];
     norm    = iNormalizePrompt[iInjectAttachments[items]];
     If[TrueQ[$UseClaudeRuntime],
-      iScheduleAt[
+      iScheduleAtAsync[
         iClaudeEvalViaRuntimeBridge[nb, tag, norm["text"],
           norm["imageDirs"], ae, mdl, ps, ap, tmo,
           norm["mediaFiles"]],
@@ -8483,7 +8648,7 @@ ClaudeQuery[session_Association, items_List, opts:OptionsPattern[]] := (
     $iCurrentSessionAttachments = iGetResolvedAttachments[nb, tag];
     norm = iNormalizePrompt[iInjectAttachments[items]];
     If[TrueQ[$UseClaudeRuntime],
-      iScheduleAt[
+      iScheduleAtAsync[
         iClaudeEvalViaRuntimeBridge[nb, tag, norm["text"],
           norm["imageDirs"], ae, mdl, ps, ap, tmo,
           norm["mediaFiles"]],
@@ -9506,12 +9671,16 @@ iScheduleAt[body_, startSpec_] :=
 (* Phase 32j (2026-05-13): Runtime Bridge \:7d4c\:8def\:7528\:306e\:975e\:540c\:671f\:30b9\:30b1\:30b8\:30e5\:30fc\:30e9\:3002
    iScheduleAt \:3068\:540c\:578b\:3060\:304c\:3001Now \:6307\:5b9a\:6642\:3082 SessionSubmit[ScheduledTask] \:3067
    preemptive task \:3068\:3057\:3066\:8d77\:52d5\:3057\:3001\:8a55\:4fa1\:30bb\:30eb\:306f\:5373\:6642\:306b Null \:3092\:8fd4\:3059\:3002
-   
+
    Runtime Bridge (ClaudeStartRuntime \:2192 ClaudeRunTurn) \:306f\:5185\:90e8\:3067
    \:540c\:671f\:8a55\:4fa1\:3092\:542b\:3080\:305f\:3081\:3001iScheduleAt \:306e Now \:30d1\:30b9 (body \:3092\:305d\:306e\:307e\:307e\:8a55\:4fa1)
    \:3067\:306f\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057\:3066\:3057\:307e\:3046\:3002\:3053\:306e\:30d8\:30eb\:30d1\:30fc\:3092\:4f7f\:3046\:3068
    ScheduledTask \:4e2d\:306e preemptive \:8a55\:4fa1\:70b9\:3067 Runtime Bridge \:304c\:5b9f\:884c\:3055\:308c\:308b\:305f\:3081\:3001
-   \:4ed6\:306e\:30bb\:30eb\:8a55\:4fa1\:3084 UI \:64cd\:4f5c\:3092\:30d6\:30ed\:30c3\:30af\:3057\:306a\:3044\:3002 *)
+   \:4ed6\:306e\:30bb\:30eb\:8a55\:4fa1\:3084 UI \:64cd\:4f5c\:3092\:30d6\:30ed\:30c3\:30af\:3057\:306a\:3044\:3002
+
+   v2026-05-16: ClaudeEval / ClaudeQuery \:5171\:7528\:306b\:8ee2\:7528\:3059\:308b\:306b\:3042\:305f\:308a\:3001
+   \:672a\:6765\:6642\:523b\:3067\:8d77\:52d5\:3055\:308c\:308b\:5834\:5408\:306f iScheduleAt \:4e92\:63db\:306e
+   \:300c[Schedule] \:30b9\:30b1\:30b8\:30e5\:30fc\:30eb\:3057\:307e\:3057\:305f\:300d\:30ed\:30b0\:3092\:51fa\:529b\:3059\:308b\:3088\:3046\:306b\:6539\:9020\:3002 *)
 SetAttributes[iScheduleAtAsync, HoldFirst];
 iScheduleAtAsync[body_, startSpec_] :=
   Module[{dateObj, delaySec, intDelay},
@@ -9522,6 +9691,11 @@ iScheduleAtAsync[body_, startSpec_] :=
     intDelay = If[NumericQ[delaySec] && delaySec > 0.5,
       Ceiling[delaySec],
       0];
+    If[intDelay > 0,
+      Print[iL["[Schedule] ", "[Schedule] "] <>
+        DateString[dateObj, {"Year","/","Month","/","Day"," ","Hour",":","Minute",":","Second"}] <>
+        iL[" \:306b\:30b9\:30b1\:30b8\:30e5\:30fc\:30eb\:3057\:307e\:3057\:305f (", " scheduled ("] <>
+        ToString[intDelay] <> iL[" \:79d2\:5f8c)", " sec later)"]]];
     Quiet @ Check[
       SessionSubmit[ScheduledTask[body, {Max[intDelay, 0.01], 1}]],
       $Failed];
@@ -9805,7 +9979,7 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, single
        preemptive \:8a55\:4fa1\:70b9\:3067\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:8a55\:4fa1\:306e\:9593\:3067\:52d5\:4f5c\:3059\:308b\:305f\:3081\:3001
        \:4ed6\:306e\:30bb\:30eb\:8a55\:4fa1\:3084\:30dc\:30bf\:30f3\:64cd\:4f5c\:3092\:30d6\:30ed\:30c3\:30af\:3057\:306a\:3044\:3002 *)
     If[TrueQ[$UseClaudeRuntime] && ri === None,
-      iScheduleAt[
+      iScheduleAtAsync[
         iClaudeEvalViaRuntimeBridge[nb, iSessionTag[], actualTask,
           {}, ae, mdl, ps, ap, tmo],
         st],
@@ -9850,7 +10024,7 @@ ClaudeEval[items_List, opts:OptionsPattern[]] := Module[{dispatchResult, paidGua
     norm = iNormalizePrompt[items];
     (* \[HorizontalLine]\[HorizontalLine] $UseClaudeRuntime \:5206\:5c90: runtime \:7d4c\:7531 expression-proposal loop \[HorizontalLine]\[HorizontalLine] *)
     If[TrueQ[$UseClaudeRuntime] && ri === None,
-      iScheduleAt[
+      iScheduleAtAsync[
         iClaudeEvalViaRuntimeBridge[nb, iSessionTag[],
           iResolveWebFetchWithFallback[norm["text"], wf, fb],
           norm["imageDirs"], ae, mdl, ps, ap, tmo, norm["mediaFiles"]],
@@ -9892,7 +10066,7 @@ ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := Module[{p
         tmo = OptionValue[ClaudeEval, {opts}, Timeout]},
     (* \[HorizontalLine]\[HorizontalLine] $UseClaudeRuntime \:5206\:5c90: runtime \:7d4c\:7531 expression-proposal loop \[HorizontalLine]\[HorizontalLine] *)
     If[TrueQ[$UseClaudeRuntime] && ri === None,
-      iScheduleAt[
+      iScheduleAtAsync[
         iClaudeEvalViaRuntimeBridge[session["Notebook"], session["SessionTag"],
           actualTask, {}, ae, mdl, ps, ap, tmo],
         st],
@@ -9932,7 +10106,7 @@ ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := Module[{pa
           tmo = OptionValue[ClaudeEval, {opts}, Timeout]},
     (* \[HorizontalLine]\[HorizontalLine] $UseClaudeRuntime \:5206\:5c90: runtime \:7d4c\:7531 expression-proposal loop \[HorizontalLine]\[HorizontalLine] *)
     If[TrueQ[$UseClaudeRuntime] && ri === None,
-      iScheduleAt[
+      iScheduleAtAsync[
         iClaudeEvalViaRuntimeBridge[session["Notebook"], session["SessionTag"],
           iResolveWebFetchWithFallback[norm["text"], wf, fb],
           norm["imageDirs"], ae, mdl, ps, ap, tmo, norm["mediaFiles"]],
@@ -10189,7 +10363,7 @@ ContinueEval[session_Association, instruction_String:"\:30a8\:30e9\:30fc\:3092\:
         tmo = OptionValue[Timeout]},
     (* \[HorizontalLine]\[HorizontalLine] $UseClaudeRuntime \:5206\:5c90: runtime \:7d4c\:7531 continuation \[HorizontalLine]\[HorizontalLine] *)
     If[TrueQ[$UseClaudeRuntime],
-      iScheduleAt[
+      iScheduleAtAsync[
         iContinueEvalViaRuntimeBridge[session["Notebook"], session["SessionTag"],
           instruction, ae, mdl, ps, ap, tmo],
         st],
@@ -10212,7 +10386,7 @@ ContinueEval[instruction_String, opts:OptionsPattern[]] := (
         ap = TrueQ[OptionValue[ContinueEval, {opts}, AutoPrivate]],
         tmo = OptionValue[ContinueEval, {opts}, Timeout]},
     If[TrueQ[$UseClaudeRuntime],
-      iScheduleAt[
+      iScheduleAtAsync[
         iContinueEvalViaRuntimeBridge[nb, iSessionTag[], actualInstr, ae, mdl, ps, ap, tmo],
         st],
       iScheduleAt[
@@ -22079,7 +22253,9 @@ LLMGraphExecuteCancel[jobID_String] :=
        "Instructions"  -> {"instruction1", ...}, (* \:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:5316\:6e08\:307f *)
        "PrivacySpecs"  -> {0.5, 1.0, ...},      (* \:30ce\:30fc\:30c9\:5225 AccessLevel *)
        "AccessLevels"  -> {"ClaudeCode", ...},
-       "L2Codes"       -> {"code1\n\ncode2", ...}, (* \:5b9f\:969b\:306b\:5b9f\:884c\:3055\:308c\:305f\:30b3\:30fc\:30c9 *)
+       "L2Codes"       -> {"code1
+
+code2", ...}, (* \:5b9f\:969b\:306b\:5b9f\:884c\:3055\:308c\:305f\:30b3\:30fc\:30c9 *)
        "TargetSlot"    -> "`targetFile`",        (* \:5dee\:3057\:66ff\:3048\:30b9\:30ed\:30c3\:30c8\:540d *)
        "SlotPattern"   -> "path/to/original.nb" (* \:5143\:306e\:30b9\:30ed\:30c3\:30c8\:5024 *)
      |>
@@ -24066,7 +24242,9 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
           
           (* \[HorizontalLine]\[HorizontalLine] 2. Mathematica \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:691c\:51fa (\:5f93\:6765\:52d5\:4f5c) \[HorizontalLine]\[HorizontalLine] *)
           (* Phase B-fix9: (?s) \:30d5\:30e9\:30b0\:3092\:4ed8\:3051\:3066\:8907\:6570\:884c\:30b3\:30fc\:30c9\:3092\:6b63\:3057\:304f\:6355\:7372\:3002
-             \:4ee5\:524d\:306f \"```(?:mathematica)\\s*\\n(.*?)\\n\\s*```\" \:3060\:3063\:305f\:304c\:3001
+             \:4ee5\:524d\:306f \"```(?:mathematica)\\s*\
+(.*?)\
+\\s*```\" \:3060\:3063\:305f\:304c\:3001
              \. \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:3067\:6539\:884c\:30de\:30c3\:30c1\:3057\:306a\:3044\:305f\:3081
              \:8907\:6570\:884c\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:306e\:4e2d\:8eab\:304c\:6355\:7372\:3067\:304d\:305a\:3001
              code \:304c\:7a7a\:6587\:5b57\:5217 (CodeLength=0) \:306b\:306a\:308b\:30d0\:30b0\:304c\:3042\:3063\:305f\:3002 *)

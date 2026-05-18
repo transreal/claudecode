@@ -73,6 +73,7 @@
 - `petri-retry-patterns` — petri_from_prompt 系で fan-out 並列 worker の失敗を retry する Petri net を生成する際の正しい配線指針 (per-worker retry vs Verdict 下流 rerun antipattern の区別)
 - `petri-template-and-validation` — proposePetriNet をテンプレート化 + 検証ノード入りメタワークフロー化する長期設計提案 (引き継ぎ書類)
 - `async-tool-execution` — `$UseClaudeRuntime = True` 経路で `iToolUseAndContinue` の hybrid 化により tool (web_search 等) を別 OS プロセスで並列実行する Phase 32k Step 3 (Phase A〜D2) の設計・運用・デバッグ
+- `async-handler-pattern` — ClaudeOrchestrator Workflow で handler が `Status -> "AwaitingLLM"` を返す Z 案パターン (callback / engine timer / Snapshot/Restore)
 
 ## ファイル読み込みルール
 
