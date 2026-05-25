@@ -28,10 +28,11 @@ Claude Directives/
     81-cuda-package-operations.md CUDA パッケージ操作制約
     85-safe-merge.md            パッケージ更新マージ安全性制約
     90-api-error-handling.md    API エラー・利用制限ハンドリング
-    95-scheduled-task-safety.md ScheduledTask・非同期処理の安全制約（デッドロック防止＋独自タスク作成禁止）
+    95-scheduled-task-safety.md ScheduledTask・非同期処理の安全制約（A-E: デッドロック防止/独自タスク禁止/LLMGraph DAG/deferred sync runState/LMStudio、F: Front End API 不可視と Memory Registry Fallback）
     96-web-search-recommendation.md Web 検索推奨ルール
     99-adapter-tool-flow.md     adapter 経由 tool-based ClaudeEval の実装ルール（R1〜R7）
     100-async-tool-execution.md AsyncToolExec(Phase 32k Step 3 Phase A〜D2)の必須ルール
+    101-sourcevault-stage-status.md SourceVault.wl 開発時の前提制約 (paths 制約: SourceVault*.wl / sourcevault*.md)。Phase 35 依存・iSanitizeForJSON 必須・ReadByteArray 経路必須等
 
   skills/                    ← 特定タスクの具体手順とパターン集
     wolfram-general/            Wolfram Language コーディング手順・出力方針
@@ -52,6 +53,19 @@ Claude Directives/
     adapter-tool-flow-debugging/ adapter 経路 ClaudeEval の異常診断手順
     async-tool-execution/       AsyncToolExec(Phase 32k Step 3)の設計・運用・デバッグ
     runtime-orchestrator-boundary/ ClaudeRuntime と ClaudeOrchestrator の責務境界
+    package-hook-installation-patterns/ 既存パッケージの公開シンボルに hook を装着する安全テンプレ (DownValues swap / Memory Registry Fallback)
+    llm-prompt-template-override/ 既存 LLM prompt template に外部からドキュメント・指示を注入する prompt engineering パターン (XML タグ + placeholder 置換)
+    claudecode-cli-vision/      claudecode.wl Phase 35 で claudecode CLI 経路で multimodal/vision を有効化する設計 (iClaudeQueryBgAPIMultimodal の 1 行リダイレクト + 既存 iNormalizePrompt の画像対応)
+    ocr-backend-design/         SourceVault Stage 4C の 3 backend OCR (ClaudeVision/TextRecognize/Custom) 設計。上下分割+30px overlap、Mode/ForceOCR、診断機構 (OCRAttempted/OCRFailReasons/Verbose)
+    llm-extraction-pipeline/    LLM 構造化抽出パイプライン設計。Schema 駆動 prompt 構築、5 段階 JSON parse fallback (bracket counting/partial recovery)、iSanitizeForJSON
+    jsonl-store-pattern/        Append-only JSONL + 3 重インデックス (master + by-X) パターン。Windows 罠 #20 (ReadList) 対応の ReadByteArray 経路、安全な OpenAppend、StoreStatus debug
+    claim-dedup-and-compact/    SourceVault Stage 6a の claim dedup + Compact 設計。by-source scope dedup、最古残し DeleteDuplicatesBy、Windows 対応 atomic write (path.tmp → DeleteFile → RenameFile)、.bak.<ISODateTime> backup
+    evidence-bundle-design/     SourceVault Stage 6c の Evidence Bundle 設計。生成物 → source/snapshot/claim 依存記録、snapshot LifecycleStatus 集約による自動 stale 検出、bundles/<bundleId>.json ストレージ
+    snapshot-lifecycle-and-diff/ SourceVault Stage 8 の snapshot lifecycle + vN diff 設計。page-hashes.json 活用、lazy passive consumer による Bundle 自動 stale 化、events/source-events.jsonl event log
+    nbauthorize-2-stage-decisions/ SourceVault Stage 6d の NBAuthorize 2 段階統合設計。SourceVaultExtract に sendDecision + persistDecision、SourceVaultContext は RequireApproval も block、iSpecFromClaim、AccessDecisions レスポンス
+    compiled-registry-and-seed/  SourceVault Stage 6b の Compiled Registry + Seed bootstrap 設計。seeds/ + compiled/{public,private}/、SourceVaultLookup / Resolve / ClaudeResolveModel、優先順位 sort、Stage 1 旧定義削除の経緯
+    notebook-management-extraction/ SourceVault Stage 9 P0 + P1 の Notebook 拡張設計。Safe parse (HoldComplete + whitelist)、TodoItem 抽出、TaggingRules > StrikeThrough 優先順位、Header / Todo 状態の独立保存、7 種 lint、deterministic FindNotebooks クエリ、SourceVaultMarkTodo、SourceVaultNotebookSummary、mtime cache、MakeExpression 第一選択化
+    nbaccess-semantic-api/      NBAccess Stage 9 P1 で追加された semantic API 7 個 (NBReadHeader / NBReadTodos / NBFindCellByPredicate + 書き込み系 4 個) の設計詳細。FrontEnd 不要のファイル直接編集、AccessLevel RBAC + DryRun、CellPath、Header フィルタ、NBReadHeader 3 経路 fallback、罠 #26-#28 対応
 ```
 
 ## 主要な設計原則
@@ -64,10 +78,13 @@ Claude Directives/
 claudecode.wl と NBAccess.wl は他のパッケージ（maildb, GitHubREST 等）に一切依存してはならない。依存方向は常に一方向: 任意のパッケージ → 基盤パッケージ。
 
 ### ScheduledTask・非同期処理の安全制約 (`rules/95-scheduled-task-safety.md`)
-ScheduledTask に関する2つの制約を統合: (A) ClaudeEval の ScheduledTask チェーン内から ClaudeQuery / ExternalEvaluate を呼ぶことの禁止（デッドロック防止）、(B) パッケージが UI ポーリング用に独自の CreateScheduledTask を作成することの禁止（動的評価オーバーフロー防止）。FrontEnd 通信を行わない純粋計算タスクや、リアルタイム性が必要なインタラクティブプログラムは例外だが、ドキュメントに明記が必要。
+ScheduledTask に関する2つの制約を統合: (A) ClaudeEval の ScheduledTask チェーン内から ClaudeQuery / ExternalEvaluate を呼ぶことの禁止（デッドロック防止）、(B) パッケージが UI ポーリング用に独自の CreateScheduledTask を作成することの禁止（動的評価オーバーフロー防止）。FrontEnd 通信を行わない純粋計算タスクや、リアルタイム性が必要なインタラクティブプログラムは例外だが、ドキュメントに明記が必要。 さらに §F として **scheduled task コンテキスト (LLMGraph DAG worker 等) での Front End API 不可視性** ルールを追加: `EvaluationNotebook[]` / `SelectedNotebook[]` などは scheduled task 経路では主 notebook を返さない。Notebook TaggingRule 経由のコンテキスト共有が必要な hook は **Memory Registry Fallback** パターン (Private 変数で並行記録) を必須とする (SourceVault A5 hook で実証)。
 
 ### AsyncToolExec 経路の必須ルール (`rules/100-async-tool-execution.md`)
 `$UseClaudeRuntime = True` 経路で 1 turn 内に複数 tool (web_search 等) を別 OS プロセスで並列実行する Phase 32k Step 3 (Phase A〜D2) の規範。`ParallelSubmit` / `SessionSubmit` / 独自 `ScheduledTask` を禁止し `StartProcess` + 既存 polling tick 基盤を使うこと、`AsyncToolExecScheduled` 返却時の callback 早期 return、`Index` キーによる tool 順序保持、API key の file 経由など 11 ルール。詳細手順は `skills/async-tool-execution`。
+
+### SourceVault.wl 開発前提 (`rules/101-sourcevault-stage-status.md`)
+`SourceVault*.wl` / `sourcevault*.md` 編集時の paths 制約付き短 rule。**Stage 9 P1 完成** (`v2026-05-19-stage-9-p1-step8-nbreadheader-boxdata-filter`、Stage 1〜5 + 6a/6b/6c/6d/8 + 9 P0 + 9 P1)、claudecode.wl は **Phase 35 以降必須**、NBAccess.wl は **5471 行 → 6436 行に拡張** (semantic API 7 個追加)。JSONL/JSON append 時の `iSanitizeForJSON` 必須、読み込みは `ReadByteArray` 経路必須 (罠 #20)、検索 API は `iEnsureRoots[]` 必須、**Wolfram 文字列リテラル内の Unicode 文字は `\:XXXX` で書く** (罠 #11、累計 1107 件混入の最大エラー源)、**`\:` の後は必ず 4 桁 hex** (罠 #11 補足)、**Stage 8 連動**: snapshot Stale → Bundle 自動 stale、**Stage 6d 2 段階 authorization**: sendDecision + persistDecision、**Stage 6b Registry**: compiled → seed fallback、ClaudeResolveModel 互換 wrapper、**Stage 9 Safe Parse**: HoldComplete + whitelist で notebook header を評価せずに取り出し、Todo Status は TaggingRules > StrikeThrough > Default 優先順位、Header Status と Todo cell 状態は独立保存して合成 lint で判定、**Stage 9 P1 拡張**: SourceVaultMarkTodo (NBAccess `NBWriteTodoStatus` 薄ラッパー)、mtime ベース cache (`SourceVaultIndexNotebook[path]` の `"Cached"` / `"SourceMTime"` / `"ForceReindex"`)、Header parser MakeExpression 第一選択化 (副作用回避)、NBReadHeader 3 経路 fallback (Notebook TaggingRules → Cell TaggingRules → BoxData MakeExpression) + `iNBIsHeaderLikeAssoc` Header フィルタ、書き込み系 API は AccessLevel >= 0.7 必須 + default DryRun = True + atomic write (tmp + Rename)、**罠 #26-#28** 追加 (CellGroupData ネスト、Module+HoldComplete のローカル変数残存、ImportString RawJSON Windows path 失敗)。詳細設計は `skills/ocr-backend-design`, `skills/llm-extraction-pipeline`, `skills/jsonl-store-pattern`, `skills/claim-dedup-and-compact`, `skills/evidence-bundle-design`, `skills/snapshot-lifecycle-and-diff`, `skills/nbauthorize-2-stage-decisions`, `skills/compiled-registry-and-seed`, `skills/notebook-management-extraction`, `skills/nbaccess-semantic-api`, `skills/claudecode-cli-vision`。
 
 ### Fallback 絶対順守要件 (`rules/90-api-error-handling.md`)
 `Fallback -> True` を明示的に指定しない限り、LLM のレート制限エラー時に代替処理を行ってはならない。エラーは `Failure[...]` として上位に伝播させ、処理を確実に停止する。エラーメッセージをデータとして利用する（リポジトリ名やファイル内容に変換する等）ことは禁止。

@@ -74,6 +74,19 @@
 - `petri-template-and-validation` — proposePetriNet をテンプレート化 + 検証ノード入りメタワークフロー化する長期設計提案 (引き継ぎ書類)
 - `async-tool-execution` — `$UseClaudeRuntime = True` 経路で `iToolUseAndContinue` の hybrid 化により tool (web_search 等) を別 OS プロセスで並列実行する Phase 32k Step 3 (Phase A〜D2) の設計・運用・デバッグ
 - `async-handler-pattern` — ClaudeOrchestrator Workflow で handler が `Status -> "AwaitingLLM"` を返す Z 案パターン (callback / engine timer / Snapshot/Restore)
+- `package-hook-installation-patterns` — 既存パッケージの公開シンボル (e.g. ClaudeAttach) に hook を装着する安全テンプレ。Block 撤廃 / DownValues swap helper / CheckAbort 復元 / `opts___` pass-through / Enable-Disable 冪等性 / Memory Registry Fallback (SourceVault P1〜P4 で検証)
+- `llm-prompt-template-override` — 既存パッケージの LLM prompt template に外部からドキュメント・指示を注入する prompt engineering パターン。XML タグ命名 (`<sources>` vs `<attached-documents>`) / HTML コメント指示文 / `{{DEPENDENCY_SECTION}}` ラベル StringReplace 置換 / prepend fallback の 2 段階 (SourceVault A5 hook で検証)
+- `claudecode-cli-vision` — claudecode.wl Phase 35 で provider == "claudecode" CLI 経路でも multimodal/vision が無課金で動く設計。`iClaudeQueryBgAPIMultimodal` の 1 行リダイレクトと既存 `iNormalizePrompt` の画像対応実装の組合せ
+- `ocr-backend-design` — SourceVault.wl Stage 4C の 3 backend OCR (ClaudeVision/TextRecognize/Custom) 設計。上下分割+30px overlap、Mode=Force/ForceOCR、PyMuPDF/native 2段 fallback、OCRAttempted/OCRFailReasons/Verbose 診断、PDFIndex 由来コード移植時の罠 #16 対応
+- `llm-extraction-pipeline` — LLM 構造化抽出パイプライン設計。Schema 駆動 prompt 構築、5 段階 JSON parse fallback (markdown fence/bracket counting/partial recovery)、iSanitizeForJSON、Verbose 診断 (SourceVault Stage 5 で実証)
+- `jsonl-store-pattern` — Append-only JSONL + 3 重インデックス (master + by-topic + by-source) パターン。Windows CRLF 対応 (罠 #20)、安全な OpenAppend + ReadByteArray 読込、StoreStatus debug ヘルパ、dedup の前提となる ContentHash 設計
+- `claim-dedup-and-compact` — SourceVault.wl Stage 6a の claim dedup + Compact 設計。by-source scope の書込み時 dedup、最古残し DeleteDuplicatesBy パターン、Windows 対応 atomic write (path.tmp → DeleteFile → RenameFile)、.bak.<ISODateTime> backup、ExtractedCount/DedupSkipped レスポンス契約
+- `evidence-bundle-design` — SourceVault.wl Stage 6c の Evidence Bundle 設計。生成物 → source/snapshot/claim 依存記録、snapshot LifecycleStatus 集約による自動 stale 検出、Status 計算優先順位 (Manual > Invalidated > NeedsReview > Stale > Current)、bundles/<bundleId>.json ストレージ、罠 #11 (\u → \:) 教訓
+- `snapshot-lifecycle-and-diff` — SourceVault.wl Stage 8 の snapshot lifecycle + vN diff 設計。page-hashes.json (Stage 4B) を活用した page hash 集合 diff、lazy passive consumer pattern による Bundle 自動 stale 化、events/source-events.jsonl event log、VersionedUpdate/Retraction/SourceDeletion/SchemaChange 4 種 event、罠 #11 累計 367 件混入の反省
+- `nbauthorize-2-stage-decisions` — SourceVault.wl Stage 6d の NBAuthorize 2 段階統合設計。SourceVaultExtract に sendDecision + persistDecision 追加、SourceVaultContext は RequireApproval も block、4 種 Decision の扱い (Permit/Screen/RequireApproval/Deny)、iSpecFromClaim による AccessLabel 継承、batch 判定 (代表 1 件) の理由、"AuthorizationCheck" -> False opt-out、AccessDecisions レスポンスフィールド
+- `compiled-registry-and-seed` — SourceVault.wl Stage 6b の Compiled Registry + Seed bootstrap 設計。seeds/<topic>-seed.json + compiled/<channel>/<topic>.json の 2 階建て、SourceVaultLookup / SourceVaultResolve / ClaudeResolveModel 互換 wrapper、Availability/Freshness/Class 優先順位 sort、public/private channel 分離、AllowSeed -> False 厳格モード、Stage 1 旧定義削除の経緯、累計 841 件の罠 #11 反省
+- `notebook-management-extraction` — SourceVault.wl Stage 9 P0 + P1 の Notebook Management 拡張。Mathematica notebook を first-class source として登録、先頭 Input セルを HoldComplete + whitelist で safe parse、TodoItem cell を TaggingRules > StrikeThrough heuristic > Default の優先順位で Done 判定、Header.Status と Todo cell 状態の独立保存と合成 lint、7 種 lint (HeaderStatusTodoButNoOpenTodos / DeadlinePast / TodoCellStatusHeuristicOnly 等)、SourceVaultFindNotebooks の deterministic クエリ、Stage 6c/8/6d との接続点。**Stage 9 P1 拡張**: SourceVaultMarkTodo (NBAccess NBWriteTodoStatus への薄いラッパー)、SourceVaultNotebookSummary (LLM 要約)、mtime ベース cache (`SourceVaultIndexNotebook[path]` の `"Cached"` / `"SourceMTime"` / `"ForceReindex"`)、Header parser MakeExpression 第一選択化 (副作用回避、`"Source"` フィールド `"MakeExpression"` / `"Initialization"`)、NBAccess semantic API 統合
+- `nbaccess-semantic-api` — NBAccess.wl Stage 9 P1 で追加された semantic API 7 個の設計詳細。FrontEnd 不要のファイル直接編集パイプライン (`Import["Notebook"]` → 編集 → `Export[..., "NB"]` の atomic write)、AccessLevel RBAC + DryRun 安全機構 (書き込み系 >= 0.7 必須、default DryRun = True)、CellPath (List of Integer) による CellGroupData ネスト対応の cell 位置記録、iNBIsHeaderLikeAssoc フィルタ (Header と Todo metadata の区別)、NBReadHeader の 3 経路 fallback (Notebook TaggingRules → Cell TaggingRules → BoxData MakeExpression)、With[{c=v}, HoldComplete[c]] による DryRun の Before/After 値埋め込み (罠 #27 回避)、CellGroupData の iNBFlattenCells 再帰展開 (罠 #26 回避)、SourceVaultMarkTodo の薄いラッパー設計、Stage 9 P0 Approval Workflow 経路 (NBOpenAuthorized + NBProcessFile) との使い分け、Stage 9 Phase 3 (P2) ロードマップ
 
 ## ファイル読み込みルール
 
@@ -337,3 +350,18 @@ claudecode の **LLMGraph DAG フレームワーク** を使用すること:
 - `GitHubCommitDataset["pkg"]` — GitHub コミット履歴を Grid 表示。Pull で過去コミットに巻き戻し可能。#0行でローカル最新版に復元。
 - いずれも起動時にローカル最新版のスナップショットを SHA-256 ハッシュ付きで保存する。
 - Pull で巻き戻した後にファイルを編集していた場合、ローカル最新版への復元時に警告を表示する。
+
+## データストアの破壊防止（SourceVault 運用開始後は必須）
+
+SourceVault の運用が始まると、`<PrivateVault>/notebooks/` 配下のストア（`sources` / `snapshots` / `summaries` / `todos` / `review` / `lint` / `sync` / `relink`）は日々の作業記録そのものになり、開発初期のように `SourceVaultResetStore` で気軽に全削除して作り直すことはできなくなる。
+
+SourceVault・NBAccess のストア書き込みコードを書く・直すときは **`rules/103-sourcevault-datastore-safety.md` を必ず読む**。要点:
+
+- 破壊的操作（削除・上書き）は `DryRun` オプションを持ち既定を `True` にする。実変更は明示的な `DryRun -> False` のときだけ。
+- ファイルの物理削除と非破壊マーク（`RelinkStatus` 等）は別オプションに分け、削除系オプションの既定は `False`。
+- 全削除 API は二重の明示確認（`Confirm -> True` なしは DryRun）。
+- 早期 return `Return[expr, Module]` は「最も内側の同名 `Module`」から抜ける。関数全体を抜けたい早期 return を内側 `Module[{tmp}, ...]` の中に書くと処理が後続に流れる（罠 #52）。
+- レコードの同一性・実在性は派生 ID（パスのハッシュ）でなく実体（実パス・内容ハッシュ）で判定する。
+- 多段照合は信頼度で「自動適用」と「レポートのみ」を分ける。
+- 破壊的操作を `DryRun -> False` で実行する前に、必ず `DryRun -> True` の結果を人間が検証する。
+- 書き込みは atomic write（`path.tmp` → 検証 → `RenameFile`）、戻り値に変更件数の集計を含める。

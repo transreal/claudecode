@@ -490,6 +490,100 @@ If[!MatchQ[proc, _ProcessObject],
 
 ---
 
+## F. scheduled task コンテキストでの Front End API の不可視性
+
+### 背景
+
+`LLMGraphDAGCreate` で起動した DAG worker、`iClaudeQueryAsyncWithProgress` の polling、`iStartFallbackAsync` の完了 callback、これらの handler はすべて **scheduled task コンテキスト**で動く。同じ Mathematica カーネル内ではあるが、**Front End への直接アクセスを前提とした API は意図した値を返さない**。
+
+### 不可視になる主な API
+
+scheduled task コンテキストで呼ぶと「Front End notebook が見えない」結果を返す API:
+
+| API | scheduled task での挙動 |
+|---|---|
+| `EvaluationNotebook[]` | ユーザの主 notebook を返さず、 `EvaluationNotebook[]` の Held 形 / `$Failed` / `Null` |
+| `SelectedNotebook[]` | 同上 |
+| `Notebooks[]` | Front End が起動していない経路では空リスト |
+| `CurrentValue[EvaluationCell[], ...]` | 同様の不定動作 |
+| `InputNotebook[]` | scheduled task は input notebook を持たない |
+
+これらに依存して値を取り出そうとすると、ユーザ操作で見えていたはずの notebook の TaggingRule / Selection / Options が **scheduled task からは取れない**。
+
+### 典型的な失敗ケース
+
+**ケース 1**: hook の auto-detect 関数が `EvaluationNotebook[]` 経由で TaggingRule を読む
+
+```mathematica
+(* ❌ scheduled task コンテキストで動かない *)
+iAutoDetectRefs[] :=
+  Module[{nb, refs},
+    nb = EvaluationNotebook[];   (* scheduled task では Front End notebook を見れない *)
+    refs = NBAccess`NBGetTaggingRule[nb, {...}];
+    ...
+  ];
+```
+
+ClaudeOrchestrator の DAG worker から呼ばれた瞬間に空が返り、hook 全体が no-op になる。SourceVault A5 hook の auto-detect で実際に踏んだ ("依存 artifact なし" と LLM が回答する問題)。
+
+### 推奨パターン: Memory Registry Fallback
+
+scheduled task からも見える **Private 変数のメモリレジストリ** を用意し、Front End 経路 (notebook TaggingRule) と並行して値を記録する。auto-detect は notebook → memory の 2 段階 fallback で動かす:
+
+```mathematica
+(* Private 変数 (パッケージ初期化時に 1 回だけ) *)
+If[!ValueQ[$LastAttachedRefs], $LastAttachedRefs = {}];
+
+(* 主 notebook で動く時 (ユーザが直接 ClaudeAttach を呼んだ瞬間) *)
+iClaudeAttachSideChannelIngest[path_String] :=
+  Module[{snapshotRef, currentList, nb},
+    nb = EvaluationNotebook[];   (* この時点では Front End notebook が見える *)
+    snapshotRef = SourceVaultIngest[path, ...];
+    
+    (* (A) Notebook TaggingRule に記録 *)
+    currentList = NBAccess`NBGetTaggingRule[nb, {"...", "..."}];
+    NBAccess`NBSetTaggingRule[nb, {"...", "..."}, Append[currentList, snapshotRef]];
+    
+    (* (B) Memory registry にも並行記録 *)
+    $LastAttachedRefs = DeleteDuplicatesBy[
+      Append[$LastAttachedRefs, snapshotRef],
+      Lookup[#, "SnapshotId", ""] &];
+  ];
+
+(* scheduled task からも呼ばれる auto-detect: 2 段階 fallback *)
+iAutoDetectRefs[] :=
+  Module[{nb, fromNB, fromMemory, refs},
+    (* 1st: Front End notebook が見えるコンテキスト用 *)
+    nb = Quiet[EvaluationNotebook[]];
+    fromNB = If[nb =!= Null && nb =!= $Failed && Head[nb] =!= EvaluationNotebook,
+      Quiet[NBAccess`NBGetTaggingRule[nb, {...}]],
+      {}];
+    If[!ListQ[fromNB], fromNB = {}];
+    
+    (* 2nd: Memory registry (scheduled task / DAG worker から見える) *)
+    fromMemory = If[ListQ[$LastAttachedRefs], $LastAttachedRefs, {}];
+    
+    refs = Join[fromNB, fromMemory];
+    DeleteDuplicatesBy[refs, Lookup[#, "SnapshotId", ""] &]
+  ];
+```
+
+### 設計上のチェック
+
+- パッケージの hook / handler が **`EvaluationNotebook[]` から TaggingRule / SelectionMove 等を取る** ような実装になっていないか
+- もしなっているなら、その関数は `LLMGraphDAGCreate` の worker / `iClaudeQueryAsyncWithProgress` の polling / `iStartFallbackAsync` の completion handler から呼ばれる可能性があるか
+- 可能性があれば、**Memory Registry Fallback** を導入する
+
+### 注意点
+
+- メモリレジストリは **同一カーネル内のみ** で共有される。別カーネル (`LaunchKernels`, `ParallelSubmit`) では別物。LLMGraphDAG は同じカーネルなので問題ないが、将来 `ParallelSubmit` 化する場合は別途設計が必要 (e.g. ファイル経由)。
+- 複数の Front End notebook で同じパッケージを使う場合、メモリレジストリは **両方の notebook の履歴をマージ** する。明示指定 (e.g. `task["SourceSpans"]`) が必要な場合は呼出側で渡してもらう。
+- メモリレジストリは Private 変数として保持し、必要なら `Disable` API で `$LastAttachedRefs = {}` にクリアできるようにする。
+
+詳細は `skills/package-hook-installation-patterns` を参照。
+
+---
+
 ## デバッグのチェックリスト
 
 非同期処理が「最初は応答するがすぐフリーズする」「動的評価の放棄ダイアログが出る」場合:
@@ -500,3 +594,4 @@ If[!MatchQ[proc, _ProcessObject],
 4. **独自 ScheduledTask を作っていないか** → 節 B 違反。`LLMGraphDAGCreate` か `iStartFallbackAsync` 経由に変える。
 5. **sync API を非同期化していないか** → 節 D。sync API は sync のまま、非同期は別 API として `xxxAsync` を提供する。
 6. **`$ClaudeModel` がリスト形式 (LMStudio) のとき、CLI 経路の bat に流していないか** → 節 E のモデル振り分けパターンを実装する。
+7. **hook が `EvaluationNotebook[]` 経由で TaggingRule / SelectionMove を取って空が返ってくる** → 節 F 違反。Memory Registry Fallback を導入する。

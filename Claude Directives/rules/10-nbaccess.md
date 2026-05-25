@@ -143,3 +143,63 @@ Button["Action",
 ## 判断
 - Notebook 関連の新機能は NBAccess の既存 API で表現できないか先に確認する。
 - 足りない場合は上位パッケージで回避策を書く前に NBAccess に責務を追加する。
+
+---
+
+## NBAccess Semantic API (Stage 9 P1 で追加、7 API)
+
+**ファイル直接編集経路**: FrontEnd なしで `.nb` ファイルを操作できる semantic 層。`Import["Notebook"]` → 編集 → `Export[..., "NB"]` (atomic write) のパイプライン。
+
+### 共通仕様
+
+- **AccessSpec**: `<|"AccessLevel" -> _Real, "Environment" -> _String, "AllowedSinks" -> {_String..}|>`
+- **読み取り系**: AccessLevel >= 0 で動作 (default 0.5, Public)
+- **書き込み系**: **AccessLevel >= 0.7 必須** (default 0.7)
+- **DryRun**: 書き込み系のデフォルトは `True` (安全側、Before/After を `HoldComplete[Cell[...]]` で返す)
+- **atomic write**: tmp ファイル + `RenameFile` (Windows 対応で既存 path は事前 `DeleteFile`)
+- **戻り値**: `<|"Status" -> "OK"|"Failed"|"DryRunOK", ...|>`
+
+### 読み取り系 (3 API)
+
+| API | 機能 |
+|---|---|
+| `NBReadHeader[path, opts]` | Notebook の SourceVault Header を抽出。3 経路 fallback: (1) Notebook 全体 TaggingRules → (2) Cell 単位 TaggingRules (Header フィルタ適用) → (3) Input cell の BoxData → MakeExpression。Source フィールド値: `"TaggingRules"` / `"HeaderCell"` / `"BoxData"` / `"None"` |
+| `NBReadTodos[path, opts]` | 全 Todo cell を抽出 (CellGroupData 再帰展開、罠 #26 対応)。Status は TaggingRules > StyleHeuristic で判定。戻り値に `CellPath` (List of Integer) を含み、書き戻し系で使用可能 |
+| `NBFindCellByPredicate[path, predicate, opts]` | 述語マッチの cell を列挙。`CellPath` + `CellIndex` (flat 連番) + `Cell` (HoldComplete) + `Style` + `ExpressionUUID` を返す |
+
+### 書き込み系 (4 API)
+
+| API | 機能 |
+|---|---|
+| `NBWriteHeader[path, key, value, opts]` | Notebook 全体 TaggingRules > SourceVault に key を merge。既存値は保持 |
+| `NBWriteTodoStatus[path, todoKey, newStatus, opts]` | Todo cell の Status を変更 (FontVariations StrikeThrough + FontColor + TaggingRules `SourceVault > TodoStatus` を同時 set)。`todoKey = <\|"Index" -> _, "Text" -> _\|>` で **Index + Text 両方一致** の cell のみ編集 (安全側) |
+| `NBSetCellOptionsByPredicate[path, pred, optionRules, opts]` | 述語マッチ cell の options を merge |
+| `NBSetCellTaggingRuleByPredicate[path, pred, taggingPath, value, opts]` | 述語マッチ cell の TaggingRules 内 nested key path を set (例: `{"SourceVault", "Priority"}` → `TaggingRules -> <\|"SourceVault" -> <\|"Priority" -> value\|>\|>`) |
+
+### 使用例
+
+```mathematica
+(* 読み取り: AccessSpec はデフォルト (Public 0.5) で OK *)
+h = NBReadHeader[path]
+(* → <|"Status" -> "OK", "Keywords" -> {...}, "Source" -> "BoxData", ...|> *)
+
+(* 書き込み (DryRun = True で先にプレビュー) *)
+NBWriteTodoStatus[path, <|"Index" -> 1, "Text" -> "参加登録"|>, "Done"]
+(* → <|"Status" -> "DryRunOK",
+       "Before" -> HoldComplete[Cell[..., FontVariations -> {"StrikeThrough" -> False}, ...]],
+       "After" -> HoldComplete[Cell[..., FontVariations -> {"StrikeThrough" -> True}, ...]]|> *)
+
+(* 実行 *)
+NBWriteTodoStatus[path, <|"Index" -> 1, "Text" -> "参加登録"|>, "Done",
+  "DryRun" -> False]
+(* → <|"Status" -> "OK", ...|> ファイル書き換え発生 *)
+```
+
+### 設計原則
+
+- **CellPath は List of Integer** (例: `{2, 1, 3}`): Notebook 内の cell に正確に辿り着くための path (CellGroupData ネストに対応)。flat な連番ではなく path にしたのは、書き戻し時に `cells[[2, 1, ..., 3]]` で安全にアクセスできるため
+- **Header と Todo metadata の区別**: NBReadHeader の 2 経路目 (cell 単位 TaggingRules 走査) では `iNBIsHeaderLikeAssoc` フィルタを使い、TodoItem cell の `<|"TodoStatus" -> "Done"|>` のような Todo metadata を Header と誤認しない (Header らしいキー: Keywords/Status/Deadline/NextReview/Owner/PathHint/Title のいずれかを含むもののみ)
+- **whitelist なし** (NBReadHeader BoxData 経路): NBAccess は中立的なファイル I/O 層なので、`MakeExpression[boxData, StandardForm]` の結果が `HoldComplete[_Association]` ならそのまま返す。型検証は呼び出し側 (SourceVault の `iAllowedHeaderValueQ` 等) の責務
+- **罠 #27 対応**: `Before` / `After` フィールドの Cell expr は `With[{c = cell}, HoldComplete[c]]` で値を埋め込む (Module を抜けた後にローカル変数名が残らないように)
+
+詳細は `skills/nbaccess-semantic-api` 参照。

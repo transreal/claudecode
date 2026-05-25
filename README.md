@@ -52,6 +52,8 @@ AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImag
 
 **ClaudeTestKit 統合**: オプションの独立パッケージ [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) は、ClaudeRuntime を利用したコード生成の品質を自動テスト・回帰テストで検証するためのフレームワークです。通常の ClaudeEval/ClaudeQuery 使用には不要であり、ClaudeTestKit がインストールされていない環境でも claudecode の全機能は影響を受けません。
 
+**SourceVault 連携（PromptRouter ブリッジ）**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすることで、`ClaudeEval` の前段に **PromptRouter** ブリッジが組み込まれます。ユーザーが入力した自然言語タスクは、まず SourceVault に登録されたルート（パターン → 評価式の対応表）と照合され、適合する候補がある場合には LLM 呼び出しを経由せず、ReadOnly 許容リスト上の式を直接評価して結果を返します。これにより、頻出する定型タスク（特定の集計・整形・テンプレートコード挿入等）を高速かつ安価に実行できると同時に、生成内容の再現性・監査可能性が向上します。claudecode 本体は SourceVault に対してハードな依存を持たず、SourceVault が未ロードの環境では従来通り自然言語ディスパッチのみが動作します。マッチしないプロンプトは通常の ClaudeEval パスにフォールスルーされるため、既存ワークフローへの影響はありません。
+
 **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を記録・可視化するためのグラフ構造を導入しています。Mathematica 14.2 で導入された `LLMGraph` と類似の DAG（有向非巡回グラフ）構造を採用しており（将来的には `LLMGraph` そのものとの統合を目指しますが、現状では独自実装）、`ClaudeEval` / `ClaudeQuery` などを実行すると、自動的にノートブック固有の LLMGraph が生成されます。各ノードは LLM 呼び出しの命令・応答サマリー・アクセスレベル・ステータスなどを保持し、ノード間の関係（コンテキスト継承・データフロー）がエッジとして記録されます。`$LLMGraphMaxConcurrency` によりカテゴリ別（`"cli"`・`"cli-vision"` 等）の並列実行数を制御でき、`LLMGraphDAGCreate` / `LLMGraphExecute` 系 API によって DAG ジョブの作成・実行・キャンセルを行えます。`NotebookLLMGraphPlot[]` による DAG 可視化、`NotebookLLMGraphSummary[]` による統計表示、`NotebookLLMGraphExtractThread[]` による実行スレッドの抽出と再適用など、豊富な分析 API を備えています。この実装は、`claudecode_info/design/` にある 1992-WOOC'92.pdf および 1993-WOOC'93「信号処理に向いたオブジェクトモデルの提案と応用」で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。
 
 **[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイル（.nb）のセルをプライバシーレベルに基づいて自動分割し、公開セルはクラウド LLM（Claude Code CLI）、秘匿セルはプライベート LLM（LM Studio 等）で並列処理してマージする `ClaudeProcessFile` を搭載しています。`ClaudeEval` でノートブックファイルパスを含む指示を与えると自動的に検出・起動され、Splitter → 並列 LLM 処理 → Merger の一連のフローが非同期で実行されます。処理過程は LLMGraph 上に Fork/Join トポロジとして記録されます。
@@ -108,6 +110,7 @@ claude コマンドを実行すると、対話形式でログイン手順が表�
 | `ClaudeRuntime` | 永続ランタイム機能（オプション・[GitHub](https://github.com/transreal/ClaudeRuntime)）。`$UseClaudeRuntime = True` 時に有効化 |
 | `ClaudeOrchestrator` | 複数 Claude セッションのオーケストレーション（オプション・[GitHub](https://github.com/transreal/ClaudeOrchestrator)）。ロードすると ClaudeEval が非同期実行モードに切り替わり、呼び出しはジョブキューに追加されて即座に返りカーネルをブロックしない。レート制限の自動検出・復旧・リトライスケジューリングを担う上位レイヤーとして機能する |
 | `ClaudeTestKit` | 自動テスト・回帰テストフレームワーク（オプション・[GitHub](https://github.com/transreal/ClaudeTestKit)）。ClaudeRuntime と組み合わせて使用 |
+| `SourceVault` | プロンプトルーティング機能（オプション・[GitHub](https://github.com/transreal/SourceVault)）。ロードすると `ClaudeEval` の前段に PromptRouter ブリッジが組み込まれ、登録済みルートに適合するプロンプトは LLM 呼び出しなしで直接評価される |
 
 #### 3. パッケージの読み込み
 
@@ -137,6 +140,13 @@ ClaudeRuntime を使用する場合も、claudecode のロード後に別途ロ�
 ```mathematica
 (* ClaudeRuntime の読み込み(オプション) — \$UseClaudeRuntime = True が自動設定される *)
 << ClaudeRuntime`
+```
+
+SourceVault を使用する場合も、claudecode のロード後に別途ロードしてください。ロード後は ClaudeEval の前段で PromptRouter ブリッジが自動的に有効化されます。
+
+```mathematica
+(* SourceVault の読み込み(オプション) — PromptRouter ブリッジが有効化される *)
+<< SourceVault`
 ```
 
 #### 4. API キーの設定
@@ -231,6 +241,11 @@ Block[{$CharacterEncoding = "UTF-8"},
 << ClaudeRuntime`
 ClaudeEval["斜方投射のグラフを描いてください"]
 
+(* SourceVault を有効化して PromptRouter ブリッジを使う(オプション) *)
+<< SourceVault`
+ClaudeEval["登録済みルートに該当する定型タスク"]
+(* → SourceVault に適合ルートがあれば LLM 呼び出しなしで直接評価される *)
+
 (* ランタイム一覧の確認 *)
 Dataset[KeyValueMap[
   Function[{id, rt}, <|
@@ -288,7 +303,7 @@ ShowClaudePalette[]
 - `ClaudeQuerySync[prompt]` — Claude に問い合わせ、応答文字列を同期的に返す軽量版。セッション履歴やノートブック書き込みは行わない
 - `ClaudeQueryBg[prompt]` — FrontEnd 操作・ScheduledTask 生成なしで同期問い合わせする軽量版。`{text, Image[...], File[path], ...}` のリスト形式によるマルチモーダル入力に対応。SocketListen ハンドラや ScheduledTask コールバック等の非同期コンテキストから安全に呼び出せる
 - `ClaudeMath[task]` — Mathematica コード生成に特化したクエリ
-- `ClaudeEval[task]` — コードを非同期生成し、ノートブックに挿入・自動実行。`Fallback`・`WebFetch`・`Model`・`AutoPrivate`・`RepeatInterval` オプションで柔軟に制御。ClaudeOrchestrator ロード時は呼び出しがジョブキューに追加されて即座に返り、カーネルをブロックしない非同期実行モードに切り替わる。ジョブキュー管理・レート制限自動待機・リトライスケジューリングが透過的に処理される。禁止パターン（`NBAutoEvalProhibitedPatterns`）に該当するコードの自動実行を自動ブロック
+- `ClaudeEval[task]` — コードを非同期生成し、ノートブックに挿入・自動実行。`Fallback`・`WebFetch`・`Model`・`AutoPrivate`・`RepeatInterval` オプションで柔軟に制御。SourceVault ロード時は前段の PromptRouter ブリッジで登録済みルートに照合され、適合する場合は LLM 呼び出しなしに直接評価される。ClaudeOrchestrator ロード時は呼び出しがジョブキューに追加されて即座に返り、カーネルをブロックしない非同期実行モードに切り替わる。ジョブキュー管理・レート制限自動待機・リトライスケジューリングが透過的に処理される。禁止パターン（`NBAutoEvalProhibitedPatterns`）に該当するコードの自動実行を自動ブロック
 - `ContinueEval[instruction]` — 直前の ClaudeEval の続きを実行。エラー修正に便利
 - `ClaudeSpec[task]` — ノートブック内容からプログラムの仕様書を生成
 - `ClaudeExtractCode[response]` / `ClaudeExtractAllCode[response]` — 応答からコードブロックを抽出
@@ -392,21 +407,28 @@ ShowClaudePalette[]
 
 ### 後方互換性について
 
-claudecode は [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime)、[ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator)、および [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) の導入にあたり、**既存のワークフローへの影響がゼロになるよう設計**されています。
+claudecode は [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime)、[ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator)、[ClaudeTestKit](https://github.com/transreal/ClaudeTestKit)、および [SourceVault](https://github.com/transreal/SourceVault) の導入にあたり、**既存のワークフローへの影響がゼロになるよう設計**されています。
 
-| 機能 | 従来の動作(各パッケージ未ロード) | ClaudeOrchestrator ロード時 | ClaudeRuntime ロード時(`$UseClaudeRuntime = True` 自動設定) |
-|------|----------------------------------|----------------------------|---------------------------------------------------|
-| `ClaudeEval["..."]` | CLI 経由で直接実行 | 非同期実行モードに切替(呼び出しがジョブキューに追加されて即座に返り、カーネルをブロックしない。ジョブキュー・レート制限管理が透過的に処理される) | Runtime 経由でルーティングして実行 |
-| `ClaudeQuery["..."]` | CLI 経由で直接実行 | 変更なし | 変更なし(ClaudeQuery は常に CLI 経由) |
-| `ContinueEval[...]` | セッション履歴を参照して継続 | 変更なし | 変更なし |
-| `ClaudeUpdatePackage[...]` | 直接パッケージ更新 | 変更なし | 変更なし |
-| 危険な操作の自動実行 | 禁止パターンでブロック | 変更なし | さらに `NeedsApproval` フローを介挿 |
+| 機能 | 従来の動作(各パッケージ未ロード) | SourceVault ロード時 | ClaudeOrchestrator ロード時 | ClaudeRuntime ロード時(`$UseClaudeRuntime = True` 自動設定) |
+|------|----------------------------------|---------------------|----------------------------|---------------------------------------------------|
+| `ClaudeEval["..."]` | CLI 経由で直接実行 | 前段に PromptRouter ブリッジが介挿され、登録済みルートに適合するプロンプトは LLM 呼び出しなしで直接評価。マッチしない場合は従来パスにフォールスルー | 非同期実行モードに切替(呼び出しがジョブキューに追加されて即座に返り、カーネルをブロックしない。ジョブキュー・レート制限管理が透過的に処理される) | Runtime 経由でルーティングして実行 |
+| `ClaudeQuery["..."]` | CLI 経由で直接実行 | 変更なし | 変更なし | 変更なし(ClaudeQuery は常に CLI 経由) |
+| `ContinueEval[...]` | セッション履歴を参照して継続 | 変更なし | 変更なし | 変更なし |
+| `ClaudeUpdatePackage[...]` | 直接パッケージ更新 | 変更なし | 変更なし | 変更なし |
+| 危険な操作の自動実行 | 禁止パターンでブロック | 変更なし | 変更なし | さらに `NeedsApproval` フローを介挿 |
 
-claudecode を単独でロードした場合は `$UseClaudeRuntime = False`(デフォルト)のままで、ClaudeRuntime パッケージがインストールされていなくても claudecode の全機能をそのまま利用できます。ClaudeOrchestrator および ClaudeTestKit についても同様に、インストールされていない環境での動作に一切影響しません。
+claudecode を単独でロードした場合は `$UseClaudeRuntime = False`(デフォルト)のままで、ClaudeRuntime パッケージがインストールされていなくても claudecode の全機能をそのまま利用できます。SourceVault・ClaudeOrchestrator・ClaudeTestKit についても同様に、インストールされていない環境での動作に一切影響しません（claudecode 本体は SourceVault に対するハードな依存を持ちません）。
 
 ```mathematica
 (* デフォルト: 各パッケージなしで従来どおり動作 *)
 ClaudeEval["タスクの説明"]   (* 従来どおり CLI 経由 *)
+
+(* SourceVault をロードすると ClaudeEval の前段に PromptRouter ブリッジが介挿される *)
+<< SourceVault`
+ClaudeEval["登録済みルートに該当する定型タスク"]
+(* → 適合ルートがあれば LLM 呼び出しなしで直接評価 *)
+ClaudeEval["未登録の自由形式タスク"]
+(* → 従来どおり CLI 経由で LLM を呼び出す *)
 
 (* ClaudeOrchestrator をロードすると ClaudeEval が非同期モードに切り替わる *)
 << ClaudeOrchestrator`
@@ -483,6 +505,29 @@ ClaudeQuery["最新の Mathematica のリリースノートを調べて"]
 ```
 
 MCP サーバー ID は `mcp.json` に登録済みの ID を文字列リストで指定します。`$ClaudeModel` を LM Studio に設定した状態で `$ClaudeLMStudioIntegrations` を有効にすることで、プライバシーを重視しながら外部ツール呼び出し機能を統合した運用が可能です。
+
+### SourceVault による PromptRouter ブリッジ
+
+オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の前段に **PromptRouter** ブリッジが組み込まれます。ユーザーが入力した自然言語タスクは、まず SourceVault に登録されたルート（パターン → 評価式の対応表）と照合され、適合するルートが存在する場合には LLM 呼び出しを経由せず、ReadOnly 許容リスト上の式を直接評価して結果を返します。
+
+```mathematica
+(* SourceVault をロードして PromptRouter ブリッジを有効化 *)
+<< SourceVault`
+
+(* 登録済みルートに合致するプロンプト → LLM 呼び出しなしで直接評価 *)
+ClaudeEval["今日の日付を表示して"]
+
+(* 未登録の自由形式プロンプト → 従来通り Claude Code CLI 経由で処理 *)
+ClaudeEval["この複雑なデータを分析して傾向を可視化して"]
+```
+
+**PromptRouter ブリッジの特徴**:
+
+- **高速・低コスト**: 適合ルートが見つかれば LLM トークン消費ゼロで結果を返せます。頻出の定型タスクに特に有効です。
+- **再現性・監査可能性**: ルートは事前に定義された評価式を実行するため、出力が決定論的になります。
+- **安全性**: 評価される式は ReadOnly 許容リストで制約されており、副作用のある式はルート定義時に弾かれます。
+- **フォールスルー**: マッチしないプロンプトは何の影響もなく従来の ClaudeEval パスに流れるため、既存のワークフローを壊しません。
+- **疎結合**: claudecode 本体は SourceVault に対するハードな依存を持ちません。SourceVault が未インストールの環境では PromptRouter ブリッジ自体が存在せず、従来の自然言語ディスパッチのみが動作します。
 
 ### 多言語対応
 

@@ -51,6 +51,18 @@
      anthropic = Anthropic API \:76f4\:63a5 (\:8ab2\:91d1)\:3001openai = OpenAI API (\:8ab2\:91d1)\:3001
      lmstudio = \:30ed\:30fc\:30ab\:30eb LLM (\:8ab2\:91d1\:306a\:3057)\:3002 *)
 
+
+(* Phase 35 (2026-05-18): provider == "claudecode" \:3067\:306e multimodal / vision \:30b5\:30dd\:30fc\:30c8\:3092\:6709\:52b9\:5316\:3002
+   - iClaudeQueryBgAPIMultimodal \:306b provider \:5224\:5b9a\:5f8c\:306e\:5206\:5c90\:3092\:8ffd\:52a0\:3002
+     providerLower === "claudecode" \:306e\:6642\:306f iClaudeQueryRawNonBlocking \:7d4c\:7531\:3067 CLI \:306b\:30ea\:30c0\:30a4\:30ec\:30af\:30c8\:3002
+   - iNormalizePrompt[items_List] \:304c\:65e2\:306b Image \:30aa\:30d6\:30b8\:30a7\:30af\:30c8\:3092 tmp PNG \:306b\:66f8\:304d\:51fa\:3057\:3001
+     prompt text \:306b\:6dfb\:4ed8\:30d5\:30a1\:30a4\:30eb\:53c2\:7167\:3068\:3057\:3066\:57cb\:3081\:8fbc\:3080\:5b9f\:88c5\:3092\:6301\:3064\:305f\:3081\:3001
+     Claude Code CLI \:7d4c\:7531\:3067 Pro/Max \:30b5\:30d6\:30b9\:30af\:5185\:3067\:8ab2\:91d1\:306a\:3057 OCR / vision \:8cea\:554f\:5fdc\:7b54\:304c\:53ef\:80fd\:306b\:306a\:308b\:3002
+   - \:5f93\:6765\:306e\:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8\:300cmultimodal API \:306f\:73fe\:5728 Anthropic \:306e\:307f\:300d\:306f openai \:306a\:3069
+     \:5916\:90e8 provider \:306e\:307f\:5bfe\:8c61 (claudecode \:306f\:81ea\:52d5\:30ea\:30c0\:30a4\:30ec\:30af\:30c8\:5f8c\:306a\:306e\:3067\:3053\:306e\:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8\:306f\:51fa\:306a\:3044)\:3002
+   - SourceVault.wl \:7b49\:306e\:5916\:90e8\:30d1\:30c3\:30b1\:30fc\:30b8\:304b\:3089\:306e\:547c\:51fa\:3057\:306f\:5f93\:6765\:307e\:307e
+     (ClaudeQueryBg[{prompt, img}, NonBlocking -> True, Timeout -> ...]) \:3067\:6539\:5909\:4e0d\:8981\:3002 *)
+
 If[StringQ[$InputFileName] && $InputFileName =!= "",
   $packageDirectory = DirectoryName[$InputFileName],
   If[!ValueQ[$packageDirectory] || $packageDirectory === "",
@@ -73,6 +85,25 @@ Quiet[ClearAll[
   iDocBuildAcknowledgmentsPrompt, iDocBuildDisclaimerPrompt, iDocBuildLicensePrompt,
   ClaudePrepareCommit, iCollectChangeSummaries, iFormatCommitMessage, iWrapCommitBodyLines,
   iClearAllClaudeHistory, iForceAccessLevelLiterals,
+  iNBFileSpecWithProjections, iNBFileCloudSendAllowedQ,
+  iNBFileRoutesFromSpec, iNBDetectedNBReadExcludedQ,
+  iCloudExternalURLQ, iCloudSendPayloadNBPaths, iCloudSendPayloadNBPath,
+  iCloudSendPreflightDecision, iCloudSendPreflightError,
+  iCloudSendPreflightFailure, iCloudSendPreflightFailureQ,
+  iFailureDisplayText,
+  ClaudeCloudSendPreflightDecision, ClaudeCloudSendPreflightError,
+  ClaudeCloudSendPreflightFailure, ClaudeCloudSendPreflightGuardDryRun,
+  ClaudeCloudSendPreflightAudit,
+  ClaudeCloudSendPreflightLog, ClaudeCloudSendPreflightLogClear,
+  ClaudeCloudSendPreflightLogSummary,
+  iCloudSendPreflightRecordLog, iCloudSendPreflightLogEntry,
+  $ClaudeCloudSendPreflightLog, $ClaudeCloudSendPreflightLogMaxLength,
+  ClaudeCloudSendPreflightFailureCell, ClaudeCloudSendPreflightLogDataset,
+  iCloudSendPreflightFailureCellRows,
+  $ClaudeCloudSendPreflightContextResolver, iCloudSendPreflightResolveContext,
+  iCloudSendRouteLabel, $ClaudeCloudSendRoutePolicy,
+  $ClaudeCloudSendPreflightLogFile, iCloudSendNormalizePathForLog,
+  iCloudSendPathHash, iCloudSendPreflightPersistEntry,
   iAttachmentMetaFile, iLoadAttachmentMeta, iSaveAttachmentMeta,
   iUpdateAttachmentMeta, iGetAttachmentMeta, iIsURL,
   iCacheURLAttachment, iMatchAttachmentsByKeyword,
@@ -154,7 +185,7 @@ Quiet[Scan[
    "LLMGraphDAGInspect","LLMGraphDAGMarkFailed",
    "LLMGraphDAGSnapshot","LLMGraphDAGRestore","LLMGraphDAGListSnapshots","LLMGraphDAGPlot",
    "LLMGraphDAGMergeHistory","$ClaudeSnapshots",
-   "$ClaudeEvalMode","$ClaudeEvalHook","$ClaudeEvalAutoThreshold","$ClaudeEvalVerbose","$claudecodeVersion","$ClaudeEvalAutoLLMMinLength","$ClaudeEvalAutoLLMMinNewlines",
+   "$ClaudeEvalMode","$ClaudeEvalHook","$ClaudeEvalAutoThreshold","$ClaudeEvalVerbose","$claudecodeVersion","$ClaudeEvalAutoLLMMinLength","$ClaudeEvalAutoLLMMinNewlines","$ClaudeEvalNaturalDispatch","$ClaudeEvalNaturalVerbose",
    "iLLMGraphNode","iMakeBat","$iMediaMaxImageSize",
    "cleanOutput","stripANSI",
    "NotebookLLMGraphExtractThread","NotebookLLMGraphApplyThread",
@@ -670,7 +701,7 @@ ClaudeQuerySync::usage =
   "WindowStatusArea \:306b\:7d4c\:904e\:6642\:9593\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
   "\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:3084\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:66f8\:304d\:8fbc\:307f\:306f\:884c\:308f\:306a\:3044\:8efd\:91cf\:7248\:3002\n" <>
   "\:30e2\:30c7\:30eb\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0\:306e\:30b3\:30a2\:ff1a\n" <>
-  "  Model -> Automatic \:304b\:3064 PrivacyLevel <= 0.5: Claude Code CLI\n" <>
+  "  Model -> Automatic \:304b\:3064 PrivacyLevel < 0.5: Claude Code CLI\n" <>
   "  Model -> Automatic \:304b\:3064 PrivacyLevel > 0.5: $ClaudePrivateModel \:3092\:81ea\:52d5\:4f7f\:7528\n" <>
   "  Model -> {\"provider\",\"model\"}: \:6307\:5b9a\:30e2\:30c7\:30eb\:3092 API \:7d4c\:7531\:3067\:4f7f\:7528\n" <>
   "Options:\n" <>
@@ -1059,7 +1090,7 @@ NBFileTranslate::usage =
 ClaudeProcessFile::usage =
   "ClaudeProcessFile[prompt, inputPath, outputPath, opts] \:306f .nb \:30d5\:30a1\:30a4\:30eb\:306e\:30bb\:30eb\:3092\n" <>
   "PrivacyLevel \:306b\:5fdc\:3058\:3066 2\:30ce\:30fc\:30c9\:306b\:5206\:914d\:3057\:3066\:4e26\:5217\:51e6\:7406\:3059\:308b\:6c4e\:7528\:95a2\:6570\:3002\n" <>
-  "  0 <= PrivacyLevel <= 0.5  \[RightArrow]  $ClaudeModel    (ClaudeCode/API)\n" <>
+  "  0 <= PrivacyLevel < 0.5  \[RightArrow]  $ClaudeModel    (ClaudeCode/API)\n" <>
   "  0.5 < PrivacyLevel <= 1.0 \[RightArrow]  $ClaudePrivateModel (LM Studio \:7b49)\n" <>
   "\:4e21\:30ce\:30fc\:30c9\:306e\:51fa\:529b\:3092\:5143\:306e\:30bb\:30eb\:9806\:306b\:30de\:30fc\:30b8\:3057\:3066 outputPath \:306b\:4fdd\:5b58\:3059\:308b\:3002\n" <>
   "LLMGraphDAGCreate \:3067 DAG \:30b8\:30e7\:30d6\:3092\:4f5c\:6210\:3057\:3001\:5171\:6709\:30b9\:30b1\:30b8\:30e5\:30fc\:30e9\:3067\:5b9f\:884c\:3059\:308b\:3002\n" <>
@@ -1443,7 +1474,36 @@ ClaudeQueryAsyncSilent::usage =
   "\:4f8b: ClaudeQueryAsyncSilent[prompt, callback]\n" <>
   "      ClaudeQueryAsyncSilent[prompt, callback, Model -> {\"anthropic\", \"claude-opus-4-7\"}]";
 
-    Begin["`Private`"];(* ============================================================
+    
+ClaudeCloudSendPreflightDecision::usage =
+  "ClaudeCloudSendPreflightDecision[provider, payload, \"URL\" -> url] returns the cloud-send preflight decision without sending the payload. " <>
+  "It checks notebook paths in the payload against NBAccess`NBFileSpec[..., \"IncludeProjections\" -> True][\"CloudSendAllowed\"].";
+
+ClaudeCloudSendPreflightError::usage =
+  "ClaudeCloudSendPreflightError[decision] formats a cloud-send preflight Deny decision as the same error text used by cloud API call guards.";
+
+ClaudeCloudSendPreflightFailure::usage =
+  "ClaudeCloudSendPreflightFailure[decision] converts a cloud-send preflight Deny decision into a Failure[...] object without sending the payload.";
+
+ClaudeCloudSendPreflightGuardDryRun::usage =
+  "ClaudeCloudSendPreflightGuardDryRun[provider, payload, \"URL\" -> url] runs the same cloud-send guard shape used by cloud API calls without sending. " <>
+  "It returns Failure[...] when the payload would be blocked, otherwise an association with \"Decision\" -> \"Permit\" and \"WouldSend\" -> True.";
+
+ClaudeCloudSendPreflightAudit::usage =
+  "ClaudeCloudSendPreflightAudit[payload, \"Provider\" -> provider, \"URL\" -> url] returns a no-send audit report for notebook paths detected in the payload, " <>
+  "including per-path NBAccess projection fields and the aggregate cloud-send preflight decision.";
+
+ClaudeCloudSendPreflightLog::usage =
+  "ClaudeCloudSendPreflightLog[] returns recent cloud-send preflight audit log entries. The log records provider, decision, notebook paths, privacy levels, and denial reason, but not prompt or payload text.";
+
+ClaudeCloudSendPreflightLogClear::usage =
+  "ClaudeCloudSendPreflightLogClear[] clears the in-memory cloud-send preflight audit log.";
+
+ClaudeCloudSendPreflightLogSummary::usage =
+  "ClaudeCloudSendPreflightLogSummary[] summarizes the in-memory cloud-send preflight audit log without including prompt or payload text. " <>
+  "Use ClaudeCloudSendPreflightLogSummary[\"IncludeEntries\" -> True] to include the existing sanitized log entries.";
+
+Begin["`Private`"];(* ============================================================
    \:8a2d\:5b9a\:ff1a\:5fc5\:8981\:306b\:5fdc\:3058\:3066\:624b\:52d5\:3067\:4e0a\:66f8\:304d\:53ef\:80fd
    ============================================================ *)
 
@@ -1581,6 +1641,695 @@ iCollectAccessibleDirs[] := Module[{nbDirs = {}, attDirs = {}, baseDirs},
     StringQ[#] && StringLength[#] > 0 &]
 ];
 
+(* Phase 4.4 (2026-05-23): file-level cloud send authorization projection.
+   Use NBAccess`NBFileSpec[..., "IncludeProjections" -> True] when available.
+   Do not derive cloud send permission from PrivacyLevel < 0.5 in claudecode. *)
+iNBFileSpecWithProjections[path_String] :=
+  Module[{spec},
+    spec = Quiet @ Check[
+      NBAccess`NBFileSpec[path, "IncludeProjections" -> True],
+      $Failed];
+    If[AssociationQ[spec],
+      spec,
+      Quiet @ Check[NBAccess`NBFileSpec[path], <||>]]
+  ];
+iNBFileSpecWithProjections[_] := <||>;
+
+iNBFileCloudSendAllowedQ[spec_Association] :=
+  TrueQ[Lookup[spec, "CloudSendAllowed", False]];
+iNBFileCloudSendAllowedQ[path_String] :=
+  iNBFileCloudSendAllowedQ[iNBFileSpecWithProjections[path]];
+iNBFileCloudSendAllowedQ[_] := False;
+
+iNBFileRoutesFromSpec[spec_Association] :=
+  If[iNBFileCloudSendAllowedQ[spec], {"cloud"}, {"local"}];
+iNBFileRoutesFromSpec[_] := {"local"};
+
+iNBDetectedNBReadExcludedQ[path_] :=
+  Module[{spec},
+    If[!StringQ[path] || !FileExistsQ[path] ||
+       ToLowerCase[FileExtension[path]] =!= "nb",
+      Return[False]];
+    spec = iNBFileSpecWithProjections[path];
+    !iNBFileCloudSendAllowedQ[spec]
+  ];
+
+
+(* Phase 4.7 (2026-05-23): cloud API preflight for notebook path payloads.
+   External cloud providers must not receive a .nb path unless NBAccess
+   explicitly projects CloudSendAllowed -> True. *)
+If[!ValueQ[$ClaudeCloudSendPreflightLog],
+  $ClaudeCloudSendPreflightLog = {}];
+
+If[!ValueQ[$ClaudeCloudSendPreflightLogMaxLength],
+  $ClaudeCloudSendPreflightLogMaxLength = 200];
+
+iCloudSendPreflightLogEntry[decision_Association] :=
+  <|"Timestamp" -> DateObject[],
+    "Provider" -> Lookup[decision, "Provider", Missing["NotAvailable"]],
+    "Decision" -> Lookup[decision, "Decision", Missing["NotAvailable"]],
+    "Reason" -> Lookup[decision, "Reason", Missing["NotAvailable"]],
+    "ReasonClass" -> Lookup[decision, "ReasonClass", Missing["NotAvailable"]],
+    "Path" -> Lookup[decision, "Path", Missing["NoPath"]],
+    "Paths" -> Lookup[decision, "Paths",
+      DeleteMissing @ {Lookup[decision, "Path", Missing["NoPath"]]}],
+    "DeniedPaths" -> Lookup[decision, "DeniedPaths", {}],
+    "AllowedPaths" -> Lookup[decision, "AllowedPaths", {}],
+    "PrivacyLevel" -> Lookup[decision, "PrivacyLevel",
+      Missing["NotAvailable"]],
+    "PrivacyLevels" -> Lookup[decision, "PrivacyLevels", <||>],
+    "CloudSendAllowed" -> Lookup[decision, "CloudSendAllowed",
+      Lookup[decision, "Decision", "Deny"] === "Permit"],
+    "CloudSendAllowedByPath" -> Lookup[decision,
+      "CloudSendAllowedByPath", <||>]|>;
+
+
+ClaudeCloudSendPreflightLog[] := $ClaudeCloudSendPreflightLog;
+
+ClaudeCloudSendPreflightLogClear[] :=
+  ($ClaudeCloudSendPreflightLog = {}; <|"Status" -> "OK", "Cleared" -> True|>);
+
+Options[ClaudeCloudSendPreflightLogSummary] = {"IncludeEntries" -> False};
+
+ClaudeCloudSendPreflightLogSummary[opts:OptionsPattern[]] :=
+  Module[{log = ClaudeCloudSendPreflightLog[], decisions, providers,
+          deniedEntries, permitEntries, deniedPaths, allowedPaths, summary},
+    decisions = Lookup[#, "Decision", Missing["NotAvailable"]] & /@ log;
+    providers = Lookup[#, "Provider", Missing["NotAvailable"]] & /@ log;
+    deniedEntries = Select[log,
+      Lookup[#, "Decision", Missing["NotAvailable"]] === "Deny" &];
+    permitEntries = Select[log,
+      Lookup[#, "Decision", Missing["NotAvailable"]] === "Permit" &];
+    deniedPaths = Flatten[Lookup[#, "DeniedPaths", {}] & /@ log];
+    allowedPaths = Flatten[Lookup[#, "AllowedPaths", {}] & /@ log];
+
+    summary = <|
+      "EntryCount" -> Length[log],
+      "DecisionCounts" -> Counts[decisions],
+      "ProviderCounts" -> Counts[providers],
+      "DenyCount" -> Length[deniedEntries],
+      "PermitCount" -> Length[permitEntries],
+      "DeniedPathCounts" -> Counts[deniedPaths],
+      "AllowedPathCounts" -> Counts[allowedPaths],
+      "LatestEntry" -> If[Length[log] > 0, Last[log],
+        Missing["EmptyLog"]],
+      "LatestDeny" -> If[Length[deniedEntries] > 0,
+        Last[deniedEntries], Missing["NoDeny"]],
+      "FirstTimestamp" -> If[Length[log] > 0,
+        Lookup[First[log], "Timestamp", Missing["NotAvailable"]],
+        Missing["EmptyLog"]],
+      "LastTimestamp" -> If[Length[log] > 0,
+        Lookup[Last[log], "Timestamp", Missing["NotAvailable"]],
+        Missing["EmptyLog"]],
+      "PayloadStored" -> AnyTrue[log, KeyExistsQ[#, "Payload"] &]
+    |>;
+
+    If[TrueQ[OptionValue["IncludeEntries"]],
+      Join[summary, <|"Entries" -> log|>],
+      summary]
+  ];
+
+iCloudExternalURLQ[url_String] :=
+  Module[{lower = ToLowerCase[url]},
+    !AnyTrue[{"localhost", "127.0.0.1", "[::1]", "0.0.0.0"},
+      StringContainsQ[lower, #] &]
+  ];
+iCloudExternalURLQ[_] := True;
+
+iCloudSendPayloadNBPaths[payload_] :=
+  Module[{s, p, candidates},
+    s = Which[
+      StringQ[payload], payload,
+      ListQ[payload], StringRiffle[ToString[#, InputForm] & /@ payload, "\n"],
+      True, ToString[payload, InputForm]
+    ];
+
+    candidates = {};
+
+    (* Direct path case. *)
+    If[StringQ[s] && FileExistsQ[s] &&
+       ToLowerCase[FileExtension[s]] === "nb",
+      candidates = Append[candidates, s]];
+
+    (* Existing detector fallback. *)
+    p = Quiet @ Check[iLLMGraphDetectFilePath[s], None];
+    If[StringQ[p] && FileExistsQ[p] &&
+       ToLowerCase[FileExtension[p]] === "nb",
+      candidates = Append[candidates, p]];
+
+    (* Phase 4.9/4.10: detect embedded Windows/Unix notebook paths in natural text.
+       Example: "Please read this notebook: F:\\Dropbox\\...\\test.nb" *)
+    candidates = DeleteDuplicates @ Join[
+      candidates,
+      StringCases[s,
+        RegularExpression["[A-Za-z]:[\\\\/][^\\n\\r\\t\\\"<>|?*]*?\\.nb"]],
+      StringCases[s,
+        RegularExpression["/(?:[^\\n\\r\\t\\\"]*?/)?.*?\\.nb"]]
+    ];
+
+    Select[candidates,
+      StringQ[#] && FileExistsQ[#] &&
+        ToLowerCase[FileExtension[#]] === "nb" &]
+  ];
+
+iCloudSendPayloadNBPath[payload_] :=
+  Module[{paths = iCloudSendPayloadNBPaths[payload]},
+    If[Length[paths] > 0, First[paths], None]
+  ];
+
+
+
+
+iCloudSendPreflightError[decision_Association] /;
+    Lookup[decision, "Decision", Missing["NoDecision"]] =!= "Deny" :=
+  "No cloud API preflight error: " <> ToString[decision, InputForm];
+
+iCloudSendPreflightError[decision_Association] :=
+  "Error: Cloud API preflight blocked notebook send.\n" <>
+  "Provider: " <> ToString[Lookup[decision, "Provider", "unknown"]] <> "\n" <>
+  "Path: " <> ToString[Lookup[decision, "Path", Missing["NoPath"]]] <> "\n" <>
+  "DeniedPaths: " <> ToString[Lookup[decision, "DeniedPaths",
+      {Lookup[decision, "Path", Missing["NoPath"]]}], InputForm] <> "\n" <>
+  "PrivacyLevel: " <> ToString[Lookup[decision, "PrivacyLevel", Missing["NotAvailable"]], InputForm] <> "\n" <>
+  "CloudSendAllowed: " <> ToString[Lookup[decision, "CloudSendAllowed", False], InputForm] <> "\n" <>
+  "ReasonClass: " <> ToString[Lookup[decision, "ReasonClass", "NBCloudSendNotAllowed"]] <> "\n" <>
+  "Set NBAccess`NBSetCloudPublishable[path, True] only for notebooks that are safe to send to cloud APIs.";
+iCloudSendPreflightError[other_] :=
+  "Error: Cloud API preflight blocked notebook send: " <> ToString[other, InputForm];
+
+iCloudSendPreflightFailure[decision_Association] /;
+    Lookup[decision, "Decision", Missing["NoDecision"]] =!= "Deny" :=
+  Missing["NotDenyDecision", decision];
+
+iCloudSendPreflightFailure[decision_Association] :=
+  Failure[
+    ToString[Lookup[decision, "ReasonClass", "CloudSendPreflightBlocked"]],
+    <|
+      "MessageTemplate" -> iCloudSendPreflightError[decision],
+      "MessageParameters" -> <||>,
+      "Decision" -> decision,
+      "Provider" -> Lookup[decision, "Provider", Missing["NotAvailable"]],
+      "Path" -> Lookup[decision, "Path", Missing["NoPath"]],
+      "DeniedPaths" -> Lookup[decision, "DeniedPaths",
+        {Lookup[decision, "Path", Missing["NoPath"]]}],
+      "AllowedPaths" -> Lookup[decision, "AllowedPaths", {}],
+      "PrivacyLevel" -> Lookup[decision, "PrivacyLevel",
+        Missing["NotAvailable"]],
+      "CloudSendAllowed" -> Lookup[decision, "CloudSendAllowed", False]
+    |>
+  ];
+iCloudSendPreflightFailure[other_] :=
+  Failure["CloudSendPreflightBlocked",
+    <|"MessageTemplate" -> iCloudSendPreflightError[other],
+      "MessageParameters" -> <||>,
+      "Decision" -> other|>];
+
+iCloudSendPreflightFailureQ[expr_] :=
+  FailureQ[expr] && Quiet @ Check[expr[[1]] === "NBCloudSendNotAllowed", False];
+
+iFailureDisplayText[f_Failure] :=
+  Module[{mt = Quiet @ Check[f["MessageTemplate"], Missing["NotAvailable"]]},
+    If[StringQ[mt], mt, ToString[f, InputForm]]
+  ];
+iFailureDisplayText[other_] := ToString[other, InputForm];
+
+Options[ClaudeCloudSendPreflightDecision] = {"URL" -> Automatic};
+
+ClaudeCloudSendPreflightDecision[provider_, payload_, opts:OptionsPattern[]] :=
+  iCloudSendPreflightDecision[provider, payload, OptionValue["URL"]];
+
+ClaudeCloudSendPreflightError[decision_] :=
+  iCloudSendPreflightError[decision];
+
+ClaudeCloudSendPreflightFailure[decision_] :=
+  iCloudSendPreflightFailure[decision];
+
+Options[ClaudeCloudSendPreflightGuardDryRun] = {"URL" -> Automatic};
+
+ClaudeCloudSendPreflightGuardDryRun[provider_, payload_, opts:OptionsPattern[]] :=
+  Module[{decision, failure},
+    decision = iCloudSendPreflightDecision[provider, payload, OptionValue["URL"]];
+    If[Lookup[decision, "Decision", "Deny"] =!= "Permit",
+      failure = iCloudSendPreflightFailure[decision];
+      Return[failure]];
+
+    Join[
+      <|"Decision" -> "Permit",
+        "WouldSend" -> True,
+        "Provider" -> Lookup[decision, "Provider",
+          ToLowerCase[ToString[provider]]],
+        "PreflightDecision" -> decision|>,
+      KeyDrop[decision, {"Decision", "Provider"}]
+    ]
+  ];
+
+
+(* ===================================================== *)
+(* Phase 4.17-4.20 : handoff section 7.2-7.5 merged-in.  *)
+(* Formerly standalone add-on files; now permanent.      *)
+(* ===================================================== *)
+
+(* ---- 7.3 : SourceVault-aware context resolver hook ---- *)
+
+(* ---- hook variable + usage -------------------------------- *)
+
+(* Preserve an already-registered resolver across reloads. *)
+If[!ValueQ[$ClaudeCloudSendPreflightContextResolver],
+  $ClaudeCloudSendPreflightContextResolver = None];
+
+$ClaudeCloudSendPreflightContextResolver::usage =
+  "$ClaudeCloudSendPreflightContextResolver is an optional hook. When " <>
+  "set to a function f, ClaudeCloudSendPreflightAudit calls f[path] for " <>
+  "each detected notebook path and stores the returned association " <>
+  "under the per-path \"SourceVault\" field. Default None. It is " <>
+  "intended to be set by SourceVault.wl at load time; claudecode.wl " <>
+  "never depends on SourceVault directly. A resolver that fails is " <>
+  "ignored (the field becomes Missing[\"ResolverFailed\"]) and can " <>
+  "never affect the cloud-send decision.";
+
+
+(* ---- Private helper: call the resolver, fail-safe --------- *)
+
+iCloudSendPreflightResolveContext[path_String] :=
+  Module[{resolver, result},
+    resolver = $ClaudeCloudSendPreflightContextResolver;
+    If[resolver === None, Return[Missing["NoResolver"]]];
+    (* Catch tagged Throw, Check catches Messages; a bad resolver
+       therefore degrades to Missing instead of breaking the audit. *)
+    result = Quiet @ Check[
+      Catch[resolver[path], _, Function[{v, t}, $Failed]],
+      $Failed];
+    If[AssociationQ[result], result, Missing["ResolverFailed"]]
+  ];
+iCloudSendPreflightResolveContext[_] :=
+  Missing["InvalidPath"];
+
+
+(* ---- redefine ClaudeCloudSendPreflightAudit (resolver-aware) *)
+(* Identical to the claudecode.wl definition except for the added
+   per-path "SourceVault" field. All existing fields are preserved,
+   so callers that ignore "SourceVault" are unaffected. *)
+
+Options[ClaudeCloudSendPreflightAudit] = {
+  "Provider" -> "anthropic",
+  "URL" -> Automatic
+};
+
+ClaudeCloudSendPreflightAudit[payload_, opts:OptionsPattern[]] :=
+  Module[{optList = Flatten[{opts}], provider, url,
+          paths, byPath, decision},
+    (* Read options directly from opts rather than via OptionValue, so
+       this redefinition does not depend on OptionValue's enclosing-
+       function autodetection. *)
+    provider = Lookup[Association[optList], "Provider", "anthropic"];
+    url = Lookup[Association[optList], "URL", Automatic];
+    paths = iCloudSendPayloadNBPaths[payload];
+
+    byPath = Association @ Table[
+      With[{spec = Quiet @ Check[
+          iNBFileSpecWithProjections[path], <||>]},
+        path -> <|
+          "PrivacyLevel" -> Lookup[spec, "PrivacyLevel",
+            Missing["NotAvailable"]],
+          "CloudSendAllowed" -> Lookup[spec, "CloudSendAllowed", False],
+          "DeclaredCloudPublishable" -> Lookup[spec,
+            "DeclaredCloudPublishable", Missing["NotAvailable"]],
+          "DeclaredCloudPublishableSource" -> Lookup[spec,
+            "DeclaredCloudPublishableSource", Missing["NotAvailable"]],
+          "Readability" -> <|
+            "ReadableByAgent" -> Lookup[spec, "ReadableByAgent",
+              Missing["NotAvailable"]],
+            "WritableByAgent" -> Lookup[spec, "WritableByAgent",
+              Missing["NotAvailable"]]|>,
+          "CloudSendDecision" -> Lookup[spec, "CloudSendDecision",
+            Missing["NotAvailable"]],
+          (* section 7.3: optional resolver-supplied context. *)
+          "SourceVault" ->
+            iCloudSendPreflightResolveContext[path]
+        |>
+      ],
+      {path, paths}];
+
+    decision = iCloudSendPreflightDecision[
+      provider, payload, url];
+
+    <|"Provider" -> ToLowerCase[ToString[provider]],
+      "URL" -> url,
+      "PathCount" -> Length[paths],
+      "Paths" -> paths,
+      "ByPath" -> byPath,
+      "Decision" -> decision|>
+  ];
+
+(* ---- 7.4 : route label / route policy ---- *)
+
+(* ---- route policy registry -------------------------------- *)
+
+(* Preserve a caller-customized registry across reloads. *)
+If[!ValueQ[$ClaudeCloudSendRoutePolicy],
+  $ClaudeCloudSendRoutePolicy = <|
+    "CloudLLM"              -> "External",
+    "ExternalAPI"           -> "External",
+    "LocalLLM"              -> "Local",
+    "LocalOpenAICompatible" -> "Local",
+    "ClaudeCodeCLI"         -> "Local"
+  |>];
+
+$ClaudeCloudSendRoutePolicy::usage =
+  "$ClaudeCloudSendRoutePolicy maps a route label (\"CloudLLM\", " <>
+  "\"LocalLLM\", \"ExternalAPI\", \"LocalOpenAICompatible\", " <>
+  "\"ClaudeCodeCLI\") to a route policy \"External\" or \"Local\". " <>
+  "It is attached to preflight decisions as \"RoutePolicy\" for " <>
+  "classification and display; it does not by itself change the " <>
+  "Permit / Deny decision.";
+
+
+(* ---- route label decision function ------------------------ *)
+
+iCloudSendRouteLabel[provider_, url_:Automatic] :=
+  Module[{prov = ToLowerCase[ToString[provider]], localURLQ},
+    localURLQ = StringQ[url] && !iCloudExternalURLQ[url];
+    Which[
+      MemberQ[{"claudecode", "claude-code", "claudecodecli", "cli"},
+        prov],
+        "ClaudeCodeCLI",
+      prov === "anthropic",
+        "CloudLLM",
+      prov === "openai",
+        If[localURLQ, "LocalOpenAICompatible", "CloudLLM"],
+      MemberQ[{"lmstudio", "ollama", "llamacpp", "localai", "local",
+               "koboldcpp", "textgenwebui"}, prov],
+        "LocalLLM",
+      localURLQ,
+        "LocalLLM",
+      True,
+        "ExternalAPI"
+    ]
+  ];
+
+iCloudSendRouteLabel::usage =
+  "iCloudSendRouteLabel[provider, url] returns the route label for a " <>
+  "(provider, url) pair: one of \"CloudLLM\", \"LocalLLM\", " <>
+  "\"ExternalAPI\", \"LocalOpenAICompatible\", \"ClaudeCodeCLI\".";
+
+
+(* ---- redefine iCloudSendPreflightDecision (route-aware) ---- *)
+(* Identical to the claudecode.wl definition except that every
+   returned decision association also carries "Route" and
+   "RoutePolicy". The Permit / Deny branching is unchanged. *)
+
+iCloudSendPreflightDecision[
+    provider_, payload_, url_:Automatic] :=
+  Module[{prov = ToLowerCase[ToString[provider]], nbPaths, specs,
+          deniedPaths, allowedPaths, nbPath, spec, decision,
+          route, routePolicy},
+    route = iCloudSendRouteLabel[provider, url];
+    routePolicy = Lookup[$ClaudeCloudSendRoutePolicy,
+      route, "Local"];
+
+    If[!MemberQ[{"anthropic", "openai"}, prov],
+      decision = <|"Decision" -> "Permit",
+        "Reason" -> "ProviderNotExternalCloud",
+        "Provider" -> prov,
+        "Route" -> route, "RoutePolicy" -> routePolicy|>;
+      Return[iCloudSendPreflightRecordLog[decision]]];
+
+    If[prov === "openai" && StringQ[url] &&
+        !iCloudExternalURLQ[url],
+      decision = <|"Decision" -> "Permit",
+        "Reason" -> "LocalOpenAICompatibleURL",
+        "Provider" -> prov,
+        "URL" -> url,
+        "Route" -> route, "RoutePolicy" -> routePolicy|>;
+      Return[iCloudSendPreflightRecordLog[decision]]];
+
+    nbPaths = iCloudSendPayloadNBPaths[payload];
+    If[Length[nbPaths] === 0,
+      decision = <|"Decision" -> "Permit",
+        "Reason" -> "NoNotebookPathDetected",
+        "Provider" -> prov,
+        "Route" -> route, "RoutePolicy" -> routePolicy|>;
+      Return[iCloudSendPreflightRecordLog[decision]]];
+
+    specs = Association @ Table[
+      path -> Quiet @ Check[
+        iNBFileSpecWithProjections[path], <||>],
+      {path, nbPaths}];
+
+    deniedPaths = Select[nbPaths,
+      !iNBFileCloudSendAllowedQ[Lookup[specs, #, <||>]] &];
+    allowedPaths = Complement[nbPaths, deniedPaths];
+
+    If[Length[deniedPaths] === 0,
+      decision = <|"Decision" -> "Permit",
+        "Reason" -> "CloudSendAllowed",
+        "Provider" -> prov,
+        "Path" -> First[nbPaths],
+        "Paths" -> nbPaths,
+        "PrivacyLevel" -> Lookup[Lookup[specs, First[nbPaths], <||>],
+          "PrivacyLevel", Missing["NotAvailable"]],
+        "PrivacyLevels" -> AssociationMap[
+          Lookup[Lookup[specs, #, <||>], "PrivacyLevel",
+            Missing["NotAvailable"]] &, nbPaths],
+        "Route" -> route, "RoutePolicy" -> routePolicy|>;
+      Return[iCloudSendPreflightRecordLog[decision]]];
+
+    nbPath = First[deniedPaths];
+    spec = Lookup[specs, nbPath, <||>];
+
+    decision = <|"Decision" -> "Deny",
+      "ReasonClass" -> "NBCloudSendNotAllowed",
+      "Provider" -> prov,
+      "Path" -> nbPath,
+      "Paths" -> nbPaths,
+      "DeniedPaths" -> deniedPaths,
+      "AllowedPaths" -> allowedPaths,
+      "PrivacyLevel" -> Lookup[spec, "PrivacyLevel",
+        Missing["NotAvailable"]],
+      "PrivacyLevels" -> AssociationMap[
+        Lookup[Lookup[specs, #, <||>], "PrivacyLevel",
+          Missing["NotAvailable"]] &, nbPaths],
+      "CloudSendAllowed" -> Lookup[spec, "CloudSendAllowed", False],
+      "CloudSendAllowedByPath" -> AssociationMap[
+        TrueQ[Lookup[Lookup[specs, #, <||>], "CloudSendAllowed",
+          False]] &, nbPaths],
+      "CloudSendDecision" -> Lookup[spec, "CloudSendDecision",
+        Missing["NotAvailable"]],
+      "Route" -> route, "RoutePolicy" -> routePolicy|>;
+    iCloudSendPreflightRecordLog[decision]
+  ];
+
+(* ---- 7.5 : opt-in persistent JSONL audit log ---- *)
+
+(* ---- opt-in hook variable + usage ------------------------- *)
+
+(* Preserve a caller-set path across reloads. *)
+If[!ValueQ[$ClaudeCloudSendPreflightLogFile],
+  $ClaudeCloudSendPreflightLogFile = None];
+
+$ClaudeCloudSendPreflightLogFile::usage =
+  "$ClaudeCloudSendPreflightLogFile is an optional persistence hook. " <>
+  "Default None (in-memory log only). When set to an absolute file " <>
+  "path, each cloud-send preflight decision is also appended to that " <>
+  "file as one JSON line. Only a fixed whitelist of fields is " <>
+  "written (timestamp, provider, decision, route, reason, normalized " <>
+  "paths + SHA-256 path hashes, privacy level, denied paths); the " <>
+  "payload text is never persisted.";
+
+
+(* ---- helpers: path normalization + hash ------------------- *)
+
+iCloudSendNormalizePathForLog[p_String] :=
+  Quiet @ Check[ExpandFileName[p], p];
+iCloudSendNormalizePathForLog[p_] := ToString[p, InputForm];
+
+iCloudSendPathHash[p_String] :=
+  Quiet @ Check[
+    Hash[ExpandFileName[p], "SHA256", "HexString"],
+    Null];
+iCloudSendPathHash[_] := Null;
+
+
+(* ---- helper: build a whitelisted entry and append JSONL --- *)
+
+iCloudSendPreflightPersistEntry[
+    decision_Association, file_String] :=
+  Module[{paths, deniedPaths, persistEntry, json, stream},
+    paths = Lookup[decision, "Paths",
+      DeleteMissing @ {Lookup[decision, "Path", Missing["NoPath"]]}];
+    paths = If[ListQ[paths], paths, {}];
+    deniedPaths = Lookup[decision, "DeniedPaths", {}];
+    deniedPaths = If[ListQ[deniedPaths], deniedPaths, {}];
+
+    (* WHITELIST ONLY. The payload text is never part of `decision`
+       and is never added here. *)
+    persistEntry = <|
+      "Timestamp"        -> DateString["ISODateTime"],
+      "Provider"         -> Lookup[decision, "Provider", Null],
+      "Decision"         -> Lookup[decision, "Decision", Null],
+      "Route"            -> Lookup[decision, "Route", Null],
+      "RoutePolicy"      -> Lookup[decision, "RoutePolicy", Null],
+      "Reason"           -> Lookup[decision, "Reason", Null],
+      "ReasonClass"      -> Lookup[decision, "ReasonClass", Null],
+      "Paths" ->
+        (iCloudSendNormalizePathForLog /@ paths),
+      "PathHashes" ->
+        (iCloudSendPathHash /@ paths),
+      "PrivacyLevel"     -> Lookup[decision, "PrivacyLevel", Null],
+      "DeniedPaths" ->
+        (iCloudSendNormalizePathForLog /@ deniedPaths),
+      "DeniedPathHashes" ->
+        (iCloudSendPathHash /@ deniedPaths)
+    |>;
+    (* JSON-safe: turn any Missing[...] into Null. *)
+    persistEntry = persistEntry /. {_Missing -> Null};
+
+    (* ExportString[..., "RawJSON", Compact] reliably yields a single-
+       line JSON string; abort before opening the file if it does not. *)
+    json = ExportString[persistEntry, "RawJSON", "Compact" -> True];
+    If[!StringQ[json], Return[$Failed]];
+    stream = OpenAppend[file, BinaryFormat -> True];
+    BinaryWrite[stream, StringToByteArray[json <> "\n", "UTF-8"]];
+    Close[stream];
+    file
+  ];
+
+
+(* ---- redefine iCloudSendPreflightRecordLog (persistence-aware) *)
+(* Identical to the claudecode.wl definition except for the optional
+   JSONL append. The in-memory log behaviour is unchanged. *)
+
+iCloudSendPreflightRecordLog[decision_Association] :=
+  Module[{entry = iCloudSendPreflightLogEntry[decision],
+          max, newLog, keep},
+    max = Replace[$ClaudeCloudSendPreflightLogMaxLength,
+      Except[_Integer?Positive] -> 200];
+    newLog = Append[$ClaudeCloudSendPreflightLog, entry];
+    keep = Min[max, Length[newLog]];
+    $ClaudeCloudSendPreflightLog = Take[newLog, -keep];
+    (* section 7.5: opt-in persistent JSONL log. Fail-safe: a write
+       error never breaks the decision or the in-memory log. *)
+    If[StringQ[$ClaudeCloudSendPreflightLogFile],
+      Quiet @ Check[
+        iCloudSendPreflightPersistEntry[
+          decision, $ClaudeCloudSendPreflightLogFile],
+        Null]];
+    decision
+  ];
+iCloudSendPreflightRecordLog[other_] := other;
+
+(* ---- 7.2 : FrontEnd display helpers ---- *)
+
+(* ---- usage declarations ----------------------------------- *)
+
+ClaudeCloudSendPreflightFailureCell::usage =
+  "ClaudeCloudSendPreflightFailureCell[failure] formats a cloud-send " <>
+  "preflight Failure (tag NBCloudSendNotAllowed) as a framed summary " <>
+  "box for display in a notebook. It shows the provider, denied and " <>
+  "allowed notebook paths, privacy levels and the reason class, but " <>
+  "never the payload text. A non-Deny input degrades to a short note.";
+
+ClaudeCloudSendPreflightLogDataset::usage =
+  "ClaudeCloudSendPreflightLogDataset[] returns the in-memory cloud-" <>
+  "send preflight audit log as a Dataset. " <>
+  "ClaudeCloudSendPreflightLogDataset[\"Columns\" -> All] shows every " <>
+  "field; a list of field names selects columns. The payload text is " <>
+  "never stored in the log and is therefore never shown.";
+
+
+(* ---- Private helper: rows of the failure cell ------------- *)
+
+iCloudSendPreflightFailureCellRows[assoc_Association] :=
+  Module[{prov, reason, denied, allowed, pl, plByPath},
+    prov     = Lookup[assoc, "Provider", Missing["NotAvailable"]];
+    reason   = Lookup[assoc, "ReasonClass",
+                 Lookup[assoc, "Reason", "NBCloudSendNotAllowed"]];
+    denied   = Lookup[assoc, "DeniedPaths", {}];
+    allowed  = Lookup[assoc, "AllowedPaths", {}];
+    pl       = Lookup[assoc, "PrivacyLevel", Missing["NotAvailable"]];
+    plByPath = Lookup[assoc, "PrivacyLevels", <||>];
+    {
+      {"Provider", prov},
+      {"ReasonClass", reason},
+      {"DeniedPaths",
+        If[denied === {}, "(none)",
+          Column[Style[#, RGBColor[0.7, 0, 0]] & /@ denied]]},
+      {"AllowedPaths",
+        If[allowed === {}, "(none)", Column[allowed]]},
+      {"PrivacyLevel", pl},
+      {"PrivacyLevels",
+        If[AssociationQ[plByPath] && Length[plByPath] > 0,
+          Column[KeyValueMap[Row[{#1, "  ->  ", #2}] &, plByPath]],
+          "(none)"]}
+    }
+  ];
+iCloudSendPreflightFailureCellRows[_] :=
+  {{"Info", "No preflight decision detail available."}};
+
+
+(* ---- public: ClaudeCloudSendPreflightFailureCell ---------- *)
+
+ClaudeCloudSendPreflightFailureCell[failure_Failure] :=
+  Module[{assoc, decision, src, rows},
+    assoc = Quiet @ Check[failure[[2]], <||>];
+    If[!AssociationQ[assoc], assoc = <||>];
+    decision = Lookup[assoc, "Decision", <||>];
+    src = If[AssociationQ[decision] && KeyExistsQ[decision, "DeniedPaths"],
+      decision, assoc];
+    rows = iCloudSendPreflightFailureCellRows[src];
+    Framed[
+      Column[{
+        Style["Cloud send blocked by NBAccess preflight",
+          Bold, 13, RGBColor[0.7, 0, 0]],
+        Grid[rows, Alignment -> {Left, Top}, Frame -> All,
+          FrameStyle -> GrayLevel[0.82],
+          Background -> {{GrayLevel[0.95], White}, None}],
+        Style[
+          "This notebook is not cloud-publishable. Use " <>
+          "NBAccess`NBSetCloudPublishable[path, True] only for " <>
+          "notebooks that are safe to send to cloud APIs.",
+          Italic, 10, GrayLevel[0.45]]
+      }, Spacings -> 1, Alignment -> Left],
+      Background -> RGBColor[1, 0.97, 0.97],
+      FrameStyle -> RGBColor[0.7, 0, 0],
+      FrameMargins -> 12, RoundingRadius -> 5]
+  ];
+
+ClaudeCloudSendPreflightFailureCell[decision_Association] :=
+  If[Lookup[decision, "Decision", ""] === "Deny",
+    ClaudeCloudSendPreflightFailureCell[
+      iCloudSendPreflightFailure[decision]],
+    Style["Not a cloud-send Deny decision; nothing to display.",
+      Italic, GrayLevel[0.5]]];
+
+ClaudeCloudSendPreflightFailureCell[other_] :=
+  Style["Not a cloud-send preflight Failure: " <>
+    ToString[Short[other, 2], InputForm], Italic, GrayLevel[0.5]];
+
+
+(* ---- public: ClaudeCloudSendPreflightLogDataset ----------- *)
+
+Options[ClaudeCloudSendPreflightLogDataset] =
+  {"Columns" -> Automatic};
+
+ClaudeCloudSendPreflightLogDataset[opts:OptionsPattern[]] :=
+  Module[{log, cols, defaultCols, rows},
+    log = ClaudeCloudSendPreflightLog[];
+    If[!ListQ[log] || log === {}, Return[Dataset[{}]]];
+    defaultCols = {"Timestamp", "Provider", "Decision", "ReasonClass",
+      "DeniedPaths", "AllowedPaths", "PrivacyLevel"};
+    cols = OptionValue["Columns"];
+    rows = Which[
+      cols === All,                 log,
+      ListQ[cols] && cols =!= {},   Map[KeyTake[#, cols] &, log],
+      True,                         Map[KeyTake[#, defaultCols] &, log]
+    ];
+    Dataset[rows]
+  ];
+
+
+
+
 (* \:30bb\:30c3\:30b7\:30e7\:30f3\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:3092\:4e00\:6642\:7684\:306b\:4fdd\:6301\:3059\:308b\:30b0\:30ed\:30fc\:30d0\:30eb
    ClaudeQuery/ClaudeEval \:304c\:547c\:3070\:308c\:308b\:305f\:3073\:306b\:30bb\:30c3\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:304b\:3089\:8aad\:307f\:8fbc\:3080 *)
 $iCurrentSessionAttachments = {};
@@ -1696,9 +2445,9 @@ iNBFileCellContext[path_String, confResults_Association: <||>] :=
       "suggested: \"" <> outputHint <> "\").\n" <>
     "- DO NOT write Module[...], NBFileOpen, NBFileReadCells, TextTranslation,\n" <>
     "  URLRead, Import, Get, or any other code.\n" <>
-    "- ClaudeProcessFile handles PrivacyLevel routing internally:\n" <>
-    "    PrivacyLevel <= 0.5 \[RightArrow] $ClaudeModel  (cloud, " <> ToString[nPublic] <> " cells)\n" <>
-    "    PrivacyLevel >  0.5 \[RightArrow] $ClaudePrivateModel (local, " <> ToString[nConf] <> " cells)\n" <>
+    "- ClaudeProcessFile handles cell-level routing internally:\n" <>
+    "    public cells: " <> ToString[nPublic] <> "\n" <>
+    "    confidential/local cells: " <> ToString[nConf] <> "\n" <>
     "- Output ONLY the single ClaudeProcessFile[...] call, no explanation.\n" <>
     "==================================================="
   ];
@@ -3637,11 +4386,12 @@ iMakeBat[promptFile_String, outFile_String, imageDirs_List:{},
       Import[promptFile, "Text", CharacterEncoding -> "UTF-8"], ""];
     detectedNBPath = If[StringQ[promptText],
       iLLMGraphDetectFilePath[promptText], None];
-    autoExcludeRead = excludeRead || (
-      StringQ[detectedNBPath] &&
-      !iIsSafeDefaultDir[DirectoryName[detectedNBPath]] &&
-      !MemberQ[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}],
-        DirectoryName[detectedNBPath]]);
+    autoExcludeRead = excludeRead ||
+      iNBDetectedNBReadExcludedQ[detectedNBPath] || (
+        StringQ[detectedNBPath] &&
+        !iIsSafeDefaultDir[DirectoryName[detectedNBPath]] &&
+        !MemberQ[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}],
+          DirectoryName[detectedNBPath]]);
     autoExcludeDirs = DeleteDuplicates @ Join[
       excludeDirs,
       If[autoExcludeRead && StringQ[detectedNBPath] && detectedNBPath =!= None,
@@ -3707,11 +4457,12 @@ iMakeBatStreamJson[promptFile_String, outFile_String, imageDirs_List:{},
     detectedNBPath = If[StringQ[promptText],
       iLLMGraphDetectFilePath[promptText], None];
     (* \:691c\:51fa\:3057\:305f\:30d1\:30b9\:304c $ClaudeAccessibleDirs / $packageDirectory \:5916\:306a\:3089\:81ea\:52d5\:9664\:5916 *)
-    autoExcludeRead = excludeRead || (
-      StringQ[detectedNBPath] &&
-      !iIsSafeDefaultDir[DirectoryName[detectedNBPath]] &&
-      !MemberQ[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}],
-        DirectoryName[detectedNBPath]]);
+    autoExcludeRead = excludeRead ||
+      iNBDetectedNBReadExcludedQ[detectedNBPath] || (
+        StringQ[detectedNBPath] &&
+        !iIsSafeDefaultDir[DirectoryName[detectedNBPath]] &&
+        !MemberQ[If[ListQ[$ClaudeAccessibleDirs], $ClaudeAccessibleDirs, {}],
+          DirectoryName[detectedNBPath]]);
     autoExcludeDirs = DeleteDuplicates @ Join[
       excludeDirs,
       If[autoExcludeRead && StringQ[detectedNBPath] && detectedNBPath =!= None,
@@ -5774,8 +6525,12 @@ iResolvePowerShellExe[] := Module[{sysRoot, candidates},
    \:305d\:306e UTF-8 \:30d0\:30a4\:30c8\:5217\:304b\:3089\:76f4\:63a5\:30d1\:30fc\:30b9\:3059\:308b\:3002 *)
 iQueryAnthropicAPI[apiKey_String, model_String, prompt_String] :=
   Module[{url, psExe, tmpDir = None, promptFile, outFile, errFile, ps1File,
-          script, res, ba, errText, text, strm},
+          script, res, ba, errText, text, strm, preflight},
     url = "https://api.anthropic.com/v1/messages";
+
+    preflight = iCloudSendPreflightDecision["anthropic", prompt, url];
+    If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
+      Return[iCloudSendPreflightFailure[preflight]]];
 
     psExe = iResolvePowerShellExe[];
 
@@ -6261,8 +7016,12 @@ ClaudeWebFetch[url_String, instruction_String] :=
 
 iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
     customURL_String:"https://api.openai.com/v1/chat/completions"] :=
-  Module[{url, body, resp, bodyStr, json, choices, msg},
+  Module[{url, body, resp, bodyStr, json, choices, msg, preflight},
     url = customURL;
+    preflight = iCloudSendPreflightDecision["openai", prompt, url];
+    If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
+      Return[iCloudSendPreflightFailure[preflight]]];
+
     body = "{\"model\":\"" <> model <>
       "\",\"messages\":[{\"role\":\"user\",\"content\":" <>
       ExportString[prompt, "RawJSON"] <> "}]}";
@@ -6646,6 +7405,9 @@ iQueryWithFallback[prompt_String, useFallback_, nb_:None] :=
           " \:306b\:5207\:66ff\:3048\:307e\:3059\[Ellipsis]",
           RGBColor[0.8, 0.4, 0]];
         fbResponse = iQueryViaAPI[provider, model, prompt, customURL];
+        If[iCloudSendPreflightFailureQ[fbResponse],
+          iFallbackNotify[nb, iFailureDisplayText[fbResponse], Red];
+          Throw[fbResponse, "fallback"]];
         If[StringQ[fbResponse] && !StringStartsQ[fbResponse, "Error:"],
           iFallbackNotify[nb,
             "\[Checkmark] " <> provider <> "/" <> model <> " " <> iL["\:3067\:5fdc\:7b54\:3092\:53d6\:5f97\:3057\:307e\:3057\:305f\:3002", " response obtained."],
@@ -6677,6 +7439,9 @@ iQueryFallbackOnly[prompt_String, nb_NotebookObject] :=
           {"\[RightArrow] Claude Code \:5229\:7528\:4e0d\:53ef\:3002" <> provider <> "/" <> model <>
            " \:306b\:5207\:66ff\:3048\:307e\:3059\[Ellipsis]", RGBColor[0.8, 0.4, 0]}];
         fbResponse = iQueryViaAPI[provider, model, prompt, customURL];
+        If[iCloudSendPreflightFailureQ[fbResponse],
+          AppendTo[$iFallbackLog, {iFailureDisplayText[fbResponse], Red}];
+          Throw[fbResponse, "fallback"]];
         If[StringQ[fbResponse] && !StringStartsQ[fbResponse, "Error:"],
           AppendTo[$iFallbackLog,
             {"\[Checkmark] " <> provider <> "/" <> model <> " " <> iL["\:3067\:5fdc\:7b54\:3092\:53d6\:5f97\:3057\:307e\:3057\:305f\:3002", " response obtained."],
@@ -6995,6 +7760,7 @@ iFallbackDeleteProgress[nb_NotebookObject, key_String] := (
 iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
     modelIdx_Integer:1, jobId_String:"", timeout_:Automatic, mediaFiles_List:{}] :=
   Module[{provider, model, customURL, apiKey, prepared, proc, ts, startTime, progKey, useJob,
+          preflight, preflightURL,
           resolvedTimeout = Replace[timeout, Automatic -> $iFallbackTimeout]},
     useJob = (jobId =!= "");
     (* \:6700\:521d\:306e\:547c\:3073\:51fa\:3057\:6642\:306b\:30b0\:30ed\:30fc\:30d0\:30eb\:72b6\:614b\:3092\:521d\:671f\:5316 *)
@@ -7035,6 +7801,29 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
         iClaudeQueryAsyncWithProgress[prompt, callback, nb, mediaFiles, jobId, {}]];
       Return[]
     ];
+
+    (* Phase 4.12: async fallback PS path must also honor cloud-send preflight. *)
+    preflightURL = Which[
+      ToLowerCase[provider] === "anthropic" && customURL === "",
+        "https://api.anthropic.com/v1/messages",
+      ToLowerCase[provider] === "openai" && customURL === "",
+        "https://api.openai.com/v1/chat/completions",
+      ToLowerCase[provider] === "openai" && customURL =!= "",
+        iEnsureChatCompletionsPath[customURL],
+      customURL =!= "",
+        customURL,
+      True,
+        Automatic];
+    preflight = iCloudSendPreflightDecision[
+      ToLowerCase[provider], prompt, preflightURL];
+    If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
+      Module[{failure = iCloudSendPreflightFailure[preflight], queue},
+        $iFallbackDone = True;
+        $iFallbackLastError = iFailureDisplayText[failure];
+        AppendTo[$iFallbackLog, {$iFallbackLastError, Red}];
+        queue = callback[failure];
+        If[ListQ[queue], Scan[Function[thk, Quiet[thk[]]], queue]];
+        Return[]]];
 
     (* API \:30ad\:30fc\:53d6\:5f97: lmstudio \:306f NBAccess \:7d4c\:7531\:3067\:89e3\:6c7a (Auth ON \:5bfe\:5fdc) *)
     If[ToLowerCase[provider] === "lmstudio",
@@ -7589,7 +8378,7 @@ Options[ClaudeQuerySync] = {
    \:30e2\:30c7\:30eb\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0\:ff08\:552f\:4e00\:306e\:30b3\:30a2\:ff09:
      Model \:304c\:660e\:793a\:6307\:5b9a \[RightArrow] \:305d\:306e\:30e2\:30c7\:30eb\:3092 API \:7d4c\:7531\:3067\:4f7f\:7528
      Model === Automatic:
-       PrivacyLevel <= 0.5 \[RightArrow] Claude Code CLI (+ Fallback \:3067 API)
+       PrivacyLevel < 0.5 \[RightArrow] Claude Code CLI (+ Fallback \:3067 API)
        PrivacyLevel >  0.5 \[RightArrow] $ClaudePrivateModel \:3092\:81ea\:52d5\:4f7f\:7528
    \:623b\:308a\:5024: \:5fdc\:7b54\:6587\:5b57\:5217\:3002 *)
 ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
@@ -7762,7 +8551,8 @@ ClaudeQueryBg[prompt_String, opts:OptionsPattern[]] :=
        (Imai \:5148\:751f\:306e privacy boundary \:30dd\:30ea\:30b7\:30fc\:9075\:62e0)\:3002 *)
 iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
   Module[{provider, model, apiKey, url, bodyBytes, req, timeout,
-          accessLevel, canAccess, providerLower, targetNb, nbAllowed},
+          accessLevel, canAccess, providerLower, targetNb, nbAllowed,
+          preflight, preflightURL},
     timeout = timeoutSpec;
     If[timeout === Automatic || !NumericQ[timeout], timeout = $ClaudeTimeout];
     If[!NumericQ[timeout], timeout = 1200];
@@ -7793,6 +8583,20 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
       True,
         "claude-sonnet-4-6"
     ];
+
+    (* Phase 4.7: external cloud API preflight before key lookup / network send. *)
+    preflightURL = Which[
+      ListQ[modelSpec] && Length[modelSpec] >= 3 && StringQ[modelSpec[[3]]],
+        modelSpec[[3]],
+      providerLower === "openai",
+        "https://api.openai.com/v1/chat/completions",
+      providerLower === "anthropic",
+        "https://api.anthropic.com/v1/messages",
+      True,
+        Automatic];
+    preflight = iCloudSendPreflightDecision[providerLower, prompt, preflightURL];
+    If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
+      Return[iCloudSendPreflightFailure[preflight]]];
 
     (* \[HorizontalLine]\[HorizontalLine] NBAccess \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:8ab2\:91d1 API \:8a31\:53ef\:30c1\:30a7\:30c3\:30af (Phase 28 Paid \:30d5\:30e9\:30b0\:30d9\:30fc\:30b9) \[HorizontalLine]\[HorizontalLine]
        \:8a2d\:8a08\:610f\:56f3:
@@ -7967,7 +8771,8 @@ ClaudeQueryBg[items_List, opts:OptionsPattern[]] :=
 iClaudeQueryBgAPIMultimodal[items_List, modelSpec_, timeoutSpec_] :=
   Module[{provider, providerLower, model, apiKey, url,
           contentBlocks = {}, bodyBytes, req, timeout,
-          tmpDir, imgIdx = 0, accessLevel, canAccess, targetNb, nbAllowed},
+          tmpDir, imgIdx = 0, accessLevel, canAccess, targetNb, nbAllowed,
+          preflight},
     timeout = timeoutSpec;
     If[timeout === Automatic || !NumericQ[timeout], timeout = $ClaudeTimeout];
     If[!NumericQ[timeout], timeout = 1200];
@@ -7980,10 +8785,30 @@ iClaudeQueryBgAPIMultimodal[items_List, modelSpec_, timeoutSpec_] :=
     ];
     providerLower = ToLowerCase[provider];
 
+    (* \[HorizontalLine]\[HorizontalLine] Phase 35 fix (2026-05-18): provider == "claudecode" \:306f CLI \:7d4c\:8def\:3078\:30ea\:30c0\:30a4\:30ec\:30af\:30c8 \[HorizontalLine]\[HorizontalLine]
+       claudecode CLI (Anthropic Pro/Max \:30b5\:30d6\:30b9\:30af\:30ea\:30d7\:30b7\:30e7\:30f3) \:306f Claude Code \:30b7\:30b9\:30c6\:30e0\:7d4c\:7531\:3067
+       \:30d7\:30ed\:30f3\:30d7\:30c8\:5185\:306e\:753b\:50cf\:30d5\:30a1\:30a4\:30eb\:53c2\:7167\:3092\:81ea\:52d5\:8a8d\:8b58\:3057 vision \:51e6\:7406\:3059\:308b\:3002
+       iNormalizePrompt[items_List] \:304c\:65e2\:306b\:6b21\:306e\:51e6\:7406\:3092\:884c\:3046:
+         1. Mathematica Image \:30aa\:30d6\:30b8\:30a7\:30af\:30c8\:3092 tmp dir \:306b PNG \:3068\:3057\:3066\:66f8\:304d\:51fa\:3057
+         2. prompt text \:306b\:300c\:6dfb\:4ed8\:30d5\:30a1\:30a4\:30eb: <path>\:300d\:3068\:3057\:3066\:57cb\:3081\:8fbc\:307f
+         3. imageDirs \:3092 --add-dir \:7d4c\:7531\:3067 CLI \:306b\:6e21\:3059
+       \:3088\:3063\:3066\:3001API \:30ad\:30fc\:6709\:7121\:306b\:95a2\:308f\:3089\:305a Claude Code \:306e Pro/Max \:7531\:6765\:306e API \:30af\:30ec\:30b8\:30c3\:30c8\:3067
+       OCR / image \:8cea\:554f\:5fdc\:7b54\:304c\:53ef\:80fd\:3002 *)
+    If[providerLower === "claudecode",
+      Return[iClaudeQueryRawNonBlocking[items, timeoutSpec]]];
+
+    (* Phase 4.7: external cloud API preflight for multimodal payloads. *)
+    preflight = iCloudSendPreflightDecision[
+      providerLower, items,
+      If[providerLower === "anthropic",
+        "https://api.anthropic.com/v1/messages", Automatic]];
+    If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
+      Return[iCloudSendPreflightFailure[preflight]]];
+
     (* multimodal \:306f\:73fe\:6642\:70b9 Anthropic \:306e\:307f\:5bfe\:5fdc *)
     If[providerLower =!= "anthropic",
       Return[
-        "Error: multimodal API \:306f\:73fe\:5728 Anthropic \:306e\:307f\:5bfe\:5fdc\:3057\:3066\:3044\:307e\:3059\:3002\n" <>
+        "Error: multimodal API \:306f\:73fe\:5728 Anthropic \:307e\:305f\:306f Claude Code CLI (provider 'claudecode') \:306e\:307f\:5bfe\:5fdc\:3057\:3066\:3044\:307e\:3059\:3002\n" <>
         "\:8a73\:7d30: provider '" <> provider <> "' \:306e multimodal API \:5f62\:5f0f (\:4f8b: OpenAI \:306f image_url \:65b9\:5f0f) \:306f\n" <>
         "iClaudeQueryBgAPIMultimodal \:3067\:306f\:30b5\:30dd\:30fc\:30c8\:3055\:308c\:3066\:3044\:307e\:305b\:3093\:3002"
       ]];
@@ -8482,6 +9307,17 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
                 "response" -> response,
                 "cellCountAfter" -> NBAccess`NBCellCount[nb2]|>];
               Return[{}]];
+            If[FailureQ[response],
+              Module[{msg = iFailureDisplayText[response]},
+                NBAccess`NBWritePrintNotice[nb2, msg, RGBColor[0.8, 0, 0]];
+                NBAccess`NBJobResetSlotWritten[jid, 1];
+                $iJobActiveNb = None;
+                NBAccess`NBEndJob[jid];
+                iSessionUpdateLast[nb2, stag2, <|
+                  "response" -> response,
+                  "responseText" -> msg,
+                  "cellCountAfter" -> NBAccess`NBCellCount[nb2]|>];
+                Return[{}]]];
             (* \:6b63\:5e38\:5fdc\:7b54: thunk \:30ea\:30b9\:30c8\:3092\:751f\:6210\:3057 writing \:30d5\:30a7\:30fc\:30ba\:306b\:59d4\:8b72 *)
             cellThunks = If[StringQ[response],
               iWriteQueryResponseQueued[nb2, response, ae],
@@ -9453,12 +10289,16 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     Module[{nbPath2, nbSpec2, nbRoutes2, nbExcludeRead, nbExcludeDirs},
       nbPath2       = iLLMGraphDetectFilePath[task];
       nbSpec2       = If[StringQ[nbPath2] && FileExistsQ[nbPath2],
-        Quiet @ NBAccess`NBFileSpec[nbPath2], None];
+        Quiet @ iNBFileSpecWithProjections[nbPath2], None];
       nbRoutes2     = If[AssociationQ[nbSpec2],
-        NBAccess`NBPrivacyLevelToRoutes[nbSpec2["PrivacyLevel"]],
-        {"cloud"}];
-      (* .nb \:30d5\:30a1\:30a4\:30eb\:304c\:3042\:308b\:5834\:5408\:306f\:5e38\:306b Read \:7981\:6b62 (cell data \:306f\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:6ce8\:5165\:6e08\:307f) *)
-      nbExcludeRead = StringQ[nbPath2] && nbPath2 =!= None;
+        iNBFileRoutesFromSpec[nbSpec2],
+        {"local"}];
+      (* Phase 4.4: cloud send permission for .nb is decided by NBAccess projection,
+         not by PrivacyLevel < 0.5.  If CloudSendAllowed is False, prohibit CLI Read
+         and remove the containing directory from --add-dir. *)
+      nbExcludeRead = StringQ[nbPath2] && nbPath2 =!= None &&
+        ToLowerCase[FileExtension[nbPath2]] === "nb" &&
+        !iNBFileCloudSendAllowedQ[nbSpec2];
       nbExcludeDirs = If[nbExcludeRead, {DirectoryName[nbPath2]}, {}];
 
     (* \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:3092\:66f8\:304d\:8fbc\:307f\:30ad\:30e5\:30fc\:65b9\:5f0f\:306b\:5909\:63db:
@@ -9830,8 +10670,358 @@ iResolveWebFetch[task_String, Automatic] :=
    (\:30b9\:30b1\:30b8\:30e5\:30fc\:30ea\:30f3\:30b0\:4ed8\:304d\:306e\:5b9f\:884c\:306f\:5f93\:6765\:30d1\:30b9\:306e\:6319\:52d5\:3092\:7dad\:6301) *)
 $iClaudeEvalNotDispatched = Unique["$iClaudeEvalNotDispatched"];
 
+
+(* ============================================================
+   Stage 9 Phase 2 (P1) Step 4: \:81ea\:7136\:8a00\:8a9e\:30eb\:30fc\:30bf\:30fc
+   ------------------------------------------------------------
+   ClaudeEval["\:4eca\:65e5\:304b\:3089\:4e00\:9031\:9593\:306e\:4e88\:5b9a\:3092"] \:7b49\:3092 SourceVault \:306e
+   \:9ad8\:30ec\:30d9\:30eb API \:306b\:30c7\:30a3\:30b9\:30d1\:30c3\:30c1\:3059\:308b\:8efd\:91cf\:30eb\:30fc\:30bf\:30fc\:3002
+
+   - LLM \:5468\:308a\:3092\:4f7f\:3046\:524d\:306b\:30b7\:30f3\:30d7\:30eb\:306a\:6b63\:898f\:8868\:73fe\:30de\:30c3\:30c1\:3067\:5224\:5b9a
+   - \:30de\:30c3\:30c1\:3057\:305f\:3089\:5373\:5ea7\:306b\:5b9f\:884c\:3001\:7d50\:679c\:3092\:8fd4\:3059
+   - \:30de\:30c3\:30c1\:3057\:306a\:3051\:308c\:3070\:5f93\:6765\:306e dispatch \[Rule] Single \:30d1\:30b9\:3078\:6d41\:3059
+   - $ClaudeEvalNaturalDispatch = False \:3067\:5168\:7121\:52b9\:5316\:53ef
+   ============================================================ *)
+
+If[!ValueQ[$ClaudeEvalNaturalDispatch], $ClaudeEvalNaturalDispatch = True];
+
+$ClaudeEvalNaturalDispatch::usage =
+  "$ClaudeEvalNaturalDispatch \:306f Step 4 \:8ffd\:52a0\:306e\:81ea\:7136\:8a00\:8a9e\:30eb\:30fc\:30bf\:30fc\:306e\:6709\:52b9\:30d5\:30e9\:30b0\:3002\n" <>
+  "True (\:65e2\:5b9a) \:306e\:3068\:304d\:3001ClaudeEval[\"...\"] \:306e\:30bf\:30b9\:30af\:6587\:5b57\:5217\:304c\:3001\n" <>
+  "\:300c\:4eca\:65e5\:304b\:3089\:30fb\:30fb\:306e\:4e88\:5b9a\:300d\:300c\:6982\:8981\:3092\:66f4\:65b0\:300d\:7b49\:306e\:5b9a\:578b\:30d1\:30bf\:30fc\:30f3\:306b\:30de\:30c3\:30c1\:3057\:305f\:3089\:3001\n" <>
+  "LLM \:3092\:7d4c\:7531\:305b\:305a SourceVault \:306e\:9ad8\:30ec\:30d9\:30eb API \:3092\:76f4\:63a5\:547c\:3076\:3002\n" <>
+  "False \:306b\:3059\:308b\:3068\:30eb\:30fc\:30bf\:30fc\:3092\:5b8c\:5168\:30b9\:30ad\:30c3\:30d7\:3057\:3001\:5168\:30bf\:30b9\:30af\:3092\:5f93\:6765\:306e LLM \:7d4c\:8def\:306b\:6d41\:3059\:3002";
+
+$ClaudeEvalNaturalVerbose::usage =
+  "$ClaudeEvalNaturalVerbose \:3092 True \:306b\:3059\:308b\:3068\:81ea\:7136\:8a00\:8a9e\:30eb\:30fc\:30bf\:30fc\:306e\:30de\:30c3\:30c1\:30fb\:5b9f\:884c\:30b5\:30de\:30ea\:3092\:8868\:793a\:3002\n" <>
+  "\:65e2\:5b9a: False\:3002";
+
+If[!ValueQ[$ClaudeEvalNaturalVerbose], $ClaudeEvalNaturalVerbose = False];
+
+(* ----- Order 2: SourceVault PromptRouter dispatch flags -----
+   Declared with FULLY-QUALIFIED names ClaudeCode`$... so that the
+   symbols are created in the ClaudeCode` context regardless of how
+   $ContextPath is set inside this Private section. iClaudeEvalTryDispatch
+   reads them back with the same fully-qualified names. *)
+If[!ValueQ[ClaudeCode`$ClaudeEvalPromptRouterDispatch],
+  ClaudeCode`$ClaudeEvalPromptRouterDispatch = Automatic];
+
+ClaudeCode`$ClaudeEvalPromptRouterDispatch::usage =
+  "$ClaudeEvalPromptRouterDispatch controls whether ClaudeEval routes " <>
+  "string tasks through the SourceVault PromptRouter before the legacy " <>
+  "natural dispatch. Automatic (default): defer to " <>
+  "SourceVaultPromptRouterActiveQ[\"ClaudeEval\"], which is True once " <>
+  "ClaudeOrchestrator is loaded. True: same as Automatic in Order 2 " <>
+  "(the activity gate still applies). False: skip the PromptRouter " <>
+  "entirely and use only the legacy natural dispatch.";
+
+If[!ValueQ[ClaudeCode`$ClaudeEvalPromptRouterPreemptsNatural],
+  ClaudeCode`$ClaudeEvalPromptRouterPreemptsNatural = True];
+
+ClaudeCode`$ClaudeEvalPromptRouterPreemptsNatural::usage =
+  "$ClaudeEvalPromptRouterPreemptsNatural controls ordering. True " <>
+  "(default): the PromptRouter runs before the legacy natural dispatch " <>
+  "so PromptRouter parameter extraction is not bypassed (spec 5.3 / " <>
+  "24.3); the legacy natural dispatch fires only when the PromptRouter " <>
+  "returns NotDispatched. False: the legacy natural dispatch runs " <>
+  "first; a migration-period safety valve.";
+
+(* \:6f22\:6570\:5b57 \[Rule] \:6574\:6570 *)
+iClaudeEvalKanjiToInt[s_String] :=
+  Module[{m},
+    m = <|"\:4e00" -> 1, "\:4e8c" -> 2, "\:4e09" -> 3, "\:56db" -> 4,
+          "\:4e94" -> 5, "\:516d" -> 6, "\:4e03" -> 7, "\:516b" -> 8,
+          "\:4e5d" -> 9, "\:5341" -> 10, "\:767e" -> 100|>;
+    Quiet @ Check[
+      Which[
+        StringMatchQ[s, DigitCharacter ..], ToExpression[s],
+        StringLength[s] === 1 && KeyExistsQ[m, s], m[s],
+        s === "\:4e00\:9031\:9593", 7,    (* \:300c\:4e00\:9031\:9593\:300d *)
+        s === "\:4e8c\:9031\:9593", 14,
+        s === "\:4e09\:9031\:9593", 21,
+        True, 7],
+      7]
+  ];
+
+(* \:300c\:4eca\:65e5\:304b\:3089 N \:65e5\:30fbN \:9031\:9593\:300d\:3092\:62bd\:51fa\:3057\:65e5\:6570\:306b\:5909\:63db\:3002\:5931\:6557\:6642\:306f None\:3002
+   Step 4 Hotfix 1: \\x{...} \:306e Unicode \:7bc4\:56f2\:6307\:5b9a\:306f\:4e0d\:5b89\:5b9a\:306a\:306e\:3067\:3001
+   \:6570\:5b57\:62bd\:51fa\:306f DigitCharacter \:30d9\:30fc\:30b9\:3001\:6f22\:6570\:5b57\:306f\:500b\:5225\:6587\:5b57\:30af\:30e9\:30b9\:3067\:51e6\:7406\:3002 *)
+iClaudeEvalExtractPeriod[task_String] :=
+  Module[{digitMatch, kanjiMatch, n, unit},
+    (* (1) \:30a2\:30e9\:30d3\:30a2\:6570\:5b57 + \:5358\:4f4d *)
+    digitMatch = Quiet @ Check[
+      StringCases[task,
+        d:(DigitCharacter ..) ~~ Whitespace... ~~
+          u:("\:9031\:9593" | "\:9031" | "\:65e5" | "days" | "day" |
+             "weeks" | "week") :> {d, u},
+        1],
+      {}];
+    If[ListQ[digitMatch] && Length[digitMatch] > 0,
+      {n, unit} = First[digitMatch];
+      n = iClaudeEvalKanjiToInt[n];
+      Return[If[
+        StringContainsQ[unit, "\:9031"] ||
+          StringContainsQ[unit, "week"],
+        n * 7, n]]];
+
+    (* (2) \:6f22\:6570\:5b57 + \:5358\:4f4d (\:300c\:4e00\:9031\:9593\:300d\:300c\:4e09\:65e5\:300d\:7b49) *)
+    kanjiMatch = Quiet @ Check[
+      StringCases[task,
+        k:("\:4e00" | "\:4e8c" | "\:4e09" | "\:56db" | "\:4e94" |
+           "\:516d" | "\:4e03" | "\:516b" | "\:4e5d" | "\:5341") ~~
+          u:("\:9031\:9593" | "\:9031" | "\:65e5") :> {k, u},
+        1],
+      {}];
+    If[ListQ[kanjiMatch] && Length[kanjiMatch] > 0,
+      {n, unit} = First[kanjiMatch];
+      n = iClaudeEvalKanjiToInt[n];
+      Return[If[StringContainsQ[unit, "\:9031"], n * 7, n]]];
+
+    None
+  ];
+
+(* \:30b9\:30b3\:30fc\:30d7\:3092\:30bf\:30b9\:30af\:6587\:5b57\:5217\:304b\:3089\:63a8\:5b9a\:3002\:30c7\:30d5\:30a9\:30eb\:30c8\:306f Automatic ($onWork) \:3002 *)
+iClaudeEvalExtractScope[task_String] :=
+  Module[{},
+    Which[
+      StringContainsQ[task, "$onWork"], Quiet @ Symbol["Global`$onWork"],
+      StringContainsQ[task, "$packageDirectory"],
+        Quiet @ Symbol["Global`$packageDirectory"],
+      True, Automatic
+    ]
+  ];
+
+(* \:30d1\:30bf\:30fc\:30f3\:8f9e\:66f8\:3002\:9806\:756a\:306b\:8a66\:884c\:3002
+   Step 4 Hotfix 1: RegularExpression \:3092\:3084\:3081\:3001StringExpression \:306e Alternatives \:3067\:8a18\:8ff0\:3002
+   StringContainsQ \:304c\:90e8\:5206\:30de\:30c3\:30c1\:3092\:5224\:5b9a\:3059\:308b\:306e\:3067\:30ad\:30fc\:30ef\:30fc\:30c9\:5217\:6319\:3067\:5341\:5206\:3002 *)
+$iClaudeEvalNaturalPatterns := {
+  (* \:300c\:6982\:8981\:3092\:66f4\:65b0\:300d\:300c\:5168\:90e8\:8981\:7d04\:300d\:7cfb (\:512a\:5148: schedule \:3088\:308a\:5148\:306b\:5224\:5b9a) *)
+  ("\:6982\:8981\:3092\:66f4\:65b0" | "\:6982\:8981\:306e\:66f4\:65b0" |
+   "\:8981\:7d04\:3092\:66f4\:65b0" | "\:8981\:7d04\:306e\:66f4\:65b0" |
+   "\:6982\:8981\:3092\:518d\:751f\:6210" | "\:8981\:7d04\:3092\:518d\:751f\:6210" |
+   "\:6982\:8981\:3092\:66f4\:65b0\:3057\:3066" | "\:8981\:7d04\:3057\:76f4" |
+   "refresh summary" | "refresh summaries" |
+   "summarize all" | "regenerate summar") -> "refresh_summary",
+
+  (* \:300c\:4eca\:65e5\:304b\:3089\:30fb\:30fb\:306e\:4e88\:5b9a\:300d\:7cfb *)
+  ("\:4e88\:5b9a" | "\:30b9\:30b1\:30b8\:30e5\:30fc\:30eb" | "\:30bf\:30b9\:30af" |
+   "upcoming" | "schedule") -> "schedule"
+};
+
+(* \:5b9f\:884c\:30cf\:30f3\:30c9\:30e9\:3002\:5b8c\:5168\:306a\:30c7\:30a3\:30b9\:30d1\:30c3\:30c1\:7d50\:679c (\:5024) \:307e\:305f\:306f $iClaudeEvalNotDispatched \:3092\:8fd4\:3059\:3002 *)
+iClaudeEvalNaturalAct[action_String, task_String, optsList_List] :=
+  Module[{verbose = TrueQ[$ClaudeEvalNaturalVerbose],
+          periodDays, scope, result},
+    Switch[action,
+      "schedule",
+        periodDays = iClaudeEvalExtractPeriod[task];
+        If[periodDays === None, periodDays = 7];
+        scope = iClaudeEvalExtractScope[task];
+        If[verbose,
+          Print[Style[
+            "[Natural Dispatch] schedule: Scope=" <> ToString[scope] <>
+            ", Period=" <> ToString[periodDays] <> " Days",
+            Italic, RGBColor[0.2, 0.5, 0.7]]]];
+        result = Quiet @ Check[
+          Symbol["SourceVault`SourceVaultUpcomingSchedule"][
+            "Scope" -> scope,
+            "Period" -> Quantity[periodDays, "Days"],
+            "IncludeOverdue" -> True,
+            "Refresh" -> "Never",
+            "FallbackToCloud" -> "Deny"],
+          $Failed];
+        If[result === $Failed, Return[$iClaudeEvalNotDispatched]];
+        result,
+      "refresh_summary",
+        scope = iClaudeEvalExtractScope[task];
+        If[verbose,
+          Print[Style[
+            "[Natural Dispatch] refresh_summary: Scope=" <> ToString[scope],
+            Italic, RGBColor[0.2, 0.5, 0.7]]]];
+        result = Quiet @ Check[
+          Symbol["SourceVault`SourceVaultRefreshAllSummaries"][
+            "Scope" -> scope,
+            "Recursive" -> True,
+            "FallbackToCloud" -> "Deny"],
+          $Failed];
+        If[result === $Failed, Return[$iClaudeEvalNotDispatched]];
+        result,
+      _,
+        $iClaudeEvalNotDispatched
+    ]
+  ];
+
+(* \:30bf\:30b9\:30af\:6587\:5b57\:5217\:3092\:30d1\:30bf\:30fc\:30f3\:8f9e\:66f8\:3068\:7167\:5408\:3001\:30de\:30c3\:30c1\:3057\:305f\:3089 act \:3092\:547c\:3076\:3002 *)
+iClaudeEvalNaturalMatch[task_String, optsList_List] :=
+  Module[{verbose = TrueQ[$ClaudeEvalNaturalVerbose], action, matched},
+    If[!StringQ[task] || StringLength[task] === 0,
+      Return[$iClaudeEvalNotDispatched]];
+
+    (* Step 4 Hotfix 1: \:65e7\:7248\:306f StringMatchQ[task, ___ ~~ pat ~~ ___] \:3060\:3063\:305f\:304c\:3001
+       RegularExpression \:3092 Blank \:30d1\:30bf\:30fc\:30f3\:3067\:6319\:3080\:3068 Mathematica \:304c\:6b63\:3057\:304f
+       \:89e3\:91c8\:3067\:304d\:305a\:6975\:7aef\:306b\:9045\:304f\:306a\:308b\:3002StringContainsQ \:306f RegularExpression \:3092
+       \:305d\:306e\:307e\:307e\:53d7\:3051\:53d6\:308a\:3001\:90e8\:5206\:30de\:30c3\:30c1\:3092\:52b9\:7387\:7684\:306b\:5224\:5b9a\:3059\:308b\:3002 *)
+    matched = SelectFirst[$iClaudeEvalNaturalPatterns,
+      Quiet @ Check[
+        StringContainsQ[task, First[#]],
+        False] &,
+      None];
+
+    If[matched === None, Return[$iClaudeEvalNotDispatched]];
+    action = Last[matched];
+
+    If[verbose,
+      Print[Style[
+        "[Natural Dispatch] match: \"" <>
+        StringTake[task, UpTo[50]] <> "\" \[RightArrow] " <> action,
+        Italic, GrayLevel[0.4]]]];
+
+    iClaudeEvalNaturalAct[action, task, optsList]
+  ];
+iClaudeEvalNaturalMatch[_, _] := $iClaudeEvalNotDispatched;
+
+(* ----- Order 2: PromptRouter proposal bridge (spec v11 5.2-5.5).
+   claudecode has NO hard dependency on SourceVault (rule 11); the call
+   goes through Names / Symbol only.
+
+   Spec 5.2 forbids ClaudeEval from returning the PromptRouter's
+   internal diagnostic Association, or an already-evaluated Grid /
+   Dataset built by the router. What ClaudeEval must yield is the
+   evaluated result of a proposed EXPRESSION whose head the Runtime
+   has validated.
+
+   The bridge therefore has two parts:
+
+   - iClaudeRuntimeSubmitProposal takes a PromptRouteProposal
+     Association, extracts its held ProposedExpression, validates the
+     expression's head against a ReadOnly allowlist, and only then
+     releases and evaluates it. A held expression whose head is not
+     allowlisted is rejected (-> NotDispatched) rather than run.
+   - iClaudeEvalTryPromptRouter weak-calls SourceVaultProposePromptRoute
+     (NOT SourceVaultExecutePromptRoute, whose PromptRouteExecution
+     diagnostic must never reach ClaudeEval) and pipes the proposal
+     through the submitter.
+
+   Returns $iClaudeEvalNotDispatched whenever the router is absent,
+   inactive, errors, declines, or proposes an off-allowlist head, so
+   the legacy dispatch can take over. ----- *)
+
+(* heads ClaudeEval may release-and-evaluate from a PromptRouter
+   proposal. Every entry is a ReadOnly SourceVault callable (or the
+   built-in Select used by the spec 5.4.2 alternative form). The
+   list is intentionally small and explicit. *)
+$iClaudeEvalProposalHeadAllowlist = {
+  "SourceVault`SourceVaultUpcomingSchedule",
+  "SourceVault`SourceVaultFormatScheduleRecords",
+  "SourceVault`SourceVaultTabularPredicate",
+  "SourceVault`SourceVaultFindNotebooks",
+  "System`Select"
+};
+
+(* the fully-qualified head name of a held expression, or $Failed *)
+iClaudeEvalHeldExprHeadName[held_] :=
+  Module[{wrapped},
+    If[!MatchQ[held, _HoldComplete] ||
+       Length[held] =!= 1,
+      Return[$Failed]];
+    (* the head of the held expression, taken WITHOUT evaluating
+       the expression: position {1, 0} inside HoldComplete is
+       that head. Extract with a HoldComplete wrapper keeps the
+       head symbol inert, so the proposed expression never runs
+       while we inspect it. *)
+    wrapped = Extract[held, {1, 0}, HoldComplete];
+    (* wrapped is HoldComplete[headSymbol]. Read the symbol's
+       context and name from inside the wrapper, so the symbol
+       is never evaluated even if it happens to carry a value. *)
+    If[MatchQ[wrapped, HoldComplete[_Symbol]],
+      Replace[wrapped,
+        HoldComplete[s_Symbol] :>
+          Context[Unevaluated[s]] <>
+          SymbolName[Unevaluated[s]]],
+      $Failed]
+  ];
+
+(* validate + release + evaluate a PromptRouteProposal *)
+iClaudeRuntimeSubmitProposal[proposal_] :=
+  Module[{held, headName},
+    If[!AssociationQ[proposal],
+      Return[$iClaudeEvalNotDispatched]];
+    (* the proposer must have produced a proposal, not a decline *)
+    If[Lookup[proposal, "Status", ""] =!= "Proposed",
+      Return[$iClaudeEvalNotDispatched]];
+    held = Lookup[proposal, "ProposedExpression", $Failed];
+    If[!MatchQ[held, _HoldComplete],
+      Return[$iClaudeEvalNotDispatched]];
+    (* head-based validation: ClaudeEval's core contract *)
+    headName = iClaudeEvalHeldExprHeadName[held];
+    If[!StringQ[headName] ||
+       !MemberQ[$iClaudeEvalProposalHeadAllowlist, headName],
+      Return[$iClaudeEvalNotDispatched]];
+    (* head is allowlisted ReadOnly -> release and evaluate.
+       The evaluated result (e.g. the decorated schedule Grid)
+       is what ClaudeEval returns. *)
+    Quiet @ Check[
+      ReleaseHold[held],
+      $iClaudeEvalNotDispatched]
+  ];
+iClaudeRuntimeSubmitProposal[___] := $iClaudeEvalNotDispatched;
+
+iClaudeEvalTryPromptRouter[task_String, optsList_List] :=
+  Module[{activeName, proposeName, activeQ, proposal},
+    activeName  = "SourceVault`SourceVaultPromptRouterActiveQ";
+    proposeName = "SourceVault`SourceVaultProposePromptRoute";
+    (* spec 5.5: weak call only; require the propose API *)
+    If[Length[Names[proposeName]] === 0,
+      Return[$iClaudeEvalNotDispatched]];
+    (* activity gate (ClaudeOrchestrator loaded, etc.) *)
+    If[Length[Names[activeName]] > 0,
+      activeQ = Quiet @ Check[
+        TrueQ[Symbol[activeName]["ClaudeEval"]], False];
+      If[!TrueQ[activeQ],
+        Return[$iClaudeEvalNotDispatched]]];
+    (* obtain an unevaluated proposal and submit it *)
+    proposal = Quiet @ Check[
+      Symbol[proposeName][task, "Caller" -> "ClaudeEval"],
+      $Failed];
+    If[proposal === $Failed,
+      Return[$iClaudeEvalNotDispatched]];
+    iClaudeRuntimeSubmitProposal[proposal]
+  ];
+iClaudeEvalTryPromptRouter[_, _] := $iClaudeEvalNotDispatched;
+
 iClaudeEvalTryDispatch[task_, optsList_List] :=
-  Module[{mode, hook, stVal, riVal, stIsFuture, result, verbose},
+  Module[{mode, hook, stVal, riVal, stIsFuture, result, verbose,
+          naturalResult, prRouterResult, prDispatch, prPreempts},
+    (* Order 2: SourceVault PromptRouter dispatch.
+       prDispatch =!= False means the PromptRouter path is considered;
+       the final activity gate (ClaudeOrchestrator loaded, etc.) lives
+       inside iClaudeEvalTryPromptRouter via SourceVaultPromptRouterActiveQ.
+       prPreempts -> True (default): the PromptRouter runs BEFORE the
+       legacy natural dispatch (spec 5.3 / 24.3). *)
+    prDispatch = ClaudeCode`$ClaudeEvalPromptRouterDispatch;
+    prPreempts = TrueQ[ClaudeCode`$ClaudeEvalPromptRouterPreemptsNatural];
+
+    If[StringQ[task] && prDispatch =!= False && prPreempts,
+      prRouterResult = iClaudeEvalTryPromptRouter[task, optsList];
+      If[prRouterResult =!= $iClaudeEvalNotDispatched,
+        Return[prRouterResult]]];
+
+    (* Step 4: legacy natural dispatch (migration-period fallback).
+       When the PromptRouter is active and preempting it has already
+       run above; this fires only when the PromptRouter returned
+       NotDispatched. *)
+    If[TrueQ[ClaudeCode`$ClaudeEvalNaturalDispatch] && StringQ[task],
+      naturalResult = iClaudeEvalNaturalMatch[task, optsList];
+      If[naturalResult =!= $iClaudeEvalNotDispatched,
+        Return[naturalResult]]];
+
+    (* Order 2: if the PromptRouter does NOT preempt, try it AFTER
+       the legacy natural dispatch. *)
+    If[StringQ[task] && prDispatch =!= False && !prPreempts,
+      prRouterResult = iClaudeEvalTryPromptRouter[task, optsList];
+      If[prRouterResult =!= $iClaudeEvalNotDispatched,
+        Return[prRouterResult]]];
+
     mode = ClaudeCode`$ClaudeEvalMode;
     If[mode === "Single", Return[$iClaudeEvalNotDispatched]];
     hook = ClaudeCode`$ClaudeEvalHook;
@@ -16464,6 +17654,154 @@ iScanAndReport[] :=
     ScanConfidentialCells[nb]
   ];
 
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:30af\:30e9\:30a6\:30c9\:516c\:958b\:5ba3\:8a00 (Stage 9 P1 Step 2) \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]
+   \:30dc\:30bf\:30f3 1 \:500b\:306e\:5faa\:74b0: Missing[\"NotDeclared\"] \[Rule] True \[Rule] False \[Rule] Missing[\"NotDeclared\"]
+   \:30dc\:30bf\:30f3\:30e9\:30d9\:30eb\:306f Dynamic \:3067\:73fe\:5728\:72b6\:614b\:3092\:8868\:793a\:3002 *)
+
+(* \:73fe\:5728\:72b6\:614b\:306e\:30ad\:30e3\:30c3\:30b7\:30e5 (\:30d1\:30ec\:30c3\:30c8\:30dc\:30bf\:30f3\:8868\:793a\:7528) *)
+If[!ValueQ[$iPaletteCloudState], $iPaletteCloudState = Missing["NotLoaded"]];
+
+(* \:73fe\:5728\:306e\:30e6\:30fc\:30b6\:30fc\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304b\:3089\:5ba3\:8a00\:72b6\:614b\:3092\:8aad\:307f $iPaletteCloudState \:306b\:30b7\:30f3\:30af\:3002
+   \:8aad\:307f\:307f\:30bb\:30eb\:6027\:306e\:305f\:3081 NotebookSave \:306f\:3057\:306a\:3044\:3002 *)
+iSyncCloudPaletteState[] :=
+  Module[{nb, path, state},
+    nb = Quiet @ iUserNotebook[];
+    If[Head[nb] =!= NotebookObject,
+      $iPaletteCloudState = Missing["NoNotebook"];
+      Return[$iPaletteCloudState]];
+    path = Quiet @ NotebookFileName[nb];
+    If[!StringQ[path],
+      $iPaletteCloudState = Missing["NotSaved"];
+      Return[$iPaletteCloudState]];
+    state = Quiet @ NBAccess`NBGetCloudPublishable[path];
+    $iPaletteCloudState = state;
+    state
+  ];
+
+(* \:30dc\:30bf\:30f3\:30e9\:30d9\:30eb (\:73fe\:5728\:72b6\:614b\:3092\:8868\:793a) *)
+iCloudPaletteLabel[state_] :=
+  Which[
+    state === True,                    iL["\:2601 \:516c\:958b\:8a31\:53ef",   "\:2601 Allow"],
+    state === False,                   iL["\:2601 \:516c\:958b\:7981\:6b62",   "\:2601 Deny"],
+    state === Missing["NotDeclared"],  iL["\:2601 \:672a\:6307\:5b9a",        "\:2601 Unset"],
+    state === Missing["NotSaved"],     iL["\:2601 \:8981\:4fdd\:5b58",        "\:2601 Save NB"],
+    state === Missing["NoNotebook"],   iL["\:2601 \:30ce\:30fc\:30c8?",       "\:2601 No NB"],
+    state === Missing["NotLoaded"],    iL["\:2601 \:8aad\:8fbc\:307f",        "\:2601 Load"],
+    True,                              iL["\:2601 ?",                          "\:2601 ?"]
+  ];
+
+(* \:30dc\:30bf\:30f3\:80cc\:666f\:8272 (\:30b9\:30c6\:30fc\:30bf\:30b9\:6bce\:306b\:5909\:5316) *)
+iCloudPaletteColor[state_] :=
+  Which[
+    state === True,                    RGBColor[0.25, 0.55, 0.75],   (* \:9752: \:8a31\:53ef *)
+    state === False,                   RGBColor[0.6,  0.4,  0.3],     (* \:8336: \:7981\:6b62 *)
+    state === Missing["NotDeclared"],  GrayLevel[0.55],               (* \:30b0\:30ec\:30fc: \:672a\:6307\:5b9a *)
+    True,                              GrayLevel[0.45]                (* \:6697\:30b0\:30ec\:30fc: \:4e0d\:660e *)
+  ];
+
+(* \:30dc\:30bf\:30f3\:62bc\:4e0b: \:72b6\:614b\:3092\:5faa\:74b0\:3055\:305b\:308b\:3002
+   Missing[\"NotDeclared\"] -> True -> False -> (\:524a\:9664\:3057\:3066) Missing[\"NotDeclared\"]\:3002
+
+   Stage 9 P1 Step 2 Hotfix 3: \:5b9f\:88c5\:65b9\:91dd\:5909\:66f4\:3002
+     \:65e7: NBSetCloudPublishable \:3067\:30d5\:30a1\:30a4\:30eb\:76f4\:63a5\:7de8\:96c6 \[Rule] frontend lock \:3067 RenameFailed
+     \:65b0: SetOptions[nb, TaggingRules -> ...] \:3067 frontend memory \:66f4\:65b0
+          + NotebookSave[nb] \:3067 frontend \:7d4c\:7531\:3067\:30d5\:30a1\:30a4\:30eb\:66f8\:304d\:51fa\:3057\:3002
+          NBAccess \:306e RBAC \:3092\:30b9\:30ad\:30c3\:30d7\:3059\:308b\:5f62\:306b\:306a\:308b\:304c\:3001\:30d1\:30ec\:30c3\:30c8\:64cd\:4f5c\:306f\:3082\:3068\:3082\:3068
+          \:30e6\:30fc\:30b6\:30fc\:64cd\:4f5c\:306a\:306e\:3067 AccessLevel \:30c1\:30a7\:30c3\:30af\:306f\:4e0d\:8981\:3002 *)
+iCycleNotebookCloudState[] :=
+  Module[{nb, path, current, action, nextVal, syncResult},
+    nb = iUserNotebook[];
+    If[Head[nb] =!= NotebookObject,
+      MessageDialog[iL[
+        "\:30a2\:30af\:30c6\:30a3\:30d6\:306a\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002",
+        "No active notebook found."]];
+      Return[$Failed]];
+
+    path = Quiet @ NotebookFileName[nb];
+    If[!StringQ[path],
+      MessageDialog[iL[
+        "\:30af\:30e9\:30a6\:30c9\:516c\:958b\:5ba3\:8a00\:306b\:306f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:4fdd\:5b58\:304c\:5fc5\:8981\:3067\:3059\:3002\:5148\:306b\:4fdd\:5b58\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+        "CloudPublishable declaration requires the notebook to be saved first."]];
+      iSyncCloudPaletteState[];
+      Return[$Failed]];
+
+    (* (1) \:30d5\:30a1\:30a4\:30eb\:304b\:3089\:73fe\:5728\:306e\:5ba3\:8a00\:3092\:53d6\:5f97 (frontend memory \:3088\:308a\:78ba\:5b9f) *)
+    current = Quiet @ NBAccess`NBGetCloudPublishable[path];
+
+    (* (2) \:6b21\:306e\:30a2\:30af\:30b7\:30e7\:30f3\:3068\:5024\:3092\:6c7a\:5b9a *)
+    {action, nextVal} = Which[
+      MissingQ[current],   {"Set",   True},
+      current === True,    {"Set",   False},
+      current === False,   {"Clear", Missing["NotDeclared"]},
+      True,                {"None",  current}
+    ];
+
+    If[action === "None",
+      iSyncCloudPaletteState[];
+      Return[<|"Status" -> "Failed", "Reason" -> "UnknownCurrentState",
+        "Current" -> current|>]];
+
+    (* (3) Frontend memory \:306e TaggingRules \:3092\:66f4\:65b0 *)
+    syncResult = iSyncFrontendTaggingRules[nb, action, nextVal];
+    If[syncResult === $Failed,
+      MessageDialog[iL[
+        "Frontend \:306e TaggingRules \:66f4\:65b0\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002",
+        "Failed to update frontend TaggingRules."]];
+      Return[$Failed]];
+
+    (* (4) NotebookSave \:3067\:30d5\:30a1\:30a4\:30eb\:306b\:53cd\:6620\:3055\:305b\:308b\:3002
+          Mathematica \:540c\:30d7\:30ed\:30bb\:30b9\:306e save \:306a\:306e\:3067 lock \:554f\:984c\:7121\:3057\:3002 *)
+    NotebookSave[nb];
+
+    (* (5) SourceVault \:304c\:30ed\:30fc\:30c9\:6e08\:307f\:306a\:3089 mtime cache \:3092\:8d8a\:3048\:308b *)
+    Quiet @ Check[
+      If[Length[Names["SourceVault`SourceVaultIndexNotebook"]] > 0,
+        Symbol["SourceVault`SourceVaultIndexNotebook"][path,
+          "ForceReindex" -> True]],
+      Null];
+
+    (* (6) \:30d1\:30ec\:30c3\:30c8\:8868\:793a\:7528\:30b0\:30ed\:30fc\:30d0\:30eb\:3092\:540c\:671f (Dynamic \:30c8\:30ea\:30ac) *)
+    iSyncCloudPaletteState[];
+
+    <|"Status" -> "OK",
+      "Action" -> action,
+      "Before" -> current,
+      "After"  -> If[action === "Clear", Missing["NotDeclared"], nextVal],
+      "Path"   -> path|>
+  ];
+
+(* Frontend memory \:306e TaggingRules > SourceVault > CloudPublishable \:3092\:5b89\:5168\:306b\:66f4\:65b0\:3059\:308b\:3002
+   action: "Set"   -> nextVal \:3092 CloudPublishable \:306b\:30bb\:30c3\:30c8
+          "Clear" -> CloudPublishable \:30ad\:30fc\:3092\:524a\:9664
+   \:30d5\:30a1\:30a4\:30eb\:5074\:3068\:540c\:3058 cleanup \:30ed\:30b8\:30c3\:30af (SourceVault \:7a7a\:306a\:3089\:524a\:9664\:3001
+   TaggingRules \:7a7a\:306a\:3089 Inherited) \:3082\:5b9f\:884c\:3059\:308b\:3002
+   \:623b\:308a\:5024: $Failed \:307e\:305f\:306f Null (\:6210\:529f) *)
+iSyncFrontendTaggingRules[nb_NotebookObject, action_String, nextVal_] :=
+  Module[{tr, sv, svUpdated, trUpdated, setResult},
+    tr = Quiet @ CurrentValue[nb, TaggingRules];
+    If[ListQ[tr], tr = Association @@ Cases[tr, _Rule | _RuleDelayed]];
+    If[!AssociationQ[tr], tr = <||>];
+    sv = Lookup[tr, "SourceVault", <||>];
+    If[ListQ[sv], sv = Association @@ Cases[sv, _Rule | _RuleDelayed]];
+    If[!AssociationQ[sv], sv = <||>];
+
+    svUpdated = Switch[action,
+      "Set",   Append[sv, "CloudPublishable" -> nextVal],
+      "Clear", KeyDrop[sv, "CloudPublishable"],
+      _,       sv
+    ];
+    trUpdated = If[Length[svUpdated] === 0,
+      KeyDrop[tr, "SourceVault"],
+      Append[tr, "SourceVault" -> svUpdated]];
+
+    setResult = Quiet @ Check[
+      SetOptions[nb,
+        TaggingRules -> If[Length[trUpdated] === 0, Inherited, trUpdated]],
+      $Failed];
+    If[setResult === $Failed, $Failed, Null]
+  ];
+iSyncFrontendTaggingRules[___] := $Failed;
+
 (* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:30bb\:30eb\:53ce\:96c6\:30d8\:30eb\:30d1\:30fc\:ff08\:30d1\:30ec\:30c3\:30c8\:30dc\:30bf\:30f3\:7528\:ff09 \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 (* \:9078\:629e\:30bb\:30eb\:ff08\:307e\:305f\:306f\:5168\:30bb\:30eb\:ff09\:304b\:3089\:30c6\:30ad\:30b9\:30c8\:3068\:753b\:50cf\:3092\:53ce\:96c6\:3057 iNormalizePrompt \:4e92\:63db\:30ea\:30b9\:30c8\:3092\:8fd4\:3059
@@ -16801,6 +18139,7 @@ ShowClaudePalette[] := (
   Quiet[iInstallCellEpilog[InputNotebook[]]];
   (* \:73fe\:5728\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304b\:3089\:8a2d\:5b9a\:3092\:8aad\:307f\:8fbc\:307f *)
   Quiet[iLoadPaletteSettings[InputNotebook[]]];
+  Quiet[iSyncCloudPaletteState[]];   (* Stage 9 P1 Step 2: \:30af\:30e9\:30a6\:30c9\:516c\:958b\:5ba3\:8a00\:3082\:540c\:671f *)
   $claudePalette = CreatePalette[
     DynamicModule[{lastNb = InputNotebook[]},
     Dynamic[
@@ -16808,7 +18147,8 @@ ShowClaudePalette[] := (
       Module[{curNb = InputNotebook[]},
         If[Head[curNb] === NotebookObject && curNb =!= lastNb,
           lastNb = curNb;
-          Quiet[iLoadPaletteSettings[curNb]]]];
+          Quiet[iLoadPaletteSettings[curNb]];
+          Quiet[iSyncCloudPaletteState[]]]];   (* Stage 9 P1 Step 2: \:30ce\:30fc\:30c8\:5207\:66ff\:6642\:306b\:518d\:540c\:671f *)
     Column[{
       Style["Claude Code", Bold, 11, RGBColor[0.2, 0.3, 0.6]],
 
@@ -16823,6 +18163,23 @@ ShowClaudePalette[] := (
       iClaudePaletteButton[iL["\[RightTriangle] \:30b9\:30ad\:30e3\:30f3", "\[RightTriangle] Scan"],
         RGBColor[0.4, 0.4, 0.65],
         iScanAndReport[]],
+      Spacer[2],
+
+      (* \[HorizontalLine]\[HorizontalLine] \:30af\:30e9\:30a6\:30c9\:516c\:958b\:5ba3\:8a00 (Stage 9 P1 Step 2) \[HorizontalLine]\[HorizontalLine] *)
+      Style[iL[" \:30af\:30e9\:30a6\:30c9\:516c\:958b", " Cloud Publish"], Bold, 8, GrayLevel[0.3]],
+      Dynamic[
+        Button[
+          Style[iCloudPaletteLabel[$iPaletteCloudState], Bold, 10, White],
+          (iCycleNotebookCloudState[];
+           With[{inb = InputNotebook[]},
+             If[Head[inb] === NotebookObject,
+               SetSelectedNotebook[inb]]]),
+          Appearance -> "Frameless",
+          Background -> iCloudPaletteColor[$iPaletteCloudState],
+          ImageSize -> {100, 22},
+          FrameMargins -> {{4, 4}, {2, 2}},
+          Method -> "Queued"],
+        TrackedSymbols :> {$iPaletteCloudState}],
       Spacer[2],
 
       (* \[HorizontalLine]\[HorizontalLine] Claude \:64cd\:4f5c \[HorizontalLine]\[HorizontalLine] *)
@@ -27643,7 +29000,7 @@ End[];
 EndPackage[];
 
 (* Phase 33 Task 5 version marker *)
-ClaudeCode`$claudecodeVersion = "2026-05-14-phase-32k-step3-phaseB-adapter-async-api";
+ClaudeCode`$claudecodeVersion = "2026-05-23-phase-4-20-preflight-7-2-7-5-merged";
 (* v2026-05-13 (Phase 32): ClaudeRuntime ExecuteProposal \:3092 ParallelSubmit + \:5171\:6709 polling tick
    \:7d4c\:7531\:3067\:522f\:30ab\:30fc\:30cd\:30eb\:5b9f\:884c\:306b\:3057\:3066\:3001\:30e1\:30a4\:30f3\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:3092\:30d6\:30ed\:30c3\:30af\:3057\:306a\:3044\:3088\:3046\:306b\:3057\:305f\:3002
    - $ClaudeRuntimeAsyncExecution (\:30c7\:30d5\:30a9\:30eb\:30c8 True) \:3067\:30aa\:30f3/\:30aa\:30d5
@@ -27737,7 +29094,7 @@ ClaudeCode`$claudecodeVersion = "2026-05-14-phase-32k-step3-phaseB-adapter-async
    textOnly \:306f L24463 \:3067 Text \:30bb\:30eb\:3068\:3057\:3066\:65e2\:306b\:66f8\:304b\:308c\:3066\:3044\:308b\:306e\:3067\:8aac\:660e\:306f\:6b8b\:308b\:3002
    \:6700\:7d42 Out \:306f\:4e2d\:9593\:30bf\:30fc\:30f3\:306e\:5b9f\:30b3\:30fc\:30c9\:7d50\:679c\:304c\:305d\:306e\:307e\:307e\:6b8b\:308a\:3001claudecode \:5358\:72ec
    ClaudeEval \:3068\:540c\:3058\:632f\:308b\:821e\:3044\:306b\:306a\:308b\:3002 *)
-ClaudeCode`$claudecodeVersion = "2026-05-14-phase-32k-step3-phaseB-adapter-async-api";
+ClaudeCode`$claudecodeVersion = "2026-05-23-phase-4-20-preflight-7-2-7-5-merged";
 (* v2026-04-30 v2: PreValidate hook \:62e1\:5f35\:3002 result13.nb \:30c6\:30b9\:30c8\:7d50\:679c\:3092\:53cd\:6620\:3002
    - (1) \:7a7a / trivial \:30b3\:30fc\:30c9 \:2192 RepairNeeded (EmptyOrTrivialCode) [\:65e2\:5b58]
    - (2) \:30e1\:30bf\:95a2\:6570\:547c\:3073\:51fa\:3057 \:2192 Deny (MetaCallProposal) [\:65b0\:898f]
