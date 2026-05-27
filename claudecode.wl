@@ -225,6 +225,14 @@ Quiet[Scan[
    "$ClaudeEditModeInsertTagClose",
    "ClaudeAppendBlockToPackage", "ClaudeInsertBeforeAnchorInPackage",
    "ClaudeParseEditModeResponse", "ClaudeAutoDetectEditMode",
+   (* === Phase 3 (2026-05-25): ChatGPT Codex CLI integration === *)
+   "$ChatgptCodexExe", "$ChatgptWorkingDirectory", "$ChatgptAccessibleDirs",
+   "$ChatgptCodexHomeDirectory", "$ChatgptCodexPermissionProfile",
+   "$ChatgptCodexApprovalPolicy", "$ChatgptCodexModel",
+   "$ChatgptCodexHarnessMode", "$ChatgptCodexRetainTempProjects",
+   "$ChatgptCodexSourceExposureMode",
+   (* === Phase 4 (2026-05-25): Claude CLI harness materialization === *)
+   "$ClaudeCLIHarnessMode",
    "ClaudeBuildEditModePromptInstructions", "ClaudeUpdatePackageWithMode"}
 ], Remove::ssym];
 
@@ -555,20 +563,54 @@ If[Quiet[DownValues[NBAccess`NBSetNotebookPaidAPIAllowed]] === {},
 
 (* Phase 28 (2026-05-12): \:30d1\:30ec\:30c3\:30c8\:30c7\:30b6\:30a4\:30f3\:3092 Provider + Model \:306e 2 \:30dc\:30bf\:30f3\:306b\:62e1\:5f35\:3002
    \:65e7 $iPaletteModel ("opus"/"sonnet"/"default") \:3068\:306f\:72ec\:7acb\:3057\:3066\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:3092\:7ba1\:7406\:3059\:308b\:3002 *)
-$iPaletteProvider  = "claudecode";    (* "claudecode" | "anthropic" | "openai" | "lmstudio" *)
+$iPaletteProvider  = "claudecode";    (* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "lmstudio" *)
 $iPaletteModelName = "claude-opus-4-7"; (* \:73fe\:30d7\:30ed\:30d0\:30a4\:30c0\:5185\:306e\:30e2\:30c7\:30eb\:540d *)
 
-(* Provider \:5faa\:74b0\:9806\:5e8f *)
-$iPaletteProviderOrder = {"claudecode", "anthropic", "openai", "lmstudio"};
+(* Provider \:5faa\:74b0\:9806\:5e8f\:3002Phase 5 (2026-05-26): chatgptcodex \:3092
+   claudecode \:306e\:6b21\:306b\:8ffd\:52a0\:3002\:3069\:3061\:3089\:3082\:30b5\:30d6\:30b9\:30af\:30ea\:30d7\:30b7\:30e7\:30f3\:7d4c\:7531\:306e
+   CLI \:306a\:306e\:3067\:8ab2\:91d1 API \:7981\:6b62\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3067\:3082\:5229\:7528\:53ef\:80fd\:3002 *)
+$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "lmstudio"};
 
 (* \:5404 Provider \:306e\:5019\:88dc\:30e2\:30c7\:30eb\:4e00\:89a7 (Phase 28) \:3002
    \:30af\:30ea\:30c3\:30af\:3067\:3053\:306e\:5217\:3092\:5faa\:74b0\:9078\:629e\:3059\:308b\:3002 *)
 $iPaletteModelsByProvider = <|
-  "claudecode" -> {"claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"},
-  "anthropic"  -> {"claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"},
-  "openai"     -> {"gpt-5.5", "gpt-5.5-pro", "gpt-5-mini", "gpt-5-nano"},
-  "lmstudio"   -> {"qwen3.6-27b", "qwen3.5-27b", "qwen3-coder-30b", "gpt-oss-120b"}
+  "claudecode"   -> {"claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"},
+  (* chatgptcodex: \:30e2\:30c7\:30eb\:5019\:88dc\:306f SourceVault \:304c\:4e00\:5143\:7ba1\:7406\:3059\:308b\:3002
+     iPaletteModelsFor \:304c SourceVaultListModels \:7d4c\:7531\:3067\:53d6\:5f97\:3059\:308b\:3002
+     \:3053\:306e\:9759\:7684\:30a8\:30f3\:30c8\:30ea\:306f SourceVault \:672a\:30ed\:30fc\:30c9\:6642\:306e\:6700\:5c0f\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3002 *)
+  "chatgptcodex" -> {"Automatic"},
+  "anthropic"    -> {"claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"},
+  "openai"       -> {"gpt-5.5", "gpt-5.5-pro", "gpt-5-mini", "gpt-5-nano"},
+  "lmstudio"     -> {"qwen3.6-27b", "qwen3.5-27b", "qwen3-coder-30b", "gpt-oss-120b"}
 |>;
+
+(* resolve the candidate model list for a provider's palette picker.
+   For chatgptcodex the catalog comes from SourceVault, the single
+   source of truth for the provider model registry (SourceVault
+   spec: production .wl files must not hard-code model ids). The
+   "Automatic" entry is always offered first (it omits the model
+   key and uses the Codex CLI default). For every other provider
+   the static $iPaletteModelsByProvider entry is used.
+
+   Falls back to the static entry when SourceVault is not loaded or
+   returns nothing, so the palette keeps working standalone. *)
+iPaletteModelsFor[provider_String] :=
+  If[provider === "chatgptcodex",
+    Module[{sv},
+      sv = If[
+        TrueQ[Quiet @ Check[
+          ValueQ[SourceVault`SourceVaultListModels] ||
+          MemberQ[$Packages, "SourceVault`"], False]],
+        Quiet @ Check[
+          SourceVault`SourceVaultListModels["chatgptcodex"], {}],
+        {}];
+      If[ListQ[sv] && sv =!= {} && AllTrue[sv, StringQ],
+        Prepend[DeleteCases[sv, "Automatic"], "Automatic"],
+        Lookup[$iPaletteModelsByProvider, "chatgptcodex",
+          {"Automatic"}]]],
+    Lookup[$iPaletteModelsByProvider, provider,
+      {"claude-opus-4-7"}]];
+iPaletteModelsFor[_] := {"claude-opus-4-7"};
 
 (* \:30e2\:30c7\:30eb\:540d\:3092\:30d1\:30ec\:30c3\:30c8\:30dc\:30bf\:30f3\:7528\:306b\:77ed\:304f\:30e9\:30d9\:30eb\:5316 *)
 iPaletteShortenModelName[mn_String] :=
@@ -588,16 +630,26 @@ iPaletteShortenModelName[_] := "default";
 (* Provider \:540d\:3092\:30d1\:30ec\:30c3\:30c8\:30dc\:30bf\:30f3\:7528\:306b\:8868\:793a\:540d\:306b *)
 iPaletteProviderLabel[p_String] :=
   Switch[p,
-    "claudecode", "ClaudeCode",
-    "anthropic",  "Anthropic",
-    "openai",     "OpenAI",
-    "lmstudio",   "LMStudio",
+    "claudecode",   "ClaudeCode",
+    "chatgptcodex", "ChatGPTCodex",
+    "anthropic",    "Anthropic",
+    "openai",       "OpenAI",
+    "lmstudio",     "LMStudio",
     _, p];
 iPaletteProviderLabel[_] := "ClaudeCode";
 
-(* \:73fe Provider/Model \:3092 $ClaudeModel (tuple) \:306b\:53cd\:6620\:3055\:305b\:308b *)
+(* \:73fe Provider/Model \:3092 $ClaudeModel (tuple) \:306b\:53cd\:6620\:3055\:305b\:308b\:3002
+   Phase 5 (2026-05-26): provider \:304c chatgptcodex \:306e\:3068\:304d\:306f Codex \:306e
+   \:5b9f\:30e2\:30c7\:30eb\:3092\:7ba1\:7406\:3059\:308b $ChatgptCodexModel \:3082\:540c\:671f\:3059\:308b\:3002
+   \:30d1\:30ec\:30c3\:30c8\:306e \"Automatic\" \:306f Symbol Automatic \:306b\:5909\:63db (CLI \:65e2\:5b9a\:30e2\:30c7\:30eb)\:3002 *)
 iPaletteSyncClaudeModel[] :=
-  ($ClaudeModel = {$iPaletteProvider, $iPaletteModelName});
+  (
+    $ClaudeModel = {$iPaletteProvider, $iPaletteModelName};
+    If[$iPaletteProvider === "chatgptcodex",
+      $ChatgptCodexModel = If[
+        $iPaletteModelName === "Automatic" || $iPaletteModelName === "",
+        Automatic, $iPaletteModelName]]
+  );
 
 (* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304b\:3089\:8a2d\:5b9a\:3092\:8aad\:307f\:8fbc\:307f\:3001\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:3092\:540c\:671f\:3002
    TaggingRules \:306b\:8a2d\:5b9a\:304c\:4fdd\:5b58\:3055\:308c\:3066\:3044\:308b\:5834\:5408\:306f\:305d\:306e\:5024\:3092\:63a1\:7528\:3057\:3001
@@ -632,7 +684,7 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
   Which[
     (* (a) \:65b0\:5f62\:5f0f\:304c\:4fdd\:5b58\:3055\:308c\:3066\:3044\:308b *)
     StringQ[vP] && MemberQ[$iPaletteProviderOrder, vP] &&
-       StringQ[vM] && MemberQ[Lookup[$iPaletteModelsByProvider, vP, {}], vM],
+       StringQ[vM] && MemberQ[iPaletteModelsFor[vP], vM],
       $iPaletteProvider  = vP;
       $iPaletteModelName = vM,
 
@@ -1503,6 +1555,32 @@ ClaudeCloudSendPreflightLogSummary::usage =
   "ClaudeCloudSendPreflightLogSummary[] summarizes the in-memory cloud-send preflight audit log without including prompt or payload text. " <>
   "Use ClaudeCloudSendPreflightLogSummary[\"IncludeEntries\" -> True] to include the existing sanitized log entries.";
 
+(* === Phase 3 (2026-05-25): ChatGPT Codex CLI integration — global variables === *)
+$ChatgptCodexExe::usage =
+  "$ChatgptCodexExe is the path to the Codex CLI executable, or Automatic to resolve it from PATH.";
+$ChatgptWorkingDirectory::usage =
+  "$ChatgptWorkingDirectory is the base working directory for Codex runs. Automatic uses $TemporaryDirectory/claudecode-chatgpt-codex.";
+$ChatgptAccessibleDirs::usage =
+  "$ChatgptAccessibleDirs is the list of extra directories exposed read-only to the Codex CLI.";
+$ChatgptCodexHomeDirectory::usage =
+  "$ChatgptCodexHomeDirectory is the CODEX_HOME directory for a Codex run. Automatic creates a per-run directory under the working directory.";
+$ChatgptCodexPermissionProfile::usage =
+  "$ChatgptCodexPermissionProfile is the name of the Codex permission profile written into config.toml.";
+$ChatgptCodexApprovalPolicy::usage =
+  "$ChatgptCodexApprovalPolicy is the Codex approval policy. Default \"never\" runs non-interactively.";
+$ChatgptCodexModel::usage =
+  "$ChatgptCodexModel is the Codex model name. Automatic omits the model key from config.toml and uses the Codex CLI default.";
+$ChatgptCodexHarnessMode::usage =
+  "$ChatgptCodexHarnessMode selects how the directive harness is materialized for Codex. Default \"Generated\".";
+$ChatgptCodexRetainTempProjects::usage =
+  "$ChatgptCodexRetainTempProjects controls whether per-run temp project directories are kept after a Codex run.";
+$ChatgptCodexSourceExposureMode::usage =
+  "$ChatgptCodexSourceExposureMode controls how package source is exposed to Codex. Default \"PackageReadOnly\".";
+
+(* === Phase 4 (2026-05-25): Claude CLI harness materialization === *)
+$ClaudeCLIHarnessMode::usage =
+  "$ClaudeCLIHarnessMode selects how the Claude CLI harness (.claude/) is produced. \"Direct\" (default) keeps the existing iPrepareClaudeProjectDirectory behaviour: the working .claude/ directory is copied as-is. \"Generated\" is an opt-in mode that materializes .claude/ from the canonical Claude Directives repository.";
+
 Begin["`Private`"];(* ============================================================
    \:8a2d\:5b9a\:ff1a\:5fc5\:8981\:306b\:5fdc\:3058\:3066\:624b\:52d5\:3067\:4e0a\:66f8\:304d\:53ef\:80fd
    ============================================================ *)
@@ -1510,6 +1588,23 @@ Begin["`Private`"];(* ==========================================================
 If[!ValueQ[$ClaudeModel], $ClaudeModel = ""];
 If[!ValueQ[$ClaudeTimeout], $ClaudeTimeout = 1200];
 If[!ValueQ[$ClaudePrivateModel], $ClaudePrivateModel = {}];
+
+(* === Phase 3 (2026-05-25): ChatGPT Codex CLI integration — defaults =
+   idempotent so a re-load keeps any user-set values. *)
+If[!ValueQ[$ChatgptCodexExe], $ChatgptCodexExe = Automatic];
+If[!ValueQ[$ChatgptWorkingDirectory], $ChatgptWorkingDirectory = Automatic];
+If[!ValueQ[$ChatgptAccessibleDirs], $ChatgptAccessibleDirs = {}];
+If[!ValueQ[$ChatgptCodexHomeDirectory], $ChatgptCodexHomeDirectory = Automatic];
+If[!ValueQ[$ChatgptCodexPermissionProfile], $ChatgptCodexPermissionProfile = "nbaccess-codex"];
+If[!ValueQ[$ChatgptCodexApprovalPolicy], $ChatgptCodexApprovalPolicy = "never"];
+If[!ValueQ[$ChatgptCodexModel], $ChatgptCodexModel = Automatic];
+If[!ValueQ[$ChatgptCodexHarnessMode], $ChatgptCodexHarnessMode = "Generated"];
+If[!ValueQ[$ChatgptCodexRetainTempProjects], $ChatgptCodexRetainTempProjects = False];
+If[!ValueQ[$ChatgptCodexSourceExposureMode], $ChatgptCodexSourceExposureMode = "PackageReadOnly"];
+
+(* Phase 4 (2026-05-25): Claude CLI harness mode. Default "Direct"
+   keeps the existing behaviour unchanged. *)
+If[!ValueQ[$ClaudeCLIHarnessMode], $ClaudeCLIHarnessMode = "Direct"];
 If[!AssociationQ[$ClaudePackageKeywordMap], $ClaudePackageKeywordMap = <||>];
 
 (* --- LM Studio MCP \:7d71\:5408\:5909\:6570\:306e\:65e2\:5b9a\:5024 (2026-04-24 \:8ffd\:52a0) --- *)
@@ -2653,8 +2748,103 @@ iInjectSettingsPermissions[settingsFile_String, dirs_List] :=
     Close[strm];
   ];
 
+(* ------------------------------------------------------------------
+   Phase 4 (2026-05-26): Claude CLI Generated harness.
+   When $ClaudeCLIHarnessMode is "Generated" the .claude/ tree is
+   materialized from the canonical Claude Directives repository instead
+   of being copied from $ClaudeWorkingDirectory/.claude/. This is an
+   opt-in path (spec 7.2); the default stays "Direct".
+   iPrepareClaudeProjectDirectoryGenerated returns the temp project
+   path on success, or $Failed so the caller can fall back to Direct.
+   ------------------------------------------------------------------ *)
+iPrepareClaudeProjectDirectoryGenerated[] := Module[
+  {srcDir, tempDir, dirRoot, bundle, matReport, writtenFiles,
+   claudeDir, rootClaudeMd, settingsFile, accessDirs},
+
+  (* temp project root, same naming scheme as the Direct path *)
+  srcDir  = iEnsureClaudeWorkingDirectory[];
+  tempDir = FileNameJoin[{
+    $ClaudeWorkingDirectory,
+    "claude_project_" <> ToString[UnixTime[]] <> "_" <>
+      ToString[RandomInteger[99999]]}];
+  CreateDirectory[tempDir, CreateIntermediateDirectories -> True];
+
+  (* resolve the canonical Claude Directives repository *)
+  dirRoot = Quiet @ Check[
+    ClaudeDirectives`ClaudeResolveDirectiveRoot[Automatic], $Failed];
+  If[FailureQ[dirRoot] || ! StringQ[dirRoot] || ! DirectoryQ[dirRoot],
+    Return[$Failed]];
+
+  (* resolve the directive bundle for the Claude CLI harness target *)
+  bundle = Quiet @ Check[
+    ClaudeDirectives`ClaudeResolveDirectiveBundle[
+      "Provider" -> "claudecode", "Target" -> "ClaudeHarness"],
+    $Failed];
+  If[FailureQ[bundle] || ! AssociationQ[bundle], Return[$Failed]];
+
+  (* materialize .claude/CLAUDE.md, .claude/rules/*, .claude/skills/* *)
+  matReport = Quiet @ Check[
+    ClaudeDirectives`ClaudeDirectiveMaterializeClaudeHarness[
+      bundle, tempDir],
+    $Failed];
+  If[FailureQ[matReport] || ! AssociationQ[matReport], Return[$Failed]];
+  writtenFiles = Lookup[matReport, "WrittenFiles", {}];
+  If[! ListQ[writtenFiles], writtenFiles = {}];
+
+  (* mirror .claude/CLAUDE.md to the project root CLAUDE.md, matching
+     the Direct path which keeps both copies *)
+  claudeDir    = FileNameJoin[{tempDir, ".claude"}];
+  rootClaudeMd = FileNameJoin[{claudeDir, "CLAUDE.md"}];
+  If[FileExistsQ[rootClaudeMd],
+    Quiet @ CopyFile[rootClaudeMd,
+      FileNameJoin[{tempDir, "CLAUDE.md"}],
+      OverwriteTarget -> True]];
+
+  (* inject read permissions into .claude/settings.json; the
+     materializer deliberately does not write settings.json *)
+  settingsFile = FileNameJoin[{claudeDir, "settings.json"}];
+  accessDirs   = DeleteDuplicates[
+    Append[iCollectAccessibleDirs[], tempDir]];
+  iInjectSettingsPermissions[settingsFile, accessDirs];
+
+  (* register the generated harness as a SourceVault evidence bundle.
+     Registration failure is non-fatal: the harness itself is ready. *)
+  Quiet @ Check[
+    SourceVault`SourceVaultRegisterHarnessMaterialization[
+      "ClaudeCLI",
+      Select[Append[writtenFiles, ".claude/settings.json"], StringQ],
+      <|"HarnessMode" -> "Generated",
+        "SourceKind"  -> "GeneratedFromCanonical",
+        "SourceRoot"  -> dirRoot,
+        "DirectiveRepositorySnapshotId" ->
+          Lookup[matReport, "DirectiveRepositoryManifestHash",
+            Missing["NotComputed"]],
+        "DirectiveRepositoryManifestHash" ->
+          Lookup[matReport, "DirectiveRepositoryManifestHash",
+            Missing["NotComputed"]],
+        "Generator" -> "iPrepareClaudeProjectDirectoryGenerated"|>],
+    $Failed];
+
+  tempDir];
+
+iPrepareClaudeProjectDirectoryGenerated[___] := $Failed;
+
 iPrepareClaudeProjectDirectory[] := Module[
-  {srcDir, tempDir, src, dst, rulesSrc, rulesDst, skillsSrc, skillsDst, accessDirs},
+  {srcDir, tempDir, src, dst, rulesSrc, rulesDst, skillsSrc, skillsDst,
+   accessDirs, genResult},
+  (* Phase 4 (2026-05-26): Generated harness mode dispatch. On failure
+     we fall through to the Direct path so existing workflows never
+     break. *)
+  If[$ClaudeCLIHarnessMode === "Generated",
+    (
+      genResult = iPrepareClaudeProjectDirectoryGenerated[];
+      If[StringQ[genResult] && DirectoryQ[genResult],
+        Return[genResult]];
+      Quiet @ Print[Style[
+        "iPrepareClaudeProjectDirectory: $ClaudeCLIHarnessMode is " <>
+        "\"Generated\" but the generated harness could not be built; " <>
+        "falling back to Direct mode.", Orange]]
+    )];
   srcDir = iEnsureClaudeWorkingDirectory[];
   tempDir = FileNameJoin[{
     $ClaudeWorkingDirectory,
@@ -7092,13 +7282,19 @@ iResolveLMStudioAPIKey[customURL_String:""] :=
 
 iResolveDefaultModelSpec[modelOpt_] :=
   Which[
-    (* \:660e\:793a\:6307\:5b9a\:304c\:30ea\:30b9\:30c8\:5f62\:5f0f: \:305d\:308c\:3092\:4f7f\:3046 *)
+    (* \:660e\:793a\:6307\:5b9a\:304c\:30ea\:30b9\:30c8\:5f62\:5f0f: \:305d\:308c\:3092\:4f7f\:3046\:3002
+       Codex provider \:306f\:30e2\:30c7\:30eb\:540d\:3092 $ChatgptCodexModel \:3067\:5225\:7ba1\:7406\:3059\:308b
+       \:305f\:3081\:3001\:7b2c2\:8981\:7d20\:306f Automatic \:3067\:3082\:3088\:3044 (StringQ \:4e0d\:8981)\:3002 *)
     ListQ[modelOpt] && Length[modelOpt] >= 2 &&
-        StringQ[modelOpt[[1]]] && StringQ[modelOpt[[2]]],
+        StringQ[modelOpt[[1]]] &&
+        (StringQ[modelOpt[[2]]] || iCodexProviderQ[modelOpt[[1]]]),
       modelOpt,
-    (* \:660e\:793a\:6307\:5b9a\:304c\:3055\:308c\:3066\:3044\:306a\:3044 (Automatic \:7b49) \:3067 $ClaudeModel \:304c\:30ea\:30b9\:30c8\:5f62\:5f0f *)
+    (* \:660e\:793a\:6307\:5b9a\:304c\:3055\:308c\:3066\:3044\:306a\:3044 (Automatic \:7b49) \:3067 $ClaudeModel \:304c\:30ea\:30b9\:30c8\:5f62\:5f0f\:3002
+       Codex provider \:306f\:540c\:69d8\:306b\:7b2c2\:8981\:7d20\:306e StringQ \:5236\:7d04\:3092\:7de9\:3081\:308b\:3002 *)
     ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 2 &&
-        StringQ[$ClaudeModel[[1]]] && StringQ[$ClaudeModel[[2]]],
+        StringQ[$ClaudeModel[[1]]] &&
+        (StringQ[$ClaudeModel[[2]]] ||
+           iCodexProviderQ[$ClaudeModel[[1]]]),
       $ClaudeModel,
     (* \:305d\:308c\:4ee5\:5916\:306f\:7121\:5909\:63db\:3067\:8fd4\:3059 (Automatic / \:6587\:5b57\:5217 / \:305d\:306e\:4ed6) *)
     True,
@@ -11092,20 +11288,38 @@ iClaudeEvalRateLimitGuard[_] := False;
      String  - \:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8 (\:30b3\:30fc\:30eb\:5074\:3067 Return \:3057\:3066\:7d42\:4e86\:3055\:305b\:308b) *)
 iClaudePaidModelGuard[modelSpec_] :=
   Module[{spec, providerLower, modelName, targetNb, nbAllowed},
-    (* \:660e\:793a\:6307\:5b9a\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:512a\:5148\:3001\:306a\:3051\:308c\:3070 $ClaudeModel \:3092\:898b\:308b *)
+    (* \:660e\:793a\:6307\:5b9a\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:512a\:5148\:3001\:306a\:3051\:308c\:3070 $ClaudeModel \:3092\:898b\:308b\:3002
+       Codex provider \:306f\:7b2c2\:8981\:7d20\:304c Automatic \:3067\:3082\:30ea\:30b9\:30c8\:3068\:3057\:3066
+       \:53d7\:3051\:53d6\:308b (iResolveDefaultModelSpec \:3068\:540c\:69d8\:306e\:7de9\:548c)\:3002 *)
     spec = Which[
       ListQ[modelSpec] && Length[modelSpec] >= 2 &&
-        StringQ[modelSpec[[1]]] && StringQ[modelSpec[[2]]], modelSpec,
+        StringQ[modelSpec[[1]]] &&
+        (StringQ[modelSpec[[2]]] ||
+           iCodexProviderQ[modelSpec[[1]]]), modelSpec,
       ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 2 &&
-        StringQ[$ClaudeModel[[1]]] && StringQ[$ClaudeModel[[2]]], $ClaudeModel,
+        StringQ[$ClaudeModel[[1]]] &&
+        (StringQ[$ClaudeModel[[2]]] ||
+           iCodexProviderQ[$ClaudeModel[[1]]]), $ClaudeModel,
       True, None
     ];
     (* List \:5f62\:5f0f\:3067\:306a\:3044 (String \:4e92\:63db \:307e\:305f\:306f\:7a7a) \:306a\:3089\:30c1\:30a7\:30c3\:30af\:4e0d\:8981 *)
     If[spec === None, Return[None]];
     providerLower = ToLowerCase[spec[[1]]];
     modelName     = spec[[2]];
-    (* claudecode / lmstudio \:306f\:7121\:8ab2\:91d1 *)
-    If[MemberQ[{"claudecode", "lmstudio"}, providerLower], Return[None]];
+    (* claudecode / lmstudio / chatgptcodex are NOT metered-API
+       providers and are never gated here:
+       - "claudecode" is the Claude Code CLI (Anthropic subscription)
+       - "chatgptcodex" is the OpenAI Codex CLI (OpenAI subscription)
+       - "lmstudio" is a local model server
+       Both the Claude Code CLI and the OpenAI Codex CLI run on a
+       subscription, not on a metered API key, so neither is a paid
+       API call. Only the metered HTTP APIs (provider "anthropic" /
+       "openai" / ...) are checked against the notebook's paid-API
+       permission below. iCodexProviderQ also accepts the Codex
+       aliases "codex" / "chatgpt-codex" / "gptcodex". *)
+    If[MemberQ[{"claudecode", "lmstudio"}, providerLower] ||
+        iCodexProviderQ[providerLower],
+      Return[None]];
     (* \:305d\:306e\:4ed6 (anthropic / openai \:7b49 \:8ab2\:91d1 API) \:306f NBAccess \:30c1\:30a7\:30c3\:30af *)
     targetNb = Quiet[EvaluationNotebook[]];
     If[Head[targetNb] =!= NotebookObject,
@@ -18222,7 +18436,7 @@ ShowClaudePalette[] := (
             nextProvider = $iPaletteProviderOrder[[nextIdx]];
             $iPaletteProvider = nextProvider;
             (* \:65b0\:30d7\:30ed\:30d0\:30a4\:30c0\:306e\:5148\:982d\:30e2\:30c7\:30eb\:306b\:30ea\:30bb\:30c3\:30c8 *)
-            models = Lookup[$iPaletteModelsByProvider, nextProvider, {"claude-opus-4-7"}];
+            models = iPaletteModelsFor[nextProvider];
             $iPaletteModelName = If[Length[models] >= 1, models[[1]], "claude-opus-4-7"];
             (* \:65e7 $iPaletteModel \:3082\:540c\:671f (\:4e92\:63db\:306e\:305f\:3081) *)
             $iPaletteModel = Which[
@@ -18238,7 +18452,7 @@ ShowClaudePalette[] := (
           Style[iL["M: ", "M: "] <> iPaletteShortenModelName[$iPaletteModelName],
             9, Bold, GrayLevel[0.2]],
           Module[{models, idx, nextIdx},
-            models = Lookup[$iPaletteModelsByProvider, $iPaletteProvider, {"claude-opus-4-7"}];
+            models = iPaletteModelsFor[$iPaletteProvider];
             idx = Position[models, $iPaletteModelName];
             idx = If[Length[idx] >= 1, idx[[1, 1]], 1];
             nextIdx = Mod[idx, Length[models]] + 1;
@@ -24335,7 +24549,7 @@ ClaudeCode`PaletteShortenModelName[mn_String] := iPaletteShortenModelName[mn];
 ClaudeCode`SetPaletteProvider[p_String] := Module[{models},
   If[MemberQ[$iPaletteProviderOrder, p],
     $iPaletteProvider = p;
-    models = Lookup[$iPaletteModelsByProvider, p, {"claude-opus-4-7"}];
+    models = iPaletteModelsFor[p];
     $iPaletteModelName = If[Length[models] >= 1, models[[1]], "claude-opus-4-7"];
     (* \:65e7 $iPaletteModel \:3082\:540c\:671f *)
     $iPaletteModel = Which[
@@ -24349,7 +24563,7 @@ ClaudeCode`SetPaletteProvider[p_String] := Module[{models},
 
 (* \:73fe Provider \:5185\:3067\:6b21\:306e\:30e2\:30c7\:30eb\:306b\:5faa\:74b0 *)
 ClaudeCode`CyclePaletteModel[] := Module[{models, idx, nextIdx},
-  models = Lookup[$iPaletteModelsByProvider, $iPaletteProvider, {"claude-opus-4-7"}];
+  models = iPaletteModelsFor[$iPaletteProvider];
   idx = Position[models, $iPaletteModelName];
   idx = If[Length[idx] >= 1, idx[[1, 1]], 1];
   nextIdx = Mod[idx, Length[models]] + 1;
@@ -25293,19 +25507,26 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
     execTimeout = OptionValue["ExecutionTimeoutSeconds"];  (* Phase 29 *)
     If[!IntegerQ[execTimeout] || execTimeout <= 0, execTimeout = 30];
     
-    (* Phase A6 B-\[Alpha] (2026-04-27): Model \:6307\:5b9a\:304c List \:306e\:5834\:5408\:306e\:5f37\:5236 sync \:5316\:3092
+    (* Phase A6 B-\:03b1 (2026-04-27): Model \:6307\:5b9a\:304c List \:306e\:5834\:5408\:306e\:5f37\:5236 sync \:5316\:3092
        lmstudio \:306b\:9650\:308a\:89e3\:9664\:3059\:308b\:3002lmstudio \:306f claudecode \:3067 iPrepareLMStudioMCPPS1
        (v2026-04-24T08) \:306e async \:7d4c\:8def\:304c\:5229\:7528\:53ef\:80fd\:306a\:305f\:3081\:3001SyncProvider=False \:3092
        \:8a31\:5bb9\:3057 QueryProviderAsync \:7d4c\:7531\:3067\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:30d6\:30ed\:30c3\:30af\:3092\:56de\:907f\:3059\:308b\:3002
        \:305d\:308c\:4ee5\:5916\:306e List \:5f62\:5f0f (anthropic/openai \:7b49\:3067 URL \:6307\:5b9a\:306a\:3069) \:306f\:5f93\:6765\:3069\:304a\:308a
        \:540c\:671f HTTP (iQueryViaAPI) \:3092\:4f7f\:3046\:305f\:3081\:5f37\:5236 sync \:3092\:7dad\:6301\:3059\:308b\:3002
+
+       Phase 5 (2026-05-26): Codex (chatgptcodex) \:3082\:9664\:5916\:3059\:308b\:3002
+       Codex \:306f codex exec \:3092 StartProcess \:3067\:975e\:540c\:671f\:8d77\:52d5\:3057\:3001
+       collectProvider \:30ce\:30fc\:30c9\:304c\:7d50\:679c\:3092\:30dd\:30fc\:30ea\:30f3\:30b0\:56de\:53ce\:3059\:308b\:3002
+       \:5f37\:5236 sync \:5316\:3059\:308b\:3068 RunProcess \:76f8\:5f53\:306e\:30d6\:30ed\:30c3\:30ad\:30f3\:30b0\:304c
+       ScheduledTask \:5185\:3067\:8d77\:304d turn \:304c\:5b8c\:4e86\:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:306b
+       \:5230\:9054\:305b\:305a\:7d42\:4e86\:3057\:3066\:3057\:307e\:3046\:305f\:3081\:3001SyncProvider=False \:3092\:7dad\:6301\:3059\:308b\:3002
        
-       \:6ce8\:610f: B-\[Alpha] \:5358\:72ec\:3067\:306f QueryProviderAsync \:306f\:4f9d\:7136 Claude CLI \:7528\:306a\:306e\:3067\:3001
-       \:5b9f\:969b\:306b\:306f async \:7d4c\:8def\:306b\:5207\:308a\:66ff\:308f\:3063\:3066\:3082 CLI \:304c\:8d77\:52d5\:3055\:308c\:308b\:3002B-\[Beta] \:3067
-       QueryProviderAsync \:306b lmstudio \:5206\:5c90\:3092\:8ffd\:52a0\:3057\:3066\:5b8c\:6210\:3059\:308b\:3002*)
+       \:6ce8\:610f: QueryProviderAsync \:306b lmstudio / chatgptcodex \:306e\:5206\:5c90\:304c\:3042\:308a\:3001
+       \:305d\:308c\:4ee5\:5916\:306f Claude CLI \:7d4c\:8def\:306b\:843d\:3061\:308b\:3002 *)
     If[ListQ[modelSpec] && Length[modelSpec] >= 2,
       If[StringQ[modelSpec[[1]]] &&
-         ToLowerCase[modelSpec[[1]]] === "lmstudio",
+         (ToLowerCase[modelSpec[[1]]] === "lmstudio" ||
+            iCodexProviderQ[modelSpec[[1]]]),
         syncProv = False,
         syncProv = True]];
     
@@ -25323,6 +25544,7 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
     <|
       "SyncProvider" -> syncProv,
       "DefaultTimeoutSeconds" -> execTimeout,  (* Phase 29 (2026-05-13) *)
+      "DecodeProviderResult" -> iDecodeProviderResult,  (* Phase 5 (2026-05-26) *)
       
       (* \[HorizontalLine]\[HorizontalLine] BuildContext \[HorizontalLine]\[HorizontalLine] *)
       "BuildContext" -> Function[{input, convState},
@@ -25363,23 +25585,51 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
         provider["Query"],
         Function[{contextPacket, convState},
           Module[{prompt, routeAdvice, response, t0 = AbsoluteTime[],
-                  label},
+                  label, codexMeta = None},
             prompt = iAdapterBuildPrompt[contextPacket, convState];
             routeAdvice = Lookup[contextPacket, "RouteAdvice",
               <|"Route" -> "CloudLLM"|>];
             
             If[ListQ[modelSpec] && Length[modelSpec] >= 2,
-              (* \[HorizontalLine]\[HorizontalLine] Model \:6307\:5b9a\:3042\:308a: iQueryViaAPI \:3067\:76f4\:63a5\:547c\:3073\:51fa\:3057 \[HorizontalLine]\[HorizontalLine] *)
-              label = modelSpec[[1]] <> "/" <> modelSpec[[2]];
-              Quiet[CurrentValue[nb, WindowStatusArea] =
-                label <> " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d...",
-                   " querying..."]];
-              response = iQueryViaAPI[
-                modelSpec[[1]], modelSpec[[2]], prompt,
-                If[Length[modelSpec] >= 3, modelSpec[[3]], ""]];
-              Quiet[CurrentValue[nb, WindowStatusArea] =
-                label <> " " <> iL["\:5fdc\:7b54\:53d7\:4fe1\:5b8c\:4e86 (" <> ToString[Round[AbsoluteTime[] - t0, 1]] <> "s) \[LongDash] \:51e6\:7406\:4e2d...",
-                   " response received (" <> ToString[Round[AbsoluteTime[] - t0, 1]] <> "s) \[LongDash] processing..."]],
+              (* \[HorizontalLine]\[HorizontalLine] Model \:6307\:5b9a\:3042\:308a \[HorizontalLine]\[HorizontalLine]
+                 modelSpec[[1]] \:304c chatgptcodex \:306b\:6b63\:898f\:5316\:3055\:308c\:308b\:5834\:5408\:306f
+                 Codex CLI runner \:7d4c\:7531\:3001\:305d\:308c\:4ee5\:5916\:306f iQueryViaAPI\:3002
+                 Codex \:306f modelSpec \:3067\:660e\:793a\:6307\:5b9a\:3055\:308c\:305f\:3068\:304d\:3060\:3051
+                 \:3053\:306e\:7d4c\:8def\:306b\:5165\:308b (privacy >= 0.5 \:306e\:81ea\:52d5\:9078\:629e\:7d4c\:8def
+                 \:3067\:306f\:9078\:3070\:308c\:306a\:3044)\:3002 *)
+              If[iCodexProviderQ[modelSpec[[1]]],
+                (* \[HorizontalLine] chatgptcodex: Codex CLI runner (Phase 5) \[HorizontalLine] *)
+                Module[{codexRaw, codexDecoded},
+                  label = "chatgptcodex";
+                  Quiet[CurrentValue[nb, WindowStatusArea] =
+                    label <> " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d...",
+                       " querying..."]];
+                  codexRaw = iRunChatgptCodexCLI[prompt, "Notebook" -> nb];
+                  codexDecoded = iDecodeProviderResult[codexRaw];
+                  If[AssociationQ[codexDecoded] &&
+                       TrueQ[codexDecoded["Success"]],
+                    response = Lookup[codexDecoded, "Response", ""];
+                    codexMeta = Lookup[codexDecoded,
+                      "ProviderResultMetadata", None],
+                    response = $Failed;
+                    codexMeta = If[AssociationQ[codexDecoded],
+                      Lookup[codexDecoded, "ProviderResultMetadata",
+                        None],
+                      None]];
+                  Quiet[CurrentValue[nb, WindowStatusArea] =
+                    label <> " " <> iL["\:5fdc\:7b54\:53d7\:4fe1\:5b8c\:4e86 (" <> ToString[Round[AbsoluteTime[] - t0, 1]] <> "s) \[LongDash] \:51e6\:7406\:4e2d...",
+                       " response received (" <> ToString[Round[AbsoluteTime[] - t0, 1]] <> "s) \[LongDash] processing..."]]],
+                (* \[HorizontalLine] Model \:6307\:5b9a\:3042\:308a: iQueryViaAPI \:3067\:76f4\:63a5\:547c\:3073\:51fa\:3057 \[HorizontalLine] *)
+                label = modelSpec[[1]] <> "/" <> modelSpec[[2]];
+                Quiet[CurrentValue[nb, WindowStatusArea] =
+                  label <> " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d...",
+                     " querying..."]];
+                response = iQueryViaAPI[
+                  modelSpec[[1]], modelSpec[[2]], prompt,
+                  If[Length[modelSpec] >= 3, modelSpec[[3]], ""]];
+                Quiet[CurrentValue[nb, WindowStatusArea] =
+                  label <> " " <> iL["\:5fdc\:7b54\:53d7\:4fe1\:5b8c\:4e86 (" <> ToString[Round[AbsoluteTime[] - t0, 1]] <> "s) \[LongDash] \:51e6\:7406\:4e2d...",
+                     " response received (" <> ToString[Round[AbsoluteTime[] - t0, 1]] <> "s) \[LongDash] processing..."]]],
               
               (* \[HorizontalLine]\[HorizontalLine] Model \:6307\:5b9a\:306a\:3057: \:5f93\:6765\:306e provider \:9078\:629e \[HorizontalLine]\[HorizontalLine] *)
               Quiet[CurrentValue[nb, WindowStatusArea] =
@@ -25391,10 +25641,18 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                    "Claude: Response received (" <> ToString[Round[AbsoluteTime[] - t0, 1]] <> "s) \[LongDash] processing..."]]
             ];
             If[StringQ[response],
-              <|"response" -> response|>,
-              <|"response" -> "",
-                "Error" -> "Provider returned non-string: " <>
-                  ToString[Short[response, 2]]|>
+              If[AssociationQ[codexMeta],
+                <|"response" -> response,
+                  "ProviderResultMetadata" -> codexMeta|>,
+                <|"response" -> response|>],
+              If[AssociationQ[codexMeta],
+                <|"response" -> "",
+                  "Error" -> "Provider returned non-string: " <>
+                    ToString[Short[response, 2]],
+                  "ProviderResultMetadata" -> codexMeta|>,
+                <|"response" -> "",
+                  "Error" -> "Provider returned non-string: " <>
+                    ToString[Short[response, 2]]|>]
             ]
           ]
         ]
@@ -25476,6 +25734,29 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                 "providerKind" -> "lmstudio",
                 "lmstudioURL"  -> customURL2,
                 "lmstudioModel"-> lmstudioModel2|>]
+            ]
+          ];
+          
+          (* \[HorizontalLine]\[HorizontalLine] Phase 5 (2026-05-26): chatgptcodex \:5206\:5c90 \[HorizontalLine]\[HorizontalLine]
+             modelSpec[[1]] \:304c Codex provider \:306b\:6b63\:898f\:5316\:3055\:308c\:308b\:5834\:5408\:3001
+             iLaunchCodexExecAsync \:3067 codex exec \:3092\:975e\:540c\:671f\:8d77\:52d5\:3057\:3001
+             deferred sync runState \:3092\:8fd4\:3059\:3002lmstudio \:3068\:540c\:69d8\:306b
+             \:6210\:529f\:6642\:306f\:65e9\:671f Return\:3001\:5931\:6557\:6642\:306f Failure \:3092 Return\:3059\:308b\:3002 *)
+          If[ListQ[modelSpec] && Length[modelSpec] >= 2 &&
+             StringQ[modelSpec[[1]]] &&
+             iCodexProviderQ[modelSpec[[1]]],
+            Module[{codexRun},
+              Quiet[CurrentValue[nb, WindowStatusArea] =
+                "chatgptcodex " <>
+                  iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s",
+                     " querying... 0s"]];
+              codexRun = iLaunchCodexExecAsync[prompt,
+                "Notebook" -> nb, "Timeout" -> timeoutOpt];
+              (* iLaunchCodexExecAsync \:306f\:6210\:529f\:6642 deferred sync
+                 runState (Association)\:3001\:5931\:6557\:6642 CodexRun Failure
+                 \:3092\:8fd4\:3059\:3002Failure \:306f\:305d\:306e\:307e\:307e Return \:3057
+                 iStepQueryProviderAsync \:5074\:3067\:30ce\:30fc\:30c9\:30a8\:30e9\:30fc\:5316\:3055\:308c\:308b\:3002 *)
+              Return[codexRun]
             ]
           ];
           
@@ -28994,6 +29275,1135 @@ ClaudeUpdatePackageWithMode[pkgName_String, prompt_String,
 
 ClaudeUpdatePackageWithMode[___] :=
   <|"Status" -> "Failed", "Reason" -> "InvalidArguments"|>;
+
+(* ============================================================
+   Phase 3 (2026-05-25): ChatGPT Codex CLI integration
+   ============================================================ *)
+
+(* Phase 3a: normalize a provider string to the internal
+   "chatgptcodex" identifier. Bare "chatgpt" is ambiguous and
+   returns a Failure; other known providers pass through. *)
+iCodexNormalizeProvider[raw_String] :=
+  Module[{p},
+    p = ToLowerCase @ StringTrim @ raw;
+    Which[
+      MemberQ[{"chatgptcodex", "chatgpt-codex", "codex", "gptcodex"}, p],
+        "chatgptcodex",
+      p === "chatgpt",
+        Failure["AmbiguousProvider", <|
+          "MessageTemplate" ->
+            "Provider \"chatgpt\" is ambiguous. Use \"chatgptcodex\" for the Codex CLI or \"openai\" for the OpenAI API.",
+          "MessageParameters" -> <||>,
+          "Input" -> raw|>],
+      True,
+        p]];
+
+iCodexNormalizeProvider[___] :=
+  Failure["InvalidProvider", <|
+    "MessageTemplate" -> "Provider must be given as a string.",
+    "MessageParameters" -> <||>|>];
+
+(* True only when the argument normalizes to the Codex provider. *)
+iCodexProviderQ[raw_] :=
+  StringQ[raw] && iCodexNormalizeProvider[raw] === "chatgptcodex";
+
+iCodexProviderQ[___] := False;
+
+(* ------------------------------------------------------------------
+   Phase 3b (2026-05-25): pure helpers for the Codex runner.
+   No process is launched here; these only build text / specs.
+   ------------------------------------------------------------------ *)
+
+(* spec section 9.5: directories of the current session's resolved
+   attachments. Reads the existing session variable only -- it does
+   not maintain any state of its own. *)
+iCurrentSessionAttachmentDirs[] :=
+  DeleteDuplicates @ Select[
+    DirectoryName /@ Select[
+      If[ListQ[$iCurrentSessionAttachments],
+        $iCurrentSessionAttachments, {}],
+      StringQ],
+    DirectoryQ];
+
+(* Normalize a filesystem path for use inside config.toml: Codex
+   config uses forward slashes even on Windows (see spec section 8.4). *)
+iCodexTomlPath[p_String] :=
+  Module[{s},
+    s = StringReplace[p, "\\" -> "/"];
+    If[StringLength[s] > 1 && StringEndsQ[s, "/"] &&
+        ! StringEndsQ[s, ":/"],
+      StringDrop[s, -1], s]];
+iCodexTomlPath[___] := "";
+
+(* spec sections 8.4 / 9.6: build the CODEX_HOME/config.toml text for
+   an nbaccess-codex permission profile. Pure function of the spec.
+
+   Expected spec keys:
+     "ProfileName"        default "nbaccess-codex"
+     "ApprovalPolicy"     default "never"
+     "Model"              Automatic (omit key) or a string
+     "ReadOnlyRoots"      list of absolute read-only roots
+     "GlobScanMaxDepth"   integer (computed from real root depth)
+     "ProjectDocMaxBytes" default 65536
+     "NetworkEnabled"     default False
+*)
+iCodexPermissionConfigText[spec_Association] :=
+  Module[{profile, policy, model, roots, depth, docMax, netEnabled,
+          rootsClean, denyFor, sens, lines},
+    profile     = Lookup[spec, "ProfileName", "nbaccess-codex"];
+    policy      = Lookup[spec, "ApprovalPolicy", "never"];
+    model       = Lookup[spec, "Model", Automatic];
+    roots       = Lookup[spec, "ReadOnlyRoots", {}];
+    depth       = Lookup[spec, "GlobScanMaxDepth", 6];
+    docMax      = Lookup[spec, "ProjectDocMaxBytes", 65536];
+    netEnabled  = TrueQ @ Lookup[spec, "NetworkEnabled", False];
+    sens        = {"*.env", "*secret*", "*credential*", "*token*"};
+    rootsClean  = DeleteDuplicates @ Select[
+      iCodexTomlPath /@ Select[If[ListQ[roots], roots, {}], StringQ],
+      StringLength[#] > 0 &];
+    (* per-root deny globs for sensitive files under a read root *)
+    denyFor[r_] :=
+      ("\"" <> r <> "/**/" <> # <> "\" = \"deny\"") & /@ sens;
+    lines = Join[
+      {"default_permissions = \"" <> profile <> "\"",
+       "project_doc_max_bytes = " <> ToString[docMax],
+       "approval_policy = \"" <> policy <> "\""},
+      If[StringQ[model], {"model = \"" <> model <> "\""}, {}],
+      {"",
+       "[permissions." <> profile <> ".filesystem]",
+       "\":minimal\" = \"read\"",
+       "glob_scan_max_depth = " <> ToString[depth]},
+      If[rootsClean === {}, {},
+        Join[{""}, ("\"" <> # <> "\" = \"read\"") & /@ rootsClean]],
+      If[rootsClean === {}, {},
+        Join[{""}, Flatten[denyFor /@ rootsClean]]],
+      {"",
+       "[permissions." <> profile <> ".filesystem.\":workspace_roots\"]",
+       "\".\" = \"write\"",
+       "\".agents\" = \"read\"",
+       "\".agents/**\" = \"read\"",
+       "\".codex\" = \"read\"",
+       "\".codex/**\" = \"read\"",
+       "\"**/*.env\" = \"deny\"",
+       "\"**/*secret*\" = \"deny\"",
+       "\"**/*credential*\" = \"deny\"",
+       "\"**/*token*\" = \"deny\"",
+       "",
+       "[permissions." <> profile <> ".network]",
+       "enabled = " <> If[netEnabled, "true", "false"]}];
+    StringRiffle[lines, "\n"] <> "\n"];
+
+iCodexPermissionConfigText[___] :=
+  Failure["InvalidCodexSpec", <|
+    "MessageTemplate" ->
+      "Codex permission config spec must be an Association.",
+    "MessageParameters" -> <||>|>];
+
+(* spec sections 8.6 / 9.6: build the `codex exec` invocation. Returns
+   an Association describing the process to start; the runtime workspace
+   root is restricted to --cd <TempProject>. The long prompt is passed
+   via stdin (a prompt file redirected on stdin), never on the command
+   line (Windows command-line length limit). The final answer text is
+   written by Codex to a separate file via --output-last-message.
+
+   Expected spec keys:
+     "CodexExe"       default "codex"
+     "TempProject"    absolute path (required, becomes --cd)
+     "ProfileName"    default "nbaccess-codex"
+     "ApprovalPolicy" default "never"
+     "PromptMode"     "Stdin" (default) or "File"
+     "PromptFile"     absolute path (used when PromptMode is "File")
+     "CodexHome"      absolute path -> CODEX_HOME environment variable
+     "AnswerFile"     absolute path -> --output-last-message target
+                      (optional; when present the flag is emitted and
+                       the path is returned under the "AnswerFile" key)
+*)
+iBuildCodexExecCommand[spec_Association] :=
+  Module[{exe, cd, profile, policy, promptMode, promptFile,
+          codexHome, answerFile, args},
+    exe        = Lookup[spec, "CodexExe", "codex"];
+    cd         = Lookup[spec, "TempProject", Missing["KeyAbsent"]];
+    profile    = Lookup[spec, "ProfileName", "nbaccess-codex"];
+    policy     = Lookup[spec, "ApprovalPolicy", "never"];
+    promptMode = Lookup[spec, "PromptMode", "Stdin"];
+    promptFile = Lookup[spec, "PromptFile", Missing["KeyAbsent"]];
+    codexHome  = Lookup[spec, "CodexHome", Missing["KeyAbsent"]];
+    answerFile = Lookup[spec, "AnswerFile", Missing["KeyAbsent"]];
+    If[!StringQ[cd] || StringLength[cd] == 0,
+      Return @ Failure["InvalidCodexSpec", <|
+        "MessageTemplate" ->
+          "Codex exec spec requires a string TempProject path.",
+        "MessageParameters" -> <||>|>]];
+    If[!MemberQ[{"Stdin", "File"}, promptMode],
+      Return @ Failure["InvalidCodexSpec", <|
+        "MessageTemplate" ->
+          "PromptMode must be \"Stdin\" or \"File\".",
+        "MessageParameters" -> <||>|>]];
+    If[promptMode === "File" && !StringQ[promptFile],
+      Return @ Failure["InvalidCodexSpec", <|
+        "MessageTemplate" ->
+          "PromptMode \"File\" requires a string PromptFile path.",
+        "MessageParameters" -> <||>|>]];
+    args = {"exec", "--cd", cd, "--skip-git-repo-check"};
+    (* --output-last-message <answerFile>: Codex writes only the final
+       answer text to this file. The async runner polls this file as
+       its outFile, so the polled content is the answer body with no
+       log lines mixed in (stdout / stderr carry the session log). *)
+    If[StringQ[answerFile] && StringLength[answerFile] > 0,
+      args = Join[args, {"--output-last-message", answerFile}]];
+    (* trailing "-" forces Codex to read the prompt from stdin
+       (codex exec -). The prompt file is redirected onto stdin by
+       the caller's batch file. *)
+    args = Append[args, "-"];
+    (* NOTE 1: neither --permissions-profile nor --ask-for-approval is
+       passed on the command line. OpenAI Codex CLI v0.133.0's
+       `codex exec` has neither flag; the permission profile and
+       approval policy are applied through default_permissions and
+       approval_policy in CODEX_HOME/config.toml instead. ProfileName
+       and ApprovalPolicy stay in the spec because
+       iCodexPermissionConfigText writes them into config.toml.
+       NOTE 2: --skip-git-repo-check is required because the per-run
+       temp project (--cd target) is a freshly created directory that
+       is not a git repository. Without this flag `codex exec` aborts
+       non-interactively when it cannot find a git repo.
+       NOTE 3: the working-directory flag is `-C, --cd <DIR>` -- this
+       is verified against `codex exec --help` for the installed Codex
+       CLI v0.133.0. Some newer docs write --cwd, but that flag does
+       not exist in this build and causes exit code 2. --cd is the
+       implementation-verified form. *)
+    <|"Executable" -> If[StringQ[exe], exe, "codex"],
+      "Arguments" -> args,
+      "PromptMode" -> promptMode,
+      "PromptFile" -> promptFile,
+      "AnswerFile" -> answerFile,
+      "Environment" ->
+        If[StringQ[codexHome],
+          <|"CODEX_HOME" -> codexHome|>, <||>]|>];
+
+iBuildCodexExecCommand[___] :=
+  Failure["InvalidCodexSpec", <|
+    "MessageTemplate" -> "Codex exec spec must be an Association.",
+    "MessageParameters" -> <||>|>];
+
+(* ------------------------------------------------------------------
+   Phase 3c-1 (2026-05-25): path-resolution helpers for the Codex
+   runner. Pure functions -- no directory is created here.
+   ------------------------------------------------------------------ *)
+
+(* Resolve the temp base directory under which per-run Codex project
+   and home directories are created. $ChatgptWorkingDirectory =
+   Automatic uses $TemporaryDirectory/claudecode-chatgpt-codex. *)
+iCodexResolveWorkingBase[] :=
+  If[StringQ[$ChatgptWorkingDirectory] &&
+       StringLength[$ChatgptWorkingDirectory] > 0,
+    $ChatgptWorkingDirectory,
+    FileNameJoin[{$TemporaryDirectory, "claudecode-chatgpt-codex"}]];
+
+(* Resolve the Codex CLI executable. Automatic defers PATH lookup to
+   the operating system by using the bare command name "codex". *)
+iCodexResolveExe[] :=
+  If[StringQ[$ChatgptCodexExe] && StringLength[$ChatgptCodexExe] > 0,
+    $ChatgptCodexExe,
+    "codex"];
+
+(* NOTE (2026-05-27): Codex model-catalog discovery was moved to
+   SourceVault. Per the SourceVault spec, concrete LLM model ids
+   must not be hard-coded or independently fetched in production
+   .wl files; SourceVault is the single source of truth for the
+   provider model registry. The palette now resolves Codex models
+   through SourceVaultListModels / ClaudeResolveModel. The former
+   iCodexAvailableModels / iCodexParseModelCatalog helpers were
+   removed; SourceVault's iSVFetchCodexModelIds and
+   SourceVaultRefreshModelRegistry (Kind "CodexCLI") replace them. *)
+
+(* A per-run identifier used to uniquely name the project / home
+   directories of one Codex run. *)
+iCodexRunId[] := StringReplace[CreateUUID[], "-" -> ""];
+
+(* Per-run project directory: the single writable workspace root,
+   passed to codex via --cd. *)
+iCodexProjectDir[base_String, runId_String] :=
+  FileNameJoin[{base, "codex_project_" <> runId}];
+iCodexProjectDir[___] := $Failed;
+
+(* Per-run CODEX_HOME directory. Kept OUTSIDE the project root (spec
+   8.8): it sits as a sibling of the project dir under the temp base,
+   so Codex cannot modify its own config from the writable workspace. *)
+iCodexHomeDir[base_String, runId_String] :=
+  FileNameJoin[{base, "codex_home_" <> runId}];
+iCodexHomeDir[___] := $Failed;
+
+(* ------------------------------------------------------------------
+   Phase 5 (2026-05-26): resolve the user's default CODEX_HOME and
+   carry its auth.json into the per-run CODEX_HOME.
+
+   A per-run CODEX_HOME starts empty, so Codex finds no auth.json and
+   every API call fails with 401 Unauthorized (codex exec then exits
+   with code 1). The login credential lives in the user's default
+   CODEX_HOME -- $CODEX_HOME if set, else ~/.codex. iCopyCodexAuth
+   copies that auth.json (and auth-adjacent files) into the per-run
+   home so the sandboxed run authenticates with the user's existing
+   `codex login` session.
+   ------------------------------------------------------------------ *)
+iCodexDefaultHome[] :=
+  Module[{envHome},
+    envHome = Quiet @ Environment["CODEX_HOME"];
+    If[StringQ[envHome] && StringLength[envHome] > 0 &&
+        DirectoryQ[envHome],
+      envHome,
+      FileNameJoin[{$HomeDirectory, ".codex"}]]];
+
+(* Copy auth.json (and version.json, if present) from the default
+   CODEX_HOME into a per-run CODEX_HOME. Returns the list of files
+   actually copied. Never fails hard: a missing source auth.json just
+   yields {} and the run proceeds (and will surface a 401 itself). *)
+iCopyCodexAuth[targetHome_String] :=
+  Module[{srcHome, copied = {}, srcAuth, dstAuth, name},
+    If[! DirectoryQ[targetHome], Return[{}]];
+    srcHome = iCodexDefaultHome[];
+    If[! StringQ[srcHome] || ! DirectoryQ[srcHome] ||
+        ExpandFileName[srcHome] === ExpandFileName[targetHome],
+      Return[copied]];
+    Do[
+      srcAuth = FileNameJoin[{srcHome, name}];
+      dstAuth = FileNameJoin[{targetHome, name}];
+      If[FileExistsQ[srcAuth] && ! FileExistsQ[dstAuth],
+        If[StringQ @ Quiet @ CopyFile[srcAuth, dstAuth],
+          AppendTo[copied, dstAuth]]],
+      {name, {"auth.json", "version.json"}}];
+    copied];
+iCopyCodexAuth[___] := {};
+
+(* Resolve a complete set of per-run paths in one call. Returns an
+   Association; does not touch the filesystem. *)
+iCodexResolveRunPaths[] :=
+  Module[{base, runId},
+    base = iCodexResolveWorkingBase[];
+    runId = iCodexRunId[];
+    <|"WorkingBase" -> base,
+      "RunId" -> runId,
+      "ProjectDir" -> iCodexProjectDir[base, runId],
+      "CodexHomeDir" -> iCodexHomeDir[base, runId]|>];
+
+(* ------------------------------------------------------------------
+   Phase 3c-2 (2026-05-25): directory preparation and glob-scan depth.
+   These do touch the filesystem (CreateDirectory / directory walk).
+   The directive harness itself is materialized separately in 3c-3 via
+   ClaudeDirectives`ClaudeDirectiveMaterializeCodexHarness.
+   ------------------------------------------------------------------ *)
+
+Options[iPrepareChatgptCodexProjectDirectory] =
+  {"WorkingBase" -> Automatic, "RunId" -> Automatic};
+
+(* Create the per-run writable project directory (codex --cd target).
+   Returns the directory path, or $Failed if it could not be created. *)
+iPrepareChatgptCodexProjectDirectory[opts : OptionsPattern[]] :=
+  Module[{base, runId, dir},
+    base = OptionValue[
+      iPrepareChatgptCodexProjectDirectory, {opts}, "WorkingBase"];
+    If[base === Automatic || ! StringQ[base],
+      base = iCodexResolveWorkingBase[]];
+    runId = OptionValue[
+      iPrepareChatgptCodexProjectDirectory, {opts}, "RunId"];
+    If[runId === Automatic || ! StringQ[runId],
+      runId = iCodexRunId[]];
+    dir = iCodexProjectDir[base, runId];
+    If[! StringQ[dir], Return[$Failed]];
+    Quiet @ CreateDirectory[dir, CreateIntermediateDirectories -> True];
+    If[DirectoryQ[dir], dir, $Failed]];
+
+Options[iPrepareChatgptCodexHomeDirectory] =
+  {"WorkingBase" -> Automatic, "RunId" -> Automatic};
+
+(* Create the per-run CODEX_HOME directory. Kept outside the project
+   root (spec 8.8). Returns the directory path, or $Failed. *)
+iPrepareChatgptCodexHomeDirectory[opts : OptionsPattern[]] :=
+  Module[{base, runId, dir},
+    base = OptionValue[
+      iPrepareChatgptCodexHomeDirectory, {opts}, "WorkingBase"];
+    If[base === Automatic || ! StringQ[base],
+      base = iCodexResolveWorkingBase[]];
+    runId = OptionValue[
+      iPrepareChatgptCodexHomeDirectory, {opts}, "RunId"];
+    If[runId === Automatic || ! StringQ[runId],
+      runId = iCodexRunId[]];
+    dir = iCodexHomeDir[base, runId];
+    If[! StringQ[dir], Return[$Failed]];
+    Quiet @ CreateDirectory[dir, CreateIntermediateDirectories -> True];
+    If[DirectoryQ[dir], dir, $Failed]];
+
+(* Depth of the deepest entry under a single read-only root, measured
+   in path components relative to the root. A file directly inside the
+   root has depth 1. An empty / missing root has depth 1. *)
+iCodexSingleRootDepth[root_String] :=
+  Module[{rootLen, entries},
+    If[! DirectoryQ[root], Return[1]];
+    rootLen = Length[FileNameSplit[ExpandFileName[root]]];
+    entries = Quiet @ FileNames["*", root, Infinity];
+    If[! ListQ[entries] || entries === {}, Return[1]];
+    Max[1, Max[
+      (Length[FileNameSplit[ExpandFileName[#]]] - rootLen) & /@
+        entries]]];
+iCodexSingleRootDepth[___] := 1;
+
+(* spec 8.4: choose glob_scan_max_depth from the real depth of the
+   read-only roots actually exposed to Codex, rather than a fixed
+   value. NBAuditCodexAccessibleDirs scans without a depth limit and
+   is the real safety net for deeply-nested secrets. *)
+iCodexGlobScanDepth[roots_List] :=
+  Module[{depths},
+    depths = iCodexSingleRootDepth /@ Select[roots, StringQ];
+    If[depths === {}, 1, Max[1, Max[depths]]]];
+iCodexGlobScanDepth[___] := 1;
+
+(* ------------------------------------------------------------------
+   Phase 3c-3a (2026-05-25): permission spec assembly and config.toml
+   writing. iBuildCodexPermissionSpec is pure; iWriteCodexConfig
+   writes a file.
+   ------------------------------------------------------------------ *)
+
+Options[iBuildCodexPermissionSpec] = {
+  "ProfileName" -> Automatic,
+  "ApprovalPolicy" -> Automatic,
+  "Model" -> Automatic,
+  "NetworkEnabled" -> False,
+  "ProjectDocMaxBytes" -> 65536};
+
+(* Build the spec consumed by iCodexPermissionConfigText from the list
+   of read-only roots to expose to Codex. glob_scan_max_depth is
+   derived from the real depth of those roots. Automatic options fall
+   back to the corresponding $ChatgptCodex* globals. Pure function. *)
+iBuildCodexPermissionSpec[roots_List, opts : OptionsPattern[]] :=
+  Module[{cleanRoots, depth, profile, policy, model, docMax, net},
+    cleanRoots = DeleteDuplicates @ Select[roots,
+      StringQ[#] && StringLength[#] > 0 &];
+    depth = iCodexGlobScanDepth[cleanRoots];
+    profile = OptionValue[
+      iBuildCodexPermissionSpec, {opts}, "ProfileName"];
+    If[profile === Automatic || ! StringQ[profile],
+      profile = $ChatgptCodexPermissionProfile];
+    policy = OptionValue[
+      iBuildCodexPermissionSpec, {opts}, "ApprovalPolicy"];
+    If[policy === Automatic || ! StringQ[policy],
+      policy = $ChatgptCodexApprovalPolicy];
+    model = OptionValue[iBuildCodexPermissionSpec, {opts}, "Model"];
+    If[model === Automatic, model = $ChatgptCodexModel];
+    docMax = OptionValue[
+      iBuildCodexPermissionSpec, {opts}, "ProjectDocMaxBytes"];
+    net = OptionValue[
+      iBuildCodexPermissionSpec, {opts}, "NetworkEnabled"];
+    <|"ProfileName" -> profile,
+      "ApprovalPolicy" -> policy,
+      "Model" -> model,
+      "ReadOnlyRoots" -> cleanRoots,
+      "GlobScanMaxDepth" -> depth,
+      "ProjectDocMaxBytes" -> docMax,
+      "NetworkEnabled" -> TrueQ[net]|>];
+
+iBuildCodexPermissionSpec[___] :=
+  Failure["InvalidCodexSpec", <|
+    "MessageTemplate" ->
+      "iBuildCodexPermissionSpec expects a list of roots.",
+    "MessageParameters" -> <||>|>];
+
+(* Write config.toml into a CODEX_HOME directory. UTF-8, binary
+   stream (Windows encoding discipline). Returns the config path, or
+   $Failed. *)
+iWriteCodexConfig[codexHome_String, configText_String] :=
+  Module[{path, s},
+    If[! DirectoryQ[codexHome],
+      Quiet @ CreateDirectory[codexHome,
+        CreateIntermediateDirectories -> True]];
+    If[! DirectoryQ[codexHome], Return[$Failed]];
+    path = FileNameJoin[{codexHome, "config.toml"}];
+    s = Quiet @ OpenWrite[path, BinaryFormat -> True];
+    If[Head[s] =!= OutputStream, Return[$Failed]];
+    BinaryWrite[s, StringToByteArray[configText, "UTF-8"]];
+    Close[s];
+    (* Phase 5 (2026-05-26): carry the user's `codex login` credential
+       into this per-run CODEX_HOME. Without auth.json every Codex API
+       call returns 401 Unauthorized and `codex exec` exits with 1. *)
+    Quiet @ iCopyCodexAuth[codexHome];
+    If[FileExistsQ[path], path, $Failed]];
+iWriteCodexConfig[___] := $Failed;
+
+(* ------------------------------------------------------------------
+   Phase 3c-3b-1 (2026-05-25): iPrepareCodexRun -- the preparation
+   phase of a Codex run (spec 9.6 steps 1-7). It captures the
+   notebook, collects accessible dirs, runs the mandatory audit gate,
+   indexes the directive snapshot, materializes the Codex harness and
+   writes config.toml. It does NOT launch the Codex CLI; that is step
+   8-9 in iRunChatgptCodexCLI (phase 3c-3b-2).
+
+   Returns an Association with Status -> "Prepared" plus every path /
+   id the runner needs, or a Failure carrying a "Stage" key telling
+   which step failed.
+   ------------------------------------------------------------------ *)
+
+Options[iPrepareCodexRun] = {
+  "Notebook" -> Automatic,
+  "DirectiveRoot" -> Automatic,
+  "Role" -> None,
+  "OnDanger" -> "Fail",
+  "WorkingBase" -> Automatic,
+  "RunId" -> Automatic,
+  "ExtraReadOnlyRoots" -> {}};
+
+iCodexPrepFailure[stage_String, msg_String] :=
+  Failure["CodexRunPrep", <|
+    "MessageTemplate" -> msg,
+    "MessageParameters" -> <||>,
+    "Stage" -> stage|>];
+
+iPrepareCodexRun[opts : OptionsPattern[]] :=
+  Module[
+    {nb, dirRoot, role, onDanger, extraRoots, runId, base,
+     projDir, codexHome, baseDirs, accessDirs, audit, denyContinue,
+     snapResult, snapId, manifestHash, bundle, harnessReport,
+     harnessFiles, permSpec, configText, configPath},
+
+    (* --- step 1: capture the notebook object --- *)
+    nb = OptionValue[iPrepareCodexRun, {opts}, "Notebook"];
+    If[nb === Automatic, nb = EvaluationNotebook[]];
+
+    (* resolve the directive repository root --- *)
+    dirRoot = OptionValue[iPrepareCodexRun, {opts}, "DirectiveRoot"];
+    If[dirRoot === Automatic,
+      dirRoot = Quiet @ Check[
+        ClaudeDirectives`ClaudeResolveDirectiveRoot[Automatic],
+        $Failed]];
+    If[FailureQ[dirRoot] || ! StringQ[dirRoot] ||
+        ! DirectoryQ[dirRoot],
+      Return @ iCodexPrepFailure["DirectiveRoot",
+        "The Claude Directives repository root could not be " <>
+        "resolved. Set DirectiveRoot -> \"...\" explicitly, or make " <>
+        "sure ClaudeFindDirectiveRoots[] locates the repository."]];
+
+    role       = OptionValue[iPrepareCodexRun, {opts}, "Role"];
+    onDanger   = OptionValue[iPrepareCodexRun, {opts}, "OnDanger"];
+    denyContinue = (onDanger === "DenyAndContinue");
+    extraRoots = OptionValue[
+      iPrepareCodexRun, {opts}, "ExtraReadOnlyRoots"];
+    If[! ListQ[extraRoots], extraRoots = {}];
+
+    (* --- resolve / create per-run directories --- *)
+    base = OptionValue[iPrepareCodexRun, {opts}, "WorkingBase"];
+    If[base === Automatic || ! StringQ[base],
+      base = iCodexResolveWorkingBase[]];
+    runId = OptionValue[iPrepareCodexRun, {opts}, "RunId"];
+    If[runId === Automatic || ! StringQ[runId],
+      runId = iCodexRunId[]];
+    projDir = iPrepareChatgptCodexProjectDirectory[
+      "WorkingBase" -> base, "RunId" -> runId];
+    If[! StringQ[projDir],
+      Return @ iCodexPrepFailure["ProjectDirectory",
+        "The Codex temp project directory could not be created."]];
+    codexHome = iPrepareChatgptCodexHomeDirectory[
+      "WorkingBase" -> base, "RunId" -> runId];
+    If[! StringQ[codexHome],
+      Return @ iCodexPrepFailure["CodexHome",
+        "The CODEX_HOME directory could not be created."]];
+
+    (* --- step 2: collect accessible dirs (read-only) --- *)
+    baseDirs = Quiet @ Check[iCollectAccessibleDirs[nb], {}];
+    If[! ListQ[baseDirs], baseDirs = {}];
+    accessDirs = DeleteDuplicates @ Select[
+      Join[baseDirs,
+        If[ListQ[$ChatgptAccessibleDirs], $ChatgptAccessibleDirs, {}],
+        iCurrentSessionAttachmentDirs[],
+        Select[extraRoots, StringQ]],
+      StringQ[#] && StringLength[#] > 0 && DirectoryQ[#] &];
+
+    (* --- steps 3-4: mandatory audit gate --- *)
+    audit = Quiet @ Check[
+      If[denyContinue,
+        NBAccess`NBAuditCodexAccessibleDirs[accessDirs,
+          "OnDanger" -> "DenyAndContinue"],
+        NBAccess`NBAuditCodexAccessibleDirs[accessDirs]],
+      $Failed];
+    If[FailureQ[audit],
+      Return @ iCodexPrepFailure["Audit",
+        "NBAuditCodexAccessibleDirs reported dangerous files; " <>
+        "Codex was not started. Pass OnDanger -> \"DenyAndContinue\" " <>
+        "only after reviewing the findings."]];
+    If[! AssociationQ[audit],
+      Return @ iCodexPrepFailure["Audit",
+        "NBAuditCodexAccessibleDirs returned an unexpected result."]];
+
+    (* --- step 5: index the directive snapshot in SourceVault --- *)
+    snapResult = Quiet @ Check[
+      SourceVault`SourceVaultIndexDirectiveRepository[dirRoot],
+      $Failed];
+    If[! AssociationQ[snapResult],
+      Return @ iCodexPrepFailure["DirectiveSnapshot",
+        "SourceVaultIndexDirectiveRepository failed."]];
+    snapId = Lookup[snapResult, "SnapshotId", Missing[]];
+    manifestHash = Lookup[snapResult, "ManifestHash", Missing[]];
+
+    (* --- step 6: materialize the Codex harness into the project --- *)
+    bundle = Quiet @ Check[
+      ClaudeDirectives`ClaudeResolveDirectiveBundle[
+        "Role" -> role,
+        "Provider" -> "chatgptcodex",
+        "Target" -> "Codex"],
+      $Failed];
+    If[FailureQ[bundle] || ! AssociationQ[bundle],
+      Return @ iCodexPrepFailure["DirectiveBundle",
+        "ClaudeResolveDirectiveBundle failed for the Codex target."]];
+    harnessReport = Quiet @ Check[
+      ClaudeDirectives`ClaudeDirectiveMaterializeCodexHarness[
+        bundle, projDir],
+      $Failed];
+    If[FailureQ[harnessReport] || ! AssociationQ[harnessReport],
+      Return @ iCodexPrepFailure["HarnessMaterialization",
+        "ClaudeDirectiveMaterializeCodexHarness failed."]];
+    harnessFiles = Lookup[harnessReport, "WrittenFiles", {}];
+    If[! ListQ[harnessFiles], harnessFiles = {}];
+
+    (* --- step 7: permission profile -> CODEX_HOME/config.toml --- *)
+    permSpec = iBuildCodexPermissionSpec[accessDirs];
+    If[! AssociationQ[permSpec],
+      Return @ iCodexPrepFailure["PermissionSpec",
+        "The Codex permission spec could not be built."]];
+    configText = iCodexPermissionConfigText[permSpec];
+    If[! StringQ[configText],
+      Return @ iCodexPrepFailure["PermissionConfig",
+        "The Codex config.toml text could not be generated."]];
+    configPath = iWriteCodexConfig[codexHome, configText];
+    If[! StringQ[configPath],
+      Return @ iCodexPrepFailure["ConfigWrite",
+        "config.toml could not be written into CODEX_HOME."]];
+
+    (* --- prepared run spec --- *)
+    <|"Status" -> "Prepared",
+      "Provider" -> "chatgptcodex",
+      "Notebook" -> nb,
+      "DirectiveRoot" -> dirRoot,
+      "RunId" -> runId,
+      "WorkingBase" -> base,
+      "ProjectDir" -> projDir,
+      "CodexHomeDir" -> codexHome,
+      "ConfigPath" -> configPath,
+      "AccessibleDirs" -> accessDirs,
+      "AuditResult" -> audit,
+      "DirectiveSnapshotId" -> snapId,
+      "DirectiveManifestHash" -> manifestHash,
+      "HarnessReport" -> harnessReport,
+      "HarnessFiles" -> harnessFiles,
+      "PermissionSpec" -> permSpec|>];
+
+iPrepareCodexRun[___] :=
+  iCodexPrepFailure["Arguments",
+    "iPrepareCodexRun expects only options."];
+
+(* ------------------------------------------------------------------
+   Phase 3c-3b-2 (2026-05-25): iRunChatgptCodexCLI -- the full Codex
+   runner (spec 9.6). It calls iPrepareCodexRun for steps 1-7, then
+   does step 8 (hand the prompt to Codex over stdin) and step 9 (launch
+   `codex exec`, collect the result, register the harness bundle in
+   SourceVault, and return the run record).
+   ------------------------------------------------------------------ *)
+
+(* UTF-8 binary text writer used for the prompt file. *)
+iCodexWriteTextFile[path_String, text_String] :=
+  Module[{s},
+    s = Quiet @ OpenWrite[path, BinaryFormat -> True];
+    If[Head[s] =!= OutputStream, Return[$Failed]];
+    BinaryWrite[s, StringToByteArray[text, "UTF-8"]];
+    Close[s];
+    If[FileExistsQ[path], path, $Failed]];
+iCodexWriteTextFile[___] := $Failed;
+
+iCodexRunFailure[stage_String, msg_String, extra_Association : <||>] :=
+  Failure["CodexRun", Join[<|
+    "MessageTemplate" -> msg,
+    "MessageParameters" -> <||>,
+    "Stage" -> stage|>, extra]];
+
+(* ------------------------------------------------------------------
+   Phase 5 (2026-05-26): iMakeCodexBat -- build a Windows batch file
+   that launches `codex exec` for the async DAG path. The batch file
+   is started with StartProcess[{"cmd","/c",batFile}] so the kernel is
+   never blocked (rules/95 D: deferred sync runState uses StartProcess,
+   never RunProcess).
+
+   The batch:
+     - sets CODEX_HOME inside the process (StartProcess' environment
+       handling differs from RunProcess; an in-batch `set` is the
+       robust way to scope CODEX_HOME without dropping PATH)
+     - runs `codex exec --cd <proj> --skip-git-repo-check
+       --output-last-message <answerFile> -`
+     - redirects the prompt file onto stdin (codex exec - reads stdin)
+     - redirects stdout to a session-log file and stderr to an
+       error-log file (Codex prints its answer to --output-last-message
+       and its session log to stderr; see result17 probe)
+
+   Arguments mirror iMakeBatStreamJson's positional style. Returns the
+   batch file path, or $Failed on write failure.
+   ------------------------------------------------------------------ *)
+iMakeCodexBat[execCmd_Association, promptFile_String,
+    answerFile_String, stdoutLog_String, stderrLog_String] :=
+  Module[{batFile, exe, argStr, codexHome, bc, strm, workDir},
+    workDir = Lookup[execCmd, "_WorkDir",
+      Quiet @ Check[$ClaudeWorkingDirectory, $TemporaryDirectory]];
+    If[!StringQ[workDir] || !DirectoryQ[workDir],
+      workDir = $TemporaryDirectory];
+    batFile = FileNameJoin[{workDir,
+      "codex_run_" <> ToString[UnixTime[]] <> "_" <>
+      ToString[RandomInteger[99999]] <> ".bat"}];
+    exe = Lookup[execCmd, "Executable", "codex"];
+    (* quote each argument; codex exec arg list comes from
+       iBuildCodexExecCommand and ends with the bare "-" *)
+    argStr = StringRiffle[
+      Map[Function[a, "\"" <> ToString[a] <> "\""],
+        Lookup[execCmd, "Arguments", {}]], " "];
+    codexHome = Lookup[Lookup[execCmd, "Environment", <||>],
+      "CODEX_HOME", Missing["KeyAbsent"]];
+    bc = "@echo off\r\n" <>
+         "chcp 65001 > nul\r\n" <>
+         If[StringQ[codexHome],
+           "set \"CODEX_HOME=" <> codexHome <> "\"\r\n", ""] <>
+         "\"" <> exe <> "\" " <> argStr <>
+         " < \"" <> promptFile <> "\"" <>
+         " > \"" <> stdoutLog <> "\"" <>
+         " 2> \"" <> stderrLog <> "\"\r\n";
+    If[!StringQ[bc],
+      Print["  [iMakeCodexBat] ERROR: bat content is not a String"];
+      Return[$Failed]];
+    strm = Quiet @ OpenWrite[batFile, BinaryFormat -> True];
+    If[Head[strm] =!= OutputStream,
+      Print["  [iMakeCodexBat] ERROR: OpenWrite failed for ", batFile];
+      Return[$Failed]];
+    BinaryWrite[strm, StringToByteArray[bc, "UTF-8"]];
+    Close[strm];
+    If[!FileExistsQ[batFile],
+      Print["  [iMakeCodexBat] WARN: file missing after write: ",
+        batFile];
+      Return[$Failed]];
+    batFile];
+iMakeCodexBat[___] := $Failed;
+
+Options[iRunChatgptCodexCLI] = Options[iPrepareCodexRun];
+
+iRunChatgptCodexCLI[prompt_String, opts : OptionsPattern[]] :=
+  Module[
+    {prep, projDir, codexHome, configPath, accessDirs, snapId,
+     manifestHash, harnessFiles, permSpec, exe, promptFile,
+     answerFile, answerText,
+     execCmd, cmdList, env, fullEnv, runResult, exitCode, stdout,
+     stderr, model, profileHash, envHash, bundleReg, bundleId},
+
+    (* steps 1-7 *)
+    prep = iPrepareCodexRun[opts];
+    If[FailureQ[prep], Return[prep]];
+    If[! AssociationQ[prep] || Lookup[prep, "Status"] =!= "Prepared",
+      Return @ iCodexRunFailure["Prepare",
+        "Codex run preparation did not complete."]];
+
+    projDir      = Lookup[prep, "ProjectDir"];
+    codexHome    = Lookup[prep, "CodexHomeDir"];
+    configPath   = Lookup[prep, "ConfigPath"];
+    accessDirs   = Lookup[prep, "AccessibleDirs", {}];
+    snapId       = Lookup[prep, "DirectiveSnapshotId"];
+    manifestHash = Lookup[prep, "DirectiveManifestHash"];
+    harnessFiles = Lookup[prep, "HarnessFiles", {}];
+    permSpec     = Lookup[prep, "PermissionSpec", <||>];
+
+    (* step 8: write the prompt file (UTF-8). The prompt is fed on
+       stdin below; the file is kept for provenance and avoids the
+       Windows command-line length limit on long prompts. The final
+       answer is written by Codex to answerFile via
+       --output-last-message; this is more robust than scraping
+       stdout (stdout also carries the session log on some builds). *)
+    promptFile = FileNameJoin[{projDir, "codex_prompt.txt"}];
+    answerFile = FileNameJoin[{projDir, "codex_answer.txt"}];
+    If[! StringQ @ iCodexWriteTextFile[promptFile, prompt],
+      Return @ iCodexRunFailure["PromptFile",
+        "The Codex prompt file could not be written."]];
+
+    exe = iCodexResolveExe[];
+    execCmd = iBuildCodexExecCommand[<|
+      "CodexExe" -> exe,
+      "TempProject" -> projDir,
+      "ProfileName" -> Lookup[permSpec, "ProfileName",
+        $ChatgptCodexPermissionProfile],
+      "ApprovalPolicy" -> Lookup[permSpec, "ApprovalPolicy",
+        $ChatgptCodexApprovalPolicy],
+      "PromptMode" -> "Stdin",
+      "AnswerFile" -> answerFile,
+      "CodexHome" -> codexHome|>];
+    If[FailureQ[execCmd] || ! AssociationQ[execCmd],
+      Return @ iCodexRunFailure["ExecCommand",
+        "The Codex exec command could not be built."]];
+
+    (* step 9: launch `codex exec`. On Windows the codex command is
+       often a .cmd / .ps1 wrapper (npm-style) that RunProcess cannot
+       start directly, so the invocation is wrapped in `cmd /c`. The
+       prompt is fed on stdin so it is never placed on the command
+       line (Windows command-line length limit). *)
+    cmdList = Prepend[execCmd["Arguments"], execCmd["Executable"]];
+    If[$OperatingSystem === "Windows",
+      cmdList = Join[{"cmd", "/c"}, cmdList]];
+    env = execCmd["Environment"];
+
+    (* RunProcess' ProcessEnvironment REPLACES the whole environment,
+       so passing only {CODEX_HOME} would drop PATH and the command
+       could not even be found. Merge CODEX_HOME into a copy of the
+       current environment instead. *)
+    fullEnv = If[AssociationQ[env] && Length[env] > 0,
+      Normal @ Join[Association @ GetEnvironment[], env],
+      Automatic];
+
+    runResult = Quiet @ Check[
+      If[fullEnv === Automatic,
+        RunProcess[cmdList, All, prompt],
+        RunProcess[cmdList, All, prompt,
+          ProcessEnvironment -> fullEnv]],
+      $Failed];
+    If[! AssociationQ[runResult],
+      Return @ iCodexRunFailure["Launch",
+        "The Codex CLI process could not be run. Check that the " <>
+        "Codex CLI is on PATH for the Wolfram kernel, or set " <>
+        "$ChatgptCodexExe to its full path.",
+        <|"Executable" -> execCmd["Executable"],
+          "CommandList" -> cmdList|>]];
+
+    exitCode = Lookup[runResult, "ExitCode", Missing[]];
+    stdout   = Lookup[runResult, "StandardOutput", ""];
+    stderr   = Lookup[runResult, "StandardError", ""];
+    (* prefer the --output-last-message answer file (final answer text
+       only). Fall back to stdout if the file was not produced. *)
+    answerText = If[StringQ[answerFile] && FileExistsQ[answerFile],
+      Module[{a = Quiet @ Import[answerFile, "Text"]},
+        If[StringQ[a], StringTrim[a], stdout]],
+      stdout];
+    (* Automatic means the Codex CLI run-time default model was used. *)
+    model    = $ChatgptCodexModel;
+
+    (* hashes for the run / bundle record *)
+    profileHash = If[StringQ[configPath] && FileExistsQ[configPath],
+      "sha256-" <> FileHash[configPath, "SHA256", "HexString"],
+      Missing[]];
+    envHash = "sha256-" <> Hash[
+      {Sort @ accessDirs, KeySort @ permSpec,
+       $ChatgptCodexApprovalPolicy}, "SHA256", "HexString"];
+
+    (* register the materialized harness as a SourceVault bundle *)
+    bundleReg = Quiet @ Check[
+      SourceVault`SourceVaultRegisterHarnessMaterialization[
+        "Codex", harnessFiles,
+        <|"HarnessMode" -> $ChatgptCodexHarnessMode,
+          "DirectiveRoot" -> Lookup[prep, "DirectiveRoot"],
+          "DirectiveRepositorySnapshotId" -> snapId,
+          "DirectiveRepositoryManifestHash" -> manifestHash,
+          "RuntimeEnvironmentHash" -> envHash,
+          "PermissionProfileHash" -> profileHash,
+          "Generator" -> "iRunChatgptCodexCLI"|>],
+      $Failed];
+    bundleId = If[AssociationQ[bundleReg],
+      Lookup[bundleReg, "BundleId", Missing[]], Missing[]];
+
+    (* NOTE: per spec 9.2 $ChatgptCodexRetainTempProjects defaults to
+       False, but this MVP runner does not delete the temp project /
+       CODEX_HOME: the harness files are referenced by the SourceVault
+       bundle. Cleanup is deferred to a later phase. *)
+
+    <|"Provider" -> "chatgptcodex",
+      "Model" -> model,
+      "Output" -> answerText,
+      "Raw" -> runResult,
+      "ExitCode" -> exitCode,
+      "StandardError" -> stderr,
+      "TempProject" -> projDir,
+      "CodexHome" -> codexHome,
+      "ConfigPath" -> configPath,
+      "DirectiveSnapshotId" -> snapId,
+      "HarnessBundleId" -> bundleId,
+      "RuntimeEnvironmentHash" -> envHash,
+      "AuditResult" -> Lookup[prep, "AuditResult"]|>];
+
+iRunChatgptCodexCLI[___] :=
+  iCodexRunFailure["Arguments",
+    "iRunChatgptCodexCLI expects a prompt string and options."];
+
+(* ------------------------------------------------------------------
+   Phase 5 (2026-05-26): iLaunchCodexExecAsync -- the async counterpart
+   of iRunChatgptCodexCLI. It runs iPrepareCodexRun for steps 1-7, then
+   writes the prompt file and a batch file and launches `codex exec`
+   with StartProcess (non-blocking). It returns a deferred sync
+   runState (rules/95 D):
+
+     <|"proc"->ProcessObject, "outFile"->answerFile,
+       "errFile"->stderrLog, "startTime"->..., "timeout"->...,
+       "providerKind"->"chatgptcodex", ...codex provenance...|>
+
+   The LLMGraphDAG scheduler polls "proc" for completion and then reads
+   "outFile" (= the --output-last-message answer file, which holds only
+   the final answer text). On launch failure it returns a CodexRun
+   Failure, which iStepQueryProviderAsync surfaces as a node error.
+   ------------------------------------------------------------------ *)
+Options[iLaunchCodexExecAsync] = Join[
+  Options[iPrepareCodexRun], {"Timeout" -> Automatic}];
+
+iLaunchCodexExecAsync[prompt_String, opts : OptionsPattern[]] :=
+  Module[
+    {prep, projDir, codexHome, configPath, accessDirs, snapId,
+     manifestHash, permSpec, exe, promptFile, answerFile,
+     stdoutLog, stderrLog, execCmd, batFile, proc, ts, envHash,
+     profileHash, timeoutOpt, prepOpts},
+    prepOpts = FilterRules[{opts}, Options[iPrepareCodexRun]];
+    timeoutOpt = OptionValue["Timeout"];
+
+    (* steps 1-7: shared with the sync runner *)
+    prep = iPrepareCodexRun[Sequence @@ prepOpts];
+    If[FailureQ[prep], Return[prep]];
+    If[! AssociationQ[prep] || Lookup[prep, "Status"] =!= "Prepared",
+      Return @ iCodexRunFailure["Prepare",
+        "Codex run preparation did not complete."]];
+
+    projDir      = Lookup[prep, "ProjectDir"];
+    codexHome    = Lookup[prep, "CodexHomeDir"];
+    configPath   = Lookup[prep, "ConfigPath"];
+    accessDirs   = Lookup[prep, "AccessibleDirs", {}];
+    snapId       = Lookup[prep, "DirectiveSnapshotId"];
+    manifestHash = Lookup[prep, "DirectiveManifestHash"];
+    permSpec     = Lookup[prep, "PermissionSpec", <||>];
+
+    (* file layout: prompt + answer + logs all under the temp project *)
+    ts = ToString[UnixTime[]] <> "r" <>
+      ToString[RandomInteger[99999]];
+    promptFile = FileNameJoin[{projDir, "codex_prompt_" <> ts <> ".txt"}];
+    answerFile = FileNameJoin[{projDir, "codex_answer_" <> ts <> ".txt"}];
+    stdoutLog  = FileNameJoin[{projDir, "codex_stdout_" <> ts <> ".log"}];
+    stderrLog  = FileNameJoin[{projDir, "codex_stderr_" <> ts <> ".log"}];
+
+    If[! StringQ @ iCodexWriteTextFile[promptFile, prompt],
+      Return @ iCodexRunFailure["PromptFile",
+        "The Codex prompt file could not be written."]];
+
+    exe = iCodexResolveExe[];
+    execCmd = iBuildCodexExecCommand[<|
+      "CodexExe" -> exe,
+      "TempProject" -> projDir,
+      "ProfileName" -> Lookup[permSpec, "ProfileName",
+        $ChatgptCodexPermissionProfile],
+      "ApprovalPolicy" -> Lookup[permSpec, "ApprovalPolicy",
+        $ChatgptCodexApprovalPolicy],
+      "PromptMode" -> "Stdin",
+      "AnswerFile" -> answerFile,
+      "CodexHome" -> codexHome|>];
+    If[FailureQ[execCmd] || ! AssociationQ[execCmd],
+      Return @ iCodexRunFailure["ExecCommand",
+        "The Codex exec command could not be built."]];
+
+    batFile = iMakeCodexBat[
+      Append[execCmd, "_WorkDir" -> projDir],
+      promptFile, answerFile, stdoutLog, stderrLog];
+    If[! StringQ[batFile],
+      Return @ iCodexRunFailure["BatchFile",
+        "The Codex launch batch file could not be written."]];
+
+    proc = Quiet @ Check[
+      StartProcess[{"cmd", "/c", batFile}], $Failed];
+    If[! MatchQ[proc, _ProcessObject],
+      Return @ iCodexRunFailure["Launch",
+        "codex exec could not be started. Check that the Codex CLI " <>
+        "is on PATH for the Wolfram kernel, or set $ChatgptCodexExe " <>
+        "to its full path.",
+        <|"Executable" -> Lookup[execCmd, "Executable", "codex"],
+          "BatchFile" -> batFile|>]];
+
+    profileHash = If[StringQ[configPath] && FileExistsQ[configPath],
+      "sha256-" <> FileHash[configPath, "SHA256", "HexString"],
+      Missing[]];
+    envHash = "sha256-" <> Hash[
+      {Sort @ accessDirs, KeySort @ permSpec,
+       $ChatgptCodexApprovalPolicy}, "SHA256", "HexString"];
+
+    (* deferred sync runState (rules/95 D). outFile is the
+       --output-last-message answer file; the DAG scheduler reads it
+       once the process finishes. parseFn trims trailing whitespace
+       (codex writes the answer plus a trailing newline). *)
+    <|"proc"         -> proc,
+      "outFile"      -> answerFile,
+      "errFile"      -> stderrLog,
+      "batFile"      -> batFile,
+      "promptFile"   -> promptFile,
+      "startTime"    -> AbsoluteTime[],
+      "timeout"      -> timeoutOpt,
+      "providerKind" -> "chatgptcodex",
+      "parseFn"      -> Function[{raw},
+        If[StringQ[raw], StringTrim[raw], raw]],
+      (* Codex provenance carried through to ProviderResultMetadata *)
+      "ProviderKind"           -> "ChatGPTCodexCLI",
+      "TempProject"            -> projDir,
+      "CodexHome"              -> codexHome,
+      "ConfigPath"             -> configPath,
+      "DirectiveSnapshotId"    -> snapId,
+      "RuntimeEnvironmentHash" -> envHash,
+      "PermissionProfileHash"  -> profileHash,
+      "HarnessFiles"           -> Lookup[prep, "HarnessFiles", {}],
+      "DirectiveRoot"          -> Lookup[prep, "DirectiveRoot"],
+      "DirectiveManifestHash"  -> manifestHash|>];
+
+iLaunchCodexExecAsync[___] :=
+  iCodexRunFailure["Arguments",
+    "iLaunchCodexExecAsync expects a prompt string and options."];
+
+(* ------------------------------------------------------------------
+   Phase 4a (2026-05-25): Direct-mode Claude CLI harness evidence.
+   When $ClaudeCLIHarnessMode is "Direct" the existing .claude/ tree
+   is copied as-is; this helper records the copied files in SourceVault
+   as a HarnessMaterialization bundle (spec 7.3) so that even the
+   legacy Direct path has a version-control entry point. The record is
+   distinguished from a Generated bundle by HarnessMode -> "Direct" and
+   SourceKind -> "LegacyClaudeDotClaude".
+   ------------------------------------------------------------------ *)
+iRegisterClaudeDirectHarnessEvidence[
+    copiedFiles_List, sourceRoot_String] :=
+  Quiet @ Check[
+    SourceVault`SourceVaultRegisterHarnessMaterialization[
+      "ClaudeCLI",
+      Select[copiedFiles, StringQ],
+      <|"HarnessMode" -> "Direct",
+        "SourceKind" -> "LegacyClaudeDotClaude",
+        "SourceRoot" -> sourceRoot,
+        "DirectiveRepositorySnapshotId" ->
+          Missing["NotUsedInDirectMode"],
+        "DirectiveRepositoryManifestHash" ->
+          Missing["NotUsedInDirectMode"],
+        "Generator" -> "iRegisterClaudeDirectHarnessEvidence"|>],
+    $Failed];
+iRegisterClaudeDirectHarnessEvidence[___] := $Failed;
+
+(* ------------------------------------------------------------------
+   Phase 5 (2026-05-26): iDecodeProviderResult -- decode a raw provider
+   execution result into the common shape consumed by the runtime
+   adapter and the ClaudeOrchestrator trace layer (spec 13.2). It is a
+   general-purpose decoder: it understands a Codex run record (the
+   Association returned by iRunChatgptCodexCLI), a Failure, a plain
+   response string and an <|"response" -> ...|> association, and falls
+   back gracefully for anything else.
+
+   Success shape:
+     <|"Success" -> True, "Provider" -> ..., "Response" -> <string>,
+       "ProviderResultMetadata" -> <association>|>
+   Failure shape:
+     <|"Success" -> False, "Provider" -> ..., "Error" -> <string>,
+       "ProviderResultMetadata" -> <association>|>
+
+   ProviderResultMetadata always carries at least "ProviderKind"; for a
+   Codex run record it also carries HarnessBundleId, DirectiveSnapshotId
+   and RuntimeEnvironmentHash so the Orchestrator trace can attribute
+   the turn without re-deriving them.
+   ------------------------------------------------------------------ *)
+
+(* Render a Failure object as a short human-readable string. *)
+iDecodeFailureText[f_Failure] :=
+  Module[{tag, tmpl, params, msg},
+    tag = Quiet @ Check[First[f], "Failure"];
+    tmpl = Quiet @ Check[f["MessageTemplate"], Missing[]];
+    params = Quiet @ Check[f["MessageParameters"], <||>];
+    msg = Which[
+      StringQ[tmpl] && AssociationQ[params] && Length[params] > 0,
+        Quiet @ Check[
+          StringTemplate[tmpl][params], tmpl],
+      StringQ[tmpl], tmpl,
+      True, ToString[Short[f, 2]]];
+    If[StringQ[tag],
+      "[" <> tag <> "] " <> ToString[msg],
+      ToString[msg]]];
+iDecodeFailureText[___] := "Unknown failure.";
+
+(* Metadata for a Codex run record (iRunChatgptCodexCLI shape). *)
+iDecodeProviderResultCodexMeta[record_Association] :=
+  <|"ProviderKind" -> "ChatGPTCodexCLI",
+    "Provider" -> Lookup[record, "Provider", "chatgptcodex"],
+    "Model" -> Lookup[record, "Model", Automatic],
+    "ExitCode" -> Lookup[record, "ExitCode", Missing[]],
+    "HarnessBundleId" -> Lookup[record, "HarnessBundleId", Missing[]],
+    "DirectiveSnapshotId" ->
+      Lookup[record, "DirectiveSnapshotId", Missing[]],
+    "RuntimeEnvironmentHash" ->
+      Lookup[record, "RuntimeEnvironmentHash", Missing[]],
+    "TempProject" -> Lookup[record, "TempProject", Missing[]],
+    "CodexHome" -> Lookup[record, "CodexHome", Missing[]]|>;
+iDecodeProviderResultCodexMeta[___] :=
+  <|"ProviderKind" -> "ChatGPTCodexCLI"|>;
+
+(* A Codex run record: identified by ExitCode plus Output / Raw. The
+   more specific definition is given first so it is tried before the
+   generic <|"response" -> ...|> form below. *)
+iDecodeProviderResult[record_Association] /;
+    KeyExistsQ[record, "ExitCode"] &&
+      (KeyExistsQ[record, "Output"] || KeyExistsQ[record, "Raw"]) :=
+  Module[{exit, output, stderr, meta, okQ},
+    exit   = Lookup[record, "ExitCode", Missing[]];
+    output = Lookup[record, "Output", ""];
+    stderr = Lookup[record, "StandardError", ""];
+    meta   = iDecodeProviderResultCodexMeta[record];
+    okQ    = (exit === 0) && StringQ[output];
+    If[okQ,
+      <|"Success" -> True,
+        "Provider" -> Lookup[record, "Provider", "chatgptcodex"],
+        "Response" -> output,
+        "ProviderResultMetadata" -> meta|>,
+      <|"Success" -> False,
+        "Provider" -> Lookup[record, "Provider", "chatgptcodex"],
+        "Error" -> StringJoin[
+          "Codex CLI run did not succeed (ExitCode -> ",
+          ToString[exit], ").",
+          If[StringQ[stderr] && StringLength[stderr] > 0,
+            " StandardError: " <> stderr, ""]],
+        "ProviderResultMetadata" -> meta|>]];
+
+(* A Failure object from anywhere in the provider path. *)
+iDecodeProviderResult[f_Failure] :=
+  <|"Success" -> False,
+    "Provider" -> "unknown",
+    "Error" -> iDecodeFailureText[f],
+    "ProviderResultMetadata" ->
+      <|"ProviderKind" -> "Unknown", "RawFailure" -> f|>|>;
+
+(* A generic <|"response" -> ...|> association (QueryProvider shape). *)
+iDecodeProviderResult[record_Association] /;
+    KeyExistsQ[record, "response"] :=
+  Module[{resp},
+    resp = Lookup[record, "response", ""];
+    If[StringQ[resp] && StringLength[resp] > 0 &&
+         ! KeyExistsQ[record, "Error"],
+      <|"Success" -> True,
+        "Provider" -> Lookup[record, "Provider", "unknown"],
+        "Response" -> resp,
+        "ProviderResultMetadata" ->
+          <|"ProviderKind" -> "Generic"|>|>,
+      <|"Success" -> False,
+        "Provider" -> Lookup[record, "Provider", "unknown"],
+        "Error" -> Lookup[record, "Error",
+          "Provider returned an empty response."],
+        "ProviderResultMetadata" ->
+          <|"ProviderKind" -> "Generic"|>|>]];
+
+(* A bare response string. *)
+iDecodeProviderResult[s_String] :=
+  <|"Success" -> True,
+    "Provider" -> "unknown",
+    "Response" -> s,
+    "ProviderResultMetadata" -> <|"ProviderKind" -> "Generic"|>|>;
+
+(* $Failed and anything else: fail closed. *)
+iDecodeProviderResult[$Failed] :=
+  <|"Success" -> False,
+    "Provider" -> "unknown",
+    "Error" -> "Provider returned $Failed.",
+    "ProviderResultMetadata" -> <|"ProviderKind" -> "Unknown"|>|>;
+
+iDecodeProviderResult[other_] :=
+  <|"Success" -> False,
+    "Provider" -> "unknown",
+    "Error" -> "Provider returned an undecodable result: " <>
+      ToString[Short[other, 3]],
+    "ProviderResultMetadata" -> <|"ProviderKind" -> "Unknown"|>|>;
 
 End[];
 

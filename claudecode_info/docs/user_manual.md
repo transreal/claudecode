@@ -35,6 +35,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - Wolfram Mathematica 13.x 以降
 - Windows 11（macOS/Linux ではパス区切りやシェルコマンドを適宜読み替えてください）
 - Claude Code CLI がインストール済みで、パスが通っていること
+- ChatGPT Codex CLI（オプション、`chatgptcodex` provider 利用時。`npm install -g @openai/codex` でインストール）
 - Node.js（node-pty によるインタラクティブ CLI 実行に使用）
 - [NBAccess](https://github.com/transreal/NBAccess) パッケージ（`NBAccess.wl`）
 - [GitHubREST](https://github.com/transreal/github) パッケージ（`github.wl`）— オプション、GitHub 連携時に必要
@@ -366,6 +367,54 @@ SystemCredential["lmstudio-http://127.0.0.1:1234"] = "your-lm-studio-api-key";
 
 **注意**: キー名に含まれる URL は `$ClaudeModel` の第3要素（カスタム URL）と一致させてください。リモートの LM Studio サーバーを使用する場合はそのサーバーの URL に合わせてキー名を変更してください。
 
+### ChatGPT Codex の直接使用
+
+`$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定することで、Claude Code CLI の代わりに OpenAI の ChatGPT Codex CLI を provider として使用できます。
+
+#### 事前準備
+
+ChatGPT Codex CLI を npm でインストールし、OpenAI アカウントでログインします。
+
+```bash
+npm install -g @openai/codex
+codex --version
+codex login
+```
+
+`codex login` で作成される認証情報（`auth.json`）は既定の `CODEX_HOME`（`~/.codex`）に保存されます。ClaudeCode は Codex 実行ごとに一時的な `CODEX_HOME` を作成しますが、この認証情報を自動的に引き継ぐため、一度 `codex login` を実行しておけば ClaudeCode 経由の Codex 実行でも認証が通ります。
+
+#### 基本使用例
+
+```mathematica
+(* provider を ChatGPT Codex に切り替え（モデルは CLI 既定） *)
+$ClaudeModel = {"chatgptcodex", Automatic}
+
+(* Codex 経由でコード生成 *)
+ClaudeEval["1 から 100 までの和を求めてください"]
+
+(* provider を Claude Code に戻す *)
+$ClaudeModel = {"claudecode", "claude-opus-4-7"}
+```
+
+Codex provider は Claude CLI と同じ非同期実行経路で動作します。Codex 実行ごとに一時的な作業ディレクトリと `CODEX_HOME` を作成し、`codex exec` をバックグラウンドで起動して結果をポーリングするため、実行中にカーネルがブロックされることはありません。
+
+Claude Code CLI も Codex CLI もサブスクリプション契約に基づく CLI であり、メーター制 API（`anthropic` / `openai` provider）とは課金体系が異なります。claudecode の課金 API ガードは `chatgptcodex` provider を無課金扱いとするため、課金 API を許可しない設定でも Codex 経由のコード生成が利用できます。
+
+#### モデルの選択
+
+ChatGPT Codex のモデル名は SourceVault が一元管理します。具体的な LLM モデル ID をパッケージソースに直書きせず、SourceVault のモデルレジストリから解決する設計です。詳細は「SourceVault 連携」の「ChatGPT Codex モデルレジストリ」を参照してください。
+
+`$ChatgptCodexModel` に具体的なモデル名を設定するか、操作パレットの `M:` ボタンで選択できます。`Automatic` を選ぶと Codex CLI の既定モデルが使われます。
+
+#### 主な設定変数
+
+| 変数 | 既定値 | 説明 |
+|---|---|---|
+| `$ChatgptCodexExe` | `Automatic` | Codex CLI 実行ファイルのパス。`Automatic` は PATH から解決 |
+| `$ChatgptCodexModel` | `Automatic` | Codex のモデル名。`Automatic` は config.toml の model キーを省略し CLI 既定モデルを使用 |
+| `$ChatgptWorkingDirectory` | `Automatic` | Codex 実行のベース作業ディレクトリ。`Automatic` は `$TemporaryDirectory` 配下の `claudecode-chatgpt-codex` |
+| `$ChatgptCodexApprovalPolicy` | `"never"` | Codex の承認ポリシー。`"never"` は非対話で実行 |
+
 ### 多言語対応（$Language ベースの言語切り替え）
 
 ClaudeCode は Wolfram Language の `$Language` 変数を参照して、Claude への応答言語指示を自動生成します。
@@ -454,6 +503,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - Wolfram Mathematica 13.x 以降
 - Windows 11（macOS/Linux ではパス区切りやシェルコマンドを適宜読み替えてください）
 - Claude Code CLI がインストール済みで、パスが通っていること
+- ChatGPT Codex CLI（オプション、`chatgptcodex` provider 利用時。`npm install -g @openai/codex` でインストール）
 - Node.js（node-pty によるインタラクティブ CLI 実行に使用）
 - [NBAccess](https://github.com/transreal/NBAccess) パッケージ（`NBAccess.wl`）
 - [GitHubREST](https://github.com/transreal/github) パッケージ（`github.wl`）— オプション、GitHub 連携時に必要
@@ -789,6 +839,54 @@ SystemCredential["lmstudio-http://127.0.0.1:1234"] = "your-lm-studio-api-key";
 登録後は `ClaudeEval` 等の呼び出し時に API キーが自動取得されます。未登録の場合は認証なしのダミーキー（`"lm-studio"`）にフォールバックするため、Require Authentication が Off の通常利用では登録不要です。
 
 **注意**: キー名に含まれる URL は `$ClaudeModel` の第3要素（カスタム URL）と一致させてください。リモートの LM Studio サーバーを使用する場合はそのサーバーの URL に合わせてキー名を変更してください。
+
+### ChatGPT Codex の直接使用
+
+`$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定することで、Claude Code CLI の代わりに OpenAI の ChatGPT Codex CLI を provider として使用できます。
+
+#### 事前準備
+
+ChatGPT Codex CLI を npm でインストールし、OpenAI アカウントでログインします。
+
+```bash
+npm install -g @openai/codex
+codex --version
+codex login
+```
+
+`codex login` で作成される認証情報（`auth.json`）は既定の `CODEX_HOME`（`~/.codex`）に保存されます。ClaudeCode は Codex 実行ごとに一時的な `CODEX_HOME` を作成しますが、この認証情報を自動的に引き継ぐため、一度 `codex login` を実行しておけば ClaudeCode 経由の Codex 実行でも認証が通ります。
+
+#### 基本使用例
+
+```mathematica
+(* provider を ChatGPT Codex に切り替え（モデルは CLI 既定） *)
+$ClaudeModel = {"chatgptcodex", Automatic}
+
+(* Codex 経由でコード生成 *)
+ClaudeEval["1 から 100 までの和を求めてください"]
+
+(* provider を Claude Code に戻す *)
+$ClaudeModel = {"claudecode", "claude-opus-4-7"}
+```
+
+Codex provider は Claude CLI と同じ非同期実行経路で動作します。Codex 実行ごとに一時的な作業ディレクトリと `CODEX_HOME` を作成し、`codex exec` をバックグラウンドで起動して結果をポーリングするため、実行中にカーネルがブロックされることはありません。
+
+Claude Code CLI も Codex CLI もサブスクリプション契約に基づく CLI であり、メーター制 API（`anthropic` / `openai` provider）とは課金体系が異なります。claudecode の課金 API ガードは `chatgptcodex` provider を無課金扱いとするため、課金 API を許可しない設定でも Codex 経由のコード生成が利用できます。
+
+#### モデルの選択
+
+ChatGPT Codex のモデル名は SourceVault が一元管理します。具体的な LLM モデル ID をパッケージソースに直書きせず、SourceVault のモデルレジストリから解決する設計です。詳細は「SourceVault 連携」の「ChatGPT Codex モデルレジストリ」を参照してください。
+
+`$ChatgptCodexModel` に具体的なモデル名を設定するか、操作パレットの `M:` ボタンで選択できます。`Automatic` を選ぶと Codex CLI の既定モデルが使われます。
+
+#### 主な設定変数
+
+| 変数 | 既定値 | 説明 |
+|---|---|---|
+| `$ChatgptCodexExe` | `Automatic` | Codex CLI 実行ファイルのパス。`Automatic` は PATH から解決 |
+| `$ChatgptCodexModel` | `Automatic` | Codex のモデル名。`Automatic` は config.toml の model キーを省略し CLI 既定モデルを使用 |
+| `$ChatgptWorkingDirectory` | `Automatic` | Codex 実行のベース作業ディレクトリ。`Automatic` は `$TemporaryDirectory` 配下の `claudecode-chatgpt-codex` |
+| `$ChatgptCodexApprovalPolicy` | `"never"` | Codex の承認ポリシー。`"never"` は非対話で実行 |
 
 ### 多言語対応（$Language ベースの言語切り替え）
 
@@ -1740,6 +1838,31 @@ PromptRouter ブリッジは複数段階のガードで安全性を確保して�
 | `$ClaudeEvalPromptRouterPreemptsNatural = False` | 自然言語ルーターを先に試行する移行期間モード |
 
 SourceVault をロードしていない、または PromptRouter を `False` に設定している場合、`ClaudeEval` の挙動は従来と完全に同じです。
+
+#### ChatGPT Codex モデルレジストリ
+
+SourceVault は PromptRouter ブリッジに加えて、LLM provider のモデルレジストリを一元管理します。頻繁に変わる外部情報であるモデル名を `rules/`・`skills/`・パッケージソースに直書きせず、SourceVault の compiled モデルレジストリから解決する設計です。ChatGPT Codex provider のモデル名もこの仕組みで管理されます。
+
+```mathematica
+(* SourceVault をロード *)
+Needs["SourceVault`"]
+
+(* Codex のモデルカタログを取得してレジストリを更新 *)
+SourceVaultRefreshModelRegistry["Providers" -> {"chatgptcodex"}]
+
+(* Codex の選択可能なモデル一覧 *)
+SourceVaultListModels["chatgptcodex"]
+
+(* 用途（intent）に応じたモデル解決 *)
+ClaudeResolveModel["chatgptcodex", "code-heavy"]
+```
+
+`SourceVaultRefreshModelRegistry` は Codex CLI の `codex debug models` コマンドを実行してモデルカタログ（JSON）を取得し、compiled モデルレジストリに登録します。Codex は HTTP の `/v1/models` エンドポイントではなく CLI コマンドでモデル一覧を提供するため、SourceVault 内部では provider 種別 `CodexCLI` として取り扱われます。
+
+- `SourceVaultListModels[provider]` — 指定 provider の選択可能な全モデル ID を列挙します。パレットのモデルピッカーがこの API を使用します。
+- `ClaudeResolveModel[provider, intent]` — 用途に応じた最適モデル 1 件を解決します（`SourceVaultResolve["Model", ...]` の互換 wrapper）。
+
+レジストリが未更新の場合や SourceVault をロードしていない場合、パレットは最小限のフォールバック候補（`Automatic`）のみを表示します。SourceVault の seed レジストリには災害復旧用の最小限の Codex モデルエントリが含まれますが、production での正しいモデル情報は compiled レジストリです。
 
 ### ClaudeTestKit（テストフレームワーク）
 

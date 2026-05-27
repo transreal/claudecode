@@ -177,6 +177,89 @@ ClaudeDirectivesParseFrontmatter::usage =
   "\:623b\:308a\:5024: <|\"Frontmatter\"->Association,\"Body\"->String|>";
 
 
+
+(* ===================================================================
+   Phase 1.0: Directive Repository Inventory / Manifest / Hash
+   (Codex integration spec 5th review, sections 4.1 / 5.2 / 11.2 / 15.1)
+   SourceVault-independent pure functions.
+   =================================================================== *)
+
+ClaudeResolveDirectiveRoot::usage =
+  "ClaudeResolveDirectiveRoot[Automatic] resolves the canonical Claude Directives root via ClaudeFindDirectiveRoots, returning Failure[\"DirectiveRootNotFound\"] when none exists. ClaudeResolveDirectiveRoot[root] validates an explicit root directory string.";
+
+ClaudeDirectiveFileInventory::usage =
+  "ClaudeDirectiveFileInventory[root] returns the Phase 1.0 inventory of a Claude Directives repository as a sorted list of file records. root is a directory string or Automatic. Each record fixes the schema: Role, RelativePath, LogicalPath, AbsolutePath, ContentHash, ByteCount, LineCount, Name, Title, Description, FrontMatter, Paths, TokenEstimate, ModifiedTime. Role is one of RootInstruction | Rule | Skill | Other. Option \"IncludeOther\" controls whether non rule/skill repository files are included.";
+
+ClaudeDirectiveRepositoryInventory::usage =
+  "ClaudeDirectiveRepositoryInventory[root] is an alias of ClaudeDirectiveFileInventory[root].";
+
+ClaudeDirectiveRepositoryManifest::usage =
+  "ClaudeDirectiveRepositoryManifest[root] returns a DirectiveRepositoryManifest association: Kind, CanonicalFormat, Root, Files (the inventory), FilesCount, RulesCount, SkillsCount, ManifestHash, CreatedAt, Generator. The ManifestHash depends only on the sorted RelativePath/ContentHash pairs and is stable under ModifiedTime or TokenEstimate changes.";
+
+ClaudeDirectiveRepositoryHash::usage =
+  "ClaudeDirectiveRepositoryHash[root] returns only the ManifestHash string of the directive repository at root.";
+
+
+(* ===================================================================
+   Phase 1.1a: rule derived metadata & classification
+   (Codex integration spec 5th review, sections 6.5.2 / 6.5.3)
+   SourceVault-independent pure functions over inventory records.
+   =================================================================== *)
+
+$CodexRuleLargeByteThreshold::usage =
+  "$CodexRuleLargeByteThreshold is the byte-count boundary above which a rule is classified as \"large\" by ClaudeDirectiveClassifyRule. Default 8192.";
+
+ClaudeDirectiveRuleDerivedMetadata::usage =
+  "ClaudeDirectiveRuleDerivedMetadata[ruleRecord] derives Codex-harness metadata for a rule inventory record (a Role -> \"Rule\" record from ClaudeDirectiveFileInventory). The canonical rule frontmatter is assumed to carry no description/summary/trigger; these are derived deterministically from the rule heading (Title) and the paths frontmatter. Returns an association with Title, Summary, Description, Trigger, DescriptionSource (\"derived-from-paths-and-heading\" | \"override\" | \"fallback\") and Paths. Option \"RuleMetadataOverrides\" supplies an opt-in per-rule override association keyed by rule Name.";
+
+ClaudeDirectiveClassifyRule::usage =
+  "ClaudeDirectiveClassifyRule[ruleRecord] classifies a rule inventory record for harness materialization. Returns an association with Scope (\"always-on\" | \"task-specific\"), SizeClass (\"small\" | \"large\"), CommandPolicy, InlineSummaryInAgentsMd (a candidate value; the final inline decision is re-evaluated against the AGENTS.md byte budget in ClaudeDirectiveHarnessPlan) and Reason. Options: \"AlwaysOnRules\", \"RuleLargeByteThreshold\", \"RuleMetadataOverrides\".";
+
+
+(* ===================================================================
+   Phase 1.1b-1: harness plan (dry-run)
+   (Codex integration spec 5th review, sections 5.2 / 5.4 / 6.3-6.6)
+   ClaudeDirectiveHarnessPlan computes, without writing any file,
+   the full Codex harness layout: AGENTS.md budget, directive index
+   entries, generated rule/skill skills, command-policy rules.
+   =================================================================== *)
+
+ClaudeDirectiveHarnessPlan::usage =
+  "ClaudeDirectiveHarnessPlan[bundle, target] returns a dry-run materialization plan for a harness without writing any file. target is \"Codex\" or \"ClaudeCLI\"; the \"ClaudeCLI\" plan is a verbatim-copy plan (no AGENTS.md, no directive index). The plan association contains Target, HarnessMaterializationMode, DirectiveRepositoryManifestHash, SourceVaultSnapshotId, AgentsMd (TargetRelativePath / EstimatedByteCount / InlineRuleNames / OmittedRuleNames / HardMaxBytes), Index (TargetRelativePath / Entries), GeneratedSkills, CommandPolicyRules, ProvenanceFiles and Warnings. Options: \"HarnessMaterializationMode\", \"AgentsMdTargetMaxBytes\", \"AgentsMdHardMaxBytes\", \"RuleLargeByteThreshold\", \"AlwaysOnRules\", \"RuleMetadataOverrides\", \"SourceVaultSnapshotId\".";
+
+
+(* ===================================================================
+   Phase 1.1b-2: Codex harness materialization
+   (Codex integration spec 5th review, sections 5.2 / 6.6-6.8)
+   ClaudeDirectiveMaterializeCodexHarness executes a harness plan and
+   writes AGENTS.md, .agents/skills/<name>/SKILL.md,
+   .agents/directive-index.json and provenance files.
+   =================================================================== *)
+
+ClaudeDirectiveHarnessProvenanceHeader::usage =
+  "ClaudeDirectiveHarnessProvenanceHeader[meta] returns the HTML-comment provenance header placed at the top of a generated AGENTS.md. meta is an association that may carry DirectiveRepositoryManifestHash, SourceVaultSnapshotId and HarnessMaterializationMode.";
+
+ClaudeDirectiveMaterializeCodexHarness::usage =
+  "ClaudeDirectiveMaterializeCodexHarness[bundle, targetDir] materializes a Codex harness under targetDir by executing ClaudeDirectiveHarnessPlan. It writes generated rule/skill SKILL.md files under .agents/skills, .agents/directive-index.json, AGENTS.md and provenance files, in that fixed order. The canonical Claude Directives repository is never modified. Returns a materialization report (WrittenFiles, AgentsMd, Index, GeneratedSkills, ProvenanceFiles, Warnings, Plan). With DryRun -> True no file is written and the plan is returned. Options mirror ClaudeDirectiveHarnessPlan plus GenerateDirectiveIndex, GenerateProvenance, CommandPolicyMaterialization, DryRun and FailOnAgentsMdOverflow.";
+
+ClaudeDirectiveMaterializeClaudeHarness::usage =
+  "ClaudeDirectiveMaterializeClaudeHarness[bundle, targetDir] materializes a Claude CLI harness under targetDir from the canonical Claude Directives repository (Phase 4, $ClaudeCLIHarnessMode -> \"Generated\"). It writes .claude/CLAUDE.md, .claude/rules/<name>.md and .claude/skills/<name>/SKILL.md as verbatim copies of the canonical files (no rule-to-skill conversion, no AGENTS.md, no directive index), plus .claude/sourcevault-provenance.json. The canonical repository is never modified, and .claude/settings.json is left to the caller (claudecode.wl injects read permissions). Returns a materialization report (WrittenFiles, RootInstruction, GeneratedFiles, ProvenanceFiles, Warnings, Plan). With DryRun -> True no file is written and the plan is returned. Options: HarnessMaterializationMode, DirectiveRepositoryManifestHash, SourceVaultSnapshotId, GenerateProvenance, DryRun.";
+
+
+(* ===================================================================
+   Phase 2.5: migration gate (Codex integration spec, section 4)
+   Diagnoses the difference between the canonical Claude Directives
+   repository and a legacy $ClaudeWorkingDirectory/.claude/ harness,
+   compared on normalised logical paths. Codex-independent; gates the
+   Phase 4 switch of Claude CLI from Direct to Generated.
+   =================================================================== *)
+
+ClaudeDirectiveCompareCanonicalAndClaudeHarness::usage =
+  "ClaudeDirectiveCompareCanonicalAndClaudeHarness[directiveRoot, claudeDir] compares a canonical Claude Directives repository against a legacy .claude/ harness on normalised logical paths (CLAUDE.md, rules/<name>.md, skills/<name>/SKILL.md). Returns the raw comparison: CanonicalEquivMap, LegacyEquivMap, FilesOnlyInCanonical, FilesOnlyInLegacy, FilesChanged, LegacyHarnessOnlyFiles (settings.json etc., excluded from equivalence), CanonicalDirExists, LegacyDirExists.";
+
+ClaudeDirectiveMigrationReport::usage =
+  "ClaudeDirectiveMigrationReport[directiveRoot, claudeDir] is the migration gate: it reports whether the legacy .claude/ harness is equivalent to the canonical Claude Directives repository. Returns <|\"CanonicalRoot\", \"LegacyClaudeDir\", \"CanonicalHash\", \"LegacyHarnessHash\", \"Status\", \"FilesOnlyInCanonical\", \"FilesOnlyInLegacy\", \"FilesChanged\", \"LegacyHarnessOnlyFiles\", \"RecommendedAction\"|>. Status is \"Equivalent\" | \"Diverged\" | \"LegacyOnly\" | \"CanonicalOnly\". Hashes are computed over normalised {LogicalPath, ContentHash} pairs of CLAUDE.md / rules / skills only; harness-only files do not affect Status. Switching Claude CLI to Generated mode requires Status \"Equivalent\" or manual approval.";
+
 Begin["`Private`"];
 
 $ClaudeDirectivesVersion = "0.1.12-phase35-stage1-provider-generic-resolve";
@@ -1314,7 +1397,12 @@ Options[ClaudeResolveDirectiveBundle] = {
   "Mode"        -> Automatic,
   "TaskHint"    -> "",
   "TokenBudget" -> Automatic,
-  "MaxSkills"   -> Automatic   (* v0.1.9: 5 \[RightArrow] Automatic ($ClaudeRoleMaxSkills \:53c2\:7167) *)
+  "MaxSkills"   -> Automatic,  (* v0.1.9: 5 -> Automatic ($ClaudeRoleMaxSkills) *)
+  (* Phase 1.1b (Codex spec 5.4): harness-target options.
+     Target -> "Prompt" keeps the legacy behaviour unchanged. *)
+  "Provider"                   -> Automatic,
+  "Target"                     -> "Prompt",
+  "HarnessMaterializationMode" -> Automatic
 };
 
 ClaudeResolveDirectiveBundle[opts:OptionsPattern[]] :=
@@ -1415,7 +1503,7 @@ ClaudeResolveDirectiveBundle[opts:OptionsPattern[]] :=
         "SelectedSkillNames" -> (Lookup[#, "Name", ""] &) /@ skills,
         "SelectedRuleNames"  -> (Lookup[#, "Name", ""] &) /@ rules
       |>
-    |>
+    |> ~Join~ iHarnessBundleMeta[OptionValue["Target"], OptionValue["Provider"], OptionValue["HarnessMaterializationMode"], repo]
   ];
 
 (* mode \:306b\:5fdc\:3058\:305f token \:63a8\:5b9a *)
@@ -1609,6 +1697,1748 @@ ClaudeBuildDirectivePromptForSingle[modelName_String, taskHint_String] :=
 
 ClaudeBuildDirectivePromptForSingle[___] := "";
 
+
+
+(* ===================================================================
+   Phase 1.0: Directive Repository Inventory / Manifest / Hash
+   Spec 5th review: sections 4.1, 5.2, 11.2, 15.1.
+   These functions are SourceVault-independent and side-effect free
+   (no global state mutation, no file writes).
+   =================================================================== *)
+
+(* ---- root argument resolution (spec 5.3) ---- *)
+
+ClaudeResolveDirectiveRoot[Automatic] :=
+  Module[{roots = ClaudeFindDirectiveRoots[]},
+    If[roots === {},
+      Failure["DirectiveRootNotFound",
+        <|"Message" ->
+            "No Claude Directives repository was found."|>],
+      First[roots]]];
+
+ClaudeResolveDirectiveRoot[root_String] :=
+  If[DirectoryQ[root],
+    root,
+    Failure["DirectiveRootNotFound", <|"Root" -> root|>]];
+
+ClaudeResolveDirectiveRoot[other_] :=
+  Failure["DirectiveRootInvalid", <|"Given" -> other|>];
+
+(* internal: normalise a root argument to an absolute, existing directory *)
+
+iDirectiveResolveRootArg[Automatic] :=
+  Module[{r = ClaudeResolveDirectiveRoot[Automatic]},
+    If[FailureQ[r], r, ExpandFileName[r]]];
+
+iDirectiveResolveRootArg[root_String] :=
+  If[DirectoryQ[root],
+    ExpandFileName[root],
+    Failure["DirectiveRootNotFound", <|"Root" -> root|>]];
+
+iDirectiveResolveRootArg[other_] :=
+  Failure["DirectiveRootInvalid", <|"Given" -> other|>];
+
+(* ---- per-file helpers ---- *)
+
+(* SHA-256 of the raw file bytes, formatted as "sha256-<lowerhex>" *)
+iDirectiveContentHash[path_String] :=
+  Module[{h},
+    h = Quiet @ Check[FileHash[path, "SHA256", "HexString"], $Failed];
+    If[StringQ[h],
+      "sha256-" <> ToLowerCase[h],
+      Missing["HashFailed"]]];
+
+iDirectiveContentHash[_] := Missing["HashFailed"];
+
+(* relative path of absPath under root, normalised with "/" separators *)
+iDirectiveRelativePath[root_String, absPath_String] :=
+  Module[{rs, as},
+    rs = FileNameSplit[ExpandFileName[root]];
+    as = FileNameSplit[ExpandFileName[absPath]];
+    If[Length[as] > Length[rs] && Take[as, Length[rs]] === rs,
+      StringRiffle[Drop[as, Length[rs]], "/"],
+      StringRiffle[as, "/"]]];
+
+(* first Markdown heading in the body, used as Title *)
+iDirectiveExtractTitle[body_String] :=
+  Module[{m},
+    m = StringCases[body,
+      RegularExpression["(?m)^#+[ \\t]+(.+?)[ \\t]*$"] :> "$1", 1];
+    If[Length[m] >= 1 && StringQ[First[m]] &&
+       StringTrim[First[m]] =!= "",
+      StringTrim[First[m]],
+      Missing["NotAvailable"]]];
+
+iDirectiveExtractTitle[_] := Missing["NotAvailable"];
+
+(* normalise the frontmatter "paths" entry to a list of strings *)
+iDirectiveNormalizePaths[fm_Association] :=
+  Module[{p = Lookup[fm, "paths", Lookup[fm, "Paths", {}]]},
+    Which[
+      ListQ[p], Select[p, StringQ],
+      StringQ[p] && StringTrim[p] =!= "", {StringTrim[p]},
+      True, {}]];
+
+iDirectiveNormalizePaths[_] := {};
+
+(* build one inventory record.
+   role   : "RootInstruction" | "Rule" | "Skill" | "Other"
+   root   : repository root (absolute)
+   absPath: absolute path of the file *)
+iDirectiveFileRecord[role_String, root_String, absPath_String] :=
+  Module[{relPath, raw, parsed, fm, body, title, name, desc,
+          paths, bytes, lineCount, mtime, chash},
+    relPath = iDirectiveRelativePath[root, absPath];
+    chash   = iDirectiveContentHash[absPath];
+    bytes   = Quiet @ Check[FileByteCount[absPath],
+                Missing["NotAvailable"]];
+    mtime   = Quiet @ Check[FileDate[absPath],
+                Missing["NotAvailable"]];
+    raw = Quiet @ Check[
+      Block[{$CharacterEncoding = "UTF-8"},
+        Import[absPath, "Text"]], ""];
+    If[!StringQ[raw], raw = ""];
+    lineCount = If[raw === "", 0, StringCount[raw, "\n"] + 1];
+    parsed = iParseFrontmatter[raw];
+    fm     = Lookup[parsed, "Frontmatter", <||>];
+    body   = Lookup[parsed, "Body", raw];
+    If[!AssociationQ[fm], fm = <||>];
+    If[!StringQ[body], body = raw];
+    title  = iDirectiveExtractTitle[body];
+    paths  = iDirectiveNormalizePaths[fm];
+    name   = Switch[role,
+      "Rule",            FileBaseName[absPath],
+      "Skill",           Lookup[fm, "name",
+                           FileBaseName[DirectoryName[absPath]]],
+      "RootInstruction", Missing["NotApplicable"],
+      _,                 FileBaseName[absPath]];
+    desc   = Lookup[fm, "description", Missing["NotAvailable"]];
+    <|
+      "Role"          -> role,
+      "RelativePath"  -> relPath,
+      "LogicalPath"   -> relPath,
+      "AbsolutePath"  -> ExpandFileName[absPath],
+      "ContentHash"   -> chash,
+      "ByteCount"     -> bytes,
+      "LineCount"     -> lineCount,
+      "Name"          -> name,
+      "Title"         -> title,
+      "Description"   -> desc,
+      "FrontMatter"   -> fm,
+      "Paths"         -> paths,
+      "TokenEstimate" -> ClaudeDirectiveTokenEstimate[raw],
+      "ModifiedTime"  -> mtime
+    |>];
+
+(* ---- ClaudeDirectiveFileInventory ---- *)
+
+Options[ClaudeDirectiveFileInventory] = {"IncludeOther" -> True};
+
+ClaudeDirectiveFileInventory[rootArg_, opts:OptionsPattern[]] :=
+  Module[{root, includeOther, records = {}, claudeMD,
+          rulesDir, ruleFiles, skillsDir, skillDirs,
+          rootMdFiles},
+    root = iDirectiveResolveRootArg[rootArg];
+    If[FailureQ[root], Return[root]];
+    includeOther = TrueQ[OptionValue[
+      ClaudeDirectiveFileInventory, {opts}, "IncludeOther"]];
+
+    (* CLAUDE.md at the repository root *)
+    claudeMD = FileNameJoin[{root, "CLAUDE.md"}];
+    If[FileExistsQ[claudeMD],
+      AppendTo[records,
+        iDirectiveFileRecord["RootInstruction", root, claudeMD]]];
+
+    (* rules/*.md *)
+    rulesDir = FileNameJoin[{root, "rules"}];
+    ruleFiles = If[DirectoryQ[rulesDir],
+      Sort @ FileNames["*.md", rulesDir], {}];
+    records = Join[records,
+      Map[iDirectiveFileRecord["Rule", root, #] &, ruleFiles]];
+
+    (* skills/<name>/SKILL.md *)
+    skillsDir = FileNameJoin[{root, "skills"}];
+    skillDirs = If[DirectoryQ[skillsDir],
+      Sort @ Select[FileNames["*", skillsDir], DirectoryQ], {}];
+    records = Join[records,
+      Map[
+        iDirectiveFileRecord["Skill", root,
+          FileNameJoin[{#, "SKILL.md"}]] &,
+        Select[skillDirs,
+          FileExistsQ[FileNameJoin[{#, "SKILL.md"}]] &]]];
+
+    (* other top-level *.md files (README.md etc.) *)
+    If[includeOther,
+      rootMdFiles = Select[
+        Sort @ FileNames["*.md", root],
+        FileBaseName[#] =!= "CLAUDE" &];
+      records = Join[records,
+        Map[iDirectiveFileRecord["Other", root, #] &, rootMdFiles]]];
+
+    SortBy[records, Lookup[#, "RelativePath", ""] &]];
+
+(* alias *)
+Options[ClaudeDirectiveRepositoryInventory] =
+  Options[ClaudeDirectiveFileInventory];
+
+ClaudeDirectiveRepositoryInventory[rootArg_, opts:OptionsPattern[]] :=
+  ClaudeDirectiveFileInventory[rootArg, opts];
+
+(* ---- ManifestHash (spec 11.2) ----
+   Computed ONLY from the sorted {RelativePath, ContentHash} pairs.
+   ModifiedTime, TokenEstimate, ByteCount, LineCount, Role and
+   AbsolutePath are intentionally excluded. *)
+
+iDirectiveManifestHash[inv_List] :=
+  Module[{pairs, canon},
+    pairs = SortBy[
+      Map[
+        {ToString[Lookup[#, "RelativePath", ""]],
+         ToString[Lookup[#, "ContentHash", ""]]} &,
+        inv],
+      First];
+    canon = StringRiffle[
+      Map[First[#] <> "\t" <> Last[#] &, pairs], "\n"];
+    "sha256-" <>
+      ToLowerCase[Hash[canon, "SHA256", "HexString"]]];
+
+iDirectiveManifestHash[_] := Missing["NotAvailable"];
+
+(* ---- ClaudeDirectiveRepositoryManifest ---- *)
+
+Options[ClaudeDirectiveRepositoryManifest] =
+  Options[ClaudeDirectiveFileInventory];
+
+ClaudeDirectiveRepositoryManifest[rootArg_, opts:OptionsPattern[]] :=
+  Module[{root, inv},
+    root = iDirectiveResolveRootArg[rootArg];
+    If[FailureQ[root], Return[root]];
+    inv = ClaudeDirectiveFileInventory[root, opts];
+    If[FailureQ[inv], Return[inv]];
+    <|
+      "Kind"            -> "DirectiveRepositoryManifest",
+      "CanonicalFormat" -> "ClaudeDirectives",
+      "Root"            -> root,
+      "Files"           -> inv,
+      "FilesCount"      -> Length[inv],
+      "RulesCount"      ->
+        Count[inv, KeyValuePattern["Role" -> "Rule"]],
+      "SkillsCount"     ->
+        Count[inv, KeyValuePattern["Role" -> "Skill"]],
+      "ManifestHash"    -> iDirectiveManifestHash[inv],
+      "CreatedAt"       -> Now,
+      "Generator"       -> <|
+        "Package" -> "claudecode_directives.wl",
+        "Version" -> $ClaudeDirectivesVersion
+      |>
+    |>];
+
+(* ---- ClaudeDirectiveRepositoryHash ---- *)
+
+Options[ClaudeDirectiveRepositoryHash] =
+  Options[ClaudeDirectiveFileInventory];
+
+ClaudeDirectiveRepositoryHash[rootArg_, opts:OptionsPattern[]] :=
+  Module[{m = ClaudeDirectiveRepositoryManifest[rootArg, opts]},
+    If[FailureQ[m],
+      m,
+      Lookup[m, "ManifestHash", Missing["NotAvailable"]]]];
+
+
+(* ===================================================================
+   Phase 1.1a: rule derived metadata & classification
+   Spec 5th review: sections 6.5.2 (derived metadata) and
+   6.5.3 (rule classification). Pure functions over inventory records.
+   =================================================================== *)
+
+(* large-rule threshold; respect a value the user already set *)
+If[!ValueQ[$CodexRuleLargeByteThreshold],
+  $CodexRuleLargeByteThreshold = 8192];
+
+(* file extensions that, inside a brace group, are NOT identifiers *)
+$iCodexKnownExtensions = {
+  "wl", "wls", "m", "nb", "cdf", "mx", "wxf",
+  "md", "txt", "json", "csv", "tsv"};
+
+(* humanise a rule file stem, e.g. "10-nbaccess" -> "Nbaccess" *)
+iHumanizeStem[stem_String] :=
+  Module[{s},
+    s = StringReplace[stem,
+      RegularExpression["^[0-9]+[-_]"] -> ""];
+    s = StringReplace[s, "-" | "_" -> " "];
+    s = StringTrim[s];
+    If[s === "", stem, Capitalize[s, "AllWords"]]];
+
+iHumanizeStem[_] := "";
+
+(* shorten a string to roughly n characters *)
+iShortenText[s_String, n_Integer] :=
+  If[StringLength[s] <= n, s, StringTake[s, n] <> "..."];
+
+iShortenText[_, _] := "";
+
+(* identifier tokens found inside glob brace-groups
+   (extension-only groups such as {wl,wls,m,nb} are not identifiers) *)
+iRuleGlobIdentifiers[paths_List] :=
+  Module[{groups, ids},
+    groups = Flatten[
+      Map[
+        StringCases[#, "{" ~~ Shortest[g___] ~~ "}" :> g] &,
+        Select[paths, StringQ]]];
+    ids = Flatten[
+      Map[
+        Function[grp, StringTrim /@ StringSplit[grp, ","]],
+        groups]];
+    ids = Select[ids,
+      StringQ[#] && # =!= "" &&
+        !MemberQ[$iCodexKnownExtensions, ToLowerCase[#]] &];
+    DeleteDuplicates[ids]];
+
+iRuleGlobIdentifiers[_] := {};
+
+(* a glob is "broad" when it targets essentially the whole repository:
+   "*", "**/*", "**/*.<ext-group>" with no literal identifier *)
+iGlobIsBroad[glob_String] :=
+  iRuleGlobIdentifiers[{glob}] === {} &&
+  StringMatchQ[glob,
+    ("**/" | "*/" | "") ~~ "*" ~~ ("." ~~ ___ | "")];
+
+iGlobIsBroad[_] := False;
+
+(* derive a trigger sentence from the paths frontmatter (spec 6.5.2 #3) *)
+iDeriveTriggerFromPaths[paths_List] :=
+  Module[{ids},
+    If[AnyTrue[paths, iGlobIsBroad],
+      Return[
+        "Use for general Wolfram Language, package, and notebook " <>
+        "work matched by this rule."]];
+    ids = iRuleGlobIdentifiers[paths];
+    If[ids =!= {},
+      Return[
+        "Use when editing " <> StringRiffle[ids, " or "] <>
+        " related files matched by this rule."]];
+    "Use when editing paths matching " <>
+      StringRiffle[Select[paths, StringQ], ", "] <> "."];
+
+iDeriveTriggerFromPaths[_] :=
+  "Use when editing paths matched by this rule.";
+
+(* ---- ClaudeDirectiveRuleDerivedMetadata (spec 6.5.2) ---- *)
+
+Options[ClaudeDirectiveRuleDerivedMetadata] = {
+  "RuleMetadataOverrides" -> <||>};
+
+ClaudeDirectiveRuleDerivedMetadata[
+    ruleRecord_Association, opts:OptionsPattern[]] :=
+  Module[{name, title0, paths, overrides, ov, title, summary,
+          trigger, descSource, description},
+    name   = ToString[Lookup[ruleRecord, "Name", ""]];
+    title0 = Lookup[ruleRecord, "Title", Missing["NotAvailable"]];
+    paths  = Lookup[ruleRecord, "Paths", {}];
+    If[!ListQ[paths], paths = {}];
+
+    overrides = OptionValue[ClaudeDirectiveRuleDerivedMetadata,
+      {opts}, "RuleMetadataOverrides"];
+    If[!AssociationQ[overrides], overrides = <||>];
+    ov = Lookup[overrides, name, <||>];
+    If[!AssociationQ[ov], ov = <||>];
+
+    title = If[StringQ[title0] && StringTrim[title0] =!= "",
+      title0, iHumanizeStem[name]];
+    summary = iShortenText[title, 120];
+
+    Which[
+      KeyExistsQ[ov, "Trigger"] || KeyExistsQ[ov, "Description"],
+        trigger = ToString[Lookup[ov, "Trigger",
+          Lookup[ov, "Description", ""]]];
+        descSource = "override",
+
+      paths === {},
+        trigger =
+          "Use when the task appears related to " <>
+          If[StringQ[title] && title =!= "", title, name] <>
+          "; no path trigger was declared in the canonical rule.";
+        descSource = "fallback",
+
+      True,
+        trigger = iDeriveTriggerFromPaths[paths];
+        descSource = "derived-from-paths-and-heading"];
+
+    description = ToString[Lookup[ov, "Description", trigger]];
+
+    <|
+      "Title"             -> title,
+      "Summary"           -> summary,
+      "Description"       -> description,
+      "Trigger"           -> trigger,
+      "DescriptionSource" -> descSource,
+      "Paths"             -> paths
+    |>];
+
+ClaudeDirectiveRuleDerivedMetadata[___] := $Failed;
+
+(* ---- ClaudeDirectiveClassifyRule (spec 6.5.3) ---- *)
+
+Options[ClaudeDirectiveClassifyRule] = {
+  "AlwaysOnRules"          -> Automatic,
+  "RuleLargeByteThreshold" -> Automatic,
+  "RuleMetadataOverrides"  -> <||>};
+
+ClaudeDirectiveClassifyRule[
+    ruleRecord_Association, opts:OptionsPattern[]] :=
+  Module[{name, bytes, paths, threshold, alwaysOnList, alwaysOnLC,
+          overrides, ov, sizeClass, explicitAlwaysOn, broadPaths,
+          scope, commandPolicy, inlineSummary, reason},
+    name  = ToString[Lookup[ruleRecord, "Name", ""]];
+    bytes = Lookup[ruleRecord, "ByteCount", 0];
+    paths = Lookup[ruleRecord, "Paths", {}];
+    If[!ListQ[paths], paths = {}];
+
+    threshold = OptionValue[ClaudeDirectiveClassifyRule,
+      {opts}, "RuleLargeByteThreshold"];
+    If[threshold === Automatic,
+      threshold = $CodexRuleLargeByteThreshold];
+    If[!IntegerQ[threshold], threshold = 8192];
+
+    alwaysOnList = OptionValue[ClaudeDirectiveClassifyRule,
+      {opts}, "AlwaysOnRules"];
+    If[alwaysOnList === Automatic,
+      alwaysOnList = $ClaudeAlwaysOnRules];
+    If[!ListQ[alwaysOnList], alwaysOnList = {}];
+    alwaysOnList = Select[alwaysOnList, StringQ];
+    alwaysOnLC = ToLowerCase /@ alwaysOnList;
+
+    overrides = OptionValue[ClaudeDirectiveClassifyRule,
+      {opts}, "RuleMetadataOverrides"];
+    If[!AssociationQ[overrides], overrides = <||>];
+    ov = Lookup[overrides, name, <||>];
+    If[!AssociationQ[ov], ov = <||>];
+
+    sizeClass = If[IntegerQ[bytes] && bytes > threshold,
+      "large", "small"];
+
+    explicitAlwaysOn = MemberQ[alwaysOnLC, ToLowerCase[name]];
+    broadPaths = AnyTrue[paths, iGlobIsBroad];
+
+    scope = Which[
+      KeyExistsQ[ov, "Scope"] &&
+        MemberQ[{"always-on", "task-specific"},
+          Lookup[ov, "Scope"]],
+        Lookup[ov, "Scope"],
+      explicitAlwaysOn, "always-on",
+      alwaysOnList === {} && broadPaths, "always-on",
+      True, "task-specific"];
+
+    commandPolicy = TrueQ[Lookup[ov, "CommandPolicy", False]];
+
+    (* candidate value; budget is applied later in HarnessPlan *)
+    inlineSummary = (scope === "always-on" && sizeClass === "small");
+
+    reason = {
+      "size " <> ToString[bytes] <> " bytes vs threshold " <>
+        ToString[threshold] <> " -> " <> sizeClass,
+      Which[
+        KeyExistsQ[ov, "Scope"],
+          "scope from RuleMetadataOverrides",
+        explicitAlwaysOn,
+          "scope always-on: listed in AlwaysOnRules",
+        scope === "always-on",
+          "scope always-on: broad paths with empty AlwaysOnRules",
+        True,
+          "scope task-specific: not in AlwaysOnRules"],
+      If[commandPolicy,
+        "commandPolicy True from RuleMetadataOverrides",
+        "commandPolicy False (default; .rules conversion is opt-in)"],
+      "InlineSummaryInAgentsMd is a candidate; the final inline " <>
+        "decision is re-evaluated against the AGENTS.md byte budget " <>
+        "in ClaudeDirectiveHarnessPlan"};
+
+    <|
+      "Scope"                   -> scope,
+      "SizeClass"               -> sizeClass,
+      "CommandPolicy"           -> commandPolicy,
+      "InlineSummaryInAgentsMd" -> inlineSummary,
+      "Reason"                  -> reason
+    |>];
+
+ClaudeDirectiveClassifyRule[___] := $Failed;
+
+
+(* ===================================================================
+   Phase 1.1b-1: harness plan (dry-run)
+   Spec 5th review: sections 5.2 / 5.4 / 6.3-6.6.
+   ClaudeDirectiveHarnessPlan writes no files; it returns the plan.
+   iHarnessBundleMeta is joined into the ClaudeResolveDirectiveBundle
+   result so that Target -> "Prompt" stays behaviour-compatible.
+   =================================================================== *)
+
+(* ---- bundle harness metadata (spec 5.4 / 5.5) ---- *)
+
+iHarnessBundleMeta[target_, provider_, hmm_, repo_] :=
+  Module[{root, isHarness, mode, hash},
+    isHarness = MemberQ[{"CodexHarness", "ClaudeHarness"}, target];
+    root = Lookup[
+      If[AssociationQ[repo], repo, <||>], "Root", None];
+    mode = Which[
+      !isHarness,             Missing["NotApplicable"],
+      StringQ[hmm],           hmm,
+      target === "ClaudeHarness", "DirectLegacy",
+      True,                   "BootstrapIndexSkills"];
+    hash = If[isHarness && StringQ[root] && DirectoryQ[root],
+      ClaudeDirectiveRepositoryHash[root],
+      Missing["NotComputed"]];
+    <|
+      "HarnessTarget" -> Switch[target,
+        "CodexHarness",  "Codex",
+        "ClaudeHarness", "ClaudeCLI",
+        _,               None],
+      "HarnessProvider"                 -> provider,
+      "HarnessMaterializationMode"      -> mode,
+      "DirectiveRoot"                   -> root,
+      "DirectiveRepositoryManifestHash" -> hash
+    |>];
+
+iHarnessBundleMeta[___] := <||>;
+
+(* ---- UTF-8 byte count ---- *)
+
+iUTF8ByteCount[s_String] := Length[ToCharacterCode[s, "UTF-8"]];
+iUTF8ByteCount[_] := 0;
+
+(* ---- AGENTS.md fixed safety template (spec 6.3 / 6.5.4) ---- *)
+
+iCodexAgentsMdSafetyTemplate[] :=
+  StringRiffle[{
+    "## Critical boundaries",
+    "",
+    "- Never bypass NBAccess for notebook cells, session history, "
+      <> "or credentials.",
+    "- Treat ChatGPT Codex as a cloud-backed CLI provider, not a "
+      <> "private or local model.",
+    "- Write only inside the generated temp project. Treat package "
+      <> "and accessible directories as read-only unless the harness "
+      <> "explicitly instructs otherwise.",
+    "- Do not read secret-looking files even if the sandbox would "
+      <> "allow it.",
+    "- Do not edit AGENTS.md or .agents/ ; they are generated harness "
+      <> "artifacts, not canonical sources."
+  }, "\n"];
+
+(* provenance comment placed at the top of AGENTS.md *)
+
+iCodexAgentsMdProvenance[manifestHash_, svSnap_, hmm_] :=
+  StringRiffle[{
+    "<!--",
+    "Generated harness file. DO NOT EDIT.",
+    "Canonical source: Claude Directives/ (the only editable source).",
+    "DirectiveRepositoryManifestHash: " <> ToString[manifestHash],
+    "SourceVaultSnapshotId: " <> ToString[svSnap],
+    "HarnessMaterializationMode: " <> ToString[hmm],
+    "Generator: claudecode_directives.wl " <>
+      ToString[$ClaudeDirectivesVersion],
+    "-->"
+  }, "\n"];
+
+(* assemble the AGENTS.md body for a given set of inline rule lines *)
+
+iBuildCodexAgentsMd[manifestHash_, svSnap_, hmm_,
+    inlineRuleLines_List] :=
+  StringRiffle[
+    Join[
+      {
+        iCodexAgentsMdProvenance[manifestHash, svSnap, hmm],
+        "",
+        "# Codex Harness Instructions",
+        "",
+        "This file is generated from the canonical Claude Directives "
+          <> "repository. Do not edit AGENTS.md or .agents/skills "
+          <> "directly.",
+        "",
+        iCodexAgentsMdSafetyTemplate[],
+        ""
+      },
+      If[inlineRuleLines === {},
+        {},
+        Join[{"## Always-on rule summaries", ""}, inlineRuleLines, {""}]],
+      {
+        "## Directive index",
+        "",
+        "Detailed rules and skills are materialized under "
+          <> ".agents/skills and indexed in "
+          <> ".agents/directive-index.json."
+      }],
+    "\n"];
+
+(* one inline summary line for a rule *)
+
+iCodexInlineRuleLine[ruleName_String, summary_String] :=
+  "- Rule: " <> ruleName <> " \[LongDash] " <> summary;
+
+(* ---- ClaudeDirectiveHarnessPlan (spec 5.2) ---- *)
+
+Options[ClaudeDirectiveHarnessPlan] = {
+  "HarnessMaterializationMode" -> Automatic,
+  "AgentsMdTargetMaxBytes"     -> 20000,
+  "AgentsMdHardMaxBytes"       -> 30000,
+  "RuleLargeByteThreshold"     -> Automatic,
+  "AlwaysOnRules"              -> Automatic,
+  "RuleMetadataOverrides"      -> <||>,
+  "SourceVaultSnapshotId"      -> Missing["NotRegistered"]
+};
+
+(* Phase 4 (spec 5.2 / 5.5): the "ClaudeCLI" target dispatches to
+   iClaudeCLIHarnessPlan, a verbatim-copy plan. This specific
+   definition is matched before the generic target_String definition
+   below. iClaudeCLIHarnessPlan is defined further down, alongside
+   ClaudeDirectiveMaterializeClaudeHarness. *)
+ClaudeDirectiveHarnessPlan[
+    bundle_Association, "ClaudeCLI", opts:OptionsPattern[]] :=
+  iClaudeCLIHarnessPlan[bundle, opts];
+
+ClaudeDirectiveHarnessPlan[
+    bundle_Association, target_String, opts:OptionsPattern[]] :=
+  Module[
+    {root, manifestHash, hmm, targetMax, hardMax, threshold,
+     alwaysOn, overrides, svSnap, inv, ruleRecs, skillRecs,
+     classifyOf, deriveOf, genSkills = {}, cmdPolicyRules = {},
+     indexEntries = {}, inlineCandidates, inlineLines, agentsBody,
+     agentsBytes, inlineNames, omittedNames, provFiles, warnings = {},
+     ruleData},
+
+    If[target =!= "Codex",
+      Return[Failure["UnsupportedHarnessTarget",
+        <|"Target" -> target,
+          "Message" ->
+            "ClaudeDirectiveHarnessPlan supports \"Codex\" and \"ClaudeCLI\"."|>]]];
+
+    (* resolve repository root *)
+    root = Lookup[bundle, "DirectiveRoot",
+      Lookup[bundle, "Root", None]];
+    If[!StringQ[root] || !DirectoryQ[root],
+      root = ClaudeResolveDirectiveRoot[Automatic]];
+    If[FailureQ[root], Return[root]];
+
+    manifestHash = Lookup[bundle, "DirectiveRepositoryManifestHash",
+      Missing["NotComputed"]];
+    If[!StringQ[manifestHash],
+      manifestHash = ClaudeDirectiveRepositoryHash[root]];
+
+    hmm = OptionValue[ClaudeDirectiveHarnessPlan, {opts},
+      "HarnessMaterializationMode"];
+    If[hmm === Automatic,
+      hmm = Lookup[bundle, "HarnessMaterializationMode",
+        "BootstrapIndexSkills"]];
+    If[!StringQ[hmm], hmm = "BootstrapIndexSkills"];
+
+    targetMax = OptionValue[ClaudeDirectiveHarnessPlan, {opts},
+      "AgentsMdTargetMaxBytes"];
+    hardMax = OptionValue[ClaudeDirectiveHarnessPlan, {opts},
+      "AgentsMdHardMaxBytes"];
+    threshold = OptionValue[ClaudeDirectiveHarnessPlan, {opts},
+      "RuleLargeByteThreshold"];
+    alwaysOn = OptionValue[ClaudeDirectiveHarnessPlan, {opts},
+      "AlwaysOnRules"];
+    overrides = OptionValue[ClaudeDirectiveHarnessPlan, {opts},
+      "RuleMetadataOverrides"];
+    svSnap = OptionValue[ClaudeDirectiveHarnessPlan, {opts},
+      "SourceVaultSnapshotId"];
+    If[!IntegerQ[hardMax], hardMax = 30000];
+    If[!IntegerQ[targetMax], targetMax = 20000];
+
+    inv = ClaudeDirectiveFileInventory[root];
+    If[FailureQ[inv], Return[inv]];
+    ruleRecs  = Select[inv, Lookup[#, "Role"] === "Rule" &];
+    skillRecs = Select[inv, Lookup[#, "Role"] === "Skill" &];
+
+    classifyOf = ClaudeDirectiveClassifyRule[#,
+      "RuleLargeByteThreshold" -> threshold,
+      "AlwaysOnRules" -> alwaysOn,
+      "RuleMetadataOverrides" -> overrides] &;
+    deriveOf = ClaudeDirectiveRuleDerivedMetadata[#,
+      "RuleMetadataOverrides" -> overrides] &;
+
+    (* per-rule classification + derived metadata *)
+    ruleData = Map[
+      Function[rec,
+        <|"Record" -> rec,
+          "Classification" -> classifyOf[rec],
+          "DerivedMetadata" -> deriveOf[rec]|>],
+      ruleRecs];
+
+    (* rules: command-policy ones go to .rules; the rest become skills *)
+    Do[
+      Module[{rec, cls, der, ruleName, skillName, srcRel, tgtRel,
+              srcHash},
+        rec = entry["Record"];
+        cls = entry["Classification"];
+        der = entry["DerivedMetadata"];
+        ruleName = ToString[Lookup[rec, "Name", ""]];
+        srcRel = Lookup[rec, "RelativePath", ""];
+        srcHash = Lookup[rec, "ContentHash", Missing["NotAvailable"]];
+        If[TrueQ[Lookup[cls, "CommandPolicy", False]],
+          AppendTo[cmdPolicyRules,
+            <|"Name" -> ruleName,
+              "SourceRelativePath" -> srcRel,
+              "SourceHash" -> srcHash,
+              "Classification" -> cls|>],
+          (* else: generated rule skill *)
+          skillName = "rule-" <> ruleName;
+          tgtRel = ".agents/skills/" <> skillName <> "/SKILL.md";
+          AppendTo[genSkills,
+            <|"Kind" -> "rule",
+              "Name" -> skillName,
+              "SourceRelativePath" -> srcRel,
+              "TargetRelativePath" -> tgtRel,
+              "Classification" -> cls,
+              "DerivedMetadata" -> der|>];
+          AppendTo[indexEntries,
+            <|"kind" -> "rule",
+              "name" -> ruleName,
+              "title" -> Lookup[der, "Title", ""],
+              "description" -> Lookup[der, "Description", ""],
+              "trigger" -> Lookup[der, "Trigger", ""],
+              "description_source" ->
+                Lookup[der, "DescriptionSource", ""],
+              "paths" -> Lookup[der, "Paths", {}],
+              "classification" -> <|
+                "scope" -> Lookup[cls, "Scope", ""],
+                "size_class" -> Lookup[cls, "SizeClass", ""],
+                "inline_summary_in_agents_md" ->
+                  TrueQ[Lookup[cls, "InlineSummaryInAgentsMd", False]],
+                "command_policy" ->
+                  TrueQ[Lookup[cls, "CommandPolicy", False]]
+              |>,
+              "source_relative_path" -> srcRel,
+              "source_hash" -> srcHash,
+              "materialized_path" -> tgtRel,
+              "materialized_hash" ->
+                Missing["PendingMaterialization"]|>]]],
+      {entry, ruleData}];
+
+    (* existing skills: copied verbatim into .agents/skills *)
+    Do[
+      Module[{skillName, srcRel, tgtRel, srcHash, desc},
+        skillName = ToString[Lookup[rec, "Name", ""]];
+        srcRel = Lookup[rec, "RelativePath", ""];
+        srcHash = Lookup[rec, "ContentHash", Missing["NotAvailable"]];
+        desc = Lookup[rec, "Description", Missing["NotAvailable"]];
+        If[!StringQ[desc], desc = ""];
+        tgtRel = ".agents/skills/" <> skillName <> "/SKILL.md";
+        AppendTo[genSkills,
+          <|"Kind" -> "skill",
+            "Name" -> skillName,
+            "SourceRelativePath" -> srcRel,
+            "TargetRelativePath" -> tgtRel,
+            "Classification" -> Missing["NotApplicable"],
+            "DerivedMetadata" -> Missing["NotApplicable"]|>];
+        AppendTo[indexEntries,
+          <|"kind" -> "skill",
+            "name" -> skillName,
+            "description" -> desc,
+            "description_source" -> "skill-frontmatter",
+            "trigger" ->
+              "Implicit matching via Codex skill description; "
+                <> "explicit reference allowed by skill name.",
+            "source_relative_path" -> srcRel,
+            "source_hash" -> srcHash,
+            "materialized_path" -> tgtRel,
+            "materialized_hash" -> Missing["PendingMaterialization"]|>]],
+      {rec, skillRecs}];
+
+    (* AGENTS.md inline candidates: always-on small rules *)
+    inlineCandidates = Select[ruleData,
+      TrueQ[Lookup[#["Classification"],
+        "InlineSummaryInAgentsMd", False]] &];
+    (* deterministic order: by rule name *)
+    inlineCandidates = SortBy[inlineCandidates,
+      ToString[Lookup[#["Record"], "Name", ""]] &];
+
+    (* budget shrink loop (spec 6.5.4): drop summaries from the end
+       until the AGENTS.md body fits the hard maximum *)
+    Module[{active = inlineCandidates},
+      inlineLines = Map[
+        iCodexInlineRuleLine[
+          ToString[Lookup[#["Record"], "Name", ""]],
+          ToString[Lookup[#["DerivedMetadata"], "Summary", ""]]] &,
+        active];
+      agentsBody = iBuildCodexAgentsMd[manifestHash, svSnap, hmm,
+        inlineLines];
+      agentsBytes = iUTF8ByteCount[agentsBody];
+      While[agentsBytes > hardMax && active =!= {},
+        active = Most[active];
+        inlineLines = Map[
+          iCodexInlineRuleLine[
+            ToString[Lookup[#["Record"], "Name", ""]],
+            ToString[Lookup[#["DerivedMetadata"], "Summary", ""]]] &,
+          active];
+        agentsBody = iBuildCodexAgentsMd[manifestHash, svSnap, hmm,
+          inlineLines];
+        agentsBytes = iUTF8ByteCount[agentsBody]];
+      inlineNames = Map[
+        ToString[Lookup[#["Record"], "Name", ""]] &, active];
+      omittedNames = Complement[
+        Map[ToString[Lookup[#["Record"], "Name", ""]] &,
+          inlineCandidates],
+        inlineNames]];
+
+    If[omittedNames =!= {},
+      AppendTo[warnings,
+        "AGENTS.md budget: " <> ToString[Length[omittedNames]] <>
+        " always-on rule summary line(s) were omitted to fit "
+          <> "the byte budget; full text remains in .agents/skills."]];
+    If[agentsBytes > hardMax,
+      AppendTo[warnings,
+        "AGENTS.md still exceeds AgentsMdHardMaxBytes (" <>
+        ToString[agentsBytes] <> " > " <> ToString[hardMax] <>
+        ") after shrinking; ClaudeDirectiveMaterializeCodexHarness "
+          <> "will apply FailOnAgentsMdOverflow."]];
+    If[agentsBytes > targetMax && agentsBytes <= hardMax,
+      AppendTo[warnings,
+        "AGENTS.md exceeds AgentsMdTargetMaxBytes but is within "
+          <> "the hard maximum."]];
+
+    (* provenance files (spec 6.8) *)
+    provFiles = Join[
+      {".agents/sourcevault-provenance.json"},
+      Map[
+        StringReplace[Lookup[#, "TargetRelativePath", ""],
+          "SKILL.md" -> ".sourcevault.json"] &,
+        genSkills]];
+
+    <|
+      "Target"                          -> "Codex",
+      "HarnessMaterializationMode"      -> hmm,
+      "DirectiveRepositoryManifestHash" -> manifestHash,
+      "SourceVaultSnapshotId"           -> svSnap,
+      "DirectiveRoot"                   -> root,
+      "AgentsMd" -> <|
+        "TargetRelativePath" -> "AGENTS.md",
+        "EstimatedByteCount" -> agentsBytes,
+        "InlineRuleNames"    -> inlineNames,
+        "OmittedRuleNames"   -> omittedNames,
+        "HardMaxBytes"       -> hardMax,
+        "TargetMaxBytes"     -> targetMax
+      |>,
+      "Index" -> <|
+        "TargetRelativePath" -> ".agents/directive-index.json",
+        "Entries"            -> indexEntries
+      |>,
+      "GeneratedSkills"    -> genSkills,
+      "CommandPolicyRules" -> cmdPolicyRules,
+      "ProvenanceFiles"    -> provFiles,
+      "Warnings"           -> warnings
+    |>];
+
+ClaudeDirectiveHarnessPlan[___] := $Failed;
+
+
+(* ===================================================================
+   Phase 1.1b-2: Codex harness materialization
+   Spec 5th review: sections 5.2 / 6.6-6.8.
+   ClaudeDirectiveMaterializeCodexHarness is a thin wrapper that
+   executes ClaudeDirectiveHarnessPlan and writes the harness files.
+   =================================================================== *)
+
+(* ---- UTF-8 file I/O (Windows-safe; see encoding traps) ---- *)
+
+iReadUTF8File[path_String] :=
+  Module[{bytes},
+    bytes = Quiet @ Check[ReadByteArray[path], $Failed];
+    Which[
+      bytes === EndOfFile,  "",
+      ByteArrayQ[bytes],    ByteArrayToString[bytes, "UTF-8"],
+      True,                 ""]];
+
+iReadUTF8File[_] := "";
+
+iWriteUTF8File[path_String, text_String] :=
+  Module[{stream},
+    stream = OpenWrite[path, BinaryFormat -> True];
+    BinaryWrite[stream, StringToByteArray[text, "UTF-8"]];
+    Close[stream];
+    path];
+
+iWriteJSONFile[path_String, expr_] :=
+  iWriteUTF8File[path,
+    Developer`WriteRawJSONString[
+      expr /. {_Missing -> Null, None -> Null},
+      "Compact" -> 4]];
+
+(* ---- YAML helpers for generated rule skill frontmatter ---- *)
+
+iYamlScalar[s_String] :=
+  "\"" <> StringReplace[s,
+    {"\\" -> "\\\\", "\"" -> "\\\""}] <> "\"";
+
+iYamlScalar[x_] := iYamlScalar[ToString[x]];
+
+iYamlPathsBlock[{}] := "paths: []";
+
+iYamlPathsBlock[paths_List] :=
+  StringRiffle[
+    Prepend[
+      Map["  - " <> iYamlScalar[ToString[#]] &,
+        Select[paths, StringQ]],
+      "paths:"],
+    "\n"];
+
+iYamlPathsBlock[_] := "paths: []";
+
+(* remove a leading YAML frontmatter block, if present *)
+
+iStripFrontmatter[text_String] :=
+  StringReplace[text,
+    RegularExpression[
+      "(?s)\\A\\s*---\\r?\\n.*?\\r?\\n---[ \\t]*\\r?\\n?"] -> "",
+    1];
+
+iStripFrontmatter[_] := "";
+
+(* generated rule skill SKILL.md (spec 6.6) *)
+
+iBuildRuleSkillMd[gen_Association, srcHash_, body_String] :=
+  Module[{der, name, ruleName, src, fm},
+    der = Lookup[gen, "DerivedMetadata", <||>];
+    If[!AssociationQ[der], der = <||>];
+    name = ToString[Lookup[gen, "Name", ""]];
+    ruleName = StringReplace[name,
+      StartOfString ~~ "rule-" -> ""];
+    src = ToString[Lookup[gen, "SourceRelativePath", ""]];
+    fm = StringRiffle[{
+      "---",
+      "name: " <> name,
+      "description: " <> iYamlScalar[
+        ToString[Lookup[der, "Description", ""]]],
+      "summary: " <> iYamlScalar[
+        ToString[Lookup[der, "Summary", ""]]],
+      "source: " <> src,
+      "source_hash: " <> ToString[srcHash],
+      iYamlPathsBlock[Lookup[der, "Paths", {}]],
+      "description_source: " <>
+        ToString[Lookup[der, "DescriptionSource", ""]],
+      "---"
+    }, "\n"];
+    fm <> "\n\n# Rule: " <> ruleName <> "\n\n" <> body];
+
+(* ------------------------------------------------------------------
+   Phase 5 (2026-05-26): normalize an existing skill's SKILL.md for
+   the Codex skill loader.
+
+   The Codex CLI skill loader requires a `name` and a `description`
+   field, and (being a strict YAML parser) rejects an unquoted scalar
+   that contains a colon-space (it reads it as a nested mapping). The
+   canonical Claude Directives skills were authored for Claude's
+   loader, so some carry only `paths:` (no description) and others
+   have a long unquoted `description:` value full of `: ` sequences.
+   Copying them verbatim makes `codex exec` log
+   "invalid YAML" / "missing field description".
+
+   iBuildSkillSkillMd rebuilds the frontmatter with a quoted name and
+   description (iYamlScalar handles the escaping) and leaves the body
+   untouched. A missing description is derived from the first level-1
+   heading of the body, falling back to the skill name.
+   ------------------------------------------------------------------ *)
+iSkillDescriptionFromBody[body_String] :=
+  Module[{m},
+    m = StringCases[body,
+      RegularExpression["(?m)^#[ \\t]+(.+?)[ \\t]*$"] :>
+        "$1", 1];
+    If[ListQ[m] && Length[m] >= 1 && StringQ[First[m]] &&
+        StringLength[StringTrim[First[m]]] > 0,
+      StringTrim[First[m]],
+      ""]];
+iSkillDescriptionFromBody[_] := "";
+
+iBuildSkillSkillMd[skillName_String, srcHash_, rawText_String] :=
+  Module[{parsed, fm, body, desc, fmLines},
+    parsed = iParseFrontmatter[rawText];
+    fm   = Lookup[parsed, "Frontmatter", <||>];
+    body = Lookup[parsed, "Body", rawText];
+    If[!AssociationQ[fm], fm = <||>];
+    If[!StringQ[body], body = rawText];
+    desc = Lookup[fm, "description",
+      Lookup[fm, "Description", Missing["NotAvailable"]]];
+    If[!StringQ[desc] || StringLength[StringTrim[desc]] === 0,
+      desc = iSkillDescriptionFromBody[body]];
+    If[!StringQ[desc] || StringLength[StringTrim[desc]] === 0,
+      desc = "Skill: " <> skillName];
+    (* collapse any internal newlines / runs of whitespace so the
+       description is emitted as a single quoted YAML scalar *)
+    desc = StringReplace[StringTrim[desc],
+      RegularExpression["\\s+"] -> " "];
+    fmLines = {
+      "---",
+      "name: " <> iYamlScalar[skillName],
+      "description: " <> iYamlScalar[StringTrim[desc]]};
+    (* preserve a paths: block when the source had one, so Codex
+       path-scoped matching still works *)
+    If[KeyExistsQ[fm, "paths"] || KeyExistsQ[fm, "Paths"],
+      Module[{p = Lookup[fm, "paths", Lookup[fm, "Paths", {}]]},
+        If[ListQ[p] && p =!= {},
+          AppendTo[fmLines, iYamlPathsBlock[p]]]]];
+    AppendTo[fmLines, "source_hash: " <> ToString[srcHash]];
+    AppendTo[fmLines, "---"];
+    StringRiffle[fmLines, "\n"] <> "\n\n" <> body];
+iBuildSkillSkillMd[___] := $Failed;
+
+
+(* UTC ISO-8601 timestamp *)
+
+iISOTimestamp[] :=
+  DateString[Now, "ISODateTime", TimeZone -> 0] <> "Z";
+
+(* resolve a materialized hash for an index entry *)
+
+iMatHashForEntry[entry_Association, plan_Association,
+    matHashByName_Association] :=
+  Module[{mp, gen},
+    mp = Lookup[entry, "materialized_path", ""];
+    gen = SelectFirst[Lookup[plan, "GeneratedSkills", {}],
+      Lookup[#, "TargetRelativePath", ""] === mp &, <||>];
+    Lookup[matHashByName, Lookup[gen, "Name", ""],
+      Missing["NotMaterialized"]]];
+
+iMatHashForEntry[___] := Missing["NotMaterialized"];
+
+(* ---- ClaudeDirectiveHarnessProvenanceHeader ---- *)
+
+ClaudeDirectiveHarnessProvenanceHeader[meta_Association] :=
+  iCodexAgentsMdProvenance[
+    Lookup[meta, "DirectiveRepositoryManifestHash",
+      Lookup[meta, "ManifestHash", Missing["NotAvailable"]]],
+    Lookup[meta, "SourceVaultSnapshotId",
+      Lookup[meta, "SnapshotId", Missing["NotRegistered"]]],
+    Lookup[meta, "HarnessMaterializationMode",
+      Lookup[meta, "Mode", "BootstrapIndexSkills"]]];
+
+ClaudeDirectiveHarnessProvenanceHeader[___] := $Failed;
+
+(* ---- ClaudeDirectiveMaterializeCodexHarness (spec 5.2) ---- *)
+
+Options[ClaudeDirectiveMaterializeCodexHarness] = {
+  "HarnessMaterializationMode"      -> Automatic,
+  "SourceVaultSnapshotId"           -> Missing["NotRegistered"],
+  "DirectiveRepositoryManifestHash" -> Automatic,
+  "GenerateDirectiveIndex"          -> True,
+  "GenerateProvenance"              -> True,
+  "AgentsMdTargetMaxBytes"          -> 20000,
+  "AgentsMdHardMaxBytes"            -> 30000,
+  "RuleLargeByteThreshold"          -> Automatic,
+  "AlwaysOnRules"                   -> Automatic,
+  "RuleMetadataOverrides"           -> <||>,
+  "CommandPolicyMaterialization"    -> "Disabled",
+  "DryRun"                          -> False,
+  "FailOnAgentsMdOverflow"          -> True
+};
+
+ClaudeDirectiveMaterializeCodexHarness[
+    bundle_Association, targetDir_String, opts:OptionsPattern[]] :=
+  Module[
+    {ov, plan, root, inv, invByRel, manifestHash, hmm, svSnap,
+     genIndex, genProv, dryRun, failOverflow, agentsBytes, agentsHard,
+     warnings, writtenFiles = {}, genReports = {}, matHashByName = <||>,
+     agentsPath = "AGENTS.md", agentsAbs, agentsHashV, agentsByteV = 0,
+     indexRel = None, idxEntryCount = 0, provFiles = {}},
+
+    ov[k_] := OptionValue[ClaudeDirectiveMaterializeCodexHarness,
+      {opts}, k];
+
+    (* 1. compute the plan *)
+    plan = ClaudeDirectiveHarnessPlan[bundle, "Codex",
+      "HarnessMaterializationMode" -> ov["HarnessMaterializationMode"],
+      "AgentsMdTargetMaxBytes"     -> ov["AgentsMdTargetMaxBytes"],
+      "AgentsMdHardMaxBytes"       -> ov["AgentsMdHardMaxBytes"],
+      "RuleLargeByteThreshold"     -> ov["RuleLargeByteThreshold"],
+      "AlwaysOnRules"              -> ov["AlwaysOnRules"],
+      "RuleMetadataOverrides"      -> ov["RuleMetadataOverrides"],
+      "SourceVaultSnapshotId"      -> ov["SourceVaultSnapshotId"]];
+    If[FailureQ[plan], Return[plan]];
+
+    warnings    = Lookup[plan, "Warnings", {}];
+    agentsBytes = Lookup[Lookup[plan, "AgentsMd", <||>],
+      "EstimatedByteCount", 0];
+    agentsHard  = Lookup[Lookup[plan, "AgentsMd", <||>],
+      "HardMaxBytes", 30000];
+
+    (* 2. AGENTS.md overflow gate *)
+    failOverflow = TrueQ[ov["FailOnAgentsMdOverflow"]];
+    If[failOverflow && agentsBytes > agentsHard,
+      Return[Failure["AgentsMdOverflow", <|
+        "EstimatedByteCount" -> agentsBytes,
+        "HardMaxBytes"       -> agentsHard,
+        "Message" ->
+          "AGENTS.md exceeds the hard byte budget. Raise "
+            <> "AgentsMdHardMaxBytes, supply RuleMetadataOverrides, "
+            <> "or set FailOnAgentsMdOverflow -> False."|>]]];
+
+    (* 3. dry-run: return the plan, write nothing *)
+    dryRun = TrueQ[ov["DryRun"]];
+    If[dryRun,
+      Return[<|
+        "DryRun"    -> True,
+        "Target"    -> "Codex",
+        "TargetDir" -> targetDir,
+        "Plan"      -> plan|>]];
+
+    (* 4. resolve repository root + inventory *)
+    root = Lookup[plan, "DirectiveRoot",
+      Lookup[bundle, "DirectiveRoot", None]];
+    If[!StringQ[root] || !DirectoryQ[root],
+      root = ClaudeResolveDirectiveRoot[Automatic]];
+    If[FailureQ[root], Return[root]];
+    inv = ClaudeDirectiveFileInventory[root];
+    If[FailureQ[inv], Return[inv]];
+    invByRel = Association[
+      (Lookup[#, "RelativePath", ""] -> #) & /@ inv];
+
+    manifestHash = Lookup[plan, "DirectiveRepositoryManifestHash",
+      Missing["NotComputed"]];
+    hmm = Lookup[plan, "HarnessMaterializationMode",
+      "BootstrapIndexSkills"];
+    svSnap   = Lookup[plan, "SourceVaultSnapshotId",
+      Missing["NotRegistered"]];
+    genIndex = TrueQ[ov["GenerateDirectiveIndex"]];
+    genProv  = TrueQ[ov["GenerateProvenance"]];
+
+    If[!DirectoryQ[targetDir],
+      CreateDirectory[targetDir,
+        CreateIntermediateDirectories -> True]];
+
+    (* 5a. generated skills (rules become skills; skills are copied) *)
+    Do[
+      Module[{gen, srcRel, srcRec, srcAbs, srcHash, tgtRel, tgtAbs,
+              rawText, skillMd, matHash},
+        gen    = g;
+        srcRel = ToString[Lookup[gen, "SourceRelativePath", ""]];
+        tgtRel = ToString[Lookup[gen, "TargetRelativePath", ""]];
+        srcRec = Lookup[invByRel, srcRel, <||>];
+        srcAbs = ToString[Lookup[srcRec, "AbsolutePath", ""]];
+        srcHash = Lookup[srcRec, "ContentHash",
+          Missing["NotAvailable"]];
+        tgtAbs = FileNameJoin[
+          Prepend[FileNameSplit[tgtRel], targetDir]];
+        If[!DirectoryQ[DirectoryName[tgtAbs]],
+          CreateDirectory[DirectoryName[tgtAbs],
+            CreateIntermediateDirectories -> True]];
+        rawText = If[StringQ[srcAbs] && FileExistsQ[srcAbs],
+          iReadUTF8File[srcAbs], ""];
+        skillMd = Which[
+          Lookup[gen, "Kind"] === "rule",
+            iBuildRuleSkillMd[gen, srcHash,
+              iStripFrontmatter[rawText]],
+          (* Phase 5 (2026-05-26): existing skills are no longer
+             copied verbatim. Their frontmatter is normalized for the
+             Codex skill loader (quoted name + description, derived
+             description when missing); the body is left intact. *)
+          Lookup[gen, "Kind"] === "skill",
+            Module[{built},
+              built = iBuildSkillSkillMd[
+                ToString[Lookup[gen, "Name", ""]], srcHash, rawText];
+              If[StringQ[built], built, rawText]],
+          True,
+            rawText];
+        iWriteUTF8File[tgtAbs, skillMd];
+        matHash = iDirectiveContentHash[tgtAbs];
+        matHashByName = Append[matHashByName,
+          ToString[Lookup[gen, "Name", ""]] -> matHash];
+        AppendTo[writtenFiles, tgtRel];
+        AppendTo[genReports, <|
+          "Kind"               -> Lookup[gen, "Kind"],
+          "Name"               -> Lookup[gen, "Name"],
+          "SourceRelativePath" -> srcRel,
+          "TargetRelativePath" -> tgtRel,
+          "SourceHash"         -> srcHash,
+          "MaterializedHash"   -> matHash|>]],
+      {g, Lookup[plan, "GeneratedSkills", {}]}];
+
+    (* 5c. directive index (materialized hashes now known) *)
+    If[genIndex,
+      Module[{entries, idxDoc, idxAbs},
+        indexRel = Lookup[Lookup[plan, "Index", <||>],
+          "TargetRelativePath", ".agents/directive-index.json"];
+        entries = Lookup[Lookup[plan, "Index", <||>], "Entries", {}];
+        idxEntryCount = Length[entries];
+        entries = Map[
+          Function[e,
+            Append[e, "materialized_hash" ->
+              iMatHashForEntry[e, plan, matHashByName]]],
+          entries];
+        idxDoc = <|
+          "schema_version"   -> 1,
+          "canonical_format" -> "ClaudeDirectives",
+          "directive_repository" -> <|
+            "root_label"             -> "Claude Directives",
+            "manifest_hash"          -> manifestHash,
+            "sourcevault_snapshot_id" -> svSnap|>,
+          "materialization" -> <|
+            "target"       -> "Codex",
+            "mode"         -> hmm,
+            "generated_at" -> iISOTimestamp[]|>,
+          "entries" -> entries|>;
+        idxAbs = FileNameJoin[
+          Prepend[FileNameSplit[indexRel], targetDir]];
+        If[!DirectoryQ[DirectoryName[idxAbs]],
+          CreateDirectory[DirectoryName[idxAbs],
+            CreateIntermediateDirectories -> True]];
+        iWriteJSONFile[idxAbs, idxDoc];
+        AppendTo[writtenFiles, indexRel]]];
+
+    (* 5d. AGENTS.md *)
+    Module[{inlineNames, inlineLines, agentsBody},
+      inlineNames = Lookup[Lookup[plan, "AgentsMd", <||>],
+        "InlineRuleNames", {}];
+      inlineLines = Map[
+        Function[rn,
+          Module[{rec, der},
+            rec = SelectFirst[inv,
+              ToString[Lookup[#, "Name", ""]] === rn &, <||>];
+            der = ClaudeDirectiveRuleDerivedMetadata[rec,
+              "RuleMetadataOverrides" -> ov["RuleMetadataOverrides"]];
+            iCodexInlineRuleLine[rn,
+              ToString[Lookup[
+                If[AssociationQ[der], der, <||>],
+                "Summary", ""]]]]],
+        inlineNames];
+      agentsBody = iBuildCodexAgentsMd[manifestHash, svSnap, hmm,
+        inlineLines];
+      agentsAbs = FileNameJoin[{targetDir, "AGENTS.md"}];
+      iWriteUTF8File[agentsAbs, agentsBody];
+      agentsHashV = iDirectiveContentHash[agentsAbs];
+      agentsByteV = iUTF8ByteCount[agentsBody];
+      AppendTo[writtenFiles, "AGENTS.md"]];
+
+    (* 5e. provenance *)
+    If[genProv,
+      Do[
+        Module[{gr, skillDir, provRel, provAbs, provDoc},
+          gr = r;
+          skillDir = DirectoryName[
+            ToString[Lookup[gr, "TargetRelativePath", ""]]];
+          provRel = skillDir <> "/.sourcevault.json";
+          provAbs = FileNameJoin[
+            Prepend[FileNameSplit[provRel], targetDir]];
+          provDoc = <|
+            "kind"               -> Lookup[gr, "Kind"],
+            "name"               -> Lookup[gr, "Name"],
+            "source_relative_path" ->
+              Lookup[gr, "SourceRelativePath"],
+            "source_hash"        -> Lookup[gr, "SourceHash"],
+            "materialized_path"  -> Lookup[gr, "TargetRelativePath"],
+            "materialized_hash"  -> Lookup[gr, "MaterializedHash"],
+            "directive_repository_manifest_hash" -> manifestHash|>;
+          iWriteJSONFile[provAbs, provDoc];
+          AppendTo[provFiles, provRel];
+          AppendTo[writtenFiles, provRel]],
+        {r, genReports}];
+      Module[{provDoc, provAbs, provRel},
+        provRel = ".agents/sourcevault-provenance.json";
+        provAbs = FileNameJoin[
+          Prepend[FileNameSplit[provRel], targetDir]];
+        provDoc = <|
+          "kind"   -> "HarnessMaterialization",
+          "target" -> "Codex",
+          "harness_materialization_mode"      -> hmm,
+          "directive_repository_manifest_hash" -> manifestHash,
+          "sourcevault_snapshot_id"           -> svSnap,
+          "generator" -> "claudecode_directives.wl "
+            <> ToString[$ClaudeDirectivesVersion],
+          "generated_at" -> iISOTimestamp[],
+          "agents_md" -> <|
+            "materialized_path" -> "AGENTS.md",
+            "materialized_hash" -> agentsHashV,
+            "byte_count"        -> agentsByteV|>,
+          "skills"   -> genReports,
+          "warnings" -> warnings|>;
+        If[!DirectoryQ[DirectoryName[provAbs]],
+          CreateDirectory[DirectoryName[provAbs],
+            CreateIntermediateDirectories -> True]];
+        iWriteJSONFile[provAbs, provDoc];
+        AppendTo[provFiles, provRel];
+        AppendTo[writtenFiles, provRel]]];
+
+    (* 6. materialization report *)
+    <|
+      "Target"                          -> "Codex",
+      "TargetDir"                       -> targetDir,
+      "HarnessMaterializationMode"      -> hmm,
+      "DirectiveRepositoryManifestHash" -> manifestHash,
+      "DryRun"                          -> False,
+      "WrittenFiles"                    -> writtenFiles,
+      "AgentsMd" -> <|
+        "TargetRelativePath" -> agentsPath,
+        "ByteCount"          -> agentsByteV,
+        "MaterializedHash"   -> agentsHashV|>,
+      "Index" -> <|
+        "TargetRelativePath" -> indexRel,
+        "EntryCount"         -> idxEntryCount|>,
+      "GeneratedSkills"  -> genReports,
+      "ProvenanceFiles"  -> provFiles,
+      "Warnings"         -> warnings,
+      "Plan"             -> plan
+    |>];
+
+ClaudeDirectiveMaterializeCodexHarness[___] := $Failed;
+
+
+(* ===================================================================
+   Phase 4: Claude CLI Generated harness
+   (Codex integration spec 5th review, sections 5.2 / 5.5 / 7.1-7.3)
+   The Claude CLI Generated harness is much simpler than the Codex
+   harness: there is no AGENTS.md byte budgeting, no directive index
+   and no rule-to-skill conversion. The canonical CLAUDE.md / rules /
+   skills are copied verbatim into a .claude/ tree. settings.json is
+   NOT produced here -- claudecode.wl injects the read permissions
+   (claudecode_directives.wl stays free of claudecode/SourceVault
+   dependencies, spec 5.1).
+   =================================================================== *)
+
+(* target-relative path of a copied rule inside a generated .claude/
+   harness. Unlike the Codex harness, Claude CLI rules are NOT
+   converted into skills; they are copied verbatim under
+   .claude/rules/. *)
+iClaudeCLIRuleTargetRel[ruleName_String] :=
+  ".claude/rules/" <> ruleName <> ".md";
+iClaudeCLIRuleTargetRel[_] := "";
+
+(* target-relative path of a copied skill inside a generated .claude/
+   harness. Mirrors the canonical skills/<name>/SKILL.md layout. *)
+iClaudeCLISkillTargetRel[skillName_String] :=
+  ".claude/skills/" <> skillName <> "/SKILL.md";
+iClaudeCLISkillTargetRel[_] := "";
+
+(* iClaudeCLIHarnessPlan (spec 5.2 / 7.2): the Claude CLI harness
+   plan. It keeps the same top-level keys as the Codex plan (Target,
+   HarnessMaterializationMode, DirectiveRepositoryManifestHash,
+   GeneratedSkills, ProvenanceFiles, Warnings) so downstream code can
+   treat both uniformly. AgentsMd and Index are Missing because the
+   Claude CLI harness has neither. GeneratedSkills carries BOTH rules
+   and skills (Kind -> "rule" | "skill"); the CLAUDE.md root
+   instruction is reported separately under RootInstruction. *)
+iClaudeCLIHarnessPlan[bundle_Association, opts:OptionsPattern[]] :=
+  Module[
+    {root, manifestHash, hmm, svSnap, inv, rootRec, ruleRecs,
+     skillRecs, genFiles = {}, rootInstruction, warnings = {}},
+
+    (* resolve repository root *)
+    root = Lookup[bundle, "DirectiveRoot",
+      Lookup[bundle, "Root", None]];
+    If[!StringQ[root] || !DirectoryQ[root],
+      root = ClaudeResolveDirectiveRoot[Automatic]];
+    If[FailureQ[root], Return[root]];
+
+    manifestHash = Lookup[bundle, "DirectiveRepositoryManifestHash",
+      Missing["NotComputed"]];
+    If[!StringQ[manifestHash],
+      manifestHash = ClaudeDirectiveRepositoryHash[root]];
+
+    hmm = OptionValue[ClaudeDirectiveHarnessPlan, {opts},
+      "HarnessMaterializationMode"];
+    If[hmm === Automatic,
+      hmm = Lookup[bundle, "HarnessMaterializationMode",
+        "FullGenerated"]];
+    If[!StringQ[hmm], hmm = "FullGenerated"];
+
+    svSnap = OptionValue[ClaudeDirectiveHarnessPlan, {opts},
+      "SourceVaultSnapshotId"];
+
+    inv = ClaudeDirectiveFileInventory[root];
+    If[FailureQ[inv], Return[inv]];
+    rootRec   = SelectFirst[inv,
+      Lookup[#, "Role"] === "RootInstruction" &, <||>];
+    ruleRecs  = Select[inv, Lookup[#, "Role"] === "Rule" &];
+    skillRecs = Select[inv, Lookup[#, "Role"] === "Skill" &];
+
+    (* CLAUDE.md -> .claude/CLAUDE.md *)
+    rootInstruction = If[AssociationQ[rootRec] && rootRec =!= <||>,
+      <|"SourceRelativePath" ->
+          Lookup[rootRec, "RelativePath", "CLAUDE.md"],
+        "TargetRelativePath" -> ".claude/CLAUDE.md",
+        "SourceHash" ->
+          Lookup[rootRec, "ContentHash", Missing["NotAvailable"]]|>,
+      (AppendTo[warnings,
+         "No CLAUDE.md (RootInstruction) was found in the canonical "
+           <> "repository; .claude/CLAUDE.md will not be generated."];
+       Missing["NotAvailable"])];
+
+    (* rules -> .claude/rules/<name>.md (verbatim) *)
+    Do[
+      Module[{ruleName, srcRel, tgtRel, srcHash},
+        ruleName = ToString[Lookup[rec, "Name", ""]];
+        srcRel   = Lookup[rec, "RelativePath", ""];
+        srcHash  = Lookup[rec, "ContentHash", Missing["NotAvailable"]];
+        tgtRel   = iClaudeCLIRuleTargetRel[ruleName];
+        AppendTo[genFiles,
+          <|"Kind" -> "rule",
+            "Name" -> ruleName,
+            "SourceRelativePath" -> srcRel,
+            "TargetRelativePath" -> tgtRel,
+            "SourceHash" -> srcHash|>]],
+      {rec, ruleRecs}];
+
+    (* skills -> .claude/skills/<name>/SKILL.md (verbatim) *)
+    Do[
+      Module[{skillName, srcRel, tgtRel, srcHash},
+        skillName = ToString[Lookup[rec, "Name", ""]];
+        srcRel    = Lookup[rec, "RelativePath", ""];
+        srcHash   = Lookup[rec, "ContentHash", Missing["NotAvailable"]];
+        tgtRel    = iClaudeCLISkillTargetRel[skillName];
+        AppendTo[genFiles,
+          <|"Kind" -> "skill",
+            "Name" -> skillName,
+            "SourceRelativePath" -> srcRel,
+            "TargetRelativePath" -> tgtRel,
+            "SourceHash" -> srcHash|>]],
+      {rec, skillRecs}];
+
+    <|
+      "Target"                          -> "ClaudeCLI",
+      "HarnessMaterializationMode"      -> hmm,
+      "DirectiveRepositoryManifestHash" -> manifestHash,
+      "SourceVaultSnapshotId"           -> svSnap,
+      "DirectiveRoot"                   -> root,
+      "RootInstruction"                 -> rootInstruction,
+      "AgentsMd"                        -> Missing["NotApplicable"],
+      "Index"                           -> Missing["NotApplicable"],
+      "GeneratedSkills"                 -> genFiles,
+      "CommandPolicyRules"              -> {},
+      "ProvenanceFiles" ->
+        {".claude/sourcevault-provenance.json"},
+      "Warnings"                        -> warnings
+    |>];
+
+iClaudeCLIHarnessPlan[___] := $Failed;
+
+
+(* ---- ClaudeDirectiveMaterializeClaudeHarness (spec 5.2 / 7.2) ----
+   A thin wrapper that executes iClaudeCLIHarnessPlan and writes the
+   .claude/ harness files. The canonical Claude Directives repository
+   is never modified. .claude/settings.json is intentionally NOT
+   written here. *)
+
+Options[ClaudeDirectiveMaterializeClaudeHarness] = {
+  "HarnessMaterializationMode"      -> Automatic,
+  "SourceVaultSnapshotId"           -> Missing["NotRegistered"],
+  "DirectiveRepositoryManifestHash" -> Automatic,
+  "GenerateProvenance"              -> True,
+  "DryRun"                          -> False
+};
+
+ClaudeDirectiveMaterializeClaudeHarness[
+    bundle_Association, targetDir_String, opts:OptionsPattern[]] :=
+  Module[
+    {ov, plan, root, inv, invByRel, manifestHash, hmm, svSnap,
+     genProv, dryRun, warnings, writtenFiles = {}, genReports = {},
+     rootInstruction, rootReport = Missing["NotApplicable"],
+     provFiles = {}},
+
+    ov[k_] := OptionValue[ClaudeDirectiveMaterializeClaudeHarness,
+      {opts}, k];
+
+    (* 1. compute the plan *)
+    plan = ClaudeDirectiveHarnessPlan[bundle, "ClaudeCLI",
+      "HarnessMaterializationMode" -> ov["HarnessMaterializationMode"],
+      "SourceVaultSnapshotId"      -> ov["SourceVaultSnapshotId"]];
+    If[FailureQ[plan], Return[plan]];
+
+    warnings = Lookup[plan, "Warnings", {}];
+
+    (* 2. dry-run: return the plan, write nothing *)
+    dryRun = TrueQ[ov["DryRun"]];
+    If[dryRun,
+      Return[<|
+        "DryRun"    -> True,
+        "Target"    -> "ClaudeCLI",
+        "TargetDir" -> targetDir,
+        "Plan"      -> plan|>]];
+
+    (* 3. resolve repository root + inventory *)
+    root = Lookup[plan, "DirectiveRoot",
+      Lookup[bundle, "DirectiveRoot", None]];
+    If[!StringQ[root] || !DirectoryQ[root],
+      root = ClaudeResolveDirectiveRoot[Automatic]];
+    If[FailureQ[root], Return[root]];
+    inv = ClaudeDirectiveFileInventory[root];
+    If[FailureQ[inv], Return[inv]];
+    invByRel = Association[
+      (Lookup[#, "RelativePath", ""] -> #) & /@ inv];
+
+    manifestHash = Lookup[plan, "DirectiveRepositoryManifestHash",
+      Missing["NotComputed"]];
+    hmm     = Lookup[plan, "HarnessMaterializationMode",
+      "FullGenerated"];
+    svSnap  = Lookup[plan, "SourceVaultSnapshotId",
+      Missing["NotRegistered"]];
+    genProv = TrueQ[ov["GenerateProvenance"]];
+
+    If[!DirectoryQ[targetDir],
+      CreateDirectory[targetDir,
+        CreateIntermediateDirectories -> True]];
+
+    (* 4. CLAUDE.md -> .claude/CLAUDE.md (verbatim copy) *)
+    rootInstruction = Lookup[plan, "RootInstruction",
+      Missing["NotApplicable"]];
+    If[AssociationQ[rootInstruction],
+      Module[{srcRel, srcRec, srcAbs, tgtRel, tgtAbs, rawText,
+              matHash},
+        srcRel = ToString[
+          Lookup[rootInstruction, "SourceRelativePath", "CLAUDE.md"]];
+        tgtRel = ToString[
+          Lookup[rootInstruction, "TargetRelativePath",
+            ".claude/CLAUDE.md"]];
+        srcRec = Lookup[invByRel, srcRel, <||>];
+        srcAbs = ToString[Lookup[srcRec, "AbsolutePath", ""]];
+        tgtAbs = FileNameJoin[
+          Prepend[FileNameSplit[tgtRel], targetDir]];
+        If[!DirectoryQ[DirectoryName[tgtAbs]],
+          CreateDirectory[DirectoryName[tgtAbs],
+            CreateIntermediateDirectories -> True]];
+        rawText = If[StringQ[srcAbs] && FileExistsQ[srcAbs],
+          iReadUTF8File[srcAbs], ""];
+        iWriteUTF8File[tgtAbs, rawText];
+        matHash = iDirectiveContentHash[tgtAbs];
+        AppendTo[writtenFiles, tgtRel];
+        rootReport = <|
+          "SourceRelativePath" -> srcRel,
+          "TargetRelativePath" -> tgtRel,
+          "SourceHash" ->
+            Lookup[rootInstruction, "SourceHash",
+              Missing["NotAvailable"]],
+          "MaterializedHash" -> matHash|>]];
+
+    (* 5. rules + skills -> .claude/ (verbatim copies) *)
+    Do[
+      Module[{gen, srcRel, srcRec, srcAbs, srcHash, tgtRel, tgtAbs,
+              rawText, matHash},
+        gen    = g;
+        srcRel = ToString[Lookup[gen, "SourceRelativePath", ""]];
+        tgtRel = ToString[Lookup[gen, "TargetRelativePath", ""]];
+        srcRec = Lookup[invByRel, srcRel, <||>];
+        srcAbs = ToString[Lookup[srcRec, "AbsolutePath", ""]];
+        srcHash = Lookup[srcRec, "ContentHash",
+          Missing["NotAvailable"]];
+        tgtAbs = FileNameJoin[
+          Prepend[FileNameSplit[tgtRel], targetDir]];
+        If[!DirectoryQ[DirectoryName[tgtAbs]],
+          CreateDirectory[DirectoryName[tgtAbs],
+            CreateIntermediateDirectories -> True]];
+        rawText = If[StringQ[srcAbs] && FileExistsQ[srcAbs],
+          iReadUTF8File[srcAbs], ""];
+        iWriteUTF8File[tgtAbs, rawText];
+        matHash = iDirectiveContentHash[tgtAbs];
+        AppendTo[writtenFiles, tgtRel];
+        AppendTo[genReports, <|
+          "Kind"               -> Lookup[gen, "Kind"],
+          "Name"               -> Lookup[gen, "Name"],
+          "SourceRelativePath" -> srcRel,
+          "TargetRelativePath" -> tgtRel,
+          "SourceHash"         -> srcHash,
+          "MaterializedHash"   -> matHash|>]],
+      {g, Lookup[plan, "GeneratedSkills", {}]}];
+
+    (* 6. provenance *)
+    If[genProv,
+      Module[{provDoc, provAbs, provRel},
+        provRel = ".claude/sourcevault-provenance.json";
+        provAbs = FileNameJoin[
+          Prepend[FileNameSplit[provRel], targetDir]];
+        provDoc = <|
+          "kind"   -> "HarnessMaterialization",
+          "target" -> "ClaudeCLI",
+          "harness_materialization_mode"      -> hmm,
+          "directive_repository_manifest_hash" -> manifestHash,
+          "sourcevault_snapshot_id"           -> svSnap,
+          "generator" -> "claudecode_directives.wl "
+            <> ToString[$ClaudeDirectivesVersion],
+          "generated_at"     -> iISOTimestamp[],
+          "root_instruction" -> rootReport,
+          "files"            -> genReports,
+          "warnings"         -> warnings|>;
+        If[!DirectoryQ[DirectoryName[provAbs]],
+          CreateDirectory[DirectoryName[provAbs],
+            CreateIntermediateDirectories -> True]];
+        iWriteJSONFile[provAbs, provDoc];
+        AppendTo[provFiles, provRel];
+        AppendTo[writtenFiles, provRel]]];
+
+    (* 7. materialization report *)
+    <|
+      "Target"                          -> "ClaudeCLI",
+      "TargetDir"                       -> targetDir,
+      "HarnessMaterializationMode"      -> hmm,
+      "DirectiveRepositoryManifestHash" -> manifestHash,
+      "DryRun"                          -> False,
+      "WrittenFiles"                    -> writtenFiles,
+      "RootInstruction"                 -> rootReport,
+      "GeneratedFiles"                  -> genReports,
+      "ProvenanceFiles"                 -> provFiles,
+      "Warnings"                        -> warnings,
+      "Plan"                            -> plan
+    |>];
+
+ClaudeDirectiveMaterializeClaudeHarness[___] := $Failed;
+
+
+(* ===================================================================
+   Phase 2.5: migration gate (spec section 4)
+   Compares canonical Claude Directives vs a legacy .claude/ harness
+   on normalised logical paths. Reuses ClaudeDirectiveFileInventory
+   for both sides, so each side's RelativePath/LogicalPath are the
+   directory-relative paths that line up across the two roots.
+   =================================================================== *)
+
+(* split an inventory into a logical equivalence map (CLAUDE.md /
+   rules / skills) and the list of harness-only logical paths *)
+iMigrationLogicalMap[inv_List] :=
+  Module[{equiv, harnessOnly},
+    equiv = Select[inv,
+      MemberQ[{"RootInstruction", "Rule", "Skill"},
+        Lookup[#, "Role"]] &];
+    harnessOnly = Select[inv,
+      !MemberQ[{"RootInstruction", "Rule", "Skill"},
+        Lookup[#, "Role"]] &];
+    <|
+      "EquivMap" -> Association[
+        (Lookup[#, "LogicalPath", ""] ->
+          Lookup[#, "ContentHash", ""]) & /@ equiv],
+      "HarnessOnly" -> Sort[
+        Lookup[#, "LogicalPath", ""] & /@ harnessOnly]
+    |>];
+
+iMigrationLogicalMap[_] := <|"EquivMap" -> <||>, "HarnessOnly" -> {}|>;
+
+(* logical (directory-relative, forward-slash) path of a file *)
+iDirectiveRelLogical[base_String, path_String] :=
+  Module[{bs, ps},
+    bs = FileNameSplit[ExpandFileName[base]];
+    ps = FileNameSplit[ExpandFileName[path]];
+    If[Length[ps] > Length[bs] && Take[ps, Length[bs]] === bs,
+      StringRiffle[Drop[ps, Length[bs]], "/"],
+      StringRiffle[ps, "/"]]];
+
+iDirectiveRelLogical[___] := "";
+
+(* every file under claudeDir that is NOT a canonical-equivalent
+   file (CLAUDE.md / rules / skills): the legacy harness-only set.
+   Walks the real directory because settings.json and commands/*
+   are not picked up by the *.md-only inventory. *)
+iLegacyHarnessOnlyFiles[claudeDir_String, equivKeys_List] :=
+  Module[{allFiles, allLogical},
+    If[!DirectoryQ[claudeDir], Return[{}]];
+    allFiles = Select[
+      FileNames["*", claudeDir, Infinity], !DirectoryQ[#] &];
+    allLogical = DeleteCases[
+      iDirectiveRelLogical[claudeDir, #] & /@ allFiles, ""];
+    Sort @ Complement[allLogical, equivKeys]];
+
+iLegacyHarnessOnlyFiles[___] := {};
+
+(* hash of a normalised {LogicalPath, ContentHash} equivalence map *)
+iMigrationEquivHash[equivMap_Association] :=
+  Module[{pairs},
+    pairs = SortBy[
+      {#, Lookup[equivMap, #, ""]} & /@ Keys[equivMap], First];
+    "sha256-" <> ToLowerCase[Hash[
+      ToString[pairs, InputForm], "SHA256", "HexString"]]];
+
+iMigrationEquivHash[_] :=
+  "sha256-" <> ToLowerCase[Hash["{}", "SHA256", "HexString"]];
+
+(* ---- ClaudeDirectiveCompareCanonicalAndClaudeHarness ---- *)
+
+ClaudeDirectiveCompareCanonicalAndClaudeHarness[
+    directiveRoot_String, claudeDir_String] :=
+  Module[{canonInv, legacyInv, canonMap, legacyMap,
+          canonEquiv, legacyEquiv, ck, lk,
+          onlyCanon, onlyLegacy, changed},
+    canonInv = If[DirectoryQ[directiveRoot],
+      ClaudeDirectiveFileInventory[directiveRoot,
+        "IncludeOther" -> True], {}];
+    legacyInv = If[DirectoryQ[claudeDir],
+      ClaudeDirectiveFileInventory[claudeDir,
+        "IncludeOther" -> True], {}];
+    If[FailureQ[canonInv] || !ListQ[canonInv], canonInv = {}];
+    If[FailureQ[legacyInv] || !ListQ[legacyInv], legacyInv = {}];
+
+    canonMap  = iMigrationLogicalMap[canonInv];
+    legacyMap = iMigrationLogicalMap[legacyInv];
+    canonEquiv  = canonMap["EquivMap"];
+    legacyEquiv = legacyMap["EquivMap"];
+    ck = Keys[canonEquiv];
+    lk = Keys[legacyEquiv];
+
+    onlyCanon  = Sort[Complement[ck, lk]];
+    onlyLegacy = Sort[Complement[lk, ck]];
+    changed = Sort[Select[Intersection[ck, lk],
+      Lookup[canonEquiv, #, ""] =!=
+        Lookup[legacyEquiv, #, ""] &]];
+
+    <|
+      "CanonicalEquivMap"      -> canonEquiv,
+      "LegacyEquivMap"         -> legacyEquiv,
+      "FilesOnlyInCanonical"   -> onlyCanon,
+      "FilesOnlyInLegacy"      -> onlyLegacy,
+      "FilesChanged"           -> changed,
+      "LegacyHarnessOnlyFiles" -> iLegacyHarnessOnlyFiles[claudeDir, lk],
+      "CanonicalDirExists"     -> DirectoryQ[directiveRoot],
+      "LegacyDirExists"        -> DirectoryQ[claudeDir]
+    |>];
+
+ClaudeDirectiveCompareCanonicalAndClaudeHarness[___] := $Failed;
+
+(* ---- ClaudeDirectiveMigrationReport (spec 4.2) ---- *)
+
+ClaudeDirectiveMigrationReport[
+    directiveRoot_String, claudeDir_String, opts:OptionsPattern[]] :=
+  Module[{cmp, canonEquiv, legacyEquiv, ck, lk,
+          status, recommended, canonHash, legacyHash},
+    cmp = ClaudeDirectiveCompareCanonicalAndClaudeHarness[
+      directiveRoot, claudeDir];
+    If[FailureQ[cmp],
+      Return[Failure["ClaudeDirectiveMigrationReport", <|
+        "MessageTemplate" ->
+          "Could not compare the canonical and legacy directories.",
+        "MessageParameters" -> <||>|>]]];
+
+    canonEquiv  = cmp["CanonicalEquivMap"];
+    legacyEquiv = cmp["LegacyEquivMap"];
+    ck = Keys[canonEquiv];
+    lk = Keys[legacyEquiv];
+
+    canonHash  = iMigrationEquivHash[canonEquiv];
+    legacyHash = iMigrationEquivHash[legacyEquiv];
+
+    {status, recommended} = Which[
+      ck =!= {} && lk =!= {},
+        If[cmp["FilesOnlyInCanonical"] === {} &&
+           cmp["FilesOnlyInLegacy"] === {} &&
+           cmp["FilesChanged"] === {},
+          {"Equivalent", "CanSwitchClaudeToGenerated"},
+          {"Diverged", "ManualReview"}],
+      ck === {} && lk =!= {},
+        {"LegacyOnly", "ManualReview"},
+      ck =!= {} && lk === {},
+        (* canonical present, legacy absent: first migration when
+           the legacy directory does not even exist *)
+        If[TrueQ[cmp["LegacyDirExists"]],
+          {"CanonicalOnly", "CanSwitchClaudeToGenerated"},
+          {"CanonicalOnly", "ManualReview"}],
+      True,
+        {"Equivalent", "CanSwitchClaudeToGenerated"}];
+
+    <|
+      "CanonicalRoot"          -> directiveRoot,
+      "LegacyClaudeDir"        -> claudeDir,
+      "CanonicalHash"          -> canonHash,
+      "LegacyHarnessHash"      -> legacyHash,
+      "Status"                 -> status,
+      "FilesOnlyInCanonical"   -> cmp["FilesOnlyInCanonical"],
+      "FilesOnlyInLegacy"      -> cmp["FilesOnlyInLegacy"],
+      "FilesChanged"           -> cmp["FilesChanged"],
+      "LegacyHarnessOnlyFiles" -> cmp["LegacyHarnessOnlyFiles"],
+      "RecommendedAction"      -> recommended
+    |>];
+
+ClaudeDirectiveMigrationReport[___] := $Failed;
 
 End[]; (* `Private` *)
 EndPackage[];

@@ -10,6 +10,9 @@ claudecode パッケージのインストールと初期設定の手順を説明
 - **Node.js 16.0** 以上
 - **Claude Code CLI** （Anthropic 提供）
 
+### オプション環境
+- **ChatGPT Codex CLI** （OpenAI 提供）― provider に `chatgptcodex` を指定して Codex 経由でコード生成・クエリを実行する場合に必要です。Claude Code CLI のみを使う場合は不要です。
+
 ### ハードウェア要件
 - **メモリ**: 最低 8GB RAM（推奨 16GB 以上）
 - **ストレージ**: 空き容量 1GB 以上
@@ -25,6 +28,37 @@ Claude Code CLI を公式サイトからダウンロードしてインストー�
 # Claude Code CLI の確認
 claude --version
 ```
+
+### 1b. ChatGPT Codex CLI のインストール（オプション）
+
+provider に `chatgptcodex` を指定して Codex 経由でコード生成・クエリを実行する場合は、ChatGPT Codex CLI をインストールしてください。Claude Code CLI のみを使う場合はこの手順は不要です。
+
+Codex CLI は npm パッケージとして提供されています：
+
+```bash
+# ChatGPT Codex CLI のインストール
+npm install -g @openai/codex
+
+# ChatGPT Codex CLI の確認
+codex --version
+```
+
+インストール後、Codex CLI に OpenAI アカウントでログインしてください：
+
+```bash
+codex login
+```
+
+`codex login` で作成される認証情報（`auth.json`）は既定の `CODEX_HOME`（`~/.codex`）に保存されます。claudecode は Codex 実行ごとに一時的な `CODEX_HOME` を作成しますが、この認証情報を自動的に引き継ぐため、`codex login` を一度実行しておけば claudecode 経由の Codex 実行でも認証が通ります。
+
+利用可能なモデル一覧は次のコマンドで確認できます：
+
+```bash
+# Codex が認識しているモデルカタログ（JSON）
+codex debug models
+```
+
+このモデルカタログは SourceVault が一元管理します（後述の「ChatGPT Codex のモデル管理」を参照）。
 
 ### 2. Node.js のインストール
 
@@ -43,6 +77,8 @@ Claude Code CLI に API キーを設定してください：
 ```bash
 claude auth login
 ```
+
+ChatGPT Codex CLI を provider として使う場合は、別途 `codex login`（前述）でログインしておきます。Claude Code CLI も Codex CLI も、いずれもサブスクリプション契約に基づく CLI であり、メーター制 API（`anthropic` / `openai` provider）とは課金体系が異なります。claudecode の課金 API ガード（`課金API: 禁止` 設定）は `claudecode` provider と `chatgptcodex` provider を無課金扱いとするため、課金 API を許可しなくても Codex 経由のコード生成が利用できます。
 
 ## パッケージのインストール
 
@@ -270,6 +306,25 @@ Keys[ClaudeRuntime`Private`$iClaudeRuntimes]
 $UseClaudeRuntime = False
 ```
 
+### 6. ChatGPT Codex provider の動作確認（オプション）
+
+ChatGPT Codex CLI をインストールした場合は、provider を `chatgptcodex` に切り替えて動作を確認できます：
+
+```mathematica
+(* provider を Codex に切り替え（モデルは CLI 既定を使用） *)
+$ClaudeModel = {"chatgptcodex", Automatic}
+
+(* Codex 経由でコード生成 *)
+ClaudeEval["1 から 100 までの和を求めてください"]
+
+(* provider を Claude Code に戻す *)
+$ClaudeModel = {"claudecode", "claude-opus-4-7"}
+```
+
+`$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定すると、`ClaudeEval` / `ClaudeQuery` が Codex CLI 経由で実行されます。`Automatic` は Codex CLI の既定モデルを使用します。具体的なモデルを指定する場合は `$ChatgptCodexModel` を設定するか、パレットの `M:` ボタンで選択します（「ChatGPT Codex のモデル管理」を参照）。
+
+Codex provider は Claude CLI と同じ非同期実行経路（バックグラウンドでの CLI 起動と結果ポーリング）で動作するため、実行中にカーネルがブロックされることはありません。
+
 ## 後方互換性について
 
 claudecode は ClaudeRuntime および ClaudeTestKit の導入にあたり、**既存のワークフローへの影響がゼロになるよう設計**されています。
@@ -319,6 +374,34 @@ ClaudeEval["最新の技術情報を調べてください", WebSearch -> True]
 (* WebFetch設定（API経由、課金あり、Fallback->True必須） *)
 ClaudeEval["このURLの内容を要約して", WebFetch -> True, Fallback -> True]
 ```
+
+### ChatGPT Codex のモデル管理
+
+ChatGPT Codex のモデル名は SourceVault が一元管理します。具体的な LLM モデル ID を `claudecode.wl` 等のソースに直書きせず、SourceVault のモデルレジストリから解決する設計です。
+
+SourceVault をインストールしている場合、まず一度モデルレジストリを更新します：
+
+```mathematica
+(* SourceVault の読み込み *)
+Needs["SourceVault`"]
+
+(* Codex のモデルカタログを取得してレジストリを更新 *)
+SourceVaultRefreshModelRegistry["Providers" -> {"chatgptcodex"}]
+```
+
+`SourceVaultRefreshModelRegistry` は `codex debug models` を実行してモデルカタログを取得し、コンパイル済みレジストリに登録します。登録後は次のように確認できます：
+
+```mathematica
+(* Codex の選択可能なモデル一覧 *)
+SourceVaultListModels["chatgptcodex"]
+
+(* 用途（intent）に応じたモデル解決 *)
+ClaudeResolveModel["chatgptcodex", "code-heavy"]
+```
+
+claudecode のパレットで provider を `ChatGPTCodex` に切り替えると、`M:` ボタンのモデル候補はこの SourceVault レジストリから取得されます。SourceVault をロードしていない場合や、レジストリ更新前は、最小限のフォールバック候補（`Automatic`）のみが表示されます。
+
+`Automatic` を選ぶと Codex CLI の既定モデルが使われます（`config.toml` の `model` キーを省略）。具体的なモデルを選ぶと、そのモデル名が Codex 実行時の設定に反映されます。
 
 ## トラブルシューティング
 
@@ -412,6 +495,37 @@ FileExistsQ[FileNameJoin[{$packageDirectory, "ClaudeRuntime", "Kernel", "init.wl
 (* ClaudeRuntime を使用しない場合は False に設定 *)
 $UseClaudeRuntime = False
 ```
+
+#### 9. ChatGPT Codex provider のエラー
+
+provider を `chatgptcodex` に設定して `ClaudeEval` がカスケード失敗する場合、いくつかの原因が考えられます。
+
+**Codex CLI が見つからない**：Codex CLI がインストールされ、PATH が通っているか確認してください。
+
+```bash
+codex --version
+```
+
+PATH に追加されていない場合は `$ChatgptCodexExe` に Codex CLI のフルパスを指定できます：
+
+```mathematica
+$ChatgptCodexExe = "C:\\Users\\<user>\\.local\\bin\\codex.exe"
+```
+
+**認証エラー（401 Unauthorized）**：Codex CLI にログインしていない場合、Codex 実行が認証失敗で終了します。一度ターミナルで `codex login` を実行してください。
+
+```bash
+codex login
+```
+
+**無効なモデル名での失敗**：存在しないモデル名を指定すると Codex CLI が起動時に失敗します。SourceVault のモデルレジストリを更新し、`SourceVaultListModels["chatgptcodex"]` で有効なモデル名を確認してください。モデル名が不確かな場合は `$ChatgptCodexModel = Automatic`（CLI 既定モデル）にすると確実に動作します。
+
+```mathematica
+(* 確実に動作する既定モデルに戻す *)
+$ChatgptCodexModel = Automatic
+```
+
+**問題切り分け**：Codex 実行ごとの一時ディレクトリ（既定では `$TemporaryDirectory` 配下の `claudecode-chatgpt-codex`）に、`codex_stderr_*.log` というセッションログが残ります。Codex CLI が出力したエラー内容はこのログで確認できます。
 
 ### デバッグ情報の取得
 

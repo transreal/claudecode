@@ -28,6 +28,8 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 **LM Studio の主モデル利用と MCP ツール連携**: `$ClaudeModel` に LM Studio のエンドポイントを直接指定することで、すべての ClaudeEval/ClaudeQuery を LM Studio 経由で実行できます。さらに `$ClaudeLMStudioIntegrations` に MCP サーバー ID を指定すると、LM Studio がサーバー側で tool-call を自動実行し、Web 検索等の MCP ツールをローカル LLM から呼び出せます。これにより、プライバシーを優先しながら外部ツール統合を実現できます。
 
+**ChatGPT Codex CLI の provider 利用**: Claude Code CLI に加えて、OpenAI の ChatGPT Codex CLI を provider として利用できます。`$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定すると、ClaudeEval/ClaudeQuery が Codex CLI 経由で実行されます。Codex provider は Claude CLI と同じ非同期実行経路で動作し、Codex 実行ごとに一時的な作業ディレクトリと CODEX_HOME を作成して `codex login` の認証情報を引き継ぎます。Codex のモデル名は SourceVault のモデルレジストリが一元管理し、具体的な LLM モデル ID をパッケージソースに直書きしない設計を採っています。
+
 パッケージ管理機能 (`ClaudeUpdatePackage`, `ClaudeRestorePackage`) では、既存の .wl パッケージを Claude の支援で更新し、差分ベースの自動バックアップにより安全なイテレーションを実現します。バックアップシステムは `SequenceAlignment` ベースの差分保存を採用し、`.cz`（ベースライン）・`.cdiff`（差分）・`.unchanged`（参照）の3形式でストレージ消費を大幅に削減します。差分チェーンの中間ノードを削除する際も依存関係を自動解決し、復元不能になることを防止します。既存の生バックアップは `ClaudeMigrateBackupHistory` で差分形式に一括変換できます。コード生成・マージ後には検証テストが自動生成・実行され（`===BEGIN_TESTS===` ～ `===END_TESTS===` ブロック）、意図した変更が正しく反映されているか確認します。
 
 パッケージキーワード自動注入システムにより、各外部パッケージが `$ClaudePackageKeywordMap` を通じて独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。これにより claudecode.wl はパッケージ非依存を保ちつつ、必要な API ドキュメントを自動的に提供できます。
@@ -73,6 +75,7 @@ AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImag
 | Mathematica | 13.0 以上（14.x 推奨） |
 | Node.js | 18 以上 |
 | Claude Code CLI | 最新版 |
+| ChatGPT Codex CLI | 最新版（オプション・`chatgptcodex` provider 利用時） |
 | OS | Windows 11（macOS/Linux ではパス区切りやシェルコマンドを適宜読み替えてください） |
 
 ### インストール
@@ -95,6 +98,21 @@ npm --version
 ```
 
 claude コマンドを実行すると、対話形式でログイン手順が表示されるため、画面の案内に従って認証を完了してください。
+
+provider に `chatgptcodex` を指定して Codex 経由でコード生成・クエリを実行する場合は、ChatGPT Codex CLI もインストールしてください（オプション）。Claude Code CLI のみを使う場合は不要です。
+
+```bash
+# ChatGPT Codex CLI のインストール
+npm install -g @openai/codex
+
+# ChatGPT Codex CLI の確認
+codex --version
+
+# OpenAI アカウントでログイン
+codex login
+```
+
+`codex login` の認証情報は claudecode の Codex 実行に自動的に引き継がれます。Claude Code CLI も Codex CLI もサブスクリプション契約に基づく CLI であり、メーター制 API とは課金体系が異なります。
 
 #### 2. パッケージファイルの配置
 
@@ -273,7 +291,7 @@ ShowClaudePalette[]
 
 | 変数 | デフォルト | 説明 |
 |------|-----------|------|
-| `$ClaudeModel` | `""` | Claude CLI に渡すモデル名。空文字は CLI デフォルト。`{"lmstudio", "モデル名", "http://host:port"}` 形式で LM Studio を主モデルとして直接指定することも可能 |
+| `$ClaudeModel` | `""` | Claude CLI に渡すモデル名。空文字は CLI デフォルト。`{"lmstudio", "モデル名", "http://host:port"}` 形式で LM Studio を主モデルとして直接指定することも可能。`{"chatgptcodex", Automatic}` 形式で ChatGPT Codex CLI を provider として指定することも可能 |
 | `$ClaudeTimeout` | `1200` | タイムアウト秒数 |
 | `$ClaudeVerbose` | `False` | `True` で履歴コンパクション等の詳細ログを出力 |
 | `$ClaudeWorkingDirectory` | `FileNameJoin[{$HomeDirectory, "Claude Working"}]` | 作業ディレクトリ |
@@ -295,6 +313,10 @@ ShowClaudePalette[]
 | `$ClaudePackageKeywordMap` | `<\|\|>` | パッケージ API 自動注入用のキーワードマップ |
 | `$LLMGraphMaxConcurrency` | カテゴリ別設定 | LLMGraph のカテゴリ別並列実行数（`"cli"`・`"cli-vision"` 等） |
 | `$UseClaudeRuntime` | `False` | `True` で ClaudeRuntime パッケージ経由の実行を有効化。claudecode 単独ロード時はデフォルトの `False`(従来動作)。ClaudeRuntime をロードすると自動的に `True` が設定される |
+| `$ChatgptCodexExe` | `Automatic` | ChatGPT Codex CLI 実行ファイルのパス。`Automatic` は PATH から解決 |
+| `$ChatgptCodexModel` | `Automatic` | Codex のモデル名。`Automatic` は config.toml の model キーを省略し Codex CLI 既定モデルを使用。具体的なモデル名は SourceVault のモデルレジストリから選択する |
+| `$ChatgptWorkingDirectory` | `Automatic` | Codex 実行のベース作業ディレクトリ。`Automatic` は `$TemporaryDirectory` 配下の `claudecode-chatgpt-codex` を使用 |
+| `$ChatgptCodexApprovalPolicy` | `"never"` | Codex の承認ポリシー。`"never"` は非対話で実行 |
 
 ### 主な機能
 
@@ -505,6 +527,50 @@ ClaudeQuery["最新の Mathematica のリリースノートを調べて"]
 ```
 
 MCP サーバー ID は `mcp.json` に登録済みの ID を文字列リストで指定します。`$ClaudeModel` を LM Studio に設定した状態で `$ClaudeLMStudioIntegrations` を有効にすることで、プライバシーを重視しながら外部ツール呼び出し機能を統合した運用が可能です。
+
+### ChatGPT Codex 対応
+
+Claude Code CLI に加えて、OpenAI の **ChatGPT Codex CLI** を provider として使用できます。`$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定すると、`ClaudeEval` / `ClaudeQuery` が Codex CLI 経由で実行されます。
+
+```bash
+# ChatGPT Codex CLI のインストール（事前準備）
+npm install -g @openai/codex
+codex --version
+codex login
+```
+
+```mathematica
+(* provider を ChatGPT Codex に切り替え（モデルは CLI 既定） *)
+$ClaudeModel = {"chatgptcodex", Automatic}
+
+(* Codex 経由でコード生成 *)
+ClaudeEval["1 から 100 までの和を求めてください"]
+
+(* provider を Claude Code に戻す *)
+$ClaudeModel = {"claudecode", "claude-opus-4-7"}
+```
+
+Codex provider は Claude CLI と同じ非同期実行経路で動作します。Codex 実行ごとに一時的な作業ディレクトリと `CODEX_HOME` を作成し、`codex login` の認証情報（`auth.json`）を自動的に引き継いだうえで、`codex exec` をバックグラウンドで起動して結果をポーリングします。実行中にカーネルがブロックされることはありません。
+
+Claude Code CLI も Codex CLI もサブスクリプション契約に基づく CLI であり、メーター制 API（`anthropic` / `openai` provider）とは課金体系が異なります。claudecode の課金 API ガードは `chatgptcodex` provider を無課金扱いとするため、課金 API を許可しない設定でも Codex 経由のコード生成が利用できます。
+
+#### ChatGPT Codex のモデル管理
+
+ChatGPT Codex のモデル名は **SourceVault** が一元管理します。具体的な LLM モデル ID をパッケージソースに直書きせず、SourceVault のモデルレジストリから解決する設計です。
+
+```mathematica
+(* SourceVault のモデルレジストリを更新（codex debug models を実行） *)
+<< SourceVault`
+SourceVaultRefreshModelRegistry["Providers" -> {"chatgptcodex"}]
+
+(* Codex の選択可能なモデル一覧 *)
+SourceVaultListModels["chatgptcodex"]
+
+(* 用途に応じたモデル解決 *)
+ClaudeResolveModel["chatgptcodex", "code-heavy"]
+```
+
+`SourceVaultRefreshModelRegistry` は `codex debug models` を実行してモデルカタログを取得し、コンパイル済みレジストリに登録します。パレットで provider を `ChatGPTCodex` に切り替えると、`M:` ボタンのモデル候補はこの SourceVault レジストリから取得されます。`$ChatgptCodexModel` に具体的なモデル名を設定することでも指定できます。
 
 ### SourceVault による PromptRouter ブリッジ
 
