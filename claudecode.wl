@@ -125,7 +125,8 @@ Quiet[ClearAll[
   $iLLMGraphCache, $iLLMGraphCacheNB, iLLMGraphFlush,
   iMakeBat, iMakeBatStreamJson, iMakeBatVerbose,
   iClaudeCallPrefix, iClaudeEnvResetBatchLines, iCLIPermissionFlags,
-  iPrepareClaudeProjectDirectory, iClaudeWorkingDirectory, iEnsureClaudeWorkingDirectory
+  iPrepareClaudeProjectDirectory, iClaudeWorkingDirectory, iEnsureClaudeWorkingDirectory,
+  iOpenaiWorkingDirectory, iEnsureOpenaiWorkingDirectory
 ]];
 
 (* NBAccess \:30d1\:30c3\:30b1\:30fc\:30b8\:3092\:30ed\:30fc\:30c9 (\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:8aad\:307f\:66f8\:304d\:30fb\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:7ba1\:7406) *)
@@ -227,6 +228,7 @@ Quiet[Scan[
    "ClaudeParseEditModeResponse", "ClaudeAutoDetectEditMode",
    (* === Phase 3 (2026-05-25): ChatGPT Codex CLI integration === *)
    "$ChatgptCodexExe", "$ChatgptWorkingDirectory", "$ChatgptAccessibleDirs",
+   "$OpenaiWorkingDirectory",
    "$ChatgptCodexHomeDirectory", "$ChatgptCodexPermissionProfile",
    "$ChatgptCodexApprovalPolicy", "$ChatgptCodexModel",
    "$ChatgptCodexHarnessMode", "$ChatgptCodexRetainTempProjects",
@@ -283,6 +285,7 @@ $ClaudeMDContent::usage =
 $ClaudeMDPath    = "";
 $ClaudeMDContent = "";
 $ClaudeWorkingDirectory = FileNameJoin[{$HomeDirectory, "Claude Working"}];
+$OpenaiWorkingDirectory = FileNameJoin[{$HomeDirectory, "OpenAI Working"}];
 
 $ClaudeSnapshots::usage =
   "$ClaudeSnapshots \:306f LLMGraphDAG \:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:306e\:4fdd\:5b58\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3002\n" <>
@@ -1559,7 +1562,9 @@ ClaudeCloudSendPreflightLogSummary::usage =
 $ChatgptCodexExe::usage =
   "$ChatgptCodexExe is the path to the Codex CLI executable, or Automatic to resolve it from PATH.";
 $ChatgptWorkingDirectory::usage =
-  "$ChatgptWorkingDirectory is the base working directory for Codex runs. Automatic uses $TemporaryDirectory/claudecode-chatgpt-codex.";
+  "$ChatgptWorkingDirectory is the base working directory for Codex runs. Automatic uses $OpenaiWorkingDirectory.";
+$OpenaiWorkingDirectory::usage =
+  "$OpenaiWorkingDirectory is the working directory for the OpenAI Codex CLI. The default is FileNameJoin[{$HomeDirectory, \"OpenAI Working\"}]. When $ChatgptWorkingDirectory is Automatic, the per-run Codex project and CODEX_HOME directories are created under this directory.";
 $ChatgptAccessibleDirs::usage =
   "$ChatgptAccessibleDirs is the list of extra directories exposed read-only to the Codex CLI.";
 $ChatgptCodexHomeDirectory::usage =
@@ -1670,8 +1675,23 @@ iEnsureClaudeWorkingDirectory[] := Module[{dir = iClaudeWorkingDirectory[]},
   dir
 ];
 
+iOpenaiWorkingDirectory[] := Module[{dir = $OpenaiWorkingDirectory},
+  If[!StringQ[dir] || dir === "",
+    dir = FileNameJoin[{$HomeDirectory, "OpenAI Working"}]
+  ];
+  dir
+];
+
+iEnsureOpenaiWorkingDirectory[] := Module[{dir = iOpenaiWorkingDirectory[]},
+  If[!DirectoryQ[dir],
+    CreateDirectory[dir, CreateIntermediateDirectories -> True]
+  ];
+  dir
+];
+
 (* \:30d1\:30c3\:30b1\:30fc\:30b8\:30ed\:30fc\:30c9\:6642\:306b\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:3092\:78ba\:4fdd *)
 Quiet[iEnsureClaudeWorkingDirectory[]];
+Quiet[iEnsureOpenaiWorkingDirectory[]];
 
 iClaudeAPIEnvVars[] := {
   "ANTHROPIC_API_KEY",
@@ -29490,14 +29510,20 @@ iBuildCodexExecCommand[___] :=
    runner. Pure functions -- no directory is created here.
    ------------------------------------------------------------------ *)
 
-(* Resolve the temp base directory under which per-run Codex project
-   and home directories are created. $ChatgptWorkingDirectory =
-   Automatic uses $TemporaryDirectory/claudecode-chatgpt-codex. *)
+(* Resolve the base directory under which per-run Codex project and
+   home directories are created. When $ChatgptWorkingDirectory is set
+   explicitly it wins; otherwise the base is $OpenaiWorkingDirectory
+   (resolved via iOpenaiWorkingDirectory). This stays a pure path
+   resolver -- the base directory itself is materialized later by the
+   iPrepareChatgptCodex*Directory functions (CreateIntermediateDirectories
+   -> True). $TemporaryDirectory is deliberately NOT used: like the
+   Claude CLI working directory, the Codex working directory must live
+   under $HomeDirectory so it is stable and reachable by the CLI. *)
 iCodexResolveWorkingBase[] :=
   If[StringQ[$ChatgptWorkingDirectory] &&
        StringLength[$ChatgptWorkingDirectory] > 0,
     $ChatgptWorkingDirectory,
-    FileNameJoin[{$TemporaryDirectory, "claudecode-chatgpt-codex"}]];
+    iOpenaiWorkingDirectory[]];
 
 (* Resolve the Codex CLI executable. Automatic defers PATH lookup to
    the operating system by using the bare command name "codex". *)
@@ -29945,9 +29971,9 @@ iMakeCodexBat[execCmd_Association, promptFile_String,
     answerFile_String, stdoutLog_String, stderrLog_String] :=
   Module[{batFile, exe, argStr, codexHome, bc, strm, workDir},
     workDir = Lookup[execCmd, "_WorkDir",
-      Quiet @ Check[$ClaudeWorkingDirectory, $TemporaryDirectory]];
+      Quiet @ Check[$ClaudeWorkingDirectory, iOpenaiWorkingDirectory[]]];
     If[!StringQ[workDir] || !DirectoryQ[workDir],
-      workDir = $TemporaryDirectory];
+      workDir = iEnsureOpenaiWorkingDirectory[]];
     batFile = FileNameJoin[{workDir,
       "codex_run_" <> ToString[UnixTime[]] <> "_" <>
       ToString[RandomInteger[99999]] <> ".bat"}];
