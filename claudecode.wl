@@ -17983,6 +17983,12 @@ iCycleNotebookCloudState[] :=
         "Failed to update frontend TaggingRules."]];
       Return[$Failed]];
 
+    (* (4b) Stage 9 P1 ext: \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:30d0\:30c3\:30b8\:3092\:540c\:671f\:3002
+       True/False \:306f\:30d0\:30c3\:30b8\:8868\:793a\:3001Clear \:306f\:9664\:53bb\:3002NotebookSave \:306e\:524d\:306b
+       \:884c\:3046\:3053\:3068\:3067\:30d0\:30c3\:30b8\:72b6\:614b\:3082\:30d5\:30a1\:30a4\:30eb\:306b\:6c38\:7d9a\:5316\:3055\:308c\:308b\:3002 *)
+    Quiet @ iSyncCloudBadgeDockedCell[nb,
+      If[action === "Clear", Missing["NotDeclared"], nextVal]];
+
     (* (4) NotebookSave \:3067\:30d5\:30a1\:30a4\:30eb\:306b\:53cd\:6620\:3055\:305b\:308b\:3002
           Mathematica \:540c\:30d7\:30ed\:30bb\:30b9\:306e save \:306a\:306e\:3067 lock \:554f\:984c\:7121\:3057\:3002 *)
     NotebookSave[nb];
@@ -18036,18 +18042,70 @@ iSyncFrontendTaggingRules[nb_NotebookObject, action_String, nextVal_] :=
   ];
 iSyncFrontendTaggingRules[___] := $Failed;
 
+(* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:30d0\:30c3\:30b8 (Stage 9 P1 ext) \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
+
+(* Notebook-level privacy badge rendered as a DockedCell, shown just
+   below the standard toolbar. It appears ONLY for notebooks explicitly
+   declared True/False; an unset notebook gets no badge at all, so the
+   absence of a badge itself means "unset". The badge is fully static
+   (no Button / no Dynamic), so a file opened without this package still
+   shows it correctly. Wording and colors match the palette's
+   iCloudPaletteLabel / iCloudPaletteColor. *)
+iCloudBadgeCell[state_] :=
+  Cell[
+    BoxData[ToBoxes[
+      Style[iCloudPaletteLabel[state],
+        iCloudPaletteColor[state], Bold, 10,
+        FontFamily -> "Yu Gothic UI"]]],
+    "DockedCell",
+    CellTags -> "SourceVaultPrivacyBadge",
+    TextAlignment -> Right,
+    CellFrameMargins -> {{8, 12}, {1, 1}},
+    CellSize -> {Automatic, 18},
+    Background -> GrayLevel[0.96]];
+
+(* Add / replace / remove the privacy badge in the notebook's
+   DockedCells without disturbing any pre-existing docked cells.
+   state True|False -> badge shown; anything else -> badge removed. *)
+iSyncCloudBadgeDockedCell[nb_NotebookObject, state_] :=
+  Module[{docked, topCells, bottomCells},
+    docked = CurrentValue[nb, DockedCells];
+    {topCells, bottomCells} = Which[
+      docked === Inherited || docked === None || docked === {},
+        {{}, {}},
+      Head[docked] === Cell,
+        {{docked}, {}},
+      MatchQ[docked, {_List, _List}],
+        docked,
+      ListQ[docked],
+        {docked, {}},
+      True, {{}, {}}];
+    topCells = DeleteCases[topCells,
+      Cell[___, CellTags -> "SourceVaultPrivacyBadge", ___]];
+    bottomCells = DeleteCases[bottomCells,
+      Cell[___, CellTags -> "SourceVaultPrivacyBadge", ___]];
+    If[state === True || state === False,
+      topCells = Append[topCells, iCloudBadgeCell[state]]];
+    SetOptions[nb, DockedCells ->
+      Which[
+        topCells === {} && bottomCells === {}, Inherited,
+        bottomCells === {}, topCells,
+        True, {topCells, bottomCells}]]
+  ];
+iSyncCloudBadgeDockedCell[___] := $Failed;
+
 (* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:30bb\:30eb\:53ce\:96c6\:30d8\:30eb\:30d1\:30fc\:ff08\:30d1\:30ec\:30c3\:30c8\:30dc\:30bf\:30f3\:7528\:ff09 \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
 (* \:9078\:629e\:30bb\:30eb\:ff08\:307e\:305f\:306f\:5168\:30bb\:30eb\:ff09\:304b\:3089\:30c6\:30ad\:30b9\:30c8\:3068\:753b\:50cf\:3092\:53ce\:96c6\:3057 iNormalizePrompt \:4e92\:63db\:30ea\:30b9\:30c8\:3092\:8fd4\:3059
    skipPrivacyFilter: True \:306e\:5834\:5408\:3001\:30e6\:30fc\:30b6\:30fc\:304c\:660e\:793a\:7684\:306b\:9078\:629e\:3057\:305f\:30bb\:30eb\:306f\:6a5f\:5bc6\:30d5\:30a3\:30eb\:30bf\:3092\:30d0\:30a4\:30d1\:30b9\:3059\:308b *)
 iCollectCellContent[nb_NotebookObject, cellIndices_List, skipPrivacyFilter_:False] :=
-  Module[{items = {}, tmpDir, imgIdx = 0, cellData, text, style},
+  Module[{items = {}, excludedCount = 0, tmpDir, imgIdx = 0, cellData, text, style},
     tmpDir = FileNameJoin[{$ClaudeWorkingDirectory,
       "claude_cells_" <> ToString[UnixTime[]] <> "_" <> ToString[RandomInteger[99999]]}];
     Scan[Function[cellIdx,
       If[!TrueQ[skipPrivacyFilter] &&
          Quiet[NBAccess`NBShouldExcludeFromPrompt[nb, cellIdx]] === True,
-        Return[]];
+        excludedCount++; Return[]];
       (* \:30bb\:30eb\:30b9\:30bf\:30a4\:30eb\:3092\:53d6\:5f97\:3057\:3066\:30e9\:30d9\:30eb\:4ed8\:304d\:3067\:53ce\:96c6 *)
       style = Quiet[NBAccess`NBCellStyle[nb, cellIdx]];
       If[!StringQ[style], style = "Unknown"];
@@ -18075,7 +18133,7 @@ iCollectCellContent[nb_NotebookObject, cellIndices_List, skipPrivacyFilter_:Fals
         ]
       ]
     ], cellIndices];
-    items
+    <|"Items" -> items, "Excluded" -> excludedCount|>
   ];
 
 (* \:30d1\:30ec\:30c3\:30c8\:304b\:3089\:547c\:3070\:308c\:308b: \:9078\:629e\:30bb\:30eb\:ff08\:306a\:3051\:308c\:3070\:5168\:30bb\:30eb\:ff09\:3067 ClaudeEval \:3092\:5b9f\:884c
@@ -18110,7 +18168,7 @@ iGetCursorCellIndex[nb_NotebookObject] :=
   ];
 
 iRunClaudeEvalFromCells[] :=
-  Module[{nb, cellIndices, items, norm, task, nCells, userInstr, selText, curIdx},
+  Module[{nb, cellIndices, collected, items, norm, task, nCells, userInstr, selText, curIdx},
     nb = iUserNotebook[];
     If[Head[nb] =!= NotebookObject, Return[$Failed]];
     NBAccess`NBInvalidateCellsCache[nb];
@@ -18126,7 +18184,12 @@ iRunClaudeEvalFromCells[] :=
         cellIndices = Range[nCells]]
     ];
     (* \:9078\:629e\:30bb\:30eb\:304b\:3089\:30b3\:30f3\:30c6\:30f3\:30c4\:3092\:53ce\:96c6\:ff08\:660e\:793a\:9078\:629e\:306a\:306e\:3067\:6a5f\:5bc6\:30d5\:30a3\:30eb\:30bf\:3092\:30d0\:30a4\:30d1\:30b9\:ff09 *)
-    items = iCollectCellContent[nb, cellIndices, True];
+    collected = iCollectCellContent[nb, cellIndices, False];
+    items = Lookup[collected, "Items", {}];
+    If[Lookup[collected, "Excluded", 0] > 0,
+      MessageDialog[iL[
+        ToString[collected["Excluded"]] <> "\:500b\:306e\:6a5f\:5bc6\:ff0f\:6a5f\:5bc6\:4f9d\:5b58\:30bb\:30eb\:3092\:9001\:4fe1\:5bfe\:8c61\:304b\:3089\:9664\:5916\:3057\:307e\:3057\:305f\:3002",
+        ToString[collected["Excluded"]] <> " confidential or dependency cell(s) were excluded from the prompt."]]];
     If[Length[items] === 0,
       MessageDialog["\:9078\:629e\:30bb\:30eb\:304b\:3089\:30b3\:30f3\:30c6\:30f3\:30c4\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002"]; Return[$Failed]];
     selText = StringRiffle[Select[items, StringQ], "\n"];
@@ -18146,7 +18209,7 @@ iRunClaudeEvalFromCells[] :=
 
 (* \:30d1\:30ec\:30c3\:30c8\:304b\:3089\:547c\:3070\:308c\:308b: \:9078\:629e\:30bb\:30eb\:3067 ClaudeQuery \:3092\:5b9f\:884c\:ff08\:30b3\:30fc\:30c9\:751f\:6210\:3067\:306f\:306a\:304f\:8aac\:660e\:30fb\:56de\:7b54\:3092\:5f97\:308b\:ff09 *)
 iRunClaudeQueryFromCells[] :=
-  Module[{nb, cellIndices, items, selText, userInstr, fullPrompt,
+  Module[{nb, cellIndices, collected, items, selText, userInstr, fullPrompt,
           nCells, session, tag, curIdx},
     nb = iUserNotebook[];
     If[Head[nb] =!= NotebookObject, Return[$Failed]];
@@ -18161,7 +18224,12 @@ iRunClaudeQueryFromCells[] :=
           MessageDialog[iL["\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:30bb\:30eb\:304c\:3042\:308a\:307e\:305b\:3093\:3002", "No cells in notebook."]]; Return[$Failed]];
         cellIndices = Range[nCells]]
     ];
-    items = iCollectCellContent[nb, cellIndices, True];
+    collected = iCollectCellContent[nb, cellIndices, False];
+    items = Lookup[collected, "Items", {}];
+    If[Lookup[collected, "Excluded", 0] > 0,
+      MessageDialog[iL[
+        ToString[collected["Excluded"]] <> "\:500b\:306e\:6a5f\:5bc6\:ff0f\:6a5f\:5bc6\:4f9d\:5b58\:30bb\:30eb\:3092\:9001\:4fe1\:5bfe\:8c61\:304b\:3089\:9664\:5916\:3057\:307e\:3057\:305f\:3002",
+        ToString[collected["Excluded"]] <> " confidential or dependency cell(s) were excluded from the prompt."]]];
     If[Length[items] === 0,
       MessageDialog["\:9078\:629e\:30bb\:30eb\:304b\:3089\:30b3\:30f3\:30c6\:30f3\:30c4\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002"]; Return[$Failed]];
     selText = StringRiffle[Select[items, StringQ], "\n"];
@@ -18180,7 +18248,7 @@ iRunClaudeQueryFromCells[] :=
 (* \:30d1\:30ec\:30c3\:30c8\:304b\:3089\:547c\:3070\:308c\:308b: \:9078\:629e\:30bb\:30eb\:ff08\:306a\:3051\:308c\:3070\:5168\:30bb\:30eb\:ff09\:3067 ClaudeSpec \:3092\:5b9f\:884c
    \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:672b\:5c3e\:306b\:4ed5\:69d8\:30bb\:30eb\:3092\:8ffd\:52a0\:3059\:308b *)
 iRunClaudeSpecFromCells[] :=
-  Module[{nb, cellIndices, items, norm, task, nCells, curIdx},
+  Module[{nb, cellIndices, collected, items, norm, task, nCells, curIdx},
     nb = iUserNotebook[];
     If[Head[nb] =!= NotebookObject, Return[$Failed]];
     NBAccess`NBInvalidateCellsCache[nb];
@@ -18197,7 +18265,12 @@ iRunClaudeSpecFromCells[] :=
     task = If[Length[cellIndices] === NBAccess`NBCellCount[nb],
       "\:3053\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:5168\:4f53\:306e\:5185\:5bb9\:3092\:5206\:6790\:3057\:3001\:60f3\:5b9a\:3055\:308c\:308b\:30d7\:30ed\:30b0\:30e9\:30e0\:306e\:4ed5\:69d8\:3092\:751f\:6210\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
       "\:4ee5\:4e0b\:306e\:9078\:629e\:30bb\:30eb\:306e\:5185\:5bb9\:3092\:5206\:6790\:3057\:3001\:30d7\:30ed\:30b0\:30e9\:30e0\:306e\:4ed5\:69d8\:3092\:751f\:6210\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
-    items = iCollectCellContent[nb, cellIndices, True];
+    collected = iCollectCellContent[nb, cellIndices, False];
+    items = Lookup[collected, "Items", {}];
+    If[Lookup[collected, "Excluded", 0] > 0,
+      MessageDialog[iL[
+        ToString[collected["Excluded"]] <> "\:500b\:306e\:6a5f\:5bc6\:ff0f\:6a5f\:5bc6\:4f9d\:5b58\:30bb\:30eb\:3092\:9001\:4fe1\:5bfe\:8c61\:304b\:3089\:9664\:5916\:3057\:307e\:3057\:305f\:3002",
+        ToString[collected["Excluded"]] <> " confidential or dependency cell(s) were excluded from the prompt."]]];
     If[Length[items] === 0,
       MessageDialog["\:9078\:629e\:30bb\:30eb\:304b\:3089\:30b3\:30f3\:30c6\:30f3\:30c4\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002"]; Return[$Failed]];
     (* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:672b\:5c3e\:306b\:30ab\:30fc\:30bd\:30eb\:3092\:79fb\:52d5 *)
@@ -18400,7 +18473,7 @@ ShowClaudePalette[] := (
       Spacer[2],
 
       (* \[HorizontalLine]\[HorizontalLine] \:30af\:30e9\:30a6\:30c9\:516c\:958b\:5ba3\:8a00 (Stage 9 P1 Step 2) \[HorizontalLine]\[HorizontalLine] *)
-      Style[iL[" \:30af\:30e9\:30a6\:30c9\:516c\:958b", " Cloud Publish"], Bold, 8, GrayLevel[0.3]],
+      Style[iL[" \:30d7\:30e9\:30a4\:30d0\:30b7\:30fc", " Privacy"], Bold, 8, GrayLevel[0.3]],
       Dynamic[
         Button[
           Style[iCloudPaletteLabel[$iPaletteCloudState], Bold, 10, White],
