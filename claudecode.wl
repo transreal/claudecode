@@ -17913,24 +17913,28 @@ iSyncCloudPaletteState[] :=
   ];
 
 (* \:30dc\:30bf\:30f3\:30e9\:30d9\:30eb (\:73fe\:5728\:72b6\:614b\:3092\:8868\:793a) *)
+(* Stage 9 P1.5: Notebook \:306b\:8868\:793a\:6587\:5b57\:5217\:3068\:3057\:3066\:5d4b\:307e\:308c\:308b\:30e9\:30d9\:30eb\:306f
+   $Language \:74b0\:5883\:306b\:4f9d\:5b58\:3057\:306a\:3044\:82f1\:5358\:8a9e\:306b\:7d71\:4e00\:3059\:308b\:3002SourceVault \:5074\:306e
+   Public / Private / Unspecified \:8868\:8a18\:3068\:6574\:5408\:3092\:53d6\:308a\:3001\:5225 PC \:306b\:30ce\:30fc\:30c8\:3092\:9001\:308b\:3068\:304d
+   \:898b\:305f\:76ee\:306e\:30d6\:30ec\:3092\:9632\:3050\:3002 *)
 iCloudPaletteLabel[state_] :=
   Which[
-    state === True,                    iL["\:2601 \:516c\:958b\:8a31\:53ef",   "\:2601 Allow"],
-    state === False,                   iL["\:2601 \:516c\:958b\:7981\:6b62",   "\:2601 Deny"],
-    state === Missing["NotDeclared"],  iL["\:2601 \:672a\:6307\:5b9a",        "\:2601 Unset"],
-    state === Missing["NotSaved"],     iL["\:2601 \:8981\:4fdd\:5b58",        "\:2601 Save NB"],
-    state === Missing["NoNotebook"],   iL["\:2601 \:30ce\:30fc\:30c8?",       "\:2601 No NB"],
-    state === Missing["NotLoaded"],    iL["\:2601 \:8aad\:8fbc\:307f",        "\:2601 Load"],
-    True,                              iL["\:2601 ?",                          "\:2601 ?"]
+    state === True,                    "\:2601 Public",
+    state === False,                   "\:2601 Private",
+    state === Missing["NotDeclared"],  "\:2601 Unspecified",
+    state === Missing["NotSaved"],     "\:2601 Save NB",
+    state === Missing["NoNotebook"],   "\:2601 No NB",
+    state === Missing["NotLoaded"],    "\:2601 Load",
+    True,                              "\:2601 ?"
   ];
 
 (* \:30dc\:30bf\:30f3\:80cc\:666f\:8272 (\:30b9\:30c6\:30fc\:30bf\:30b9\:6bce\:306b\:5909\:5316) *)
 iCloudPaletteColor[state_] :=
   Which[
-    state === True,                    RGBColor[0.25, 0.55, 0.75],   (* \:9752: \:8a31\:53ef *)
-    state === False,                   RGBColor[0.6,  0.4,  0.3],     (* \:8336: \:7981\:6b62 *)
-    state === Missing["NotDeclared"],  GrayLevel[0.55],               (* \:30b0\:30ec\:30fc: \:672a\:6307\:5b9a *)
-    True,                              GrayLevel[0.45]                (* \:6697\:30b0\:30ec\:30fc: \:4e0d\:660e *)
+    state === True,                    RGBColor[0.25, 0.55, 0.75],   (* blue: Public *)
+    state === False,                   RGBColor[0.6,  0.4,  0.3],     (* brown: Private *)
+    state === Missing["NotDeclared"],  GrayLevel[0.55],               (* gray: Unspecified *)
+    True,                              GrayLevel[0.45]                (* dark gray: unknown *)
   ];
 
 (* \:30dc\:30bf\:30f3\:62bc\:4e0b: \:72b6\:614b\:3092\:5faa\:74b0\:3055\:305b\:308b\:3002
@@ -18353,8 +18357,27 @@ iWriteContinueEvalButton[nb_NotebookObject, autoEvaluate_:True, callerOpts_Assoc
               Evaluator -> Automatic,
               Method -> "Queued"
             ],
-            iL[" \:3067\:7d99\:7d9a\:3067\:304d\:307e\:3059\:3002",
-               " to continue."]
+            iL[" \:3067\:7d99\:7d9a\:3001",
+               " to continue, or "],
+            (* Stage 9 P1.5: \:4eca\:5b9f\:884c\:3057\:305f\:30d7\:30ed\:30f3\:30d7\:30c8\:3068\:95a2\:6570\:3092
+               SourceVault \:306b\:4fdd\:5b58\:3059\:308b\:30dc\:30bf\:30f3\:3002\:30af\:30ea\:30c3\:30af\:3067
+               SaveLastPrompt[""] \:3092 Input \:30bb\:30eb\:306b\:51fa\:529b\:3057\:3001
+               \:30e6\:30fc\:30b6\:30fc\:304c\:30e1\:30e2\:3092\:8a18\:5165\:3057\:3066\:5b9f\:884c\:3059\:308b\:3002 *)
+            ButtonBox[
+              "SaveLastPrompt",
+              BaseStyle -> "Hyperlink",
+              ButtonFunction :> Module[{target = InputNotebook[]},
+                NBAccess`NBWriteInputCellAndMaybeEvaluate[
+                  target,
+                  RowBox[{"SaveLastPrompt", "[", "\"\"", "]"}],
+                  False
+                ]
+              ],
+              Evaluator -> Automatic,
+              Method -> "Queued"
+            ],
+            iL["[\"\:30e1\:30e2\"] \:3067\:30d7\:30ed\:30f3\:30d7\:30c8\:3092\:4fdd\:5b58\:3067\:304d\:307e\:3059\:3002",
+               "[\"memo\"] to save this prompt."]
           }],
           "Print", FontWeight -> Bold, FontColor -> GrayLevel[0.4], FontSize -> 11,
           CellTags -> {"claudecode-notice"}
@@ -18570,10 +18593,11 @@ ShowClaudePalette[] := (
           Appearance -> "Frameless"]],
       Dynamic[
         Button[
-          Style[iL["\:8ab2\:91d1API: ", "Paid API: "] <>
-            If[TrueQ[$iPaletteFallback],
-              iL["\:8a31\:53ef", "On"],
-              iL["\:7981\:6b62", "Off"]],
+          (* Stage 9 P1.5: \:8868\:793a\:6587\:5b57\:5217\:3092\:8a00\:8a9e\:975e\:4f9d\:5b58\:306e\:82f1\:5358\:8a9e\:306b\:7d71\:4e00 (Cloud \:30d1\:30ec\:30c3\:30c8\:3068\:540c\:65b9\:91dd)\:3002
+             \:5185\:90e8\:5024 ($iPaletteFallback: True/False) \:306f\:4e0d\:5909\:3002Allowed/Denied \:306f
+             Cloud Publishable \:306e Public/Private \:3068\:5e73\:884c\:3057\:305f Paid API \:7528\:8a9e\:5f59\:3002 *)
+          Style["Paid API: " <>
+            If[TrueQ[$iPaletteFallback], "Allowed", "Denied"],
             9, Bold, GrayLevel[0.2]],
           ($iPaletteFallback = !TrueQ[$iPaletteFallback];
            iSavePaletteSettings[InputNotebook[]]),

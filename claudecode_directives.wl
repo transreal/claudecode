@@ -789,7 +789,15 @@ ClaudeDirectiveTokenEstimate[_] := 0;
    value \:306b\:7a7a\:6587\:5b57\:5217\:306e key \:306f\:6b21\:884c\:4ee5\:964d\:306e "  - item" \:3092\:96c6\:3081\:3066 List \:5024\:306b\:3059\:308b\:3002 *)
 iParseFrontmatter[text_String] :=
   Module[{lines, restLines, sepIdx, fmText, body, fmLines, kvs = <||>,
-          curKey = None, curList = {}, n, line, m},
+          curKey = None, curList = {}, n, line, m,
+          blockKey = None, blockLines = {}, blockIndent = 0,
+          curIndentOf},
+    (* leading-whitespace width of a line *)
+    curIndentOf = Function[ln,
+      If[StringQ[ln],
+        StringLength[ln] - StringLength[
+          StringReplace[ln, RegularExpression["^\\s+"] -> ""]],
+        0]];
     lines = Select[StringSplit[text, "\n"], StringQ];
     If[Length[lines] < 2 || StringTrim[First[lines]] =!= "---",
       Return[<|"Frontmatter" -> <||>, "Body" -> text|>]];
@@ -807,6 +815,15 @@ iParseFrontmatter[text_String] :=
     Do[
       line = fmLines[[i]];
       Which[
+        (* \:30d6\:30ed\:30c3\:30af\:30b9\:30ab\:30e9\:30fc (| \:307e\:305f\:306f >) \:53ce\:96c6\:4e2d:
+           blockIndent \:3088\:308a\:6df1\:3044\:30a4\:30f3\:30c7\:30f3\:30c8\:884c\:307e\:305f\:306f\:7a7a\:884c\:306f
+           \:305d\:306e key \:306e\:5024\:306b\:8ffd\:52a0\:3059\:308b\:3002\:6d45\:3044\:30a4\:30f3\:30c7\:30f3\:30c8\:884c\:304c
+           \:6765\:305f\:3089 block \:3092\:78ba\:5b9a\:3057\:3066\:901a\:5e38\:51e6\:7406\:306b\:623b\:308b\:3002 *)
+        StringQ[blockKey] &&
+          (StringTrim[line] === "" ||
+           curIndentOf[line] >= blockIndent),
+          blockLines = Append[blockLines, StringTrim[line]],
+
         (* \:7a7a\:884c\:30fb\:30b3\:30e1\:30f3\:30c8\:884c\:306f\:30b9\:30ad\:30c3\:30d7 *)
         !StringQ[line] || StringTrim[line] === "" ||
           StringMatchQ[StringTrim[line], "#" ~~ ___],
@@ -825,22 +842,38 @@ iParseFrontmatter[text_String] :=
           (* \:76f4\:524d\:306e list \:3092\:78ba\:5b9a *)
           If[StringQ[curKey] && Length[curList] > 0,
             kvs[curKey] = curList];
+          (* \:76f4\:524d\:306e block scalar \:3092\:78ba\:5b9a *)
+          If[StringQ[blockKey],
+            kvs[blockKey] = StringRiffle[blockLines, "\n"];
+            blockKey = None; blockLines = {}];
           curKey = None; curList = {};
           Module[{kv = StringSplit[line, ":", 2], k, v},
             If[Length[kv] === 2 && StringQ[kv[[1]]] && StringQ[kv[[2]]],
               k = StringTrim[kv[[1]]];
               v = StringTrim[kv[[2]]];
-              If[v === "",
+              Which[
+                (* YAML block scalar: "key: |" / "key: >" / "key: |-" etc.
+                   \:6b21\:884c\:4ee5\:964d\:306e\:30a4\:30f3\:30c7\:30f3\:30c8\:884c\:3092\:96c6\:3081\:3066 value \:306b\:3059\:308b\:3002 *)
+                StringMatchQ[v, RegularExpression["^[|>][+-]?\\d*$"]],
+                  blockKey = k; blockLines = {};
+                  blockIndent = curIndentOf[line] + 1,
                 (* value \:304c\:7a7a: \:6b21\:884c\:304b\:3089 list \:304c\:59cb\:307e\:308b\:53ef\:80fd\:6027 *)
-                curKey = k; curList = {},
-                (* \:901a\:5e38\:306e scalar *)
-                kvs[k] = v]]],
+                v === "",
+                  curKey = k; curList = {},
+                (* \:901a\:5e38\:306e scalar (\:524d\:5f8c\:306e \" \:3092\:5265\:304c\:3059) *)
+                True,
+                  kvs[k] = StringReplace[v,
+                    {RegularExpression["^\""] -> "",
+                     RegularExpression["\"$"] -> ""}]]]],
         True, Null
       ],
       {i, n}];
     (* \:30eb\:30fc\:30d7\:7d42\:4e86\:6642\:306b list \:304c\:6b8b\:3063\:3066\:3044\:308c\:3070\:78ba\:5b9a *)
     If[StringQ[curKey] && Length[curList] > 0,
       kvs[curKey] = curList];
+    (* \:30eb\:30fc\:30d7\:7d42\:4e86\:6642\:306b block scalar \:304c\:6b8b\:3063\:3066\:3044\:308c\:3070\:78ba\:5b9a *)
+    If[StringQ[blockKey],
+      kvs[blockKey] = StringRiffle[blockLines, "\n"]];
 
     <|"Frontmatter" -> kvs, "Body" -> body|>
   ];
