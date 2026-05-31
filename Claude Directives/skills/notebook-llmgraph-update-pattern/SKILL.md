@@ -1,4 +1,6 @@
 ---
+name: notebook-llmgraph-update-pattern
+description: 外部パッケージ (ClaudeStateGraph 等) から NotebookLLMGraph のノードを追加・更新するときの正しいパターン。誤ると書き込んだノードが直後の NotebookLLMGraphNodes[] で見えないバグになる。直接キャッシュ更新 + Flush、必要な Public 化シンボルを扱う。Use when adding or updating NotebookLLMGraph nodes from an external package, or when written nodes are not visible afterward.
 paths:
   - "**/*.{wl,wls,m,nb}"
 ---

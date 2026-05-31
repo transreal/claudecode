@@ -259,3 +259,28 @@ compiled model registry をネットの実エンドポイントから更新す�
 ## 残課題
 
 - 取得モデルの `Class` (Heavy/Mid/Light) と `Intent` は API から判別できず `Unknown` / `Null`。Intent ベース lookup (`iCompiledLookupModel`) に乗せるには分類ステップが必要
+
+## topic 正規化 (Stage 9 P1.5、Model.json 孤児ファイル事故の教訓)
+
+**事故**: `SourceVaultResolve` / `SourceVaultSetModel` は topic を `ToLowerCase[kind] <> "-registry"` = `"model-registry"` に正規化して `model-registry.json` を読み書きする。一方 `SourceVaultCompileRegistry[topic, ...]` は **topic を正規化せず** `iCompiledPath[topic]` = `<topic>.json` に書いていた。過去に `SourceVaultCompileRegistry["Model", ...]` (大文字) を呼んだ結果、`Model.json` という**別ファイル**ができ、解決経路が読む `model-registry.json` は空のまま。lmstudio エントリが `Model.json` に無く `model-registry.json` も無い → seed の `qwen-local` に fallback、という分かりにくい症状になった。
+
+**修正**: `iSVNormalizeRegistryTopic[topic]` を新設し全経路で統一。
+- 既に `"-registry"` で終わるならそのまま、でなければ `ToLowerCase[topic] <> "-registry"`。
+- `"Model"` → `"model-registry"`、`"model-registry"` → `"model-registry"` (不変)。
+- `SourceVaultCompileRegistry` と `SourceVaultResolve` (明示 Topic) の両方に適用。
+
+**鉄則**: registry ファイル名を決める全経路 (Compile / Resolve / SetModel / ListModels) は同じ正規化を通すこと。読み書きで topic 文字列が 1 箇所でも食い違うと、別ファイルができて沈黙の fallback になる。新規 Private helper は ClearAll リストへの追加も忘れない。
+
+## モデル別 ContextLength の永続管理 (Stage 9 P1.5)
+
+LM Studio は API リクエストに `context_length` を送らないと、モデルを大きい context (例 65000) でロード済みでもスロットを 4096 にリセットする。context_length はモデル・環境依存なので、グローバル変数でなく **SourceVault が registry の各モデルエントリに `ContextLength` フィールドとして永続管理**する。
+
+- `SourceVaultSetModel["lmstudio", "extraction", "qwen/qwen3.6-27b", "ContextLength" -> 65000]` でエントリに保存。compiled registry (`model-registry.json`) に書かれるので**一度実行すれば永続**。起動ファイルで毎回 SetModel する必要はない (`SourceVaultClearModelRegistry[]` でだけ消える)。
+- `SourceVaultModelContextLength["lmstudio", modelId]` は **modelId 完全一致のみ**返す (フォールバック禁止)。別モデルの値を返すと誤りなので、無ければ `None`。
+- claudecode 側の LM Studio 呼び出し (`iQueryLMStudioChat`) は ctxLen 解決を「オプション明示 > グローバル `$ClaudeLMStudioContextLength` > `SourceVaultModelContextLength` > None」の順にする。
+
+**モデル名は全経路で完全一致させる**: registry 登録 ID・パレット候補・LM Studio 実ロード名・context_length 解決キーが 1 つでもずれる (`qwen/qwen3.6-27b` vs `qwen3.6-27b`) と、完全一致に失敗して context_length が送られず 4096 に戻る。パレットのモデル候補も静的リストでなく `SourceVaultListModels[provider]` から取り、SourceVault の実名に統一する。
+
+## Source 優先度 (manual > auto-fetch > seed)
+
+`iRegistryResolveOrder` の第 1 sort キーに Source 優先度を持たせ、`SourceVaultSetModel` の manual 指定が `SourceVaultRefreshModelRegistry` の auto-fetch に勝つようにする。マージ (`iSVMergeModelRegistry`) でも `Source =!= "auto-fetch"` を温存し、manual/seed を保護する。Refresh しても手動指定が消えないことが要件。

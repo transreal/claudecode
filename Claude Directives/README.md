@@ -18,7 +18,7 @@ Claude Directives/
     11-core-package-dependency.md 基盤パッケージの依存方向制約
     12-function-name-verification.md Mathematica 関数名・定数名の検証制約
     20-api-key-security.md      API キー管理・SystemCredential 直接使用禁止
-    30-encoding-safety.md       UTF-8 エンコーディング・正規表現の安全ルール
+    30-encoding-safety.md       UTF-8 エンコーディング・正規表現・JSON ファイル書き込み (ExportString RawJSON は ISO8859-1) の安全ルール
     40-pde-constraints.md       PDE モデリング制約
     50-file-path.md             ファイルパス解決ルール
     55-nbdir-access.md          NotebookDirectory アクセス制御
@@ -40,7 +40,8 @@ Claude Directives/
     nbaccess-notebook-access/   NBAccess API リファレンスと推奨パターン
     nbaccess-separation-check/  NBAccess 分離原則の検証・修正手順（静的走査+LLM判定）
     api-key-handling/           API キー取得の正しい実装手順
-    wl-encoding-and-regex/      エスケープ・正規表現の検証手順
+    wl-encoding-and-regex/      `.wl` ソース内のエスケープ (`\:XXXX`)・正規表現の検証手順
+    wl-runtime-byte-io/         実行時の文字列⇔バイト変換 (HTTP ボディ / JSON ファイル I/O)。ExportString["RawJSON"] (→ISO8859-1) と WriteRawJSONString (→UTF-8) の戻り値エンコード差、二重 encode 回避 (罠 #55)、HTTPRequest Body に ByteArray
     pde-modeling/               PDE 実装ステップ
     confidential-data-handling/ 機密データのラッピング手順
     confidential-structure-probe/ 秘密変数の構造調査と ContinueEval 連携手順
@@ -65,7 +66,9 @@ Claude Directives/
     nbauthorize-2-stage-decisions/ SourceVault Stage 6d の NBAuthorize 2 段階統合設計。SourceVaultExtract に sendDecision + persistDecision、SourceVaultContext は RequireApproval も block、iSpecFromClaim、AccessDecisions レスポンス
     compiled-registry-and-seed/  SourceVault Stage 6b の Compiled Registry + Seed bootstrap 設計。seeds/ + compiled/{public,private}/、SourceVaultLookup / Resolve / ClaudeResolveModel、優先順位 sort、Stage 1 旧定義削除の経緯
     notebook-management-extraction/ SourceVault Stage 9 P0 + P1 の Notebook 拡張設計。Safe parse (HoldComplete + whitelist)、TodoItem 抽出、TaggingRules > StrikeThrough 優先順位、Header / Todo 状態の独立保存、7 種 lint、deterministic FindNotebooks クエリ、SourceVaultMarkTodo、SourceVaultNotebookSummary、mtime cache、MakeExpression 第一選択化
+    sourcevault-sync-relink-uuid/ SourceVault の notebook source 鮮度管理・移動追跡・UUID 同定 (notebook-management-extraction から分離)。SourceVaultSync (mtime 鮮度トークン)、SourceVaultRelinkSources (UUID / 内容ハッシュ / ファイル名の 3 段照合、シンボリックパス解決で別 PC のパス差を誤検出しない)、Notebook UUID 埋め込み (TaggingRules、非破壊)
     nbaccess-semantic-api/      NBAccess Stage 9 P1 で追加された semantic API 7 個 (NBReadHeader / NBReadTodos / NBFindCellByPredicate + 書き込み系 4 個) の設計詳細。FrontEnd 不要のファイル直接編集、AccessLevel RBAC + DryRun、CellPath、Header フィルタ、NBReadHeader 3 経路 fallback、罠 #26-#28 対応
+    claudeeval-security-guard-placement/ ClaudeEval/ClaudeQuery にセキュリティ・プライバシーガードを追加するときの配置位置。$UseClaudeRuntime=True で Runtime Bridge 経由になるとバイパスされる落とし穴、Deny は最前段 (dispatch 前)・Substitute は共通入口
 ```
 
 ## 主要な設計原則

@@ -22,6 +22,14 @@ paths:
 - `PrivacyLevel <= 0.5` — 公開セル。クラウド LLM でアクセス可能。
 - `PrivacyLevel > 0.5` — 秘匿セル。ローカル LLM (`$ClaudePrivateModel`) でのみ処理可能。
 
+### Private ノートブック宣言 (Stage 9 P1.5)
+
+ノートブック全体を Private 宣言すると、**そのノートブックの全セルを PrivacyLevel 1.0 とみなす**。判定・書き換えは NBAccess が管轄する。
+- 実体は frontend memory の TaggingRules `{"SourceVault", "CloudPublishable"}`。`False` = Private, `True` = Public, 未設定 = Unspecified。`NBGetCloudPublishable[path]` で取得。
+- セル単位の `NBCellPrivacyLevel` の冒頭で「ノートブックが Private 宣言なら 1.0 を返す」オーバーライドを必ず効かせる。ファイルレベル判定 (`iNBFilePrivacyLevel`) だけ Private→1.0 にしてもセル単位経路が漏れる (実際の漏洩原因だった)。
+- Private 宣言判定はセル毎にファイル I/O すると重いので、frontend memory から軽量判定する helper (`iNBNotebookDeclaredPrivateQ`) を使う。
+- モデル検証も NBAccess 管轄: `NBModelCanHandleAccessLevel[modelSpec, level]` / `NBNotebookRequiredAccessLevel[nb]` (Private→1.0) / `NBModelProviderName[modelSpec]`。provider 別 max access level は lmstudio=1.0、claudecode/anthropic/openai=0.5。
+
 ```
 nbcells = {機密セル(1.0), セル(0.0), 機密セル(1.0), セル(0.0)}
 

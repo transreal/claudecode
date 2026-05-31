@@ -131,26 +131,6 @@ print(f"\n{'PASS' if errors == 0 else f'FAIL: {errors} issue(s)'}")
 ```
 
 
-## HTTP API 通信のエンコーディング (Windows 環境対策)
+## 実行時のバイト I/O (HTTP / JSON ファイル)
 
-Windows の Mathematica は文字列\[DoubleLeftRightArrow]バイト変換でシステムエンコーディング (ShiftJIS/CP932) を暗黙に使うため、HTTP 送受信の両方で非ASCII文字が化ける。以下を厳守する。
-
-### 送信 (リクエストボディ)
-
-- `ExportString[body, "RawJSON"]` は Windows で日本語を UTF-8 バイト値として文字列に埋め込む場合がある (各文字コード <= 255)。この文字列を直接 `HTTPRequest` の `Body` に渡してはならない。
-- 安全な手順:
-  1. `ExportString` \[RightArrow] `ToCharacterCode` でコード列取得
-  2. 全コード <= 255 なら `ByteArrayToString[ByteArray[codes], "UTF-8"]` で正しい Unicode に復元
-  3. 非ASCII文字を `\uXXXX` エスケープして純粋ASCII化
-  4. `StringToByteArray[..., "UTF-8"]` で `ByteArray` として `Body` に渡す
-
-### 受信 (レスポンスボディ)
-
-- `resp["Body"]` は Windows でシステムエンコーディングによるデコードが入り、UTF-8 の日本語レスポンスが壊れて JSON パースが失敗しうる。
-- `resp["Body"]` の代わりに `resp["BodyByteArray"]` で生バイト列を受け取り、`ImportByteArray[rawBody, "RawJSON"]` でパースする。
-
-### 原則
-
-- `HTTPRequest` の `Body` には文字列ではなく `ByteArray` を渡す。
-- `URLRead` のレスポンスは `"BodyByteArray"` で取得する。
-- 文字列経由の暗黙エンコーディング変換を一切介在させない。
+HTTP 送受信ボディや JSON ファイルの読み書きでの文字列⇔バイト変換 (Windows のシステムエンコーディング対策、`ExportString["RawJSON"]` vs `Developer`WriteRawJSONString` のエンコード差、ISO8859-1 / UTF-8 の使い分け) は、独立 skill **`skills/wl-runtime-byte-io`** に分離した。API 通信や JSON ストアで日本語が化けるときはそちらを参照。

@@ -1,4 +1,6 @@
 ---
+name: llmgraph-dag-job-lifecycle
+description: claudecode.wl の LLMGraphDAGCreate で起動した DAG ジョブの扱いで躓きやすい 2 挙動 (完了ジョブの registry 自動削除、$iLLMGraphDAGJobs の context 解決が予測しにくい問題) と安全な扱い方。Use when retrieving DAG job results, observing LLMGraphDAG job state, or debugging why a finished job disappears from the registry in claudecode.wl.
 paths:
   - "**/*.{wl,wls,m,nb}"
 ---

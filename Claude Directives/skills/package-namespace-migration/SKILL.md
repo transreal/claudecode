@@ -1,4 +1,6 @@
 ---
+name: package-namespace-migration
+description: 既存パッケージ (claudecode.wl 等) の関数を新パッケージ (ClaudePackageManager.wl 等) に分離・移管するときの context shadowing 罠と回避パターン。BeginPackage の依存リスト無しが context path をリセットし既存関数が連鎖破損する問題を、Phase ごとの安全実装でまとめる。Use when splitting or migrating functions between Wolfram Language packages, or when a namespace migration breaks existing package functions.
 paths:
   - "**/*.{wl,m}"
 ---

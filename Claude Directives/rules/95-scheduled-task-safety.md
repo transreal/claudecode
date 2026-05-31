@@ -149,6 +149,22 @@ ParallelSubmit[heavyComputation[data]]
 
 ドキュメント（`api.md` / `user_manual.md` / `README.md`）に独自 ScheduledTask を使用している旨と理由を**明記**すること。
 
+### 事例: 承認後コード実行を ParallelSubmit に送ってはいけない (2026-05-31)
+
+`ClaudeEval` の非同期実行 (`$ClaudeRuntimeAsyncExecution`) で、**生成コードを別カーネル (`ParallelSubmit`) に送る判定 `iShouldExecuteAsync` が FrontEnd 依存式を弾けず**、`NotebookImport` を含む式を別カーネルに送って**フロントエンドと相互待ちデッドロック**を起こした (Mathematica 強制終了が必要になる)。`SystemOpen` の Deny override 承認後にこの経路に入りやすい。
+
+**原因の連鎖**:
+- 生成式が `SourceVaultExtractNotebookTodos` → `iExtractTodoCellsFromPath` → **`NotebookImport[path, style -> "Cell"]`** (FrontEnd 依存) を呼ぶ。
+- `iShouldExecuteAsync` のローカル文脈判定 `$iLocalContextSymbols` に **`NotebookImport` が登録されておらず**、別カーネル送出と判定された。
+- サブカーネルに FrontEnd が無いため `NotebookImport` が返らずデッドロック (セクション B「ParallelSubmit は FrontEnd 通信を一切行わない純粋計算専用」に抵触)。
+
+**対策**:
+1. **FrontEnd / OS / 外部プロセス依存シンボルを async 判定の除外リストに必ず含める**。`$iLocalContextSymbols` に `NotebookImport`, `Import`, `Export`, `SystemOpen`, `Run`, `RunProcess`, `StartProcess`, `CreateProcess`, `FrontEndExecute` 系, ダイアログ系等を登録し、これらを含む式は同期実行 (メインカーネル) に落とす。
+2. **二重防御**: `$NBDenyHeads` / `$NBApprovalHeads` に属する head を含む式は無条件で async 化しない (承認を経た式は性質上 FE/ローカル文脈依存が濃い)。
+3. 同期実行でも `NBExecuteHeldExpr` の `TimeConstrained` で保護され、最悪でもタイムアウトでカーネルが回復する (ParallelSubmit デッドロックのような強制終了は不要になる)。
+
+**判定原則**: コード実行を別カーネルに送ってよいのは、その式が **FrontEnd・OS・パッケージ private context のいずれにも依存しない純粋計算**であると確認できるときだけ。判定が曖昧なら同期実行に倒す。
+
 ---
 
 ## C. 複数 LLM 呼び出しの非同期処理: LLMGraph DAG フレームワーク

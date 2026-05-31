@@ -567,6 +567,9 @@ iLoadJSONFromFile[path_String] :=
 | 日付フィールドを `DateObject` 固定で扱う | 罠 #36 (`Quantity` 相対値が来うる) | `Head` で分岐、`Quantity` は `DatePlus[mtime, qty]` |
 | `DateObject`/`Quantity`/`Missing` を素の JSON へ | 罠 #48 (型が壊れる) | `Compress[expr]` で ASCII 文字列化して保存、`Uncompress` で復元 |
 | 多重定義関数に後からオプション追加 | 罠 #47 (引数違いの定義間で不整合) | 全アリティに `opts:OptionsPattern[]`、短い版は長い版へ委譲、`Options[f]` は 1 回 |
+| `ClearAll[...]` リストに載せた関数の定義をリストより前に書く | 罠 #56 (定義が即クリアされ未定義化) | 定義は `ClearAll` ブロックの後ろに置く |
+| `Button`/`Tooltip`/`Grid` のラベルに関数呼び出しを直接書く | 罠 #57 (未評価のまま StyleBox に焼き込まれフォント等が効かない) | `With[{v = f[]}, ...]` で事前評価 + 最上位で `/. HoldPattern[f[]] -> 値` 保険 |
+| `"Hyperlink"` を `BaseStyle` に入れてテキストのフォントを変えようとする | 罠 #58 (Hyperlink スタイルのフォントが勝つ) | `Style[text, "Hyperlink", FontFamily -> ff]` と同階層に並べる |
 
 ## 適用タイミング
 
@@ -626,9 +629,73 @@ iLoadJSONFromFile[path_String] :=
 - **罠 #52 (重大、データ破壊源)**: `Return[expr, Module]` は **最も内側の同名 `Module`** から抜ける。ある条件で関数全体を抜けたい早期 return (`If[cond, ...; Return[Null, Module]]`) を、たまたま内側の `Module[{tmp}, ...]` の中に書くと、関数本体でなく**内側 `Module` だけを抜けて**処理が後続に流れる。SourceVault Relink で「移動していないファイル」の早期 return を内側 Module に閉じ込めた結果、全件が照合ループに流れて `Relinked` が 360 件に膨張した。早期 return を含む `If` は、その `If` がどの `Module` 直下にあるかを必ず確認する。内側 Module が必要なら判定結果だけを値で返し、早期 return は外側で行う。
 - **罠 #53**: `URLRead[req, fmt, TimeConstraint -> n]` の `TimeConstraint` は `URLRead` のオプションではない。`URLRead::optx` メッセージとともに静かに `$Failed` を返す。`Quiet@Check` で囲んでいると気づけない。タイムアウトは `TimeConstrained[URLRead[req], 秒, $Failed]` で外側から囲む。
 - **罠 #54**: `name::usage = "..."` の usage 文字列リテラル内に出てくる `"..."` (例の中のオプション名やデフォルト値) は必ず `\"...\"` にエスケープする。生の `"` を書くと usage 文字列がそこで終了し、続く文字列が裸のシンボル列として解釈され、`MessageName::messg` ("MessageName の右辺は文字列でなければならない" 系) でロード失敗する。パッケージ配布前に全 `::usage` の引用符バランスを機械検査するとよい (`::usage =` 以降で `\"` を除いた `"` の数が偶数か)。罠 #11 と並ぶ、Windows 非依存の継続的エラー源。
+- **罠 #55** (最重要・JSON 書き込みの文字化け): JSON 文字列化の 2 API は戻り値のエンコードが異なり、ファイル書き込みのバイト化方法を取り違えると**二重エンコードで日本語が `ã` だらけに化ける**。`ToCharacterCode` で実証済み (result7.nb)。`ExportString[expr, "RawJSON"]` の戻りは**各 codepoint が UTF-8 byte の Latin-1 表現** (`"今"` → `228,187,138`) なので、書き込みは `StringToByteArray[json, "ISO8859-1"]` (1 codepoint = 1 byte) が正しい。`"UTF-8"` で書くと既に UTF-8 の byte を再度 UTF-8 encode して二重化する。一方 `Developer`WriteRawJSONString[expr]` の戻りは**通常の Unicode 文字列** (`"今"` → `20170`) なので、書き込みは逆に `"UTF-8"` が正しい。読み取りは両方とも `ReadByteArray` → `ByteArrayToString[..., "UTF-8"]`。ASCII のみのデータでは二重 encode でも値が変わらず**顕在化しない**ため、ASCII テストだけ通すと見逃す (日本語のパス・Memo・プロンプトが入って初めて化ける)。さらに**二次被害**として、化けたファイルを読み込むと JSON パースの Association 化が崩れ、後段で `Lookup::invrl` 等の別エラーを誘発する (SaveLastPrompt で発生)。文字化けを直すと連鎖エラーも消える。検出: `grep -n 'StringToByteArray\[[^,]*, *"UTF-8"\]' *.wl` でヒットしたら、書く文字列が `ExportString["RawJSON"]` 由来か (→ ISO8859-1 に直す) `WriteRawJSONString`/通常文字列か (→ UTF-8 のまま) を確認する。発見経緯: Stage 9 P1.5 で `prompt-route-registry.json` の日本語が化け、横断調査で promptrouter 2 箇所・DirRepo・cloud-send ログ・workflow メタの計 5 箇所が `UTF-8` のまま取り残されていた (model-registry 系は既に ISO8859-1 だった)。
 
 ## クイック診断 (次フェーズの罠)
 
 - **`Return[Null, Module]` を書いたのに処理がスキップされず後続に流れたら罠 #52 を疑う** (その `If` の直上の `Module` は関数本体か、内側ブロックか)
 - **`URLRead` が常に `$Failed` を返す / 到達可能なはずのサーバーが Offline になったら罠 #53 を疑う** (`TimeConstraint` オプションを渡していないか)
 - **パッケージロードで `MessageName::messg` が出たら罠 #54 を疑う** (`::usage` 本文内の生ダブルクォート)
+- **JSON ファイルの日本語が `ã` だらけに化けたら罠 #55 を疑う** (`ExportString["RawJSON"]` の戻りを `StringToByteArray[..., "UTF-8"]` で書いていないか。ISO8859-1 が正しい)。`Lookup::invrl` 等が JSON 読み込み後に出るのも、化けたファイルの二次被害として罠 #55 を疑う。
+
+## 表示フォント / Style / ClearAll の罠 (UI 出力カスタマイズ, 2026-05-31)
+
+`$ClaudeStandardFont` 対応 (ClaudeEval/SourceVault の表出力フォントをユーザー設定に追従させる) で、フォントが反映されない症状を 8 ラウンドかけて切り分けた際に踏んだ罠。表面症状は同じ「フォントが変わらない」でも原因が 3 層に分かれており、上位の罠を潰さないと下位の罠が顕在化しない。
+
+### 罠 #56 (最重要・原因が見えにくい): `ClearAll` リストに載せた関数の定義を `ClearAll` より**前**に書くと、定義が即座に消去される
+
+```mathematica
+Begin["`Private`"];
+
+iSVStandardFont[] := ...   (* (A) ここで定義 *)
+
+ClearAll[
+  iSVStandardFont,         (* (B) ロード時の旧定義クリア目的だが、(A) も消す！ *)
+  iOtherFunc, ...
+];
+(* → この後 iSVStandardFont[] は未定義。呼んでも評価されず入力がそのまま返る。 *)
+```
+
+パッケージは**再ロード時に古い DownValues が残らないよう冒頭で `ClearAll`** するのが定石だが、その `ClearAll` リストに載せた関数の定義を **`ClearAll` の前に書いてしまう**と、ロードのたびに「定義 → 即クリア」となり関数が消える。`iSVStandardFont` が常にフォールバック値を返していた (ように見えた) 真因はこれで、実際には**関数自体が未定義**だった。
+
+**症状の決定的な見分け方**: `pkg\`Private\`f[]` を直接評価して**入力がそのまま返ってくる** (例: `SourceVault\`Private\`iSVStandardFont[]` → `SourceVault\`Private\`iSVStandardFont[]`) なら、その関数は未定義。DownValues が無い。
+
+**対策**: `ClearAll[...]` リストに載せる関数の**定義は必ず `ClearAll` ブロックの後ろに置く**。クリア → 定義の順序にする。新規ヘルパを既存の `ClearAll` リストに追記するときは、定義位置がリストより後ろにあるか必ず確認する。
+
+**検出**: `ClearAll[` の中に出てくるシンボル名について、その `f[...] :=` 定義行が `ClearAll[...]` の閉じ括弧より後ろにあるかを機械チェックできる。
+
+### 罠 #57: `Button` / `Tooltip` のラベルや `Grid` のボックス化文脈に渡した式の中の**関数呼び出しは未評価のまま StyleBox に焼き込まれる**
+
+```mathematica
+Button[Style[title, FontFamily -> iSVStandardFont[]], action]
+(* 出力 .nb: FontFamily->SourceVault`Private`iSVStandardFont[]  ← 未評価のまま! *)
+```
+
+`Button` はラベルを Hold する。`Style[..., FontFamily -> f[]]` の `f[]` がボックス化される時点で評価されず、`FontFamily->f[]` という**関数呼び出しがそのまま box 値**になる。フロントエンドは `FontFamily` の値に文字列 (フォント名) を期待するため、関数式は値として解釈できず**無視され**、フォントが効かない。`.nb` を覗くと `FontFamily->pkg\`Private\`helper[]` が大量に残っているのが目印。
+
+**対策 (2 段構え)**:
+1. **`With[{ff = f[]}, Button[Style[..., FontFamily -> ff], ...]]`** で字句置換。`With` は本体内の `ff` を評価済みの値 (文字列) で構文置換するため、`Button` が Hold しても既にリテラルになっている。`Module` のローカル変数は評価時束縛なので Hold 文脈では危険 (罠 #27 と同根)。
+2. **生成物の最上位で `expr /. HoldPattern[f[]] -> 確定文字列` で一括置換**してから返す (保険)。左辺は `HoldPattern` で包まないとルール構築時に `f[]` が評価されて無意味なルールになる。
+
+**検出**: 出力 `.nb` に `FontFamily->...helper[]` のような未評価の関数呼び出しが残っていないか grep する。
+
+### 罠 #58: 組み込み `"Hyperlink"` スタイルは独自の `FontFamily` を持ち、`BaseStyle` 経由ではテキストのフォントを上書きできない
+
+```mathematica
+(* NG: BaseStyle に Hyperlink を入れると、Hyperlink スタイルのフォントがテキストに勝つ *)
+Button[Style[title, FontFamily -> ff], action, BaseStyle -> {"Hyperlink", FontFamily -> ff}]
+
+(* OK: Style の引数列で "Hyperlink" の後に FontFamily を置く (同階層・後勝ち) *)
+Button[Style[title, "Hyperlink", FontFamily -> ff], action]
+```
+
+`"Hyperlink"` は色・サイズ・下線に加え `FontFamily` をスタイルシートで定義している。`Button` の `BaseStyle -> {"Hyperlink"}` 経由だと、リンクテキストにはスタイルシート由来のフォントが適用され、内側 `Style` の `FontFamily` が負ける。一方 `Style[text, "Hyperlink", FontFamily -> ff]` のように **`Style` の同階層に並べる**と後勝ちで `ff` が効く (色・サイズ・下線は `"Hyperlink"` のまま維持)。`"Hyperlink"` を外して `RGBColor` 直指定にすると、今度はスタイルが持っていたフォントサイズ等も失われて「文字が小さくなる」二次症状が出る。
+
+**対策**: リンク見た目を保ちつつフォントだけ変えたいときは、`"Hyperlink"` を `Style` の引数に入れ、その後に `FontFamily -> ...` を置く。`BaseStyle` には入れない。`Hyperlink[Style[text, FontFamily -> ff], url]` のように `Style` を `Hyperlink` の内側に入れる形でも効く。
+
+## クイック診断 (フォント / Style / ClearAll の罠)
+
+- **`pkg\`Private\`f[]` を直接評価して入力がそのまま返ってきたら罠 #56 を疑う** (その関数が `ClearAll[...]` リストに載っていて、定義が `ClearAll` より前にないか)。フォント・色・ヘルパ全般の「設定が効かない」症状の最有力。
+- **出力 `.nb` に `FontFamily->...helper[]` のような未評価の関数呼び出しが焼き込まれていたら罠 #57 を疑う** (`Button`/`Tooltip`/`Grid` のラベルに関数呼び出しを直接書いていないか。`With` で事前評価しているか)。
+- **リンク (Hyperlink) のテキストだけフォントが変わらない / Hyperlink を外したら文字が小さくなったら罠 #58 を疑う** (`"Hyperlink"` を `BaseStyle` でなく `Style` の引数列に置いているか)。
+- **フォント反映を確認するときは、まず `pkg\`Private\`フォント取得関数[]` を単体評価し、期待値の文字列が返るかを最初に確認する** (関数が正しい値を返すか → 出力 `.nb` の `FontFamily` 値が文字列になっているか、の順で切り分ける)。

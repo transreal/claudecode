@@ -51,7 +51,8 @@
 - `nbaccess-notebook-access` — NBAccess API リファレンスと推奨パターン
 - `nbaccess-separation-check` — NBAccess 分離原則の検証・修正手順
 - `api-key-handling` — API キー取得の正しい実装手順
-- `wl-encoding-and-regex` — エスケープ・正規表現の検証手順
+- `wl-encoding-and-regex` — `.wl` ソース内のエスケープ (`\:XXXX`)・正規表現の検証手順 (実行時バイト I/O は `wl-runtime-byte-io` に分離)
+- `wl-runtime-byte-io` — 実行時の文字列⇔バイト変換 (HTTP 送受信ボディ、JSON ファイル読み書き) で日本語が化けないための手順。`ExportString["RawJSON"]` (→ ISO8859-1) と `Developer`WriteRawJSONString` (→ UTF-8) の戻り値エンコード差、二重 encode 回避 (罠 #55)、`HTTPRequest` Body に ByteArray を渡す原則
 - `pde-modeling` — PDE 実装ステップ
 - `confidential-data-handling` — 機密データのラッピング手順
 - `confidential-structure-probe` — 秘密変数の構造調査と ContinueEval 連携手順
@@ -63,6 +64,7 @@
 - `llmgraph-dag-job-lifecycle` — LLMGraphDAG ジョブの自動削除挙動と registry 観察パターン (onComplete 経由 / handler 内部観察)
 - `notebook-llmgraph-update-pattern` — 外部パッケージから NotebookLLMGraph にノードを追加する際の正しいキャッシュ更新 + Flush パターン
 - `wolfram-syntax-pitfalls` — `Module` 閉じ位置誤りや `Quiet` のエラー隠蔽など、LLM ベースの大規模 .wl 編集で頻発する構文上の罠と診断手順
+- `ui-output-font-customization` — ClaudeEval/SourceVault の表・リスト出力フォント (`$ClaudeStandardFont`/`iSVStandardFont`) を設定追従させる実装パターンと「フォントが効かない」切り分け (罠 #56–#58: ClearAll 順序 / Button ラベル内関数の未評価 / Hyperlink フォント上書き)
 - `maildb-operations` — maildb パッケージの API 使用パターン（showMails/searchFromMails は MailDBObject 必須）
 - `system-open` — SystemOpen によるファイル・フォルダ・ノートブックの開き方
 - `runtime-orchestrator-boundary` — ClaudeRuntime と ClaudeOrchestrator の責務境界、特に並列化の許容範囲（Workflow Migration プロジェクト）
@@ -87,6 +89,8 @@
 - `compiled-registry-and-seed` — SourceVault.wl Stage 6b の Compiled Registry + Seed bootstrap 設計。seeds/<topic>-seed.json + compiled/<channel>/<topic>.json の 2 階建て、SourceVaultLookup / SourceVaultResolve / ClaudeResolveModel 互換 wrapper、Availability/Freshness/Class 優先順位 sort、public/private channel 分離、AllowSeed -> False 厳格モード、Stage 1 旧定義削除の経緯、累計 841 件の罠 #11 反省
 - `notebook-management-extraction` — SourceVault.wl Stage 9 P0 + P1 の Notebook Management 拡張。Mathematica notebook を first-class source として登録、先頭 Input セルを HoldComplete + whitelist で safe parse、TodoItem cell を TaggingRules > StrikeThrough heuristic > Default の優先順位で Done 判定、Header.Status と Todo cell 状態の独立保存と合成 lint、7 種 lint (HeaderStatusTodoButNoOpenTodos / DeadlinePast / TodoCellStatusHeuristicOnly 等)、SourceVaultFindNotebooks の deterministic クエリ、Stage 6c/8/6d との接続点。**Stage 9 P1 拡張**: SourceVaultMarkTodo (NBAccess NBWriteTodoStatus への薄いラッパー)、SourceVaultNotebookSummary (LLM 要約)、mtime ベース cache (`SourceVaultIndexNotebook[path]` の `"Cached"` / `"SourceMTime"` / `"ForceReindex"`)、Header parser MakeExpression 第一選択化 (副作用回避、`"Source"` フィールド `"MakeExpression"` / `"Initialization"`)、NBAccess semantic API 統合
 - `nbaccess-semantic-api` — NBAccess.wl Stage 9 P1 で追加された semantic API 7 個の設計詳細。FrontEnd 不要のファイル直接編集パイプライン (`Import["Notebook"]` → 編集 → `Export[..., "NB"]` の atomic write)、AccessLevel RBAC + DryRun 安全機構 (書き込み系 >= 0.7 必須、default DryRun = True)、CellPath (List of Integer) による CellGroupData ネスト対応の cell 位置記録、iNBIsHeaderLikeAssoc フィルタ (Header と Todo metadata の区別)、NBReadHeader の 3 経路 fallback (Notebook TaggingRules → Cell TaggingRules → BoxData MakeExpression)、With[{c=v}, HoldComplete[c]] による DryRun の Before/After 値埋め込み (罠 #27 回避)、CellGroupData の iNBFlattenCells 再帰展開 (罠 #26 回避)、SourceVaultMarkTodo の薄いラッパー設計、Stage 9 P0 Approval Workflow 経路 (NBOpenAuthorized + NBProcessFile) との使い分け、Stage 9 Phase 3 (P2) ロードマップ
+- `sourcevault-sync-relink-uuid` — SourceVault.wl の notebook source 鮮度管理・移動追跡・UUID 同定 (notebook-management-extraction から分離)。SourceVaultSync (mtime 鮮度トークンで Stale な .nb を再 index)、SourceVaultRelinkSources (UUID / 内容ハッシュ / ファイル名の 3 段照合、シンボリックパス解決で別 PC のパス差を移動と誤検出しない、StaleDuplicate 残骸判定)、Notebook UUID 埋め込み (TaggingRules SourceVault>NotebookUUID、非破壊、ファイルと一緒に移動)
+- `claudeeval-security-guard-placement` — ClaudeEval/ClaudeQuery にセキュリティ・プライバシーガード (クラウド送信拒否、Private ノートブック保護等) を追加するときの配置位置。`$UseClaudeRuntime=True` で Runtime Bridge 経由になるとバイパスされる落とし穴、Deny は最前段 (dispatch 前)・Substitute は共通入口という原則、両経路での発火確認
 
 ## ファイル読み込みルール
 

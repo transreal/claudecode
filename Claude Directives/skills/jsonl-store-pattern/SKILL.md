@@ -83,13 +83,14 @@ iAppendJSONL[path_String, record_Association] :=
       Return[<|"Status" -> "Failed",
         "Reason" -> "JSONEncodeFailed", "Path" -> path|>]];
     iEnsureDir[DirectoryName[path]];
-    strm = Quiet[OpenAppend[path, BinaryFormat -> True,
-      CharacterEncoding -> "UTF-8"]];
+    strm = Quiet[OpenAppend[path, BinaryFormat -> True]];
     If[Head[strm] =!= OutputStream,
       Return[<|"Status" -> "Failed",
         "Reason" -> "OpenAppendFailed", "Path" -> path|>]];
-    BinaryWrite[strm, ExportString[line <> "\n", "Text",
-      CharacterEncoding -> "UTF-8"]];
+    (* 罠 #55: ExportString["RawJSON"] の戻りは codepoint = UTF-8 byte の
+       Latin-1 表現なので ISO8859-1 で byte 化する。"UTF-8" だと二重 encode で
+       日本語が化ける。読み取りは ByteArrayToString[..., "UTF-8"] と整合。 *)
+    BinaryWrite[strm, StringToByteArray[line <> "\n", "ISO8859-1"]];
     Close[strm];
     <|"Status" -> "OK", "Path" -> path|>
   ];
@@ -100,8 +101,11 @@ iAppendJSONL[path_String, record_Association] :=
 1. **`iSanitizeForJSON` を必ず通す** — Missing[]・DateObject・Symbol 等を Null/文字列に
    (詳細は skill `llm-extraction-pipeline`)
 2. **`Compact -> True`** — 1 行に収めるために必須
-3. **`BinaryFormat -> True` + `BinaryWrite + ExportString[..., "Text", UTF-8]`** —
-   `WriteString` だと OS の encoding 設定に依存して文字化けする可能性
+3. **`StringToByteArray[line, "ISO8859-1"]` で書く (罠 #55)** —
+   `ExportString["RawJSON"]` の戻りは UTF-8 byte の Latin-1 表現。`"UTF-8"` で byte 化すると
+   二重 encode で日本語が化ける。`ExportString[line, "Text", CharacterEncoding -> "UTF-8"]`
+   や `WriteString` も同じ二重 encode / OS encoding 依存の危険があるので使わない。
+   (`Developer`WriteRawJSONString` を使う場合のみ戻りが通常 Unicode なので "UTF-8" が正しい)
 4. 戻り値は Association `<|"Status" -> "OK"|"Failed"|>` 形式 — エラーパスを呼出側で識別可能に
 
 ## Load (読込) — 罠 #20 対応

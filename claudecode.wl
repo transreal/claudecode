@@ -207,6 +207,7 @@ Quiet[Scan[
    (* === Phase 32k (2026-05-14): ParallelKernels \:306e\:524d\:7f6e\:8d77\:52d5 === *)
    "ClaudeBeginParallelKernels",
    "$ClaudeTimeout", "$ClaudeMDPath", "$ClaudeMDContent", "$ClaudeModel",
+   "$ClaudeStandardFont",
    "$ClaudeTestModel", "$ClaudeVerbose",
    "$ClaudeFallbackModels", "$ClaudeWorkingDirectory", "$ClaudeAccessibleDirs",
    "$ClaudeDocRetryDelay", "$ClaudeDocMaxRetries", "$ClaudeDocMaxChunkChars",
@@ -246,6 +247,19 @@ ClaudeSpec::usage =
 $ClaudeModel::usage =
   "$ClaudeModel \:306f Claude CLI \:306b\:6e21\:3059\:30e2\:30c7\:30eb\:540d\:3002\n"
   "\:4f8b: $ClaudeModel = \"claude-opus-4-6\"; (* \:30c7\:30d5\:30a9\:30eb\:30c8: \"\" \:306f\:7701\:7565\:6642 Claude Code \:81ea\:8eab\:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb *)";
+
+$ClaudeStandardFont::usage =
+  "$ClaudeStandardFont \:306f ClaudeEval \:304c\:751f\:6210\:3059\:308b\:51fa\:529b\:30b3\:30fc\:30c9 (Grid / Column / Style / Button \:7b49) \:3067\n" <>
+  "\:7d71\:4e00\:7684\:306b\:4f7f\:7528\:3055\:308c\:308b\:6a19\:6e96\:30d5\:30a9\:30f3\:30c8\:540d (\:6587\:5b57\:5217)\:3002\n" <>
+  "\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:57cb\:3081\:8fbc\:307e\:308c\:3001\:751f\:6210\:30b3\:30fc\:30c9\:306e FontFamily \:6307\:5b9a\:3092\:5f37\:5236\:3059\:308b\:3002\n" <>
+  "\:30c7\:30d5\:30a9\:30eb\:30c8 (\:30ed\:30fc\:30c9\:6642): \"Yu Gothic UI\"\:3002\:30ed\:30fc\:30c9\:5f8c\:306b\:4efb\:610f\:306e\:30d5\:30a9\:30f3\:30c8\:540d\:3092\:4ee3\:5165\:3057\:3066\:5909\:66f4\:53ef\:80fd\:3002\n" <>
+  "\:4f8b: $ClaudeStandardFont = \"Meiryo UI\";";
+
+(* \:6a19\:6e96\:30d5\:30a9\:30f3\:30c8\:5b9a\:6570\:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:5024 (2026-05-31 \:8ffd\:52a0)\:3002
+   \:516c\:958b\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8 (ClaudeCode`) \:3067\:4ee3\:5165\:3059\:308b\:305f\:3081 Private \:306b\:5165\:308b\:524d\:306b\:7f6e\:304f\:3002
+   \:518d\:30ed\:30fc\:30c9\:6642\:306b\:30e6\:30fc\:30b6\:30fc\:8a2d\:5b9a\:3092\:4e0a\:66f8\:304d\:3057\:306a\:3044\:3088\:3046 ValueQ \:30ac\:30fc\:30c9\:3002 *)
+If[!ValueQ[$ClaudeStandardFont],
+  $ClaudeStandardFont = "Yu Gothic UI"];
 
 $ClaudePrivateModel::usage =
   "$ClaudePrivateModel \:306f\:79d8\:5bc6\:30c7\:30fc\:30bf\:51e6\:7406\:7528\:306e\:30ed\:30fc\:30ab\:30eb\:30e2\:30c7\:30eb\:6307\:5b9a\:3002\n" <>
@@ -598,19 +612,27 @@ $iPaletteModelsByProvider = <|
    Falls back to the static entry when SourceVault is not loaded or
    returns nothing, so the palette keeps working standalone. *)
 iPaletteModelsFor[provider_String] :=
-  If[provider === "chatgptcodex",
+  If[provider === "chatgptcodex" || provider === "lmstudio",
+    (* Stage 9 P1.5: chatgptcodex \:306b\:52a0\:3048 lmstudio \:3082 SourceVault \:304b\:3089\:30e2\:30c7\:30eb\:540d\:3092
+       \:52d5\:7684\:53d6\:5f97\:3059\:308b\:3002\:30e2\:30c7\:30eb\:540d\:306f SourceVault \:7ba1\:7406\:306a\:306e\:3067\:3001\:30d1\:30ec\:30c3\:30c8\:5019\:88dc\:3082
+       SourceVault \:306e\:5b9f\:540d (\:4f8b: qwen/qwen3.6-27b) \:3092\:4f7f\:3046\:3002\:3053\:308c\:306b\:3088\:308a
+       \:30d1\:30ec\:30c3\:30c8\:9078\:629e\:3068 SourceVault \:30fbLM Studio \:5b9f\:540d\:30fbcontext_length \:89e3\:6c7a\:304c\:6574\:5408\:3059\:308b\:3002
+       SourceVault \:7121\:3057\:74b0\:5883\:3067\:306f\:9759\:7684\:30ea\:30b9\:30c8\:306b\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af (\:5f8c\:65b9\:4e92\:63db)\:3002 *)
     Module[{sv},
       sv = If[
         TrueQ[Quiet @ Check[
           ValueQ[SourceVault`SourceVaultListModels] ||
           MemberQ[$Packages, "SourceVault`"], False]],
         Quiet @ Check[
-          SourceVault`SourceVaultListModels["chatgptcodex"], {}],
+          SourceVault`SourceVaultListModels[provider], {}],
         {}];
       If[ListQ[sv] && sv =!= {} && AllTrue[sv, StringQ],
-        Prepend[DeleteCases[sv, "Automatic"], "Automatic"],
-        Lookup[$iPaletteModelsByProvider, "chatgptcodex",
-          {"Automatic"}]]],
+        If[provider === "chatgptcodex",
+          Prepend[DeleteCases[sv, "Automatic"], "Automatic"],
+          DeleteCases[sv, "Automatic"]],
+        Lookup[$iPaletteModelsByProvider, provider,
+          If[provider === "chatgptcodex", {"Automatic"},
+            {"claude-opus-4-7"}]]]],
     Lookup[$iPaletteModelsByProvider, provider,
       {"claude-opus-4-7"}]];
 iPaletteModelsFor[_] := {"claude-opus-4-7"};
@@ -2304,7 +2326,11 @@ iCloudSendPreflightPersistEntry[
     json = ExportString[persistEntry, "RawJSON", "Compact" -> True];
     If[!StringQ[json], Return[$Failed]];
     stream = OpenAppend[file, BinaryFormat -> True];
-    BinaryWrite[stream, StringToByteArray[json <> "\n", "UTF-8"]];
+    (* Stage 9 P1.5 utf8fix: ExportString["RawJSON"] \:306e\:623b\:308a\:5024\:306f
+       codepoint = UTF-8 byte \:306e Latin-1 \:8868\:73fe\:306a\:306e\:3067\:3001ISO8859-1 \:3067
+       byte \:5316\:3059\:308b\:306e\:304c\:6b63\:3057\:3044\:3002\:65e7 UTF-8 \:306f\:4e8c\:91cd encode \:306b\:306a\:308a\:3001
+       Paths \:7b49\:306b\:65e5\:672c\:8a9e\:30d5\:30a9\:30eb\:30c0\:540d\:304c\:5165\:308b\:3068\:6587\:5b57\:5316\:3051\:3059\:308b\:3002 *)
+    BinaryWrite[stream, StringToByteArray[json <> "\n", "ISO8859-1"]];
     Close[stream];
     file
   ];
@@ -3778,6 +3804,46 @@ iResolveAccessLevel[ps_Association] :=
 iResolveAccessLevel[_] :=
   NBAccess`NBGetProviderMaxAccessLevel["claudecode"];
 
+(* Stage 9 P1.5: Private \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30e2\:30c7\:30eb\:691c\:8a3c\:30ac\:30fc\:30c9\:3002
+   \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304c\:8981\:6c42\:3059\:308b\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb (Private \:306a\:3089 1.0) \:306b\:5bfe\:3057\:3001
+   \:6307\:5b9a\:30e2\:30c7\:30eb\:304c\:305d\:306e\:30c7\:30fc\:30bf\:3092\:6271\:3048\:308b\:304b\:3092 NBAccess \:306b\:554f\:3044\:5408\:308f\:305b\:308b\:3002
+   - Model \:6307\:5b9a\:3042\:308a (modelSpec =!= Automatic) \:3067\:6271\:3048\:306a\:3051\:308c\:3070\:62d2\:5426 (\:7406\:7531\:3092\:8fd4\:3059)\:3002
+   - Model \:6307\:5b9a\:7121\:3057 (Automatic) \:306a\:3089 $ClaudePrivateModel \:306b\:5207\:308a\:66ff\:3048\:3066\:901a\:3059\:3002
+   \:691c\:8a3c\:81ea\:4f53\:306f NBAccess \:7ba1\:8f44 (NBModelCanHandleAccessLevel)\:3002
+   \:8fd4\:5024: <|"Action" -> "Allow"|"Substitute"|"Deny", "ModelSpec" -> spec,
+              "Reason" -> _, "RequiredLevel" -> _|> *)
+iClaudeEvalPrivacyGuard[nb_, modelSpec_] :=
+  Module[{requiredLevel, canHandle, provider},
+    (* \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:8981\:6c42\:30ec\:30d9\:30eb (NBAccess \:304c\:5224\:5b9a\:3002Private \:306a\:3089 1.0) *)
+    requiredLevel = If[Head[nb] === NotebookObject,
+      Quiet @ Check[NBAccess`NBNotebookRequiredAccessLevel[nb], 0.0],
+      0.0];
+    If[!NumericQ[requiredLevel], requiredLevel = 0.0];
+    (* \:8981\:6c42\:30ec\:30d9\:30eb\:304c\:4f4e\:3051\:308c\:3070 (\:975e Private) \:5236\:7d04\:7121\:3057 *)
+    If[requiredLevel < 1.0,
+      Return[<|"Action" -> "Allow", "ModelSpec" -> modelSpec,
+        "RequiredLevel" -> requiredLevel|>]];
+    (* \:3053\:3053\:304b\:3089 Private (\:8981\:6c42 1.0) *)
+    If[modelSpec === Automatic,
+      (* Model \:6307\:5b9a\:7121\:3057: $ClaudePrivateModel \:306b\:5207\:308a\:66ff\:3048\:308b *)
+      Return[<|"Action" -> "Substitute",
+        "ModelSpec" -> $ClaudePrivateModel,
+        "Reason" -> "PrivateNotebookAutoLocalModel",
+        "RequiredLevel" -> requiredLevel|>]];
+    (* Model \:6307\:5b9a\:3042\:308a: NBAccess \:306b\:691c\:8a3c\:3055\:305b\:308b *)
+    canHandle = Quiet @ Check[
+      NBAccess`NBModelCanHandleAccessLevel[modelSpec, requiredLevel],
+      False];
+    provider = Quiet @ Check[
+      NBAccess`NBModelProviderName[modelSpec], "unknown"];
+    If[TrueQ[canHandle],
+      <|"Action" -> "Allow", "ModelSpec" -> modelSpec,
+        "RequiredLevel" -> requiredLevel, "Provider" -> provider|>,
+      <|"Action" -> "Deny", "ModelSpec" -> modelSpec,
+        "Reason" -> "PrivateNotebookCloudModelDenied",
+        "Provider" -> provider, "RequiredLevel" -> requiredLevel|>]
+  ];
+
 (* ============================================================
    \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:53ce\:96c6\:ff08\:6a5f\:5bc6\:9664\:5916\:4ed8\:304d\:ff09
    \[RightArrow] NBAccess\:306e NBGetContext \:306b\:59d4\:8b72\:3002
@@ -4370,12 +4436,25 @@ If[!ValueQ[$iLocalContextSymbols],
     "SelectionMove", "SelectionEvaluate",
     "NotebookCreate", "NotebookOpen", "NotebookClose", "NotebookSave",
     "CellPrint", "NotebookEvaluate", "NotebookApply",
+    (* 2026-05-31 fix: NotebookImport \:7cfb\:306f FrontEnd \:7d4c\:7531\:3067 .nb \:3092\:30d1\:30fc\:30b9\:3059\:308b\:305f\:3081\:3001
+       \:30b5\:30d6\:30ab\:30fc\:30cd\:30eb (ParallelSubmit) \:306b\:9001\:308b\:3068 FrontEnd \:3068\:306e\:76f8\:4e92\:5f85\:3061\:3067
+       \:30c7\:30c3\:30c9\:30ed\:30c3\:30af\:3057\:3001\:300c\:52d5\:7684\:8a55\:4fa1\:306e\:653e\:68c4\:300d\:30c0\:30a4\:30a2\:30ed\:30b0\:3067\:30d5\:30ea\:30fc\:30ba\:3059\:308b\:3002
+       SourceVaultExtractNotebookTodos \[RightArrow] iExtractTodoCellsFromPath \[RightArrow] NotebookImport
+       \:304c\:5178\:578b\:4f8b\:3002\:3053\:308c\:3089\:3092\:542b\:3080\:5f0f\:306f\:5fc5\:305a\:540c\:671f (\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb) \:5b9f\:884c\:3055\:305b\:308b\:3002 *)
+    "NotebookImport", "Import", "Export", "NotebookPrint",
+    "FrontEndExecute", "FrontEndTokenExecute", "UsingFrontEnd",
     (* \:30c0\:30a4\:30a2\:30ed\:30b0 *)
     "CreateDialog", "DialogInput", "MessageDialog", "ChoiceDialog",
     "DialogReturn", "DialogNotebook",
     (* ScheduledTask \(\:30b5\:30d6\:304b\:3089\:767b\:9332\:3059\:308b\:3068\:30ec\:30fc\:30b9\:72b6\:614b) *)
     "CreateScheduledTask", "RunScheduledTask",
     "StopScheduledTask", "RemoveScheduledTask", "SessionSubmit",
+    (* 2026-05-31 fix: OS / \:5916\:90e8\:30d7\:30ed\:30bb\:30b9\:8d77\:52d5\:7cfb\:3082\:30b5\:30d6\:30ab\:30fc\:30cd\:30eb\:3067\:306f
+       \:74b0\:5883 (\:30ab\:30ec\:30f3\:30c8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:30fb$Path) \:304c\:7570\:306a\:308a\:7d50\:679c\:304c\:5909\:308f\:308b\:305f\:3081\:540c\:671f\:5316\:3002
+       \:7279\:306b SystemOpen \:306f $NBDenyHeads \:306b\:3082\:5165\:3063\:3066\:304a\:308a\:3001Deny override \:627f\:8a8d\:5f8c\:306e
+       \:5f0f\:306b\:983b\:51fa\:3059\:308b (todolist.nb \:30b1\:30fc\:30b9)\:3002 *)
+    "SystemOpen", "Run", "RunProcess", "StartProcess", "CreateProcess",
+    "URLExecute", "Install",
     (* \:30ab\:30fc\:30cd\:30eb\:7ba1\:7406 (\:30b5\:30d6\:304b\:3089\:547c\:3076\:3068\:672c\:4f53\:304c\:3089\:3093\:3060) *)
     "LaunchKernels", "AbortKernels", "CloseKernels"
   }];
@@ -4440,7 +4519,30 @@ iShouldExecuteAsync[heldExpr_, confVarNames_List] :=
     If[TrueQ[$ClaudeRuntimeAsyncForce], Return[True]];
     If[iCodeRefsConfidential[heldExpr, confVarNames], Return[False]];
     If[iCodeRefsLocalContext[heldExpr], Return[False]];
+    (* 2026-05-31 fix: $NBDenyHeads / $NBApprovalHeads \:306b\:5c5e\:3059\:308b head \:3092\:542b\:3080\:5f0f\:306f
+       \:6027\:8cea\:4e0a 1) FrontEnd / OS / \:5916\:90e8\:30d7\:30ed\:30bb\:30b9\:4f9d\:5b58 (SystemOpen, Run, Import, NotebookImport \:7b49) \:307e\:305f\:306f
+       2) NBAccess \:7d4c\:7531\:306e notebook \:64cd\:4f5c\:3067\:3001\:3044\:305a\:308c\:3082\:30b5\:30d6\:30ab\:30fc\:30cd\:30eb (ParallelSubmit) \:3067\:306f
+       FrontEnd \:3068\:306e\:76f8\:4e92\:5f85\:3061\:30c7\:30c3\:30c9\:30ed\:30c3\:30af\:3092\:8d77\:3053\:3059\:3002Deny override \:627f\:8a8d\:5f8c\:306e\:5f0f\:306f
+       \:3053\:308c\:306b\:8a72\:5f53\:3057\:3084\:3059\:3044\:305f\:3081 (todolist.nb \:30b1\:30fc\:30b9)\:3001\:78ba\:5b9f\:306b\:540c\:671f\:5b9f\:884c\:306b\:843d\:3068\:3059\:3002
+       iCodeRefsLocalContext \:3068\:91cd\:8907\:3059\:308b\:304c\:3001DenyHeads \:304c\:5c06\:6765\:62e1\:5f35\:3055\:308c\:305f\:3068\:304d\:306e\:4fdd\:967a\:3002 *)
+    If[iCodeRefsForbiddenOrApprovalHead[heldExpr], Return[False]];
     True
+  ];
+
+(* heldExpr \:5185\:306e symbol head \:304c $NBDenyHeads / $NBApprovalHeads \:306b\:542b\:307e\:308c\:308b\:304b\:5224\:5b9a\:3002
+   \:3053\:308c\:3089\:306e head \:306f FrontEnd / OS / NBAccess \:4f9d\:5b58\:3067\:3042\:308a\:3001\:30b5\:30d6\:30ab\:30fc\:30cd\:30eb\:5b9f\:884c\:3067\:306f
+   \:30c7\:30c3\:30c9\:30ed\:30c3\:30af\:307e\:305f\:306f\:74b0\:5883\:5dee\:7570\:306b\:3088\:308b\:8aa4\:52d5\:4f5c\:3092\:8d77\:3053\:3059\:305f\:3081 async \:5316\:3057\:306a\:3044\:3002
+   NBAccess \:30d1\:30c3\:30b1\:30fc\:30b8\:304c\:672a\:30ed\:30fc\:30c9\:3067\:3082\:5b89\:5168\:306b False \:3092\:8fd4\:3059\:3088\:3046 Quiet@Check \:3067\:5305\:3080\:3002 *)
+iCodeRefsForbiddenOrApprovalHead[heldExpr_] :=
+  Quiet @ Check[
+    Module[{names, deny, approval},
+      names = iCodeExtractSymbolNames[heldExpr];
+      If[!ListQ[names], Return[True, Module]];   (* \:5b89\:5168\:5074 *)
+      deny     = If[ListQ[NBAccess`$NBDenyHeads], NBAccess`$NBDenyHeads, {}];
+      approval = If[ListQ[NBAccess`$NBApprovalHeads], NBAccess`$NBApprovalHeads, {}];
+      AnyTrue[names, MemberQ[deny, #] || MemberQ[approval, #] &]
+    ],
+    True   (* \:30a8\:30e9\:30fc\:6642\:306f\:5b89\:5168\:5074 (\:540c\:671f) *)
   ];
 
 (* Phase 32k (2026-05-14): \:522f\:30ab\:30fc\:30cd\:30eb\:8d77\:52d5\:306e\:30ad\:30e3\:30c3\:30b7\:30e5\:5316\:3002
@@ -7397,6 +7499,18 @@ iQueryLMStudioChat[model_String, prompt_String, baseURL_String,
     sysPrompt = OptionValue["SystemPrompt"];
     ctxLen = OptionValue["ContextLength"];
     If[ctxLen === Automatic, ctxLen = $ClaudeLMStudioContextLength];
+    (* Stage 9 P1.5: ContextLength \:306f\:30e2\:30c7\:30eb\:30fb\:74b0\:5883\:4f9d\:5b58\:306a\:306e\:3067 SourceVault \:304c\:7ba1\:7406\:3059\:308b\:3002
+       \:512a\:5148\:9806: \:30aa\:30d7\:30b7\:30e7\:30f3\:660e\:793a > SourceVault \:30ec\:30b8\:30b9\:30c8\:30ea > $ClaudeLMStudioContextLength > None\:3002
+       \:30aa\:30d7\:30b7\:30e7\:30f3/\:30b0\:30ed\:30fc\:30d0\:30eb\:304c\:6574\:6570\:3067\:6307\:5b9a\:6e08\:307f\:306a\:3089\:305d\:308c\:3092\:512a\:5148\:3002\:305d\:3046\:3067\:306a\:3051\:308c\:3070
+       SourceVault \:304c\:5b58\:5728\:3059\:308c\:3070 SourceVaultModelContextLength \:3067\:30e2\:30c7\:30eb\:5225\:306e\:5024\:3092\:5f15\:304f\:3002
+       \:5f8c\:65b9\:4e92\:63db: SourceVault \:7121\:3057\:306a\:3089 $ClaudeLMStudioContextLength \:306e\:307f\:3002 *)
+    If[!(IntegerQ[ctxLen] && ctxLen > 0),
+      Module[{svCtx},
+        If[Length[Names["SourceVault`SourceVaultModelContextLength"]] > 0,
+          svCtx = Quiet @ Check[
+            SourceVault`SourceVaultModelContextLength["lmstudio", model],
+            None];
+          If[IntegerQ[svCtx] && svCtx > 0, ctxLen = svCtx]]]];
     (* None / Automatic / \:975e\:6b63\:306a\:5024\:306f\:9001\:4fe1\:305b\:305a\:30e2\:30c7\:30eb\:5074\:8a2d\:5b9a\:3092\:4f7f\:3046 *)
     temp = OptionValue["Temperature"];
     If[temp === Automatic, temp = $ClaudeLMStudioTemperature];
@@ -7867,6 +7981,13 @@ iPrepareLMStudioMCPPS1[apiKey_String, model_String, prompt_String,
     (* body \:5168\:4f53\:3092 Mathematica \:5074\:3067\:69cb\:7bc9 *)
     integrations = $ClaudeLMStudioIntegrations;
     ctxLen       = $ClaudeLMStudioContextLength;
+    (* Stage 9 P1.5: SourceVault \:304c\:30e2\:30c7\:30eb\:5225 ContextLength \:3092\:7ba1\:7406\:3002
+       \:30b0\:30ed\:30fc\:30d0\:30eb\:304c\:672a\:8a2d\:5b9a\:306a\:3089 SourceVault \:30ec\:30b8\:30b9\:30c8\:30ea\:3092\:53c2\:7167\:3002 *)
+    If[!(IntegerQ[ctxLen] && ctxLen > 0),
+      If[Length[Names["SourceVault`SourceVaultModelContextLength"]] > 0,
+        Module[{svCtx = Quiet @ Check[
+          SourceVault`SourceVaultModelContextLength["lmstudio", model], None]},
+          If[IntegerQ[svCtx] && svCtx > 0, ctxLen = svCtx]]]];
     temp         = $ClaudeLMStudioTemperature;
     bodyAssoc = <|"model" -> model, "input" -> iHoistThinkPrefix[prompt]|>;
     If[ListQ[integrations] && Length[integrations] > 0,
@@ -10046,6 +10167,22 @@ Column[{\n\
   \"2. \:30d5\:30a3\:30dc\:30ca\:30c3\:30c1\:6570\:5217\"\n\
 }, Spacings -> 1]\n\
 ```\n\n\
+STANDARD FONT (CRITICAL \[LongDash] ABSOLUTE RULE for visual output): \
+When your code produces visual output \[LongDash] Grid, Column, Row, Style, Button, Item, \
+Panel, Framed, Labeled, TableForm, or any displayed cell content \[LongDash] \
+you MUST specify the font family \"" <> $ClaudeStandardFont <> "\" so the output \
+renders consistently. Apply it as follows:\n\
+- For Grid / Column / Row / Panel / Framed: add the option \
+BaseStyle -> {FontFamily -> \"" <> $ClaudeStandardFont <> "\"}.\n\
+- For individual Style[...] wrappers: add FontFamily -> \"" <> $ClaudeStandardFont <> "\".\n\
+- For a whole result, you may also wrap it once: \
+Style[result, FontFamily -> \"" <> $ClaudeStandardFont <> "\"].\n\
+Use this EXACT font name string. Do NOT substitute another font \
+(e.g. not \"Courier\", \"Arial\", \"Meiryo\") for general text output. \
+The ONLY exception is monospaced code / paths / hashes, where \"Courier\" or \"Consolas\" remains appropriate.\n\
+Example - CORRECT:\n\
+  Grid[data, Frame -> All, BaseStyle -> {FontFamily -> \"" <> $ClaudeStandardFont <> "\"}]\n\
+  Column[{Style[\"\:30bf\:30a4\:30c8\:30eb\", Bold, 16, FontFamily -> \"" <> $ClaudeStandardFont <> "\"], body}]\n\n\
 PACKAGE USE vs UPDATE (CRITICAL \[LongDash] ABSOLUTE RULE):\n\
 When a package name appears in the task, FIRST check api.md for existing functions.\n\
 - If the task is to COMPUTE, DISPLAY, ANALYZE, USE, or EXECUTE something with the package: \
@@ -10336,11 +10473,26 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     If[!TrueQ[iGuardCoreIntegrity[nb]], Return[$Failed]];
     (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306e\:89e3\:6c7a: PrivacySpec \:3068 Model \:306e\:4e21\:65b9\:3092\:8003\:616e *)
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
-    (* \:518d\:5e30\:6df1\:3055\:30c1\:30a7\:30c3\:30af *)
-    If[$iClaudeEvalCurrentDepth >= $ClaudeEvalMaxDepth,
-      nbPrint[nb, iL["\:26a0\:fe0f ClaudeEval \:306e\:518d\:5e30\:6df1\:5ea6\:4e0a\:9650 (", "\:26a0\:fe0f ClaudeEval recursion depth limit ("] <> ToString[$ClaudeEvalMaxDepth] <>
-        ") \:306b\:9054\:3057\:307e\:3057\:305f\:3002\:5fc5\:8981\:306a\:3089 $ClaudeEvalMaxDepth \:3092\:5897\:3084\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
-      Return[$Failed]];
+    (* Stage 9 P1.5: Private \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30e2\:30c7\:30eb\:691c\:8a3c (NBAccess \:7ba1\:8f44)\:3002
+       Private (\:8981\:6c42 1.0) \:3067\:30af\:30e9\:30a6\:30c9\:30e2\:30c7\:30eb\:306f\:62d2\:5426\:3001Model \:7121\:6307\:5b9a\:306f
+       $ClaudePrivateModel \:306b\:5207\:308a\:66ff\:3048\:308b\:3002 *)
+    Module[{guard = iClaudeEvalPrivacyGuard[nb, modelSpec]},
+      Switch[Lookup[guard, "Action", "Allow"],
+        "Deny",
+          nbPrint[nb, iL[
+            "\:26d4 \:3053\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306f Private \:5ba3\:8a00\:6e08\:307f\:3067\:3059\:3002\:6307\:5b9a\:30e2\:30c7\:30eb (",
+            "\:26d4 This notebook is declared Private. The specified model ("] <>
+            ToString[Lookup[guard, "Provider", "?"]] <>
+            iL[") \:306f\:30af\:30e9\:30a6\:30c9 LLM \:306e\:305f\:3081\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:30ec\:30d9\:30eb 1.0 \:306e\:30c7\:30fc\:30bf\:3092\:6271\:3048\:307e\:305b\:3093\:3002\n" <>
+              "\:30ed\:30fc\:30ab\:30eb LLM (lmstudio \:7b49) \:3092 Model \:3067\:6307\:5b9a\:3059\:308b\:304b\:3001Model \:6307\:5b9a\:3092\:5916\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+              ") cannot handle privacy level 1.0 data (cloud LLM).\n" <>
+              "Specify a local LLM (lmstudio etc.) via Model, or remove the Model option."]];
+          Throw[$Failed, "iClaudeEvalNBFileEarlyReturn"],
+        "Substitute",
+          modelSpec = Lookup[guard, "ModelSpec", modelSpec];
+          accessLevel = iResolveAccessLevel[privSpec, modelSpec],
+        _, Null]
+    ];
     $iClaudeEvalCurrentDepth++;
     (* LLM \:9001\:4fe1\:76f4\:524d\:306e\:7cbe\:5bc6\:30c1\:30a7\:30c3\:30af (\:7b2c2\:5c64):
        \:518d\:5e30\:547c\:3073\:51fa\:3057\:3067\:306f\:89aa\:304c\:65e2\:306b\:30c1\:30a7\:30c3\:30af\:6e08\:307f\:306a\:306e\:3067\:3001\:30c8\:30c3\:30d7\:30ec\:30d9\:30eb\:306e\:307f\:5b9f\:884c *)
@@ -11355,10 +11507,28 @@ iClaudePaidModelGuard[modelSpec_] :=
     "(Phase 28: ClaudeEval \:5197\:982d\:30ac\:30fc\:30c9)"
   ];
 
-ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, singleResult, paidGuard},
+ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, singleResult, paidGuard, privGuard0},
     (* Phase 28 (2026-05-12): \:8ab2\:91d1 API \:30e2\:30c7\:30eb\:30ac\:30fc\:30c9 *)
     paidGuard = iClaudePaidModelGuard[OptionValue[Model]];
     If[StringQ[paidGuard], Return[paidGuard]];
+    (* Stage 9 P1.5: Private \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30e2\:30c7\:30eb\:691c\:8a3c (\:6700\:65e9\:671f\:30fbdispatch \:524d)\:3002
+       dispatch (PromptRouter/Orchestrator) \:3084 Runtime Bridge \:306a\:3069\:5168\:7d4c\:8def\:3092
+       \:78ba\:5b9f\:306b\:30ab\:30d0\:30fc\:3059\:308b\:305f\:3081\:3001ClaudeEval \:306e\:6700\:521d\:306b Deny \:3092\:30c1\:30a7\:30c3\:30af\:3059\:308b\:3002
+       Private (\:8981\:6c42 1.0) \:3067\:30af\:30e9\:30a6\:30c9\:30e2\:30c7\:30eb\:660e\:793a\:6307\:5b9a\:306f\:62d2\:5426\:3002
+       Substitute (Model \:7121\:6307\:5b9a\:2192$ClaudePrivateModel) \:306f\:5f8c\:6bb5\:306e\:5171\:901a\:5165\:53e3\:30ac\:30fc\:30c9\:3067\:51e6\:7406\:3002 *)
+    privGuard0 = iClaudeEvalPrivacyGuard[
+      EvaluationNotebook[],
+      iResolveDefaultModelSpec[Replace[OptionValue[Model], Except[_List] -> Automatic]]];
+    If[Lookup[privGuard0, "Action", "Allow"] === "Deny",
+      nbPrint[EvaluationNotebook[], iL[
+        "\:26d4 \:3053\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306f Private \:5ba3\:8a00\:6e08\:307f\:3067\:3059\:3002\:6307\:5b9a\:30e2\:30c7\:30eb (",
+        "\:26d4 This notebook is declared Private. The specified model ("] <>
+        ToString[Lookup[privGuard0, "Provider", "?"]] <>
+        iL[") \:306f\:30af\:30e9\:30a6\:30c9 LLM \:306e\:305f\:3081\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:30ec\:30d9\:30eb 1.0 \:306e\:30c7\:30fc\:30bf\:3092\:6271\:3048\:307e\:305b\:3093\:3002\n" <>
+          "\:30ed\:30fc\:30ab\:30eb LLM (lmstudio \:7b49) \:3092 Model \:3067\:6307\:5b9a\:3059\:308b\:304b\:3001Model \:6307\:5b9a\:3092\:5916\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+          ") cannot handle privacy level 1.0 data (cloud LLM).\n" <>
+          "Specify a local LLM (lmstudio etc.) via Model, or remove the Model option."]];
+      Return[$Failed]];
     (* v2026-04-20 T09: rate-limit \:30ac\:30fc\:30c9\:3002\:307e\:3060\:5fa9\:65e7\:3057\:3066\:3044\:306a\:3044\:306a\:3089\:5373\:5ea7\:306b\:623b\:308b\:3002 *)
     If[TrueQ[iClaudeEvalRateLimitGuard[]],
       Return[Failure["RateLimitActive",
@@ -11383,40 +11553,46 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, single
         ToString[TrueQ[$UseClaudeRuntime]] <> ", depth=" <>
         ToString[$iClaudeEvalCurrentDepth] <> "/" <> ToString[$ClaudeEvalMaxDepth],
         Italic, GrayLevel[0.4]]]];
+    (* Stage 9 P1.5: Private \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30e2\:30c7\:30eb\:691c\:8a3c (NBAccess \:7ba1\:8f44)\:3002
+       Runtime / \:975e Runtime \:306e\:4e21\:7d4c\:8def\:306e\:5171\:901a\:5165\:53e3\:3067\:691c\:8a3c\:3059\:308b\:3002
+       Private (\:8981\:6c42 1.0) \:3067\:30af\:30e9\:30a6\:30c9\:30e2\:30c7\:30eb\:306f\:62d2\:5426\:3001Model \:7121\:6307\:5b9a\:306f
+       $ClaudePrivateModel \:306b\:5207\:308a\:66ff\:3048\:308b\:3002mdl \:306f With \:675f\:7e1b\:306a\:306e\:3067
+       \:30ac\:30fc\:30c9\:7d50\:679c\:3092 effMdl \:306b\:53cd\:6620\:3057\:3066\:4ee5\:964d\:3067\:4f7f\:3046\:3002 *)
+    Module[{guard, effMdl = mdl},
+      guard = iClaudeEvalPrivacyGuard[nb, mdl];
+      Switch[Lookup[guard, "Action", "Allow"],
+        "Deny",
+          nbPrint[nb, iL[
+            "\:26d4 \:3053\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306f Private \:5ba3\:8a00\:6e08\:307f\:3067\:3059\:3002\:6307\:5b9a\:30e2\:30c7\:30eb (",
+            "\:26d4 This notebook is declared Private. The specified model ("] <>
+            ToString[Lookup[guard, "Provider", "?"]] <>
+            iL[") \:306f\:30af\:30e9\:30a6\:30c9 LLM \:306e\:305f\:3081\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:30ec\:30d9\:30eb 1.0 \:306e\:30c7\:30fc\:30bf\:3092\:6271\:3048\:307e\:305b\:3093\:3002\n" <>
+              "\:30ed\:30fc\:30ab\:30eb LLM (lmstudio \:7b49) \:3092 Model \:3067\:6307\:5b9a\:3059\:308b\:304b\:3001Model \:6307\:5b9a\:3092\:5916\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+              ") cannot handle privacy level 1.0 data (cloud LLM).\n" <>
+              "Specify a local LLM (lmstudio etc.) via Model, or remove the Model option."]];
+          Return[$Failed],
+        "Substitute",
+          effMdl = Lookup[guard, "ModelSpec", mdl],
+        _, Null];
     singleResult =
     (* \[HorizontalLine]\[HorizontalLine] $UseClaudeRuntime \:5206\:5c90: runtime \:7d4c\:7531 expression-proposal loop \[HorizontalLine]\[HorizontalLine]
-       Phase 32j (2026-05-13): Runtime Bridge \:7d4c\:8def\:3092 SessionSubmit \:3067\:975e\:540c\:671f\:5316\:3002
-       
-       \:4ee5\:524d\:306f iScheduleAt[..., Now] \:3067\:3082\:5373\:6642\:5b9f\:884c\:3055\:308c (L9221-9223)\:3001
-       iClaudeEvalViaRuntimeBridge \:5185\:306e ClaudeStartRuntime \:2192 ClaudeRunTurn \:304c
-       \:8a55\:4fa1\:30bb\:30eb\:306e\:4e2d\:3067\:540c\:671f\:5b9f\:884c\:3055\:308c\:3066\:3044\:305f\:305f\:3081\:3001
-       \:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092\:9577\:6642\:9593\:5360\:6709\:3057 UI \:3092\:30d5\:30ea\:30fc\:30ba\:3055\:305b\:305f\:3002
-       
-       \:4fee\:6b63: claudecode \:5358\:72ec\:30d1\:30b9\:306e ClaudeQueryAsync \:3068\:540c\:3058\:30ec\:30d9\:30eb\:306e
-       \:975e\:540c\:671f\:6027\:3092\:78ba\:4fdd\:3059\:308b\:305f\:3081\:3001SessionSubmit[ScheduledTask[body, {0, 1}]]
-       \:3067 preemptive task \:3068\:3057\:3066\:5373\:6642\:5b9f\:884c\:30ad\:30e5\:30fc\:306b\:6295\:3052\:308b\:3002
-       \:3053\:308c\:306b\:3088\:308a\:8a55\:4fa1\:30bb\:30eb\:306f\:5373\:6642\:306b Null \:3092\:8fd4\:3057\:3001
-       \:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:306f\:89e3\:653e\:3055\:308c\:308b\:3002
-       
-       Runtime Bridge \:672c\:4f53 (iClaudeEvalViaRuntimeBridge) \:306f
-       ScheduledTask \:4e2d\:3067\:5b9f\:884c\:3055\:308c\:308b\:304c\:3001ScheduledTask \:306f
-       preemptive \:8a55\:4fa1\:70b9\:3067\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:8a55\:4fa1\:306e\:9593\:3067\:52d5\:4f5c\:3059\:308b\:305f\:3081\:3001
-       \:4ed6\:306e\:30bb\:30eb\:8a55\:4fa1\:3084\:30dc\:30bf\:30f3\:64cd\:4f5c\:3092\:30d6\:30ed\:30c3\:30af\:3057\:306a\:3044\:3002 *)
+       Phase 32j (2026-05-13): Runtime Bridge \:7d4c\:8def\:3092 SessionSubmit \:3067\:975e\:540c\:671f\:5316\:3002 *)
     If[TrueQ[$UseClaudeRuntime] && ri === None,
       iScheduleAtAsync[
         iClaudeEvalViaRuntimeBridge[nb, iSessionTag[], actualTask,
-          {}, ae, mdl, ps, ap, tmo],
+          {}, ae, effMdl, ps, ap, tmo],
         st],
       (* \:65e2\:5b58\:30d1\:30b9 *)
       If[ri === None,
         iScheduleAt[
-          iClaudeEvalImpl[nb, iSessionTag[], actualTask, {}, ae, mdl, ps, ap, tmo],
+          iClaudeEvalImpl[nb, iSessionTag[], actualTask, {}, ae, effMdl, ps, ap, tmo],
           st],
         iScheduleRepeating[
-          iClaudeEvalImpl[nb, iSessionTag[], actualTask, {}, ae, mdl, ps, ap, tmo],
+          iClaudeEvalImpl[nb, iSessionTag[], actualTask, {}, ae, effMdl, ps, ap, tmo],
           st, ri]
       ]
     ];
+    ];  (* end Module privacy guard *)
     If[TrueQ[ClaudeCode`$ClaudeEvalVerbose],
       Print[Style["[ClaudeEval Single] \:5b8c\:4e86: result=" <>
         ToString[Short[singleResult, 2]],
@@ -17946,6 +18122,21 @@ iCloudPaletteColor[state_] :=
           + NotebookSave[nb] \:3067 frontend \:7d4c\:7531\:3067\:30d5\:30a1\:30a4\:30eb\:66f8\:304d\:51fa\:3057\:3002
           NBAccess \:306e RBAC \:3092\:30b9\:30ad\:30c3\:30d7\:3059\:308b\:5f62\:306b\:306a\:308b\:304c\:3001\:30d1\:30ec\:30c3\:30c8\:64cd\:4f5c\:306f\:3082\:3068\:3082\:3068
           \:30e6\:30fc\:30b6\:30fc\:64cd\:4f5c\:306a\:306e\:3067 AccessLevel \:30c1\:30a7\:30c3\:30af\:306f\:4e0d\:8981\:3002 *)
+(* Stage 9 P1.5: $ClaudeModel / $ClaudePrivateModel \:304b\:3089 {provider, modelName} \:3092
+   \:53d6\:308a\:51fa\:3059\:3002{provider, model} / {provider, model, url} / "model" \:6587\:5b57\:5217 /
+   \:305d\:306e\:4ed6\:3092\:6271\:3046\:3002url \:306f\:843d\:3068\:3057\:3066 provider/modelName \:306e 2 \:8981\:7d20\:306b\:3059\:308b\:3002
+   \:30d1\:30ec\:30c3\:30c8\:8a2d\:5b9a (paletteProvider/paletteModelName) \:306f 2 \:8981\:7d20\:306a\:306e\:3067\:3001
+   url \:306f\:30c8\:30fc\:30af\:30f3\:5074 (NBResolveLocalServer) \:3067\:88dc\:308f\:308c\:308b\:3002 *)
+iCloudStateModelTuple[spec_] :=
+  Which[
+    ListQ[spec] && Length[spec] >= 2 &&
+      StringQ[spec[[1]]] && StringQ[spec[[2]]],
+      {spec[[1]], spec[[2]]},
+    StringQ[spec] && StringTrim[spec] =!= "",
+      {"claudecode", spec},
+    True,
+      $Failed];
+
 iCycleNotebookCloudState[] :=
   Module[{nb, path, current, action, nextVal, syncResult},
     nb = iUserNotebook[];
@@ -17992,6 +18183,26 @@ iCycleNotebookCloudState[] :=
        \:884c\:3046\:3053\:3068\:3067\:30d0\:30c3\:30b8\:72b6\:614b\:3082\:30d5\:30a1\:30a4\:30eb\:306b\:6c38\:7d9a\:5316\:3055\:308c\:308b\:3002 *)
     Quiet @ iSyncCloudBadgeDockedCell[nb,
       If[action === "Clear", Missing["NotDeclared"], nextVal]];
+
+    (* (4c) Stage 9 P1.5: Private/Public \:5207\:66ff\:306b\:5fdc\:3058\:3066\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e
+       \:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb\:3092\:5207\:308a\:66ff\:3048\:308b\:3002
+       - Private (nextVal === False) \[Rule] $ClaudePrivateModel
+       - Public  (nextVal === True)  \[Rule] $ClaudeModel
+       - Clear   \[Rule] \:30e2\:30c7\:30eb\:5909\:66f4\:306a\:3057 (\:4e2d\:7acb)
+       NBAccess \:4ee5\:5916\:306f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:5185\:90e8\:3092\:66f8\:304d\:63db\:3048\:306a\:3044\:539f\:5247\:306b\:5f93\:3044\:3001
+       \:5024\:306f claudecode \:304c\:6c7a\:3081\:3066 ((1) \:65b9\:5f0f) NBAccess`NBSetNotebookDefaultModel \:304c\:66f8\:304f\:3002
+       \:305d\:306e\:5f8c iLoadPaletteSettings \:3067\:30d1\:30ec\:30c3\:30c8\:5909\:6570\:3092\:8aad\:307f\:76f4\:3057\:540c\:671f\:3059\:308b\:3002 *)
+    If[action === "Set",
+      Module[{tuple, prov, mdl},
+        tuple = If[nextVal === False,
+          iCloudStateModelTuple[$ClaudePrivateModel],
+          iCloudStateModelTuple[$ClaudeModel]];
+        If[ListQ[tuple] && Length[tuple] === 2 &&
+           StringQ[tuple[[1]]] && StringQ[tuple[[2]]],
+          {prov, mdl} = tuple;
+          Quiet @ NBAccess`NBSetNotebookDefaultModel[nb, prov, mdl];
+          (* claudecode \:306e\:30d1\:30ec\:30c3\:30c8\:5909\:6570\:3092\:66f8\:304d\:8fbc\:307f\:7d50\:679c\:304b\:3089\:8aad\:307f\:76f4\:3059 *)
+          Quiet @ iLoadPaletteSettings[nb]]]];
 
     (* (4) NotebookSave \:3067\:30d5\:30a1\:30a4\:30eb\:306b\:53cd\:6620\:3055\:305b\:308b\:3002
           Mathematica \:540c\:30d7\:30ed\:30bb\:30b9\:306e save \:306a\:306e\:3067 lock \:554f\:984c\:7121\:3057\:3002 *)
