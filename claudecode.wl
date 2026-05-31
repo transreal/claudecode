@@ -42,7 +42,7 @@
      $ClaudeModel \:307e\:305f\:306f Model \:30aa\:30d7\:30b7\:30e7\:30f3\:304c {anthropic|openai, ...} (Paid \:30d7\:30ed\:30d0\:30a4\:30c0) \:306e\:6642\:3001
      NBAccess \:8a31\:53ef\:3092\:30c1\:30a7\:30c3\:30af\:3057\:3001\:7981\:6b62\:306a\:3089\:660e\:793a\:30a8\:30e9\:30fc\:3067\:6b62\:3081\:308b\:3002
      \:8a31\:53ef\:3055\:308c\:3066\:3044\:308c\:3070\:5f93\:4f86\:901a\:308a CLI \:3067\:9032\:3080 (CLI \:306f Pro/Max \:30b5\:30d6\:30b9\:30af\:5185\:3067\:8ab2\:91d1\:306a\:3057)\:3002
-   - \:30d1\:30ec\:30c3\:30c8\:8a2d\:8a08\:5909\:66f4: \:300c\:30e2\:30c7\:30eb: Opus\:300d 1 \:30dc\:30bf\:30f3 \:2192 \:300cP: ClaudeCode\:300d + \:300cM: Opus 4.7\:300d 2 \:30dc\:30bf\:30f3\:306b\:5206\:96e2\:3002
+   - \:30d1\:30ec\:30c3\:30c8\:8a2d\:8a08\:5909\:66f4: \:300c\:30e2\:30c7\:30eb: Opus\:300d 1 \:30dc\:30bf\:30f3 \[RightArrow] \:300cP: ClaudeCode\:300d + \:300cM: Opus 4.7\:300d 2 \:30dc\:30bf\:30f3\:306b\:5206\:96e2\:3002
      $iPaletteProvider / $iPaletteModelName \:5909\:6570\:3092\:65b0\:898f\:3001
      $iPaletteModelsByProvider \:30c6\:30fc\:30d6\:30eb\:306b\:5404\:30d7\:30ed\:30d0\:30a4\:30c0\:306e\:5019\:88dc\:30e2\:30c7\:30eb\:30ea\:30b9\:30c8\:3002
      \:30af\:30ea\:30c3\:30af\:3067 Provider \:5faa\:74b0 (claudecode -> anthropic -> openai -> lmstudio) \:3068
@@ -479,7 +479,7 @@ Acknowledgments::usage =
 
 
 If[!ListQ[$ClaudeFallbackModels],
-  $ClaudeFallbackModels = {{"anthropic", $iModelOpus}, {"openai", "gpt-5.5"}}];
+  $ClaudeFallbackModels = {{"chatgptcodex","gpt-5.5"},{"anthropic", $iModelOpus}, {"openai", "gpt-5.5"}}];
 
 (* $ClaudeFallbackModels \:3092 NBAccess \:306b\:540c\:671f *)
 iSyncFallbackModelsToNBAccess[] :=
@@ -1226,7 +1226,7 @@ $ClaudeRuntimeAsyncExecution::usage =
   "False \:306b\:3059\:308b\:3068 NBExecuteHeldExpr \:3092\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3067\:540c\:671f\:5b9f\:884c\:3059\:308b\n" <>
   "\:5f93\:6765\:52d5\:4f5c\:306b\:623b\:308b\:3002\n\n" <>
   "\:5236\:7d04: \:522f\:30ab\:30fc\:30cd\:30eb\:3067\:306f EvaluationNotebook[] / CurrentValue /\n" <>
-  "NBAccess\:0060* \:7b49\:306e\:30ed\:30fc\:30ab\:30eb\:6587\:8108\:53c2\:7167\:304c\:5b89\:5b9a\:3057\:306a\:3044\:305f\:3081\:3001\n" <>
+  "NBAccess`* \:7b49\:306e\:30ed\:30fc\:30ab\:30eb\:6587\:8108\:53c2\:7167\:304c\:5b89\:5b9a\:3057\:306a\:3044\:305f\:3081\:3001\n" <>
   "\:305d\:308c\:3089\:3092\:53c2\:7167\:3059\:308b\:30b3\:30fc\:30c9\:306f\:81ea\:52d5\:7684\:306b\:540c\:671f\:5b9f\:884c\:306b\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3059\:308b\:3002\n" <>
   "\:6a5f\:5bc6\:30b7\:30f3\:30dc\:30eb (NBConfidentialSymbols / Secrets) \:3092\:53c2\:7167\:3059\:308b\:30b3\:30fc\:30c9\:3082\n" <>
   "\:540c\:671f\:5b9f\:884c\:306b\:306a\:308b\:3002";
@@ -1525,17 +1525,17 @@ ClaudePollingTickKeys::usage =
   "ClaudePollingTickKeys[] \:306f\:73fe\:5728\:767b\:9332\:3055\:308c\:3066\:3044\:308b polling tick \:306e key \:4e00\:89a7\:3092\n" <>
   "List \:3067\:8fd4\:3059\:3002registry \:304c\:672a\:521d\:671f\:5316\:306e\:3068\:304d\:306f {} \:3092\:8fd4\:3059\:3002";
 
-(* === Z 案 (2026-05-17): Public usage を Begin Private 前に配置 ===
-   ClaudeEnsureSilentNotebook と ClaudeQueryAsyncSilent の usage 宣言は
-   元々 L8299/L8325 (Begin Private 内) にしか置かれていなかったため、
-   シンボルが ClaudeCode`Private` context に登録され Public context から
-   見えなかった。本体定義も Private 内だが、ここで先にシンボルを Public
-   側に登録しておくと、Begin Private 内の
+(* === Z \:6848 (2026-05-17): Public usage \:3092 Begin Private \:524d\:306b\:914d\:7f6e ===
+   ClaudeEnsureSilentNotebook \:3068 ClaudeQueryAsyncSilent \:306e usage \:5ba3\:8a00\:306f
+   \:5143\:3005 L8299/L8325 (Begin Private \:5185) \:306b\:3057\:304b\:7f6e\:304b\:308c\:3066\:3044\:306a\:304b\:3063\:305f\:305f\:3081\:3001
+   \:30b7\:30f3\:30dc\:30eb\:304c ClaudeCode`Private` context \:306b\:767b\:9332\:3055\:308c Public context \:304b\:3089
+   \:898b\:3048\:306a\:304b\:3063\:305f\:3002\:672c\:4f53\:5b9a\:7fa9\:3082 Private \:5185\:3060\:304c\:3001\:3053\:3053\:3067\:5148\:306b\:30b7\:30f3\:30dc\:30eb\:3092 Public
+   \:5074\:306b\:767b\:9332\:3057\:3066\:304a\:304f\:3068\:3001Begin Private \:5185\:306e
      ClaudeEnsureSilentNotebook[..] := ..
      ClaudeQueryAsyncSilent[..] := ..
-   が $ContextPath 経由で Public シンボルを解決し、そちらに DownValues
-   が付与される。L8299/L8325 での usage 宣言は冪等の上書きとなり同一
-   シンボル (Public) の usage を更新するので無害。 *)
+   \:304c $ContextPath \:7d4c\:7531\:3067 Public \:30b7\:30f3\:30dc\:30eb\:3092\:89e3\:6c7a\:3057\:3001\:305d\:3061\:3089\:306b DownValues
+   \:304c\:4ed8\:4e0e\:3055\:308c\:308b\:3002L8299/L8325 \:3067\:306e usage \:5ba3\:8a00\:306f\:51aa\:7b49\:306e\:4e0a\:66f8\:304d\:3068\:306a\:308a\:540c\:4e00
+   \:30b7\:30f3\:30dc\:30eb (Public) \:306e usage \:3092\:66f4\:65b0\:3059\:308b\:306e\:3067\:7121\:5bb3\:3002 *)
 ClaudeEnsureSilentNotebook::usage =
   "ClaudeEnsureSilentNotebook[] \:306f Workflow handler \:7d4c\:7531\:306e\n" <>
   "ClaudeQueryAsyncSilent \:304c\:4f7f\:3046 hidden notebook \:3092\:78ba\:4fdd\:3059\:308b\:3002\n" <>
@@ -1580,7 +1580,7 @@ ClaudeCloudSendPreflightLogSummary::usage =
   "ClaudeCloudSendPreflightLogSummary[] summarizes the in-memory cloud-send preflight audit log without including prompt or payload text. " <>
   "Use ClaudeCloudSendPreflightLogSummary[\"IncludeEntries\" -> True] to include the existing sanitized log entries.";
 
-(* === Phase 3 (2026-05-25): ChatGPT Codex CLI integration — global variables === *)
+(* === Phase 3 (2026-05-25): ChatGPT Codex CLI integration \[LongDash] global variables === *)
 $ChatgptCodexExe::usage =
   "$ChatgptCodexExe is the path to the Codex CLI executable, or Automatic to resolve it from PATH.";
 $ChatgptWorkingDirectory::usage =
@@ -1616,7 +1616,7 @@ If[!ValueQ[$ClaudeModel], $ClaudeModel = ""];
 If[!ValueQ[$ClaudeTimeout], $ClaudeTimeout = 1200];
 If[!ValueQ[$ClaudePrivateModel], $ClaudePrivateModel = {}];
 
-(* === Phase 3 (2026-05-25): ChatGPT Codex CLI integration — defaults =
+(* === Phase 3 (2026-05-25): ChatGPT Codex CLI integration \[LongDash] defaults =
    idempotent so a re-load keeps any user-set values. *)
 If[!ValueQ[$ChatgptCodexExe], $ChatgptCodexExe = Automatic];
 If[!ValueQ[$ChatgptWorkingDirectory], $ChatgptWorkingDirectory = Automatic];
@@ -4658,7 +4658,7 @@ iSubmitParallelExecution[heldExpr_, effectiveTimeout_] :=
     ];
     
     (* Phase 32a fix: Head \:306e\:5224\:5b9a\:3092\:7de9\:3081\:308b\:3002Mathematica \:30d0\:30fc\:30b8\:30e7\:30f3\:306b\:3088\:3063\:3066\:306f
-       Head \:304c EvaluationObject \:4ee5\:5916 (Parallel\:0060Private\:0060evaluationData \:7b49) \:306b
+       Head \:304c EvaluationObject \:4ee5\:5916 (Parallel`Private`evaluationData \:7b49) \:306b
        \:306a\:308b\:53ef\:80fd\:6027\:304c\:3042\:308b\:3002$Failed \:3060\:3051\:3092\:30c1\:30a7\:30c3\:30af\:3059\:308b\:3002 *)
     If[future === $Failed, Return[None]];
     
@@ -10880,7 +10880,7 @@ iScheduleAt[body_, startSpec_] :=
    iScheduleAt \:3068\:540c\:578b\:3060\:304c\:3001Now \:6307\:5b9a\:6642\:3082 SessionSubmit[ScheduledTask] \:3067
    preemptive task \:3068\:3057\:3066\:8d77\:52d5\:3057\:3001\:8a55\:4fa1\:30bb\:30eb\:306f\:5373\:6642\:306b Null \:3092\:8fd4\:3059\:3002
 
-   Runtime Bridge (ClaudeStartRuntime \:2192 ClaudeRunTurn) \:306f\:5185\:90e8\:3067
+   Runtime Bridge (ClaudeStartRuntime \[RightArrow] ClaudeRunTurn) \:306f\:5185\:90e8\:3067
    \:540c\:671f\:8a55\:4fa1\:3092\:542b\:3080\:305f\:3081\:3001iScheduleAt \:306e Now \:30d1\:30b9 (body \:3092\:305d\:306e\:307e\:307e\:8a55\:4fa1)
    \:3067\:306f\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057\:3066\:3057\:307e\:3046\:3002\:3053\:306e\:30d8\:30eb\:30d1\:30fc\:3092\:4f7f\:3046\:3068
    ScheduledTask \:4e2d\:306e preemptive \:8a55\:4fa1\:70b9\:3067 Runtime Bridge \:304c\:5b9f\:884c\:3055\:308c\:308b\:305f\:3081\:3001
@@ -11515,7 +11515,7 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, single
        dispatch (PromptRouter/Orchestrator) \:3084 Runtime Bridge \:306a\:3069\:5168\:7d4c\:8def\:3092
        \:78ba\:5b9f\:306b\:30ab\:30d0\:30fc\:3059\:308b\:305f\:3081\:3001ClaudeEval \:306e\:6700\:521d\:306b Deny \:3092\:30c1\:30a7\:30c3\:30af\:3059\:308b\:3002
        Private (\:8981\:6c42 1.0) \:3067\:30af\:30e9\:30a6\:30c9\:30e2\:30c7\:30eb\:660e\:793a\:6307\:5b9a\:306f\:62d2\:5426\:3002
-       Substitute (Model \:7121\:6307\:5b9a\:2192$ClaudePrivateModel) \:306f\:5f8c\:6bb5\:306e\:5171\:901a\:5165\:53e3\:30ac\:30fc\:30c9\:3067\:51e6\:7406\:3002 *)
+       Substitute (Model \:7121\:6307\:5b9a\[RightArrow]$ClaudePrivateModel) \:306f\:5f8c\:6bb5\:306e\:5171\:901a\:5165\:53e3\:30ac\:30fc\:30c9\:3067\:51e6\:7406\:3002 *)
     privGuard0 = iClaudeEvalPrivacyGuard[
       EvaluationNotebook[],
       iResolveDefaultModelSpec[Replace[OptionValue[Model], Except[_List] -> Automatic]]];
@@ -25835,7 +25835,7 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
     execTimeout = OptionValue["ExecutionTimeoutSeconds"];  (* Phase 29 *)
     If[!IntegerQ[execTimeout] || execTimeout <= 0, execTimeout = 30];
     
-    (* Phase A6 B-\:03b1 (2026-04-27): Model \:6307\:5b9a\:304c List \:306e\:5834\:5408\:306e\:5f37\:5236 sync \:5316\:3092
+    (* Phase A6 B-\[Alpha] (2026-04-27): Model \:6307\:5b9a\:304c List \:306e\:5834\:5408\:306e\:5f37\:5236 sync \:5316\:3092
        lmstudio \:306b\:9650\:308a\:89e3\:9664\:3059\:308b\:3002lmstudio \:306f claudecode \:3067 iPrepareLMStudioMCPPS1
        (v2026-04-24T08) \:306e async \:7d4c\:8def\:304c\:5229\:7528\:53ef\:80fd\:306a\:305f\:3081\:3001SyncProvider=False \:3092
        \:8a31\:5bb9\:3057 QueryProviderAsync \:7d4c\:7531\:3067\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:30d6\:30ed\:30c3\:30af\:3092\:56de\:907f\:3059\:308b\:3002
@@ -26495,7 +26495,7 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
          SubmitToolAsync    : call \[Rule] entry \(ProcessObject \:5165\:308a\)\:3002\:5373\:6642 return\:3002
          CollectToolAsync   : entry \(\:5b8c\:4e86\:6e08\:307f\)\[Rule] toolResult Association\:3002
          CancelToolAsync    : entry \[Rule] kill + cleanup + error result\:3002
-         MaxConcurrentTools : \:540c\:6642\:8d77\:52d5\:6700\:5927\:6570\(\:30ec\:30d3\:30e5\:30fc \:00a74.1 \:63a8\:5968\:5024\)\:3002 *)
+         MaxConcurrentTools : \:540c\:6642\:8d77\:52d5\:6700\:5927\:6570\(\:30ec\:30d3\:30e5\:30fc \[Section]4.1 \:63a8\:5968\:5024\)\:3002 *)
 
       "AsyncToolNames" -> {"web_search"},
 
@@ -30749,9 +30749,9 @@ ClaudeCode`$claudecodeVersion = "2026-05-23-phase-4-20-preflight-7-2-7-5-merged"
    \:7d4c\:7531\:3067\:522f\:30ab\:30fc\:30cd\:30eb\:5b9f\:884c\:306b\:3057\:3066\:3001\:30e1\:30a4\:30f3\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:3092\:30d6\:30ed\:30c3\:30af\:3057\:306a\:3044\:3088\:3046\:306b\:3057\:305f\:3002
    - $ClaudeRuntimeAsyncExecution (\:30c7\:30d5\:30a9\:30eb\:30c8 True) \:3067\:30aa\:30f3/\:30aa\:30d5
    - $ClaudeRuntimeAsyncForce (\:30c7\:30d5\:30a9\:30eb\:30c8 False) \:3067\:30c6\:30b9\:30c8\:7528\:5f37\:5236
-   - \:6a5f\:5bc6\:30b7\:30f3\:30dc\:30eb\:53c2\:7167 / \:30ed\:30fc\:30ab\:30eb\:6587\:8108 (EvaluationNotebook / NBAccess\:0060)
+   - \:6a5f\:5bc6\:30b7\:30f3\:30dc\:30eb\:53c2\:7167 / \:30ed\:30fc\:30ab\:30eb\:6587\:8108 (EvaluationNotebook / NBAccess`)
      \:53c2\:7167\:306f\:81ea\:52d5\:3067\:540c\:671f\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3002
-   - ClaudeRuntime\:0060iScheduleAsyncExecutionPoll \:304c\:5b8c\:4e86\:3092\:30dd\:30fc\:30ea\:30f3\:30b0\:3057\:3001
+   - ClaudeRuntime`iScheduleAsyncExecutionPoll \:304c\:5b8c\:4e86\:3092\:30dd\:30fc\:30ea\:30f3\:30b0\:3057\:3001
      iAsyncExecutionFinalize \:3067 Redact/ShouldContinue/Continuation \:3092\:8d77\:52d5\:3059\:308b\:3002
    - ClaudeRuntime`$ClaudeRuntimeVersion = "2026-05-13-phase-32j-revert" \:3068\:30bb\:30c3\:30c8\:3067\:4f7f\:3046\:3002 *)
 (* v2026-04-27 (Phase A6 B-\[Alpha]): ClaudeBuildRuntimeAdapter \:3067 Model \:30ea\:30b9\:30c8\:304c
@@ -30840,12 +30840,12 @@ ClaudeCode`$claudecodeVersion = "2026-05-23-phase-4-20-preflight-7-2-7-5-merged"
    ClaudeEval \:3068\:540c\:3058\:632f\:308b\:821e\:3044\:306b\:306a\:308b\:3002 *)
 ClaudeCode`$claudecodeVersion = "2026-05-23-phase-4-20-preflight-7-2-7-5-merged";
 (* v2026-04-30 v2: PreValidate hook \:62e1\:5f35\:3002 result13.nb \:30c6\:30b9\:30c8\:7d50\:679c\:3092\:53cd\:6620\:3002
-   - (1) \:7a7a / trivial \:30b3\:30fc\:30c9 \:2192 RepairNeeded (EmptyOrTrivialCode) [\:65e2\:5b58]
-   - (2) \:30e1\:30bf\:95a2\:6570\:547c\:3073\:51fa\:3057 \:2192 Deny (MetaCallProposal) [\:65b0\:898f]
+   - (1) \:7a7a / trivial \:30b3\:30fc\:30c9 \[RightArrow] RepairNeeded (EmptyOrTrivialCode) [\:65e2\:5b58]
+   - (2) \:30e1\:30bf\:95a2\:6570\:547c\:3073\:51fa\:3057 \[RightArrow] Deny (MetaCallProposal) [\:65b0\:898f]
      Phase B-fix3 \:306e adapter ValidateProposal \:30e1\:30bf\:691c\:51fa\:306f NBAccess \:30ed\:30fc\:30c9\:72b6\:614b\:3067
      \:547c\:3070\:308c\:305a\:6a5f\:80fd\:3057\:306a\:304b\:3063\:305f\:30d0\:30b0\:3092\:4fee\:6b63\:3002
-   - (3) HoldComplete[Null] \:691c\:51fa \:2192 RepairNeeded (NullCodeProposal) [\:65b0\:898f]
-   - (4) \:30b3\:30e1\:30f3\:30c8\:9664\:53bb\:5f8c\:306b\:7a7a \:2192 RepairNeeded (NullCodeProposal) [\:65b0\:898f]
+   - (3) HoldComplete[Null] \:691c\:51fa \[RightArrow] RepairNeeded (NullCodeProposal) [\:65b0\:898f]
+   - (4) \:30b3\:30e1\:30f3\:30c8\:9664\:53bb\:5f8c\:306b\:7a7a \[RightArrow] RepairNeeded (NullCodeProposal) [\:65b0\:898f]
    ClaudeRuntime\`$ClaudeRuntimeVersion = "2026-04-30T-PreValidateHook" \:3068\:4e92\:63db\:3002 *)
 (* v2026-04-30: Phase F PreValidate hook \:5c0e\:5165\:3002
    ClaudeBuildTransactionAdapter \:306e\:7a7a\:30b3\:30fc\:30c9 rejection \:3092
