@@ -1,0 +1,79 @@
+(* Content-type: application/vnd.wolfram.mathematica *)
+
+(*** Wolfram Notebook File ***)
+(* http://www.wolfram.com/nb *)
+
+(* CreatedBy='Wolfram 14.3' *)
+
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[       154,          7]
+NotebookDataLength[      2414,         71]
+NotebookOptionsPosition[      1758,         52]
+NotebookOutlinePosition[      2253,         71]
+CellTagsIndexPosition[      2210,         68]
+WindowFrame->Normal*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+Cell[BoxData[
+ RowBox[{"<|", 
+  RowBox[{
+   RowBox[{"\"\<Keywords\>\"", "\[Rule]", 
+    RowBox[{"{", "\"\<template\>\"", "}"}]}], ",", 
+   RowBox[{"\"\<Deadline\>\"", "->", 
+    RowBox[{"DateObject", "[", 
+     RowBox[{"{", 
+      RowBox[{"2026", ",", "1", ",", "1"}], "}"}], "]"}]}], ",", 
+   RowBox[{"\"\<NextReview\>\"", "->", 
+    TemplateBox[{"1", "\"wk\"", "week", "\"Weeks\""},
+     "Quantity"]}], ",", 
+   RowBox[{"\"\<Status\>\"", "->", "\"\<Todo\>\""}]}], 
+  "|>"}]], "NotebookStatus",
+ CellChangeTimes->{
+  3.989297190137926*^9, 3.989297236303982*^9, {3.9892972902090473`*^9, 
+   3.9892973206056747`*^9}, {3.9892989822227516`*^9, 3.989299008693405*^9}, {
+   3.989299044110821*^9, 3.989299070533659*^9}, {3.989299137704941*^9, 
+   3.9892991398619137`*^9}},ExpressionUUID->"14c36337-2571-7848-bf8e-\
+3dfcda885c91"],
+
+Cell["todo item", "TodoItem_1",
+ CellChangeTimes->{{3.9892972626256638`*^9, 3.989297264427845*^9}, {
+  3.9893020530274773`*^9, 
+  3.989302053808943*^9}},ExpressionUUID->"f295d508-3b71-5a4e-b861-\
+dc0e91a24119"],
+
+Cell["Template", "Subsubsection",
+ CellChangeTimes->{{3.9893020436844597`*^9, 
+  3.989302049789152*^9}},ExpressionUUID->"9eddde2b-83ab-1648-a6e0-\
+329799360c3c"]
+},
+WindowSize->{571, 627.5},
+WindowMargins->{{Automatic, 105.5}, {Automatic, 329.5}},
+WindowStatusArea->"",
+TaggingRules-><|"TryRealOnly" -> False|>,
+FrontEndVersion->"14.3 for Microsoft Windows (64-bit) (2025\:5e747\:67088\
+\:65e5)",
+StyleDefinitions->"SourceVault default.nb",
+ExpressionUUID->"466949c8-4852-f94d-9222-4fab488a3454"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[554, 20, 823, 19, 47, "NotebookStatus",ExpressionUUID->"14c36337-2571-7848-bf8e-3dfcda885c91"],
+Cell[1380, 41, 210, 4, 25, "TodoItem_1",ExpressionUUID->"f295d508-3b71-5a4e-b861-dc0e91a24119"],
+Cell[1593, 47, 161, 3, 37, "Subsubsection",ExpressionUUID->"9eddde2b-83ab-1648-a6e0-329799360c3c"]
+}
+]
+*)
+

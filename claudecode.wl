@@ -11592,6 +11592,8 @@ $iClaudeEvalProposalHeadAllowlist = {
   "SourceVault`SourceVaultFormatScheduleRecords",
   "SourceVault`SourceVaultTabularPredicate",
   "SourceVault`SourceVaultFindNotebooks",
+  "SourceVault`SourceVaultFindTodos",
+  "SourceVault`SourceVaultNewNotebook",
   "System`Select"
 };
 

@@ -1,0 +1,1546 @@
+(* Content-type: application/vnd.wolfram.mathematica *)
+
+(*** Wolfram Notebook File ***)
+(* http://www.wolfram.com/nb *)
+
+(* CreatedBy='Mathematica 12.2' *)
+
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[       158,          7]
+NotebookDataLength[     71941,       1538]
+NotebookOptionsPosition[     66127,       1463]
+NotebookOutlinePosition[     66808,       1486]
+CellTagsIndexPosition[     66765,       1483]
+WindowFrame->Normal*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+Cell[StyleData[StyleDefinitions -> "Default.nb"],ExpressionUUID->"c1390a9f-0f2e-4c04-8b86-304eb592c993"],
+
+Cell[StyleData[All],ExpressionUUID->"aada7546-59db-49b0-9409-e23e39277282"],
+
+Cell[StyleData["Title"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->45,
+ FontWeight->"SemiBold",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"0c7479df-7594-4e2e-8afa-ea5967a72bdd"],
+
+Cell[StyleData["Subtitle"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->24,
+ FontWeight->"SemiBold",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"300d0f5f-a21d-47fe-b315-04de0f68db0d"],
+
+Cell[StyleData["Chapter"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->34,
+ FontWeight->"SemiBold",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"ed3768d1-c626-4ffc-93bb-e42ed3e6e857"],
+
+Cell[StyleData["Section"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->28,
+ FontWeight->"SemiBold",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"2c7ecc13-b56c-4548-8844-f580b360f4bc"],
+
+Cell[StyleData["Subsection"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->20,
+ FontWeight->"SemiBold",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"a38db8db-fbe3-4ec5-847d-896c744f358e"],
+
+Cell[StyleData["Subsection"],ExpressionUUID->"00a018fd-2d87-43b1-bcb7-363a8d9446aa"],
+
+Cell[StyleData["Subsubsection"],
+ FontFamily->"Hiragino Kaku Gothic Pro",
+ FontSize->19,
+ FontWeight->"SemiBold",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"c09e7121-a94f-4811-9938-5f414abd3382"],
+
+Cell[StyleData["Text"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->15,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"506ff800-3ef7-44c5-bd0d-f5cd3b9490b3"],
+
+Cell[StyleData["Code"],ExpressionUUID->"bc7bb6b9-eed8-410d-a764-db679198af43"],
+
+Cell[StyleData["Abstract"],
+ FontFamily->"Hiragino Kaku Gothic Std",
+ FontSize->15,
+ FontWeight->"Normal",
+ FontSlant->"Oblique",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"d02114c1-8c87-4bf6-afe7-2dcc55236e23"],
+
+Cell[StyleData["Author"],
+ FontFamily->"Hiragino Kaku Gothic Std",
+ FontSize->18,
+ FontWeight->"Normal",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"ec72b3c4-dcec-44ac-b171-6747e77550cc"],
+
+Cell[StyleData["Affiliation"],
+ FontFamily->"Hiragino Kaku Gothic Std",
+ FontSize->16,
+ FontWeight->"Normal",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"56110b39-c4f8-449d-aca8-5903c04d2bfb"],
+
+Cell[StyleData["Item"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->15,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"f4d49564-4969-4363-a474-6380431777e8"],
+
+Cell[StyleData["ItemNumbered"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->15,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"e0106445-85bd-498e-8346-54b19f4a0bad"],
+
+Cell[StyleData["ItemParagraph"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->15,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"8df10ac8-fc8f-4c3c-bf49-0070df0493df"],
+
+Cell[StyleData["Subitem"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->14,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"35542c86-6e21-4f78-ab05-5421b5d0972b"],
+
+Cell[StyleData["SubitemNumbered"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->14,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"f5636dfe-bedd-4e5a-bf31-d4f8dd918c23"],
+
+Cell[StyleData["SubitemParagraph"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->14,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"cb12ab91-658c-483c-80e8-6f87742a825d"],
+
+Cell[StyleData["Subsubitem"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->13,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"f5cc58fd-c25b-4b35-98e3-886c94636db8"],
+
+Cell[StyleData["SubsubitemNumbered"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->13,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"3645ade8-a296-400a-abec-8905c25bce8d"],
+
+Cell[StyleData["SubsubitemParagraph"],
+ FontFamily->"Hiragino Kaku Gothic ProN",
+ FontSize->13,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"79363295-5fac-4d18-aa68-2c6de12cae59"],
+
+Cell[StyleData["Input"],
+ FontFamily->"Consolas",
+ FontSize->13,
+ FontWeight->"Bold",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"dbb0085b-88cc-444a-a51d-aabd500f6cfb"],
+
+Cell[StyleData["NaturalLanguageInput"],
+ FontFamily->"Hiragino Mincho Pro",
+ FontSize->14,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"4a5525e0-37bf-4284-afa6-08c1acb4292f"],
+
+Cell[StyleData["WolframAlphaLong"],
+ MenuSortingValue->10000,
+ FontFamily->"Yu Mincho",
+ FontSize->12,
+ FontWeight->"SemiBold",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"b28b67f4-0568-4784-92f7-6fcd466933c9"],
+
+Cell[StyleData["WolframAlphaShort"],
+ MenuSortingValue->10000,
+ FontFamily->"Yu Mincho",
+ FontSize->12,
+ FontWeight->"SemiBold",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"a9fc74d4-7b45-45c5-b1a8-a12723ec52f6"],
+
+Cell[StyleData["WolframAlphaShortInput"],
+ MenuSortingValue->10000,
+ FontFamily->"Yu Mincho",
+ FontSize->12,
+ FontWeight->"SemiBold",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},ExpressionUUID->"5ac231b3-e6a2-4c91-b81b-906518d4b71d"],
+
+Cell[StyleData["TodoItem_1"],
+ CellFrame->{{10, 1}, {1, 1}},
+ CellMargins->{{10, 50}, {1, 0}},
+ ReturnCreatesNewCell->True,
+ StyleKeyMapping->{
+  "Tab" -> "TodoItem_2", "*" -> "TodoItem_2", "Backspace" -> "TodoItem_0", 
+   KeyEvent["Tab", Modifiers -> {Shift}] -> "TodoItem_0"},
+ CellGroupingRules->{"SectionGrouping", 15000},
+ CellFrameMargins->{{10, 5}, {5, 1}},
+ CellFrameStyle->{{
+    RGBColor[0.932982, 0.73698, 0.246387], 
+    GrayLevel[1, 0]}, {
+    GrayLevel[1, 0], 
+    GrayLevel[1, 0]}},
+ CellFrameLabels->{{None, 
+    Cell[
+     BoxData[
+      DynamicModuleBox[{$CellContext`status$$ = 
+        "todo", $CellContext`workCell$$}, 
+       InterpretationBox[
+        StyleBox[
+         GridBox[{{
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"todo"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"todo"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"TODO\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}], 
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"done"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"done"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"DONE\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}], 
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"pass"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"pass"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"PASS\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}]}}, ColumnAlignments -> Left], 
+         "Deploy"], 
+        RadioButtonBar[
+         Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+              EvaluationCell[], All, EvaluationCell]; Part[
+              SelectedCells[], 1]); 
+          SetOptions[$CellContext`workCell$$, 
+            FontVariations -> {
+             "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]}, 
+            FontColor -> <|
+             "todo" -> GrayLevel[0.2], "done" -> 
+              RGBColor[
+               0.5254901960784314, 0.7450980392156863, 0.19607843137254902`], 
+              "pass" -> GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+            If[$CellContext`status$$ === "todo", None, 
+              GrayLevel[0.95]]])& ], {
+         "todo" -> Framed["TODO", FrameMargins -> None, FrameStyle -> None], 
+          "done" -> Framed["DONE", FrameMargins -> None, FrameStyle -> None], 
+          "pass" -> Framed["PASS", FrameMargins -> None, FrameStyle -> None]},
+          Method -> "Active", Appearance -> "Horizontal"]], 
+       DynamicModuleValues :> {}]], Background -> GrayLevel[1], FontWeight -> 
+     Bold, FontColor -> GrayLevel[0.2], FontSize -> 8, 
+     FontVariations -> {"StrikeThrough" -> False}, ShowStringCharacters -> 
+     False]}, {None, None}},
+ CellFrameLabelMargins->4,
+ DefaultNewCellStyle->"TodoItem_1",
+ CounterIncrements->"TodoItem_1",
+ CounterAssignments->{{"TodoItem_2", 0}},
+ MenuCommandKey:>"a",
+ FontFamily->"Hiragino Kaku Gothic Pro",
+ FontSize->13,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},
+ FontColor->GrayLevel[
+  0.2],ExpressionUUID->"7546fc48-4a67-4de1-ac2b-050471143f77"],
+
+Cell[StyleData["TodoItem_2"],
+ CellFrame->{{9, 1}, {1, 1}},
+ CellMargins->{{34, 50}, {1, 0}},
+ ReturnCreatesNewCell->True,
+ StyleKeyMapping->{
+  "Tab" -> "TodoItem_3", "*" -> "TodoItem_3", "Backspace" -> "TodoItem_1", 
+   KeyEvent["Tab", Modifiers -> {Shift}] -> "TodoItem_1"},
+ CellGroupingRules->{"SectionGrouping", 15100},
+ CellFrameMargins->{{10, 5}, {5, 1}},
+ CellFrameStyle->{{
+    RGBColor[0.9322448, 0.8732558, 0.7223194], 
+    GrayLevel[1, 0]}, {
+    GrayLevel[1, 0], 
+    GrayLevel[1, 0]}},
+ CellFrameLabels->{{None, 
+    Cell[
+     BoxData[
+      DynamicModuleBox[{$CellContext`status$$ = 
+        "todo", $CellContext`workCell$$}, 
+       InterpretationBox[
+        StyleBox[
+         GridBox[{{
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"todo"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"todo"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"TODO\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}], 
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"done"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"done"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"DONE\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}], 
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"pass"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"pass"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"PASS\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}]}}, ColumnAlignments -> Left], 
+         "Deploy"], 
+        RadioButtonBar[
+         Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+              EvaluationCell[], All, EvaluationCell]; Part[
+              SelectedCells[], 1]); 
+          SetOptions[$CellContext`workCell$$, 
+            FontVariations -> {
+             "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]}, 
+            FontColor -> <|
+             "todo" -> GrayLevel[0.2], "done" -> 
+              RGBColor[
+               0.5254901960784314, 0.7450980392156863, 0.19607843137254902`], 
+              "pass" -> GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+            If[$CellContext`status$$ === "todo", None, 
+              GrayLevel[0.95]]])& ], {
+         "todo" -> Framed["TODO", FrameMargins -> None, FrameStyle -> None], 
+          "done" -> Framed["DONE", FrameMargins -> None, FrameStyle -> None], 
+          "pass" -> Framed["PASS", FrameMargins -> None, FrameStyle -> None]},
+          Method -> "Active", Appearance -> "Horizontal"]], 
+       DynamicModuleValues :> {}]], Background -> GrayLevel[1], FontWeight -> 
+     Bold, FontColor -> GrayLevel[0.2], FontSize -> 8, 
+     FontVariations -> {"StrikeThrough" -> False}, ShowStringCharacters -> 
+     False]}, {None, None}},
+ CellFrameLabelMargins->4,
+ DefaultNewCellStyle->"TodoItem_2",
+ CounterIncrements->"TodoItem_2",
+ CounterAssignments->{{"TodoItem_3", 0}},
+ FontFamily->"Hiragino Kaku Gothic Pro",
+ FontSize->12,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},
+ FontColor->GrayLevel[
+  0.2],ExpressionUUID->"e0673c06-e891-43b3-bd3a-a7c822caddd0"],
+
+Cell[StyleData["TodoItem_3"],
+ CellFrame->{{7, 1}, {1, 1}},
+ CellMargins->{{58, 50}, {1, 0}},
+ ReturnCreatesNewCell->True,
+ StyleKeyMapping->{
+  "Tab" -> "TodoItem_4", "*" -> "TodoItem_4", "Backspace" -> "TodoItem_2", 
+   KeyEvent["Tab", Modifiers -> {Shift}] -> "TodoItem_2"},
+ CellGroupingRules->{"SectionGrouping", 15200},
+ CellFrameMargins->{{10, 5}, {5, 1}},
+ CellFrameStyle->{{
+    RGBColor[0.7973562, 0.7979746, 0.8021841999999999], 
+    GrayLevel[1, 0]}, {
+    GrayLevel[1, 0], 
+    GrayLevel[1, 0]}},
+ CellFrameLabels->{{None, 
+    Cell[
+     BoxData[
+      DynamicModuleBox[{$CellContext`status$$ = 
+        "todo", $CellContext`workCell$$}, 
+       InterpretationBox[
+        StyleBox[
+         GridBox[{{
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"todo"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"todo"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"TODO\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}], 
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"done"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"done"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"DONE\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}], 
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"pass"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"pass"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"PASS\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}]}}, ColumnAlignments -> Left], 
+         "Deploy"], 
+        RadioButtonBar[
+         Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+              EvaluationCell[], All, EvaluationCell]; Part[
+              SelectedCells[], 1]); 
+          SetOptions[$CellContext`workCell$$, 
+            FontVariations -> {
+             "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]}, 
+            FontColor -> <|
+             "todo" -> GrayLevel[0.2], "done" -> 
+              RGBColor[
+               0.5254901960784314, 0.7450980392156863, 0.19607843137254902`], 
+              "pass" -> GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+            If[$CellContext`status$$ === "todo", None, 
+              GrayLevel[0.95]]])& ], {
+         "todo" -> Framed["TODO", FrameMargins -> None, FrameStyle -> None], 
+          "done" -> Framed["DONE", FrameMargins -> None, FrameStyle -> None], 
+          "pass" -> Framed["PASS", FrameMargins -> None, FrameStyle -> None]},
+          Method -> "Active", Appearance -> "Horizontal"]], 
+       DynamicModuleValues :> {}]], Background -> GrayLevel[1], FontWeight -> 
+     Bold, FontColor -> GrayLevel[0.2], FontSize -> 8, 
+     FontVariations -> {"StrikeThrough" -> False}, ShowStringCharacters -> 
+     False]}, {None, None}},
+ CellFrameLabelMargins->4,
+ DefaultNewCellStyle->"TodoItem_3",
+ CounterIncrements->"TodoItem_3",
+ CounterAssignments->{{"TodoItem_4", 0}},
+ FontFamily->"Hiragino Kaku Gothic Pro",
+ FontSize->11,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},
+ FontColor->GrayLevel[
+  0.2],ExpressionUUID->"aa9aa3c7-138e-4c6a-b49c-065eca2634ef"],
+
+Cell[StyleData["TodoItem_4"],
+ CellFrame->{{6, 1}, {1, 1}},
+ CellMargins->{{82, 50}, {1, 0}},
+ ReturnCreatesNewCell->True,
+ StyleKeyMapping->{
+  "Tab" -> "TodoItem_5", "*" -> "TodoItem_5", "Backspace" -> "TodoItem_3", 
+   KeyEvent["Tab", Modifiers -> {Shift}] -> "TodoItem_3"},
+ CellGroupingRules->{"SectionGrouping", 15300},
+ CellFrameMargins->{{10, 5}, {5, 1}},
+ CellFrameStyle->{{
+    RGBColor[0.5741272, 0.5982780000000001, 0.668456], 
+    GrayLevel[1, 0]}, {
+    GrayLevel[1, 0], 
+    GrayLevel[1, 0]}},
+ CellFrameLabels->{{None, 
+    Cell[
+     BoxData[
+      DynamicModuleBox[{$CellContext`status$$ = 
+        "todo", $CellContext`workCell$$}, 
+       InterpretationBox[
+        StyleBox[
+         GridBox[{{
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"todo"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"todo"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"TODO\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}], 
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"done"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"done"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"DONE\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}], 
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"pass"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"pass"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"PASS\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}]}}, ColumnAlignments -> Left], 
+         "Deploy"], 
+        RadioButtonBar[
+         Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+              EvaluationCell[], All, EvaluationCell]; Part[
+              SelectedCells[], 1]); 
+          SetOptions[$CellContext`workCell$$, 
+            FontVariations -> {
+             "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]}, 
+            FontColor -> <|
+             "todo" -> GrayLevel[0.2], "done" -> 
+              RGBColor[
+               0.5254901960784314, 0.7450980392156863, 0.19607843137254902`], 
+              "pass" -> GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+            If[$CellContext`status$$ === "todo", None, 
+              GrayLevel[0.95]]])& ], {
+         "todo" -> Framed["TODO", FrameMargins -> None, FrameStyle -> None], 
+          "done" -> Framed["DONE", FrameMargins -> None, FrameStyle -> None], 
+          "pass" -> Framed["PASS", FrameMargins -> None, FrameStyle -> None]},
+          Method -> "Active", Appearance -> "Horizontal"]], 
+       DynamicModuleValues :> {}]], Background -> GrayLevel[1], FontWeight -> 
+     Bold, FontColor -> GrayLevel[0.2], FontSize -> 8, 
+     FontVariations -> {"StrikeThrough" -> False}, ShowStringCharacters -> 
+     False]}, {None, None}},
+ CellFrameLabelMargins->4,
+ DefaultNewCellStyle->"TodoItem_4",
+ CounterIncrements->"TodoItem_4",
+ CounterAssignments->{{"TodoItem_5", 0}},
+ FontFamily->"Hiragino Kaku Gothic Pro",
+ FontSize->10,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},
+ FontColor->GrayLevel[
+  0.2],ExpressionUUID->"8978e097-e4c3-4c93-acdb-3bbb0bfb89b5"],
+
+Cell[StyleData["TodoItem_5"],
+ CellFrame->{{4, 1}, {1, 1}},
+ CellMargins->{{106, 50}, {1, 0}},
+ ReturnCreatesNewCell->True,
+ StyleKeyMapping->{
+  "Tab" -> "TodoItem_6", "*" -> "TodoItem_6", "Backspace" -> "TodoItem_4", 
+   KeyEvent["Tab", Modifiers -> {Shift}] -> "TodoItem_4"},
+ CellGroupingRules->{"SectionGrouping", 15400},
+ CellFrameMargins->{{10, 5}, {5, 1}},
+ CellFrameStyle->{{
+    RGBColor[0.3464244, 0.3779186, 0.4677288], 
+    GrayLevel[1, 0]}, {
+    GrayLevel[1, 0], 
+    GrayLevel[1, 0]}},
+ CellFrameLabels->{{None, 
+    Cell[
+     BoxData[
+      DynamicModuleBox[{$CellContext`status$$ = 
+        "todo", $CellContext`workCell$$}, 
+       InterpretationBox[
+        StyleBox[
+         GridBox[{{
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"todo"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"todo"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"TODO\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}], 
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"done"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"done"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"DONE\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}], 
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"pass"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"pass"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"PASS\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}]}}, ColumnAlignments -> Left], 
+         "Deploy"], 
+        RadioButtonBar[
+         Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+              EvaluationCell[], All, EvaluationCell]; Part[
+              SelectedCells[], 1]); 
+          SetOptions[$CellContext`workCell$$, 
+            FontVariations -> {
+             "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]}, 
+            FontColor -> <|
+             "todo" -> GrayLevel[0.2], "done" -> 
+              RGBColor[
+               0.5254901960784314, 0.7450980392156863, 0.19607843137254902`], 
+              "pass" -> GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+            If[$CellContext`status$$ === "todo", None, 
+              GrayLevel[0.95]]])& ], {
+         "todo" -> Framed["TODO", FrameMargins -> None, FrameStyle -> None], 
+          "done" -> Framed["DONE", FrameMargins -> None, FrameStyle -> None], 
+          "pass" -> Framed["PASS", FrameMargins -> None, FrameStyle -> None]},
+          Method -> "Active", Appearance -> "Horizontal"]], 
+       DynamicModuleValues :> {}]], Background -> GrayLevel[1], FontWeight -> 
+     Bold, FontColor -> GrayLevel[0.2], FontSize -> 8, 
+     FontVariations -> {"StrikeThrough" -> False}, ShowStringCharacters -> 
+     False]}, {None, None}},
+ CellFrameLabelMargins->4,
+ DefaultNewCellStyle->"TodoItem_5",
+ CounterIncrements->"TodoItem_5",
+ CounterAssignments->{{"TodoItem_6", 0}},
+ FontFamily->"Hiragino Kaku Gothic Pro",
+ FontSize->9,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},
+ FontColor->GrayLevel[
+  0.2],ExpressionUUID->"af1f1400-a2a4-4c5b-a475-1435db08fdf9"],
+
+Cell[StyleData["TodoItem_6"],
+ CellFrame->{{2, 1}, {1, 1}},
+ CellMargins->{{130, 50}, {1, 0}},
+ ReturnCreatesNewCell->True,
+ StyleKeyMapping->{
+  "Tab" -> "TodoItem_7", "*" -> "TodoItem_7", "Backspace" -> "TodoItem_5", 
+   KeyEvent["Tab", Modifiers -> {Shift}] -> "TodoItem_5"},
+ CellGroupingRules->{"SectionGrouping", 15500},
+ CellFrameMargins->{{10, 5}, {5, 1}},
+ CellFrameStyle->{{
+    RGBColor[0.180514, 0.213809, 0.295109], 
+    GrayLevel[1, 0]}, {
+    GrayLevel[1, 0], 
+    GrayLevel[1, 0]}},
+ CellFrameLabels->{{None, 
+    Cell[
+     BoxData[
+      DynamicModuleBox[{$CellContext`status$$ = 
+        "todo", $CellContext`workCell$$}, 
+       InterpretationBox[
+        StyleBox[
+         GridBox[{{
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"todo"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"todo"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"TODO\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}], 
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"done"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"done"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"DONE\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}], 
+            GridBox[{{
+               RadioButtonBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"pass"}, DefaultBaseStyle -> 
+                "RadioButtonBar", Appearance -> Inherited], 
+               SetterBox[
+                
+                Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+                    EvaluationCell[], All, EvaluationCell]; Part[
+                    SelectedCells[], 1]); 
+                 SetOptions[$CellContext`workCell$$, 
+                   FontVariations -> {
+                    "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]},
+                    FontColor -> <|
+                    "todo" -> GrayLevel[0.2], "done" -> 
+                    RGBColor[
+                    0.5254901960784314, 0.7450980392156863, 
+                    0.19607843137254902`], "pass" -> 
+                    GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+                   If[$CellContext`status$$ === "todo", None, 
+                    GrayLevel[0.95]]])& ], {"pass"}, 
+                StyleBox[
+                 FrameBox[
+                 "\"PASS\"", FrameMargins -> None, FrameStyle -> None, 
+                  StripOnInput -> False], "RadioButtonBarLabel", StripOnInput -> 
+                 False], Appearance -> None, BaselinePosition -> Baseline]}}, 
+             AutoDelete -> False, 
+             GridBoxItemSize -> {
+              "Columns" -> {{Automatic}}, "Rows" -> {{Automatic}}}, 
+             ColumnAlignments -> Left, ColumnSpacings -> 0.3, 
+             BaselinePosition -> {1, 2}]}}, ColumnAlignments -> Left], 
+         "Deploy"], 
+        RadioButtonBar[
+         Dynamic[$CellContext`status$$, ($CellContext`status$$ = #; \
+$CellContext`workCell$$ = (SelectionMove[
+              EvaluationCell[], All, EvaluationCell]; Part[
+              SelectedCells[], 1]); 
+          SetOptions[$CellContext`workCell$$, 
+            FontVariations -> {
+             "StrikeThrough" -> Not[$CellContext`status$$ === "todo"]}, 
+            FontColor -> <|
+             "todo" -> GrayLevel[0.2], "done" -> 
+              RGBColor[
+               0.5254901960784314, 0.7450980392156863, 0.19607843137254902`], 
+              "pass" -> GrayLevel[0.75]|>[$CellContext`status$$], Background -> 
+            If[$CellContext`status$$ === "todo", None, 
+              GrayLevel[0.95]]])& ], {
+         "todo" -> Framed["TODO", FrameMargins -> None, FrameStyle -> None], 
+          "done" -> Framed["DONE", FrameMargins -> None, FrameStyle -> None], 
+          "pass" -> Framed["PASS", FrameMargins -> None, FrameStyle -> None]},
+          Method -> "Active", Appearance -> "Horizontal"]], 
+       DynamicModuleValues :> {}]], Background -> GrayLevel[1], FontWeight -> 
+     Bold, FontColor -> GrayLevel[0.2], FontSize -> 8, 
+     FontVariations -> {"StrikeThrough" -> False}, ShowStringCharacters -> 
+     False]}, {None, None}},
+ CellFrameLabelMargins->4,
+ DefaultNewCellStyle->"TodoItem_6",
+ CounterIncrements->"TodoItem_6",
+ CounterAssignments->{{"TodoItem_7", 0}},
+ FontFamily->"Hiragino Kaku Gothic Pro",
+ FontSize->8,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},
+ FontColor->GrayLevel[
+  0.2],ExpressionUUID->"b1cb83ef-9b53-462e-8fc9-2d1a3ac1b9d6"],
+
+Cell[StyleData["ChatInput"],
+ FontFamily->"Hiragino Kaku Gothic Pro",
+ FontSize->15,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},
+ FontColor->RGBColor[
+  0., 0., 0.],ExpressionUUID->"5ffd05e7-2b9f-9e4a-961e-37ed1c90c870"],
+
+Cell[StyleData["ChatOutput"],
+ MenuSortingValue->10000,
+ FontFamily->"Hiragino Kaku Gothic Pro",
+ FontSize->15,
+ FontWeight->"Light",
+ FontSlant->"Plain",
+ FontTracking->"Plain",
+ FontVariations->{"StrikeThrough"->False,
+ "Underline"->False},
+ FontColor->RGBColor[
+  0., 0., 0.],ExpressionUUID->"f3449ad5-ebf7-3746-8578-b65b47dfd85f"],
+
+Cell[StyleData["NotebookStatus", StyleDefinitions -> StyleData["Input"]],
+ MenuSortingValue->
+  10000,ExpressionUUID->"503f8535-2637-ab40-85a5-4a50d8366094"]
+},
+WindowSize->{773, 814},
+WindowMargins->{{Automatic, 167.5}, {Automatic, 109}},
+WindowStatusArea->"",
+FrontEndVersion->"14.3 for Microsoft Windows (64-bit) (2025\:5e747\:67088\
+\:65e5)",
+StyleDefinitions->Notebook[{
+   Cell[
+    StyleData[StyleDefinitions -> "PrivateStylesheetFormatting.nb"]]}, 
+  Visible -> False, FrontEndVersion -> 
+  "14.3 for Microsoft Windows (64-bit) (2025\:5e747\:67088\:65e5)", 
+  StyleDefinitions -> "PrivateStylesheetFormatting.nb"],
+ExpressionUUID->"d8787d64-c40e-461c-8c27-7ba9a8177abe"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[558, 20, 104, 0, 30, 49, 0, "StyleData", "StyleDefinitions", "",ExpressionUUID->"c1390a9f-0f2e-4c04-8b86-304eb592c993"],
+Cell[665, 22, 75, 0, 40, 20, 0, "StyleData", "All", "All",ExpressionUUID->"aada7546-59db-49b0-9409-e23e39277282"],
+Cell[743, 24, 270, 7, 119, 24, 0, "StyleData", "Title", "All",ExpressionUUID->"0c7479df-7594-4e2e-8afa-ea5967a72bdd"],
+Cell[1016, 33, 273, 7, 73, 27, 0, "StyleData", "Subtitle", "All",ExpressionUUID->"300d0f5f-a21d-47fe-b315-04de0f68db0d"],
+Cell[1292, 42, 272, 7, 89, 26, 0, "StyleData", "Chapter", "All",ExpressionUUID->"ed3768d1-c626-4ffc-93bb-e42ed3e6e857"],
+Cell[1567, 51, 272, 7, 73, 26, 0, "StyleData", "Section", "All",ExpressionUUID->"2c7ecc13-b56c-4548-8844-f580b360f4bc"],
+Cell[1842, 60, 275, 7, 58, 29, 0, "StyleData", "Subsection", "All",ExpressionUUID->"a38db8db-fbe3-4ec5-847d-896c744f358e"],
+Cell[2120, 69, 84, 0, 58, 29, 0, "StyleData", "Subsection", "All",ExpressionUUID->"00a018fd-2d87-43b1-bcb7-363a8d9446aa"],
+Cell[2207, 71, 277, 7, 56, 32, 0, "StyleData", "Subsubsection", "All",ExpressionUUID->"c09e7121-a94f-4811-9938-5f414abd3382"],
+Cell[2487, 80, 266, 7, 48, 23, 0, "StyleData", "Text", "All",ExpressionUUID->"506ff800-3ef7-44c5-bd0d-f5cd3b9490b3"],
+Cell[2756, 89, 78, 0, 68, 23, 0, "StyleData", "Code", "All",ExpressionUUID->"bc7bb6b9-eed8-410d-a764-db679198af43"],
+Cell[2837, 91, 272, 7, 83, 27, 0, "StyleData", "Abstract", "All",ExpressionUUID->"d02114c1-8c87-4bf6-afe7-2dcc55236e23"],
+Cell[3112, 100, 268, 7, 53, 25, 0, "StyleData", "Author", "All",ExpressionUUID->"ec72b3c4-dcec-44ac-b171-6747e77550cc"],
+Cell[3383, 109, 273, 7, 52, 30, 0, "StyleData", "Affiliation", "All",ExpressionUUID->"56110b39-c4f8-449d-aca8-5903c04d2bfb"],
+Cell[3659, 118, 266, 7, 49, 23, 0, "StyleData", "Item", "All",ExpressionUUID->"f4d49564-4969-4363-a474-6380431777e8"],
+Cell[3928, 127, 274, 7, 49, 31, 0, "StyleData", "ItemNumbered", "All",ExpressionUUID->"e0106445-85bd-498e-8346-54b19f4a0bad"],
+Cell[4205, 136, 275, 7, 42, 32, 0, "StyleData", "ItemParagraph", "All",ExpressionUUID->"8df10ac8-fc8f-4c3c-bf49-0070df0493df"],
+Cell[4483, 145, 269, 7, 44, 26, 0, "StyleData", "Subitem", "All",ExpressionUUID->"35542c86-6e21-4f78-ab05-5421b5d0972b"],
+Cell[4755, 154, 277, 7, 44, 34, 0, "StyleData", "SubitemNumbered", "All",ExpressionUUID->"f5636dfe-bedd-4e5a-bf31-d4f8dd918c23"],
+Cell[5035, 163, 278, 7, 41, 35, 0, "StyleData", "SubitemParagraph", "All",ExpressionUUID->"cb12ab91-658c-483c-80e8-6f87742a825d"],
+Cell[5316, 172, 272, 7, 43, 29, 0, "StyleData", "Subsubitem", "All",ExpressionUUID->"f5cc58fd-c25b-4b35-98e3-886c94636db8"],
+Cell[5591, 181, 280, 7, 43, 37, 0, "StyleData", "SubsubitemNumbered", "All",ExpressionUUID->"3645ade8-a296-400a-abec-8905c25bce8d"],
+Cell[5874, 190, 281, 7, 40, 38, 0, "StyleData", "SubsubitemParagraph", "All",ExpressionUUID->"79363295-5fac-4d18-aa68-2c6de12cae59"],
+Cell[6158, 199, 249, 7, 47, 24, 0, "StyleData", "Input", "All",ExpressionUUID->"dbb0085b-88cc-444a-a51d-aabd500f6cfb"],
+Cell[6410, 208, 276, 7, 66, 39, 0, "StyleData", "NaturalLanguageInput", "All",ExpressionUUID->"4a5525e0-37bf-4284-afa6-08c1acb4292f"],
+Cell[6689, 217, 291, 8, 49, 35, 0, "StyleData", "WolframAlphaLong", "All",ExpressionUUID->"b28b67f4-0568-4784-92f7-6fcd466933c9",
+ MenuSortingValue->10000],
+Cell[6983, 227, 292, 8, 49, 36, 0, "StyleData", "WolframAlphaShort", "All",ExpressionUUID->"a9fc74d4-7b45-45c5-b1a8-a12723ec52f6",
+ MenuSortingValue->10000],
+Cell[7278, 237, 297, 8, 49, 41, 0, "StyleData", "WolframAlphaShortInput", "All",ExpressionUUID->"5ac231b3-e6a2-4c91-b81b-906518d4b71d",
+ MenuSortingValue->10000],
+Cell[7578, 247, 9634, 197, 44, 29, 0, "StyleData", "TodoItem_1", "All",ExpressionUUID->"7546fc48-4a67-4de1-ac2b-050471143f77",
+ CounterIncrements->"TodoItem_1",
+ CounterAssignments->{{"TodoItem_2", 0}},
+ MenuCommandKey:>"a"],
+Cell[17215, 446, 9615, 196, 43, 29, 0, "StyleData", "TodoItem_2", "All",ExpressionUUID->"e0673c06-e891-43b3-bd3a-a7c822caddd0",
+ CounterIncrements->"TodoItem_2",
+ CounterAssignments->{{"TodoItem_3", 0}}],
+Cell[26833, 644, 9624, 196, 41, 29, 0, "StyleData", "TodoItem_3", "All",ExpressionUUID->"aa9aa3c7-138e-4c6a-b49c-065eca2634ef",
+ CounterIncrements->"TodoItem_3",
+ CounterAssignments->{{"TodoItem_4", 0}}],
+Cell[36460, 842, 9623, 196, 40, 29, 0, "StyleData", "TodoItem_4", "All",ExpressionUUID->"8978e097-e4c3-4c93-acdb-3bbb0bfb89b5",
+ CounterIncrements->"TodoItem_4",
+ CounterAssignments->{{"TodoItem_5", 0}}],
+Cell[46086, 1040, 9615, 196, 39, 29, 0, "StyleData", "TodoItem_5", "All",ExpressionUUID->"af1f1400-a2a4-4c5b-a475-1435db08fdf9",
+ CounterIncrements->"TodoItem_5",
+ CounterAssignments->{{"TodoItem_6", 0}}],
+Cell[55704, 1238, 9612, 196, 38, 29, 0, "StyleData", "TodoItem_6", "All",ExpressionUUID->"b1cb83ef-9b53-462e-8fc9-2d1a3ac1b9d6",
+ CounterIncrements->"TodoItem_6",
+ CounterAssignments->{{"TodoItem_7", 0}}],
+Cell[65319, 1436, 307, 9, 62, 28, 0, "StyleData", "ChatInput", "All",ExpressionUUID->"5ffd05e7-2b9f-9e4a-961e-37ed1c90c870"],
+Cell[65629, 1447, 334, 10, 74, 29, 0, "StyleData", "ChatOutput", "All",ExpressionUUID->"f3449ad5-ebf7-3746-8578-b65b47dfd85f",
+ MenuSortingValue->10000],
+Cell[65966, 1459, 157, 2, 47, 73, 0, "StyleData", "NotebookStatus", "All",ExpressionUUID->"503f8535-2637-ab40-85a5-4a50d8366094",
+ MenuSortingValue->10000]
+}
+]
+*)
+
