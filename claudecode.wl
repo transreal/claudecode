@@ -186,7 +186,7 @@ Quiet[Scan[
    "LLMGraphDAGInspect","LLMGraphDAGMarkFailed",
    "LLMGraphDAGSnapshot","LLMGraphDAGRestore","LLMGraphDAGListSnapshots","LLMGraphDAGPlot",
    "LLMGraphDAGMergeHistory","$ClaudeSnapshots",
-   "$ClaudeEvalMode","$ClaudeEvalHook","$ClaudeEvalAutoThreshold","$ClaudeEvalVerbose","$claudecodeVersion","$ClaudeEvalAutoLLMMinLength","$ClaudeEvalAutoLLMMinNewlines","$ClaudeEvalNaturalDispatch","$ClaudeEvalNaturalVerbose",
+   "$ClaudeEvalMode","$ClaudeEvalHook","$ClaudeEvalAutoThreshold","$ClaudeEvalVerbose","$claudecodeVersion","$ClaudeEvalAutoLLMMinLength","$ClaudeEvalAutoLLMMinNewlines","$ClaudeEvalNaturalDispatch","$ClaudeEvalNaturalVerbose","$ClaudeEvalNotebookContext",
    "iLLMGraphNode","iMakeBat","$iMediaMaxImageSize",
    "cleanOutput","stripANSI",
    "NotebookLLMGraphExtractThread","NotebookLLMGraphApplyThread",
@@ -216,6 +216,7 @@ Quiet[Scan[
    "$ClaudePackageKeywordMap",
    "$LLMGraphMaxConcurrency","$LLMGraphAutoStopThreshold",
    "Fallback", "AutoPrivate", "AutoEvaluate", "StartTime", "Timeout",
+   "Integrations",
    "TargetFiles", "TargetFunctions", "Mode", "DryRun", "Inherit",
    "License", "Model", "WebFetch", "WebSearch", "RepeatInterval", "PrivacySpec",
    "Keywords", "Title", "Refetch",
@@ -447,6 +448,13 @@ Fallback::usage =
   "True: Claude Code \:5229\:7528\:4e0d\:53ef\:6642\:306b\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:30e2\:30c7\:30eb\:306b\:81ea\:52d5\:5207\:66ff\:3002\n" <>
   "\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:5fdc\:3058\:3066\:5229\:7528\:53ef\:80fd\:306a\:30e2\:30c7\:30eb\:306e\:307f\:306b\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3059\:308b\:3002\n" <>
   "False (\:30c7\:30d5\:30a9\:30eb\:30c8): \:30a8\:30e9\:30fc\:3092\:305d\:306e\:307e\:307e\:8fd4\:3059\:3002";
+
+Integrations::usage =
+  "Integrations \:306f ClaudeQuery / ClaudeQueryAsync \:306e\:30aa\:30d7\:30b7\:30e7\:30f3\:3002\n" <>
+  "LM Studio /api/v1/chat \:306e MCP \:30b5\:30fc\:30d0\:30fc / plugin \:30ea\:30b9\:30c8\:3092\:6307\:5b9a\:3059\:308b\:3002\n" <>
+  "lmstudio \:30e2\:30c7\:30eb\:6642\:306e\:307f\:6709\:52b9\:3002\:4f8b: Integrations -> {\"mcp/exa\"}\:3002\n" <>
+  "Automatic (\:30c7\:30d5\:30a9\:30eb\:30c8): \$ClaudeLMStudioIntegrations \[RightArrow] SourceVault \:306e\:9806\:3067\:89e3\:6c7a\:3002\n" <>
+  "\:660e\:793a\:30ea\:30b9\:30c8\:3092\:6e21\:3059\:3068\:305d\:308c\:304c\:6700\:512a\:5148\:3055\:308c\:308b\:3002";
 
 $ClaudeDocRetryDelay::usage =
   "$ClaudeDocRetryDelay \:306f\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:306e\:30ea\:30c8\:30e9\:30a4\:5f85\:6a5f\:79d2\:6570\:3002\:30c7\:30d5\:30a9\:30eb\:30c8 60\:3002";
@@ -808,10 +816,14 @@ ClaudeWriteResponse::usage =
 
 ClaudeQueryAsync::usage =
   "ClaudeQueryAsync[prompt, callback, nb] \:306f Claude \:306b\:975e\:540c\:671f\:3067\:554f\:3044\:5408\:308f\:305b\:3001\:5b8c\:4e86\:6642\:306b callback[\:5fdc\:7b54\:6587\:5b57\:5217] \:3092\:547c\:3076\:3002\n" <>
+  "callback \:304c thunk (Function) \:306e\:30ea\:30b9\:30c8\:3092\:8fd4\:3055\:306a\:3044\:5358\:7d14\:306a\:95a2\:6570 (\:4f8b: Print) \:306e\:5834\:5408\:3001\n" <>
+  "\:5fdc\:7b54\:672c\:6587\:306f\:81ea\:52d5\:3067\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30bb\:30eb\:3068\:3057\:3066\:66f8\:304d\:8fbc\:307e\:308c\:308b (\:30de\:30fc\:30af\:30c0\:30a6\:30f3\:5c55\:958b)\:3002\n" <>
+  "callback \:304c thunk \:30ea\:30b9\:30c8\:3092\:8fd4\:3059\:5834\:5408\:306f\:305d\:308c\:3092\:5c0a\:91cd (\:81ea\:52d5\:30bb\:30eb\:5316\:306f\:3057\:306a\:3044)\:3002\n" <>
   "nb \:306f\:51fa\:529b\:5148 NotebookObject\:ff08\:30d1\:30ec\:30c3\:30c8\:304b\:3089\:547c\:3076\:5834\:5408\:306f iUserNotebook[] \:7b49\:3067\:89e3\:6c7a\:6e08\:307f\:306e\:3082\:306e\:ff09\:3002\n" <>
   "\:30ab\:30fc\:30cd\:30eb\:3092\:30d6\:30ed\:30c3\:30af\:3057\:306a\:3044\:3002WindowStatusArea \:306b\:7d4c\:904e\:6642\:9593\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
   "Job \:30b7\:30b9\:30c6\:30e0 (NBBeginJobAtEvalCell) \:3092\:4f7f\:7528\:3057\:3001iClaudeQueryImpl \:3068\:540c\:3058\:975e\:540c\:671f\:30d1\:30b9\:3092\:901a\:308b\:3002\n" <>
   "Options: Fallback -> False, Model -> Automatic, PrivacyLevel -> Automatic, Timeout -> Automatic\n" <>
+  "Integrations -> {\"mcp/exa\", ...} \:3067 LM Studio MCP \:3092\:6709\:52b9\:5316 (lmstudio \:30e2\:30c7\:30eb\:6642\:306e\:307f\:6709\:52b9)\:3002\n" <>
   "\:4f8b: ClaudeQueryAsync[\"Hello\", Print, EvaluationNotebook[]]\n" <>
   "    ClaudeQueryAsync[prompt, callback, nb, PrivacyLevel -> 1.0]";
 
@@ -819,6 +831,7 @@ ClaudeQuery::usage =
   "ClaudeQuery[prompt] \:306f Claude Code \:306b prompt \:3092\:9001\:308a\:3001\:5fdc\:7b54\:6587\:5b57\:5217\:3092\:8fd4\:3059\:ff08\:540c\:671f\:ff09\:3002\n" <>
   "ClaudeQuery[session, prompt] \:306f\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:3068\:76f4\:524d\:306e\:51fa\:529b/\:30a8\:30e9\:30fc\:3092\:8003\:616e\:3057\:3066\:56de\:7b54\:3059\:308b\:3002\n" <>
   "Options: WebSearch->True(\:30c7\:30d5\:30a9\:30eb\:30c8,\:7121\:6599), WebFetch->False(\:8ab2\:91d1\:3042\:308a,Fallback->True\:5fc5\:9808), Fallback, Timeout->Automatic(\:79d2)\n" <>
+  "Integrations -> {\"mcp/exa\", ...} \:3067 LM Studio MCP \:3092\:6709\:52b9\:5316 (lmstudio \:30e2\:30c7\:30eb\:6642\:306e\:307f)\:3002\n" <>
   "ClaudeQuery[{text, Image[...], File[path], ...}] \:3067\:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb\:5165\:529b\:3002\:753b\:50cf/PDF/\:97f3\:58f0\:3092 API \:306b\:76f4\:63a5\:9001\:4fe1\:3059\:308b\:3002";ClaudeMath::usage =
   "ClaudeMath[task] \:306f Mathematica \:30b3\:30fc\:30c9\:751f\:6210\:306b\:7279\:5316\:3057\:305f\:30d7\:30ed\:30f3\:30d7\:30c8\:3067 Claude \:3092\:547c\:3073\:51fa\:3059\:3002";ClaudeExtractCode::usage =
   "ClaudeExtractCode[response] \:306f Claude \:306e\:5fdc\:7b54\:304b\:3089\:6700\:521d\:306e ```mathematica \:30d6\:30ed\:30c3\:30af\:3092\:62bd\:51fa\:3059\:308b\:3002";ClaudeExtractAllCode::usage =
@@ -1394,6 +1407,12 @@ $ClaudeEvalVerbose::usage =
   "$ClaudeEvalVerbose \:3092 True \:306b\:3059\:308b\:3068\:3001dispatch \:304c fallback \:3059\:308b\:969b\:306b\:8a3a\:65ad\:60c5\:5831\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
   "\:65e2\:5b9a: False \[LongDash] Orchestration \:3068 Single \:306e\:9078\:629e\:3092\:9752\:3044\:6587\:5b57\:3067\:8868\:793a\:3002";
 
+$ClaudeEvalNotebookContext::usage =
+  "$ClaudeEvalNotebookContext \:306f dispatch \:7d4c\:8def (Orchestrator/PromptRouter) \:5411\:3051\:306b\n" <>
+  "\:6355\:6349\:3055\:308c\:305f\:73fe\:5728\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:6587\:5b57\:5217\:3002\n" <>
+  "\:5358\:767a\:7d4c\:8def\:3068\:540c\:69d8\:306b a=1234; text=\"...\" \:7b49\:306e Global \:5b9a\:7fa9\:3092 worker \:306b\:4f1d\:3048\:308b\:305f\:3081\:306b\:4f7f\:3046\:3002\n" <>
+  "\:65e2\:5b9a: \"\"\:3002";
+
 $ClaudeEvalAutoLLMMinLength::usage =
   "$ClaudeEvalAutoLLMMinLength \:306f \"Auto\" \:30e2\:30fc\:30c9\:3067 LLM planner \:3092\:8d77\:52d5\:3059\:308b\:6700\:5c0f\:6587\:5b57\:6570\:3002\n" <>
   "\:65e2\:5b9a: 500\:3002\:6587\:5b57\:6570\:672a\:6e80\:304b\:3064\:6539\:884c\:6570\:672a\:6e80\:306a\:3089 LLM planner \:3092\:30b9\:30ad\:30c3\:30d7\:3057\:3066\:5373 Single\:3002";
@@ -1414,7 +1433,10 @@ $ClaudeLMStudioIntegrations::usage =
   "\:4f8b 2: $ClaudeLMStudioIntegrations = {<|\"type\"->\"plugin\",\"id\"->\"mcp/exa\",\n" <>
   "                \"allowed_tools\"->{\"web_search_exa\"}|>};\n" <>
   "\:4f8b 3: $ClaudeLMStudioIntegrations = {<|\"type\"->\"ephemeral_mcp\",\n" <>
-  "                \"server_label\"->\"hf\",\"server_url\"->\"https://huggingface.co/mcp\"|>};";
+  "                \"server_label\"->\"hf\",\"server_url\"->\"https://huggingface.co/mcp\"|>};\n" <>
+  "\:89e3\:6c7a\:512a\:5148\:9806 (2026-06-01): \:547c\:3073\:51fa\:3057\:5074 Integrations \:30aa\:30d7\:30b7\:30e7\:30f3 (ClaudeQuery / \n" <>
+  "ClaudeQueryAsync) > \:3053\:306e\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570 > SourceVault model-registry \n" <>
+  "(SourceVaultSetModel[..., \"Integrations\" -> {...}])\:3002\:3069\:308c\:3082\:7121\:8a2d\:5b9a\:306a\:3089 MCP \:7121\:52b9\:3002";
 
 $ClaudeLMStudioAPIToken::usage =
   "$ClaudeLMStudioAPIToken \[LongDash] LM Studio \:3078\:306e Authorization Bearer \:30c8\:30fc\:30af\:30f3\:3002\n" <>
@@ -1434,6 +1456,38 @@ $ClaudeLMStudioIncludeToolTrace::usage =
   "$ClaudeLMStudioIncludeToolTrace \[LongDash] True \:306a\:3089\:3001iQueryLMStudioChat \:306e\:623b\:308a\:5024\:306b\n" <>
   "tool_call \:306e\:30c8\:30ec\:30fc\:30b9 (\:30c4\:30fc\:30eb\:540d\:3001\:5f15\:6570\:3001\:7d50\:679c\:306e\:5148\:982d) \:3092\:5148\:982d\:306b\:4ed8\:52a0\:3059\:308b\:3002\n" <>
   "\:30c7\:30d0\:30c3\:30b0\:7528\:3002\:901a\:5e38\:306f False \:63a8\:5968\:3002";
+
+$ClaudeLMStudioSamplingParams::usage =
+  "$ClaudeLMStudioSamplingParams \[LongDash] /api/v1/chat \:306b\:9001\:308b\:30b5\:30f3\:30d7\:30ea\:30f3\:30b0\:8a2d\:5b9a\:306e Association\:3002\n" <>
+  "Qwen3 \:7cfb thinking \:30e2\:30c7\:30eb\:306f\:7279\:5b9a\:30d1\:30e9\:30e1\:30fc\:30bf\:3067\:7121\:9650\:30eb\:30fc\:30d7 (\:540c\:4e00\:51fa\:529b\:306e\:7e70\:308a\:8fd4\:3057) \:306b\:9665\:308b\:65e2\:77e5\:30d0\:30b0\:304c\:3042\:308b\:3002\n" <>
+  "Qwen \:516c\:5f0f\:63a8\:5968 (thinking): temperature=0.6, top_p=0.95, top_k=20, min_p=0\:3002\n" <>
+  "greedy decoding (temperature=0) \:306f\:53cd\:5fa9\:3092\:8a98\:767a\:3059\:308b\:305f\:3081\:907f\:3051\:308b\:3002\n" <>
+  "\:65e2\:5b9a\:306f Qwen \:63a8\:5968\:5024\:3002None \:306a\:3089\:9001\:3089\:306a\:3044 (\:5f8c\:65b9\:4e92\:63db)\:3002\n" <>
+  "\:30ad\:30fc: \"temperature\", \"top_p\", \"top_k\", \"min_p\", \"repeat_penalty\"\:3002";
+
+$ClaudeLMStudioMaxOutputTokens::usage =
+  "$ClaudeLMStudioMaxOutputTokens \[LongDash] /api/v1/chat \:306e max_output_tokens\:3002\n" <>
+  "reasoning \:66b4\:8d70\:6642\:306e\:5b89\:5168\:5f01\:3002\:6574\:6570\:306a\:3089\:305d\:306e\:5024\:3092\:9001\:308a\:3001\:751f\:6210\:3092\:6253\:3061\:5207\:308b\:3002\n" <>
+  "None / Automatic \:306a\:3089\:9001\:3089\:306a\:3044\:3002context_length \:3088\:308a\:5341\:5206\:5c0f\:3055\:3044\:5024\:3092\:63a8\:5968\:3002\n" <>
+  "\:4f8b: 16000 (reasoning \:304c\:66b4\:8d70\:3057\:3066\:3082 message \:306b\:5230\:9054\:3055\:305b\:308b)\:3002";
+
+$ClaudeLMStudioReasoning::usage =
+  "$ClaudeLMStudioReasoning \[LongDash] /api/v1/chat \:306e reasoning \:8a2d\:5b9a\:3002\n" <>
+  "Automatic (\:30c7\:30d5\:30a9\:30eb\:30c8): /api/v1/models \:306e capabilities.reasoning.allowed_options \:3092\n" <>
+  "\:53d6\:5f97\:3057\:3001MCP \:5229\:7528\:524d\:63d0\:3067\:601d\:8003\:3092\:4fc3\:3059\:6700\:5f37\:5024 (high>medium>low>on) \:3092\:81ea\:52d5\:9078\:629e\:3059\:308b\:3002\n" <>
+  "\"off\"|\"on\"|\"low\"|\"medium\"|\"high\": \:30e6\:30fc\:30b6\:30fc\:660e\:793a\:6307\:5b9a (allowed_options \:306b\:542b\:307e\:308c\:308b\:3068\:304d\:306e\:307f\:9001\:308b)\:3002\n" <>
+  "None: reasoning \:3092\:9001\:3089\:306a\:3044 (\:5b8c\:5168\:5f8c\:65b9\:4e92\:63db)\:3002\n" <>
+  "\:30e2\:30c7\:30eb\:304c\:672a\:5bfe\:5fdc\:306e\:5024\:306f\:9001\:3089\:306a\:3044\:305f\:3081 LM Studio \:5074\:30a8\:30e9\:30fc\:306b\:306a\:3089\:306a\:3044\:3002\n" <>
+  "\:4f8b: qwen3.6 \:306f allowed_options=={\"off\",\"on\"} \:306a\:306e\:3067 Automatic \:3067 \"on\" \:304c\:9078\:3070\:308c\:308b\:3002";
+
+$ClaudeLMStudioToolNudge::usage =
+  "$ClaudeLMStudioToolNudge \[LongDash] LM Studio MCP (integrations) \:6709\:52b9\:6642\:306b\n" <>
+  "\:30d7\:30ed\:30f3\:30d7\:30c8\:5148\:982d\:306b\:524d\:7f6e\:3059\:308b\:30c4\:30fc\:30eb\:4f7f\:7528\:4fc3\:9032\:6587\:3002\n" <>
+  "LM Studio /api/v1/chat \:306b\:306f tool_choice \:5f37\:5236\:304c\:7121\:304f\:3001\:30c4\:30fc\:30eb\:547c\:3073\:51fa\:3057\:306f\n" <>
+  "\:30e2\:30c7\:30eb\:306e\:5224\:65ad\:306b\:4f9d\:5b58\:3059\:308b\:305f\:3081\:3001\:56fa\:6709\:540d\:8a5e\:30fb\:4e8b\:5b9f\:30fb\:6700\:65b0\:60c5\:5831\:306e\:88cf\:53d6\:308a\:306b\n" <>
+  "web \:691c\:7d22\:30c4\:30fc\:30eb\:3092\:7a4d\:6975\:7684\:306b\:4f7f\:3046\:3088\:3046\:4fc3\:3059\:3002\:65e2\:5b9a\:306f\:65e5\:82f1\:4f75\:8a18\:306e\:6c4e\:7528\:6587\:3002\n" <>
+  "None / \"\" \:306b\:3059\:308c\:3070\:524d\:7f6e\:3057\:306a\:3044\:3002\:30e6\:30fc\:30b6\:30fc\:304c\:6587\:5b57\:5217\:3092\:4ee3\:5165\:3057\:3066\:4e0a\:66f8\:304d\:53ef\:80fd\:3002\n" <>
+  "\:4f8b: $ClaudeLMStudioToolNudge = \"\:5fc5\:305a exa \:3067\:691c\:7d22\:3057\:3066\:304b\:3089\:7b54\:3048\:308b\:3053\:3068\:3002\";";
 
 
 (* ============================================================
@@ -1640,6 +1694,24 @@ If[!ValueQ[$ClaudeLMStudioAPIToken],         $ClaudeLMStudioAPIToken         = N
 If[!ValueQ[$ClaudeLMStudioContextLength],    $ClaudeLMStudioContextLength    = None];
 If[!ValueQ[$ClaudeLMStudioTemperature],      $ClaudeLMStudioTemperature      = Automatic];
 If[!ValueQ[$ClaudeLMStudioIncludeToolTrace], $ClaudeLMStudioIncludeToolTrace = False];
+If[!ValueQ[$ClaudeLMStudioReasoning],        $ClaudeLMStudioReasoning        = Automatic];
+If[!ValueQ[$ClaudeLMStudioSamplingParams],
+  (* Qwen \:516c\:5f0f\:63a8\:5968 (thinking \:30e2\:30c7\:30eb\:306e\:7121\:9650\:30eb\:30fc\:30d7\:56de\:907f) *)
+  $ClaudeLMStudioSamplingParams =
+    <|"temperature" -> 0.6, "top_p" -> 0.95, "top_k" -> 20, "min_p" -> 0.0|>];
+If[!ValueQ[$ClaudeLMStudioMaxOutputTokens],
+  (* reasoning \:66b4\:8d70\:6642\:306e\:5b89\:5168\:5f01\:3002context_length \:3088\:308a\:5341\:5206\:5c0f\:3055\:304f *)
+  $ClaudeLMStudioMaxOutputTokens = 16000];
+If[!ValueQ[$ClaudeLMStudioToolNudge],
+  $ClaudeLMStudioToolNudge =
+    "[\:30c4\:30fc\:30eb\:5229\:7528\:6307\:793a] \:3042\:306a\:305f\:306b\:306f web \:691c\:7d22\:30c4\:30fc\:30eb (exa \:7b49) \:304c\:5229\:7528\:53ef\:80fd\:3067\:3059\:3002" <>
+    "\:4eba\:540d\:30fb\:6240\:5c5e\:30fb\:5c02\:9580\:7528\:8a9e\:30fb\:6700\:65b0\:60c5\:5831\:306a\:3069\:3001\:81ea\:5206\:306e\:77e5\:8b58\:3060\:3051\:3067\:306f\:4e0d\:78ba\:5b9f\:306a\:4e8b\:67c4\:304c" <>
+    "\:542b\:307e\:308c\:308b\:5834\:5408\:306f\:3001\:5fc5\:305a\:5148\:306b web \:691c\:7d22\:30c4\:30fc\:30eb\:3067\:88cf\:53d6\:308a\:3057\:3066\:304b\:3089\:56de\:7b54\:3057\:3066\:304f\:3060\:3055\:3044\:3002" <>
+    "\:63a8\:6e2c\:3084\:5e7b\:899a\:3092\:907f\:3051\:3001\:691c\:7d22\:7d50\:679c\:306b\:57fa\:3065\:3044\:3066\:6b63\:78ba\:306b\:8a18\:8ff0\:3057\:3066\:304f\:3060\:3055\:3044\:3002\n" <>
+    "[Tool-use directive] You have web search tools (e.g. exa) available. " <>
+    "If the request involves names, affiliations, technical terms, or recent information " <>
+    "that you are not certain about, you MUST search the web first and base your answer on the results. " <>
+    "Avoid guessing or hallucinating.\n\n"];
 
 (* ClaudeCode \:8a73\:7d30\:30ed\:30b0\:51fa\:529b\:30d5\:30e9\:30b0 (\:30c7\:30a3\:30d5\:30a9\:30eb\:30c8 False: \:91cd\:5927\:30a8\:30e9\:30fc\:4ee5\:5916\:306e\:30ed\:30b0\:3092\:6291\:5236) *)
 If[$ClaudeVerbose =!= True, $ClaudeVerbose = False];
@@ -7396,6 +7468,174 @@ iResolveLMStudioAPIKey[customURL_String:""] :=
     If[StringQ[k] && k =!= "", k, "lm-studio"]
   ];
 
+(* ---- LM Studio MCP integrations \:89e3\:6c7a\:30d8\:30eb\:30d1 (2026-06-01 \:8ffd\:52a0) ----
+   LM Studio /api/v1/chat \:306e integrations \:30d1\:30e9\:30e1\:30fc\:30bf (MCP \:30b5\:30fc\:30d0\:30fc / plugin) \:3092
+   \:4e00\:5143\:7684\:306b\:89e3\:6c7a\:3059\:308b\:3002\:540c\:671f\:7d4c\:8def (iQueryLMStudioChat) \:3068\:975e\:540c\:671f\:7d4c\:8def
+   (iPrepareLMStudioMCPPS1) \:306e\:4e21\:65b9\:304c\:3053\:308c\:3092\:7d4c\:7531\:3057\:3001\:632f\:308b\:821e\:3044\:3092\:7d71\:4e00\:3059\:308b\:3002
+
+   \:89e3\:6c7a\:512a\:5148\:9806\:4f4d (\:5f8c\:65b9\:4e92\:63db\:3092\:7dad\:6301):
+     1. \:660e\:793a\:5f15\:6570 explicitInteg (Integrations \:30aa\:30d7\:30b7\:30e7\:30f3 / \:547c\:3073\:51fa\:3057\:5074\:6307\:5b9a)
+     2. \:52d5\:7684\:30b9\:30b3\:30fc\:30d7 override $iLMStudioIntegrationsOverride (ClaudeQuery/ClaudeQueryAsync \:7d4c\:7531)
+     3. \:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570 $ClaudeLMStudioIntegrations (\:65e2\:5b58\:30fb\:5f93\:6765\:901a\:308a\:3002\:65e2\:5b9a None)
+     4. SourceVault model-registry (SourceVaultModelIntegrations[\"lmstudio\", model])
+     5. None (integrations \:3092\:9001\:3089\:305a\:5f93\:6765\:306e MCP \:7121\:52b9\:52d5\:4f5c)
+
+   \:623b\:308a\:5024: integrations \:30ea\:30b9\:30c8 (\:9577\:3055 >= 1) \:307e\:305f\:306f None\:3002 *)
+
+(* \:52d5\:7684\:30b9\:30b3\:30fc\:30d7 override\:3002\:65e2\:5b9a\:306f None (\:672a\:6307\:5b9a)\:3002
+   ClaudeQuery / ClaudeQueryAsync \:304c Integrations \:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:53d7\:3051\:53d6\:3063\:305f\:3068\:304d
+   Block[{$iLMStudioIntegrationsOverride = ...}, ...] \:3067\:5305\:3093\:3067\:4e0b\:4f4d\:306b\:4f1d\:64ad\:3059\:308b\:3002
+   \:3053\:308c\:306b\:3088\:308a iStartFallbackAsync \:306e\:9577\:3044\:518d\:5e30\:30b7\:30b0\:30cd\:30c1\:30e3\:3092\:5909\:3048\:305a\:306b\:6e08\:3080\:3002 *)
+If[!ValueQ[$iLMStudioIntegrationsOverride], $iLMStudioIntegrationsOverride = None];
+
+iResolveLMStudioIntegrations[model_String, explicitInteg_:Automatic] :=
+  Module[{cand},
+    (* 1. \:660e\:793a\:5f15\:6570 *)
+    If[ListQ[explicitInteg] && Length[explicitInteg] > 0,
+      Return[explicitInteg]];
+    (* 2. \:52d5\:7684\:30b9\:30b3\:30fc\:30d7 override *)
+    If[ListQ[$iLMStudioIntegrationsOverride] &&
+       Length[$iLMStudioIntegrationsOverride] > 0,
+      Return[$iLMStudioIntegrationsOverride]];
+    (* 3. \:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570 (\:5f93\:6765\:901a\:308a) *)
+    If[ListQ[$ClaudeLMStudioIntegrations] &&
+       Length[$ClaudeLMStudioIntegrations] > 0,
+      Return[$ClaudeLMStudioIntegrations]];
+    (* 4. SourceVault model-registry (\:5b58\:5728\:3059\:308c\:3070) *)
+    If[Length[Names["SourceVault`SourceVaultModelIntegrations"]] > 0,
+      cand = Quiet @ Check[
+        SourceVault`SourceVaultModelIntegrations["lmstudio", model], None];
+      If[ListQ[cand] && Length[cand] > 0, Return[cand]]];
+    (* 5. \:672a\:8a2d\:5b9a *)
+    None
+  ];
+
+(* ---- LM Studio tool-use nudge \:524d\:7f6e\:30d8\:30eb\:30d1 (2026-06-01 \:8ffd\:52a0) ----
+   LM Studio /api/v1/chat \:306b\:306f tool_choice \:5f37\:5236\:304c\:7121\:304f\:3001\:30c4\:30fc\:30eb\:547c\:3073\:51fa\:3057\:306f
+   \:30e2\:30c7\:30eb\:306e\:5224\:65ad\:306b\:4f9d\:5b58\:3059\:308b\:3002integrations \:304c\:6709\:52b9\:306a\:3068\:304d\:3060\:3051\:3001
+   \:30d7\:30ed\:30f3\:30d7\:30c8\:5148\:982d\:306b $ClaudeLMStudioToolNudge \:3092\:524d\:7f6e\:3057\:3066 web \:691c\:7d22\:5229\:7528\:3092\:4fc3\:3059\:3002
+   integrations \:304c\:7121\:52b9 (None / \:7a7a) \:306a\:3089\:4f55\:3082\:3057\:306a\:3044 (\:5f93\:6765\:632f\:308b\:821e\:3044\:7dad\:6301)\:3002
+   nudge \:6587\:81ea\:4f53\:304c None / \"\" \:306a\:3089\:3082\:524d\:7f6e\:3057\:306a\:3044\:3002 *)
+iApplyLMStudioToolNudge[prompt_String, integrations_] :=
+  Module[{nudge},
+    If[!(ListQ[integrations] && Length[integrations] > 0), Return[prompt]];
+    nudge = $ClaudeLMStudioToolNudge;
+    If[!StringQ[nudge] || StringTrim[nudge] === "", Return[prompt]];
+    (* \:65e2\:306b\:524d\:7f6e\:6e08\:307f\:306a\:3089\:4e8c\:91cd\:4ed8\:52a0\:3057\:306a\:3044 (idempotent) *)
+    If[StringContainsQ[prompt, StringTake[nudge, UpTo[24]]], Return[prompt]];
+    nudge <> prompt
+  ];
+iApplyLMStudioToolNudge[prompt_, _] := prompt;
+
+(* ---- LM Studio \:30b5\:30f3\:30d7\:30ea\:30f3\:30b0 / max_output_tokens \:9069\:7528\:30d8\:30eb\:30d1 (2026-06-01 \:8ffd\:52a0) ----
+   Qwen3 \:7cfb thinking \:30e2\:30c7\:30eb\:306e\:7121\:9650\:30eb\:30fc\:30d7 (\:540c\:4e00\:51fa\:529b\:7e70\:308a\:8fd4\:3057) \:306f\:65e2\:77e5\:30d0\:30b0\:3002
+   Qwen \:516c\:5f0f\:63a8\:5968\:30b5\:30f3\:30d7\:30ea\:30f3\:30b0\:5024 (temperature=0.6 \:7b49) \:3067\:53cd\:5fa9\:3092\:6291\:5236\:3057\:3001
+   max_output_tokens \:3067\:4e07\:4e00\:306e\:66b4\:8d70\:3092\:6253\:3061\:5207\:3063\:3066 message \:306b\:5230\:9054\:3055\:305b\:308b\:3002
+   bodyAssoc (Association) \:3092\:53d7\:3051\:53d6\:308a\:3001\:30b5\:30f3\:30d7\:30ea\:30f3\:30b0\:30ad\:30fc\:3092\:88dc\:5b8c\:3057\:305f Association \:3092\:8fd4\:3059\:3002
+   \:65e2\:306b bodyAssoc \:306b\:5b58\:5728\:3059\:308b\:30ad\:30fc (\:4f8b: temperature) \:306f\:4e0a\:66f8\:304d\:3057\:306a\:3044 (\:660e\:793a\:8a2d\:5b9a\:5c0a\:91cd)\:3002 *)
+iApplyLMStudioSampling[bodyAssoc_Association] :=
+  Module[{out = bodyAssoc, sp, mot},
+    sp = $ClaudeLMStudioSamplingParams;
+    If[AssociationQ[sp],
+      KeyValueMap[
+        Function[{k, v},
+          (* \:65e2\:5b58\:30ad\:30fc\:306f\:4e0a\:66f8\:304d\:3057\:306a\:3044\:3002\:6570\:5024\:306e\:307f\:8a31\:53ef\:3002 *)
+          If[!KeyExistsQ[out, k] && NumericQ[v],
+            out = Append[out, k -> v]]],
+        sp]];
+    mot = $ClaudeLMStudioMaxOutputTokens;
+    If[IntegerQ[mot] && mot > 0 && !KeyExistsQ[out, "max_output_tokens"],
+      out = Append[out, "max_output_tokens" -> mot]];
+    out
+  ];
+iApplyLMStudioSampling[x_] := x;
+
+(* ---- LM Studio reasoning \:89e3\:6c7a\:30d8\:30eb\:30d1 (2026-06-01 \:8ffd\:52a0) ----
+   GET /api/v1/models \:304b\:3089\:30e2\:30c7\:30eb\:306e capabilities.reasoning.allowed_options /
+   default \:3092\:53d6\:5f97\:3057\:3001/api/v1/chat \:306b\:9001\:308b reasoning \:5024\:3092\:6c7a\:5b9a\:3059\:308b\:3002
+   LM Studio \:516c\:5f0f\:4ed5\:69d8\:6e96\:62e0 (\:61b6\:6e2c\:3092\:6392\:3057\:3001\:5b9f\:969b\:306e\:30b5\:30dd\:30fc\:30c8\:5024\:306e\:307f\:9001\:308b)\:3002
+
+   $ClaudeLMStudioReasoning \:306e\:610f\:5473:
+   - Automatic (\:65e2\:5b9a): MCP \:5229\:7528\:6642\:306f reasoning \:304c\:4e8b\:5b9f\:4e0a\:5fc5\:8981\:306a\:305f\:3081\:3001
+     allowed_options \:304b\:3089\:300c\:6700\:3082\:601d\:8003\:3092\:4fc3\:3059\:5bfe\:5fdc\:5024\:300d (high>medium>low>on \:306e\:9806) \:3092\:9078\:3076\:3002
+     allowed_options \:304c\:53d6\:5f97\:3067\:304d\:306a\:3051\:308c\:3070 reasoning \:3092\:9001\:3089\:306a\:3044\:3002
+   - "off"/"on"/"low"/"medium"/"high": \:30e6\:30fc\:30b6\:30fc\:660e\:793a\:6307\:5b9a\:3002
+     allowed_options \:306b\:542b\:307e\:308c\:308b\:3068\:304d\:306e\:307f\:9001\:308b (\:975e\:5bfe\:5fdc\:5024\:306f\:9001\:3089\:305a\:30a8\:30e9\:30fc\:56de\:907f)\:3002
+   - None: \:9001\:3089\:306a\:3044 (\:5b8c\:5168\:5f8c\:65b9\:4e92\:63db)\:3002
+
+   \:623b\:308a\:5024: \:9001\:308b\:3079\:304d reasoning \:6587\:5b57\:5217\:3001\:307e\:305f\:306f None (\:9001\:3089\:306a\:3044)\:3002 *)
+
+(* \:30e2\:30c7\:30eb\:306e reasoning capability \:30ad\:30e3\:30c3\:30b7\:30e5 (\:30bb\:30c3\:30b7\:30e7\:30f3\:5185) *)
+If[!ValueQ[$iLMStudioModelReasoningCache], $iLMStudioModelReasoningCache = <||>];
+
+iGetLMStudioModelReasoning[model_String, baseURL_String] :=
+  Module[{cacheKey, modelsURL, apiKey, resp, body, json, models, entry,
+          caps, reasoning},
+    cacheKey = baseURL <> "|" <> model;
+    If[KeyExistsQ[$iLMStudioModelReasoningCache, cacheKey],
+      Return[$iLMStudioModelReasoningCache[cacheKey]]];
+    (* /api/v1/models \:306e URL \:3092\:7d44\:307f\:7acb\:3066\:308b (baseURL \:306f /api/v1/chat \:5f62\:5f0f\:306e\:53ef\:80fd\:6027\:3042\:308a) *)
+    modelsURL = StringReplace[baseURL,
+      {"/api/v1/chat" -> "/api/v1/models",
+       "/v1/chat/completions" -> "/api/v1/models"}];
+    If[!StringContainsQ[modelsURL, "/api/v1/models"],
+      modelsURL = StringTrim[baseURL, "/"] <> "/api/v1/models"];
+    apiKey = iResolveLMStudioAPIKey[
+      StringReplace[baseURL, {"/api/v1/chat" -> "", "/v1/chat/completions" -> ""}]];
+    resp = Quiet @ Check[
+      URLRead[HTTPRequest[modelsURL,
+        <|Method -> "GET",
+          "Headers" -> {"Authorization" -> "Bearer " <> apiKey}|>],
+        TimeConstraint -> 15], $Failed];
+    If[Head[resp] =!= HTTPResponse || resp["StatusCode"] =!= 200,
+      $iLMStudioModelReasoningCache[cacheKey] = None;
+      Return[None]];
+    body = resp["Body"];
+    json = Quiet @ Check[Developer`ReadRawJSONString[body], $Failed];
+    If[!AssociationQ[json],
+      json = Quiet @ Check[ImportString[body, "RawJSON"], $Failed]];
+    If[!AssociationQ[json],
+      $iLMStudioModelReasoningCache[cacheKey] = None; Return[None]];
+    models = Lookup[json, "models", {}];
+    If[!ListQ[models],
+      $iLMStudioModelReasoningCache[cacheKey] = None; Return[None]];
+    (* key \:5b8c\:5168\:4e00\:81f4\:30a8\:30f3\:30c8\:30ea\:3092\:63a2\:3059 *)
+    entry = FirstCase[models,
+      e_ /; AssociationQ[e] && Lookup[e, "key", ""] === model :> e, None];
+    If[!AssociationQ[entry],
+      $iLMStudioModelReasoningCache[cacheKey] = None; Return[None]];
+    caps = Lookup[entry, "capabilities", <||>];
+    reasoning = If[AssociationQ[caps], Lookup[caps, "reasoning", None], None];
+    (* reasoning = <|"allowed_options"->{...},"default"->"..."|> \:307e\:305f\:306f None *)
+    $iLMStudioModelReasoningCache[cacheKey] = reasoning;
+    reasoning
+  ];
+iGetLMStudioModelReasoning[___] := None;
+
+(* \:9001\:308b\:3079\:304d reasoning \:5024\:3092\:6c7a\:5b9a *)
+iResolveLMStudioReasoning[model_String, baseURL_String] :=
+  Module[{setting, cap, allowed, pick},
+    setting = $ClaudeLMStudioReasoning;
+    (* None \:306a\:3089\:9001\:3089\:306a\:3044 (\:5b8c\:5168\:5f8c\:65b9\:4e92\:63db) *)
+    If[setting === None, Return[None]];
+    cap = iGetLMStudioModelReasoning[model, baseURL];
+    allowed = If[AssociationQ[cap], Lookup[cap, "allowed_options", {}], {}];
+    (* capability \:304c\:53d6\:5f97\:3067\:304d\:306a\:3044\:5834\:5408 *)
+    If[!(ListQ[allowed] && Length[allowed] > 0),
+      (* \:660e\:793a\:6307\:5b9a\:304c\:6587\:5b57\:5217\:306a\:3089\:305d\:306e\:307e\:307e\:9001\:308b (\:30e6\:30fc\:30b6\:30fc\:8cac\:4efb)\:3001
+         Automatic \:306a\:3089\:5b89\:5168\:5074\:306b\:9001\:3089\:306a\:3044 *)
+      Return[If[StringQ[setting] &&
+        MemberQ[{"off","low","medium","high","on"}, setting], setting, None]]];
+    (* \:660e\:793a\:6307\:5b9a: allowed \:306b\:542b\:307e\:308c\:308c\:3070\:9001\:308b\:3001\:306a\:3051\:308c\:3070\:9001\:3089\:306a\:3044 *)
+    If[StringQ[setting] && MemberQ[{"off","low","medium","high","on"}, setting],
+      Return[If[MemberQ[allowed, setting], setting, None]]];
+    (* Automatic: MCP \:5229\:7528\:524d\:63d0\:3067\:601d\:8003\:3092\:4fc3\:3059\:6700\:5f37\:5024\:3092\:9078\:3076 *)
+    pick = FirstCase[{"high","medium","low","on"},
+      v_ /; MemberQ[allowed, v] :> v, None];
+    pick
+  ];
+iResolveLMStudioReasoning[___] := None;
+
 (* ---- \:30bb\:30c3\:30b7\:30e7\:30f3\:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb\:89e3\:6c7a\:30d8\:30eb\:30d1 ----
    Model \:30aa\:30d7\:30b7\:30e7\:30f3\:304c Automatic (\:307e\:305f\:306f\:975e\:30ea\:30b9\:30c8) \:306e\:3068\:304d\:3001
    $ClaudeModel \:304c {provider, model, url} \:5f62\:5f0f\:306e\:30ea\:30b9\:30c8\:306a\:3089\:3001\:305d\:3061\:3089\:3092\:4f7f\:3046\:3002
@@ -7491,11 +7731,13 @@ iQueryLMStudioChat[model_String, prompt_String, baseURL_String,
                    opts:OptionsPattern[]] :=
   Module[{url, integrations, sysPrompt, ctxLen, temp, token, includeTrace,
           timeout, debugRaw, bodyAssoc, body, req, resp, statusCode, bodyStr,
-          json, outputs, msgs, traces, msgText, prefix},
+          json, outputs, msgs, traces, msgText, prefix, reasoning},
     url = iEnsureLMStudioV1ChatPath[
       If[baseURL =!= "", baseURL, "http://localhost:1234"]];
     integrations = OptionValue["Integrations"];
-    If[integrations === Automatic, integrations = $ClaudeLMStudioIntegrations];
+    (* 2026-06-01: integrations \:89e3\:6c7a\:3092\:4e00\:5143\:5316\:3002Automatic \:306a\:3089
+       override / \:30b0\:30ed\:30fc\:30d0\:30eb / SourceVault \:306e\:9806\:3067\:89e3\:6c7a\:3001\:660e\:793a\:30ea\:30b9\:30c8\:306f\:5c0a\:91cd\:3002 *)
+    integrations = iResolveLMStudioIntegrations[model, integrations];
     sysPrompt = OptionValue["SystemPrompt"];
     ctxLen = OptionValue["ContextLength"];
     If[ctxLen === Automatic, ctxLen = $ClaudeLMStudioContextLength];
@@ -7531,9 +7773,10 @@ iQueryLMStudioChat[model_String, prompt_String, baseURL_String,
       timeout = If[NumericQ[$ClaudeTimeout] && $ClaudeTimeout > 0,
                    $ClaudeTimeout, 300]];
     debugRaw = TrueQ[OptionValue["DebugReturnRaw"]];
+    (* 2026-06-01: integrations \:6709\:52b9\:6642\:306f tool-use nudge \:3092\:524d\:7f6e *)
     bodyAssoc = <|
       "model" -> model,
-      "input" -> prompt|>;
+      "input" -> iApplyLMStudioToolNudge[prompt, integrations]|>;
     (* context_length \:306f\:6574\:6570\:304c\:6307\:5b9a\:3055\:308c\:305f\:3068\:304d\:306e\:307f\:9001\:4fe1\:3002
        \:9001\:4fe1\:3057\:306a\:3044\:3068 LM Studio UI \:306e\:8a2d\:5b9a\:5024\:304c\:305d\:306e\:307e\:307e\:4f7f\:308f\:308c\:308b\:3002 *)
     If[IntegerQ[ctxLen] && ctxLen > 0,
@@ -7544,11 +7787,18 @@ iQueryLMStudioChat[model_String, prompt_String, baseURL_String,
       bodyAssoc = Join[bodyAssoc, <|"temperature" -> temp|>]];
     If[ListQ[integrations] && Length[integrations] > 0,
       bodyAssoc = Join[bodyAssoc, <|"integrations" -> integrations|>]];
+    (* 2026-06-01: reasoning \:5024\:306f /api/v1/models \:306e capabilities \:304b\:3089\:6c7a\:5b9a (\:30a8\:30e9\:30fc\:56de\:907f)\:3002 *)
+    reasoning = iResolveLMStudioReasoning[model, url];
+    If[StringQ[reasoning] && MemberQ[{"off","low","medium","high","on"}, reasoning],
+      bodyAssoc = Join[bodyAssoc, <|"reasoning" -> reasoning|>]];
+    (* 2026-06-01: Qwen3 thinking \:7121\:9650\:30eb\:30fc\:30d7\:5bfe\:7b56 (\:30b5\:30f3\:30d7\:30ea\:30f3\:30b0 + max_output_tokens) *)
+    bodyAssoc = iApplyLMStudioSampling[bodyAssoc];
+    (* 2026-06-01: \:65e5\:672c\:8a9e\:30a8\:30f3\:30b3\:30fc\:30c7\:30a3\:30f3\:30b0\:5805\:7262\:5316\:306e\:305f\:3081 WriteRawJSONString \:3092\:7b2c\:4e00\:9078\:629e\:3002 *)
     body = Quiet @ Check[
-      ExportString[bodyAssoc, "RawJSON", "Compact" -> True], $Failed];
+      Developer`WriteRawJSONString[bodyAssoc, "Compact" -> True], $Failed];
     If[!StringQ[body],
       body = Quiet @ Check[
-        Developer`WriteRawJSONString[bodyAssoc, "Compact" -> True], $Failed]];
+        ExportString[bodyAssoc, "RawJSON", "Compact" -> True], $Failed]];
     If[!StringQ[body],
       Return[iL[
         "Error: LM Studio /api/v1/chat body \:30a8\:30f3\:30b3\:30fc\:30c9\:5931\:6557",
@@ -7645,7 +7895,9 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
           integrations, useMCP, sysPrompt, ctxLen, temp, token,
           effectiveURL, resolvedKey},
     integrations = OptionValue["Integrations"];
-    If[integrations === Automatic, integrations = $ClaudeLMStudioIntegrations];
+    (* 2026-06-01: integrations \:89e3\:6c7a\:3092\:4e00\:5143\:5316 (iResolveLMStudioIntegrations)\:3002
+       useMCP \:5224\:5b9a\:306b\:4f7f\:3046\:3002lmstudio \:4ee5\:5916\:306e provider \:3067\:306f\:7121\:8996\:3055\:308c\:308b\:3002 *)
+    integrations = iResolveLMStudioIntegrations[model, integrations];
     sysPrompt = OptionValue["SystemPrompt"];
     ctxLen = OptionValue["ContextLength"];
     temp = OptionValue["Temperature"];
@@ -7969,7 +8221,7 @@ iReadAnthropicResult[outFile_String, errFile_String] :=
 iPrepareLMStudioMCPPS1[apiKey_String, model_String, prompt_String,
     url_String:"http://localhost:1234/api/v1/chat", psTimeout_Integer:300] :=
   Module[{psExe, tmpDir, bodyFile, outFile, errFile, ps1File, strm, script,
-          bodyAssoc, bodyText, integrations, ctxLen, temp},
+          bodyAssoc, bodyText, integrations, ctxLen, temp, reasoning},
     psExe = iResolvePowerShellExe[];
     If[!StringQ[psExe], Return[$Failed]];
     tmpDir = iMakeTempDir[];
@@ -7979,7 +8231,10 @@ iPrepareLMStudioMCPPS1[apiKey_String, model_String, prompt_String,
     errFile    = FileNameJoin[{tmpDir, "error.txt"}];
     ps1File    = FileNameJoin[{tmpDir, "fb_lmsmcp.ps1"}];
     (* body \:5168\:4f53\:3092 Mathematica \:5074\:3067\:69cb\:7bc9 *)
-    integrations = $ClaudeLMStudioIntegrations;
+    (* 2026-06-01: integrations \:89e3\:6c7a\:3092\:4e00\:5143\:5316\:3002\:5f93\:6765\:306f $ClaudeLMStudioIntegrations \:306e\:307f\:3092
+       \:53c2\:7167\:3057\:3066\:3044\:305f\:305f\:3081\:3001override / SourceVault \:7d4c\:7531\:3067 exa \:3092\:6709\:52b9\:5316\:3067\:304d\:306a\:304b\:3063\:305f\:3002
+       iResolveLMStudioIntegrations \:306f override > \:30b0\:30ed\:30fc\:30d0\:30eb > SourceVault \:306e\:9806\:3067\:89e3\:6c7a\:3059\:308b\:3002 *)
+    integrations = iResolveLMStudioIntegrations[model, Automatic];
     ctxLen       = $ClaudeLMStudioContextLength;
     (* Stage 9 P1.5: SourceVault \:304c\:30e2\:30c7\:30eb\:5225 ContextLength \:3092\:7ba1\:7406\:3002
        \:30b0\:30ed\:30fc\:30d0\:30eb\:304c\:672a\:8a2d\:5b9a\:306a\:3089 SourceVault \:30ec\:30b8\:30b9\:30c8\:30ea\:3092\:53c2\:7167\:3002 *)
@@ -7989,18 +8244,34 @@ iPrepareLMStudioMCPPS1[apiKey_String, model_String, prompt_String,
           SourceVault`SourceVaultModelContextLength["lmstudio", model], None]},
           If[IntegerQ[svCtx] && svCtx > 0, ctxLen = svCtx]]]];
     temp         = $ClaudeLMStudioTemperature;
-    bodyAssoc = <|"model" -> model, "input" -> iHoistThinkPrefix[prompt]|>;
+    (* 2026-06-01: integrations \:6709\:52b9\:6642\:306f tool-use nudge \:3092\:524d\:7f6e\:3057\:3066 web \:691c\:7d22\:5229\:7528\:3092\:4fc3\:3059\:3002 *)
+    bodyAssoc = <|"model" -> model,
+      "input" -> iHoistThinkPrefix[iApplyLMStudioToolNudge[prompt, integrations]]|>;
     If[ListQ[integrations] && Length[integrations] > 0,
       bodyAssoc = Join[bodyAssoc, <|"integrations" -> integrations|>]];
     If[IntegerQ[ctxLen] && ctxLen > 0,
       bodyAssoc = Join[bodyAssoc, <|"context_length" -> ctxLen|>]];
     If[NumericQ[temp],
       bodyAssoc = Join[bodyAssoc, <|"temperature" -> temp|>]];
+    (* 2026-06-01: reasoning \:5024\:306f /api/v1/models \:306e capabilities \:304b\:3089\:6c7a\:5b9a\:3059\:308b\:3002
+       \:30e2\:30c7\:30eb\:306e allowed_options \:306b\:542b\:307e\:308c\:308b\:5024\:306e\:307f\:9001\:308b\:305f\:3081\:30a8\:30e9\:30fc\:306b\:306a\:3089\:306a\:3044\:3002
+       MCP \:5229\:7528\:6642\:306f reasoning \:304c\:4e8b\:5b9f\:4e0a\:5fc5\:8981\:306a\:305f\:3081\:3001Automatic \:3067\:6700\:5f37\:5024\:3092\:81ea\:52d5\:9078\:629e\:3002 *)
+    reasoning = iResolveLMStudioReasoning[model, url];
+    If[StringQ[reasoning] && MemberQ[{"off","low","medium","high","on"}, reasoning],
+      bodyAssoc = Join[bodyAssoc, <|"reasoning" -> reasoning|>]];
+    (* 2026-06-01: Qwen3 thinking \:7121\:9650\:30eb\:30fc\:30d7\:5bfe\:7b56\:3002Qwen \:63a8\:5968\:30b5\:30f3\:30d7\:30ea\:30f3\:30b0\:5024\:3068
+       max_output_tokens \:5b89\:5168\:5f01\:3092\:88dc\:5b8c (\:65e2\:5b58\:30ad\:30fc\:306f\:5c0a\:91cd)\:3002 *)
+    bodyAssoc = iApplyLMStudioSampling[bodyAssoc];
+    (* 2026-06-01: JSON \:751f\:6210\:306f Developer`WriteRawJSONString \:3092\:7b2c\:4e00\:9078\:629e\:3068\:3059\:308b\:3002
+       ExportString["RawJSON"] \:306f\:65e5\:672c\:8a9e\:7b49\:306e\:975e ASCII \:6587\:5b57\:3092\:751f\:306e\:307e\:307e\:51fa\:529b\:3057\:3001
+       \:74b0\:5883\:306b\:3088\:3063\:3066\:30a8\:30f3\:30b3\:30fc\:30c7\:30a3\:30f3\:30b0\:304c\:5d29\:308c\:308b (mojibake) \:3053\:3068\:304c\:3042\:308b\:3002
+       WriteRawJSONString \:306f\:975e ASCII \:3092 \\uXXXX \:306b\:30a8\:30b9\:30b1\:30fc\:30d7\:3057 ASCII-safe \:306a JSON \:3092\:751f\:6210\:3059\:308b\:305f\:3081\:3001
+       LM Studio \:3078\:306e\:9001\:4fe1\:5185\:5bb9\:304c\:78ba\:5b9f\:306b\:6b63\:3057\:304f\:306a\:308b\:3002trap28 \:306e\:9001\:4fe1\:5074\:5bfe\:7b56\:3002 *)
     bodyText = Quiet @ Check[
-      ExportString[bodyAssoc, "RawJSON", "Compact" -> True], $Failed];
+      Developer`WriteRawJSONString[bodyAssoc, "Compact" -> True], $Failed];
     If[!StringQ[bodyText],
       bodyText = Quiet @ Check[
-        Developer`WriteRawJSONString[bodyAssoc, "Compact" -> True], $Failed]];
+        ExportString[bodyAssoc, "RawJSON", "Compact" -> True], $Failed]];
     If[!StringQ[bodyText], Return[$Failed]];
     (* body.json \:66f8\:304d\:51fa\:3057 *)
     strm = OpenWrite[bodyFile, BinaryFormat -> True];
@@ -9341,10 +9612,14 @@ Options[ClaudeQueryAsync] = {
   Fallback -> False,
   Model -> Automatic,
   PrivacyLevel -> Automatic,
-  Timeout -> Automatic
+  Timeout -> Automatic,
+  Integrations -> Automatic
 };
 
 ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPattern[]] :=
+  Block[{$iLMStudioIntegrationsOverride =
+      With[{ig = OptionValue[Integrations]},
+        If[ListQ[ig] && Length[ig] > 0, ig, $iLMStudioIntegrationsOverride]]},
   Module[{modelSpec, privLevel, useFallback, availModels, useClaudeCode,
           jobId, wrappedCallback, accessLevel, norm, hasMedia, mediaFiles},
     modelSpec = iResolveDefaultModelSpec[OptionValue[Model]];
@@ -9417,17 +9692,45 @@ ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPatter
        \:691c\:51fa\:3057 silent\:30e2\:30fc\:30c9\:3067\:8fd4\:3057\:305f\:5024) \:306e\:5834\:5408\:306f NBAccess Job \:64cd\:4f5c\:3092
        \:4e00\:62ec\:3067\:30d0\:30a4\:30d1\:30b9\:3057\:3001userCb \:3060\:3051\:3092\:4f8b\:5916\:5b89\:5168\:306b\:547c\:3076\:3002\:3053\:308c\:306b\:3088\:308a hidden notebook \:4e0a\:3067\:306e
        FrontEnd \:64cd\:4f5c (SelectionMove / NotebookWrite / CellTags \:691c\:7d22) \:306e\:30cf\:30f3\:30b0\:3092\:907f\:3051\:308b\:3002 *)
+    (* userCb \:306e\:623b\:308a\:5024\:304c thunk \:30ea\:30b9\:30c8 (List \:4e14\:3064\:5404\:8981\:7d20 Function) \:304b\:5224\:5b9a\:3059\:308b\:30d8\:30eb\:30d1 *)
     wrappedCallback = With[{nb2 = nb, jid = jobId, userCb = callback},
       Function[response,
-        Module[{},
+        Module[{userRet, thunks},
+          (* userCb \:3092\:547c\:3073\:3001\:623b\:308a\:5024\:3092\:53d6\:5f97\:3002Print \:7b49\:5358\:7d14 callback \:306f
+             \:526f\:4f5c\:7528\:306e\:307f\:3067 thunk \:30ea\:30b9\:30c8\:3092\:8fd4\:3055\:306a\:3044\:305f\:3081\:3001
+             \:305d\:306e\:5834\:5408\:306f\:5fdc\:7b54\:672c\:6587\:3092\:81ea\:52d5\:3067\:30bb\:30eb\:5316\:3059\:308b (usage \:306e Print \:4f8b\:3068\:6574\:5408)\:3002
+             callback \:304c\:65e2\:306b thunk \:30ea\:30b9\:30c8\:3092\:8fd4\:3059\:9ad8\:5ea6\:306a\:5229\:7528\:306f\:305d\:306e\:307e\:307e\:5c0a\:91cd (\:4e8c\:91cd\:66f8\:304d\:8fbc\:307f\:56de\:907f)\:3002 *)
           If[jid =!= "",
             NBAccess`NBJobMoveToAnchor[jid];
             $iJobActiveNb = nb2;
-            Quiet @ Check[userCb[response], Null];
+            (* userCb \:306e\:623b\:308a\:5024\:3092\:53d6\:5f97\:3059\:308b\:304c\:3001Print \:7b49\:5358\:7d14 callback \:306e
+               \:526f\:4f5c\:7528\:51fa\:529b (\:30e1\:30c3\:30bb\:30fc\:30b8\:9818\:57df\:3078\:306e\:51fa\:529b) \:306f\:6291\:5236\:3059\:308b\:3002
+               \:30bb\:30eb\:5316\:306f\:4e0b\:8a18\:306e thunk \:5b9f\:884c\:3067\:884c\:3046\:305f\:3081\:3001userCb \:81ea\:8eab\:306e Print \:51fa\:529b\:306f\:4e0d\:8981\:3002
+               \:9ad8\:5ea6\:306a callback (thunk \:30ea\:30b9\:30c8\:3092\:8fd4\:3059) \:306f Print \:3092\:4f7f\:308f\:306a\:3044\:305f\:3081\:5f71\:97ff\:306a\:3057\:3002 *)
+            userRet = Block[{Print}, Print[___] := Null;
+              Quiet @ Check[userCb[response], Null]];
+            (* thunk \:30ea\:30b9\:30c8\:5224\:5b9a: List \:4e14\:3064\:5168\:8981\:7d20\:304c Function (\:7a7a\:30ea\:30b9\:30c8\:306f\:9664\:304f) *)
+            thunks = If[ListQ[userRet] && Length[userRet] > 0 &&
+                AllTrue[userRet, (Head[#] === Function) &],
+              userRet,
+              (* \:5358\:7d14 callback: \:5fdc\:7b54\:3092\:30bb\:30eb\:5316\:3059\:308b thunk \:30ea\:30b9\:30c8\:3092\:751f\:6210 *)
+              If[StringQ[response] && StringTrim[response] =!= "",
+                iWriteQueryResponseQueued[nb2, response],
+                {}]];
             NBAccess`NBJobResetSlotWritten[jid, 1];
             $iJobActiveNb = None;
-            NBAccess`NBEndJob[jid],
-            (* silent\:30e2\:30fc\:30c9: NBAccess Job \:30d1\:30b9\:3092\:30b9\:30ad\:30c3\:30d7 *)
+            (* thunk \:30ea\:30b9\:30c8\:304c\:3042\:308c\:3070\:30a2\:30f3\:30ab\:30fc\:4f4d\:7f6e\:306b\:9806\:6b21\:66f8\:304d\:8fbc\:307f *)
+            If[ListQ[thunks] && Length[thunks] > 0,
+              NBAccess`NBJobMoveToAnchor[jid];
+              $iJobActiveNb = nb2;
+              Scan[Function[thk, Quiet @ Check[thk[], Null]], thunks];
+              NBAccess`NBJobResetSlotWritten[jid, 1];
+              $iJobActiveNb = None];
+            NBAccess`NBEndJob[jid];
+            (* \:81ea\:524d\:3067 thunk \:5b9f\:884c\:6e08\:307f\:3002\:547c\:3073\:51fa\:3057\:5074 (fallback 8544 / \:672c\:6d41 polling) \:304c
+               \:623b\:308a\:5024\:3092 Scan \:3059\:308b\:8a2d\:8a08\:306e\:305f\:3081\:3001\:7a7a\:30ea\:30b9\:30c8\:3092\:8fd4\:3057\:3066\:4e8c\:91cd\:5b9f\:884c\:3092\:9632\:3050\:3002 *)
+            {},
+            (* silent\:30e2\:30fc\:30c9: NBAccess Job \:30d1\:30b9\:3092\:30b9\:30ad\:30c3\:30d7\:3002\:30bb\:30eb\:5316\:306f\:3057\:306a\:3044 *)
             Quiet @ Check[userCb[response], Null]
           ]
         ]]
@@ -9470,6 +9773,7 @@ ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPatter
         $iJobActiveNb = None;
         NBAccess`NBEndJob[jobId]
     ];
+  ]
   ];
 
 (* ============================================================
@@ -9547,7 +9851,7 @@ ClaudeQueryAsyncSilent[prompt_String, callback_,
     ClaudeQueryAsync[prompt, safeCallback, nb, opts]
   ];
 
-Options[ClaudeQuery] = {Fallback -> False, WebFetch -> False, WebSearch -> True, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False, AutoEvaluate -> False, Timeout -> Automatic};
+Options[ClaudeQuery] = {Fallback -> False, WebFetch -> False, WebSearch -> True, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False, AutoEvaluate -> False, Timeout -> Automatic, Integrations -> Automatic};
 
 (* ClaudeQuery \:5185\:90e8\:5b9f\:88c5\:ff08\:975e\:540c\:671f\:ff09 *)
 iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFetch_,
@@ -9715,7 +10019,11 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
     ]];  (* \:8ffd\:52a0 ] \:306f Phase 28 fix \:3067\:8ffd\:52a0\:3057\:305f Module \:306e\:9589\:3058 *)
   ];
 
-ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
+ClaudeQuery[prompt_, opts:OptionsPattern[]] := Block[
+  {$iLMStudioIntegrationsOverride =
+     With[{ig = OptionValue[Integrations]},
+       If[ListQ[ig] && Length[ig] > 0, ig, $iLMStudioIntegrationsOverride]]},
+  (
     iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = True;
@@ -9742,7 +10050,7 @@ ClaudeQuery[prompt_, opts:OptionsPattern[]] := (
         TrueQ[OptionValue[Fallback]], TrueQ[OptionValue[WebFetch]],
         mdl, ps, ap, ae, tmo, {}, {}]
     ]
-  ]]);
+  ]])];
 
 (* \:30bb\:30c3\:30b7\:30e7\:30f3\:5bfe\:5fdc\:7248 ClaudeQuery\:ff08\:975e\:540c\:671f\:30fb\:5c65\:6b74\:4fdd\:5b58\:4ed8\:304d\:ff09 *)
 ClaudeQuery[session_Association, prompt_, opts:OptionsPattern[]] := (
@@ -10852,7 +11160,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
   ];
 
 (* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:7248 ClaudeEval\:ff08\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:8fd4\:3055\:306a\:3044\:ff09 *)
-Options[ClaudeEval] = {Fallback -> False, AutoEvaluate -> True, StartTime -> Now, WebFetch -> Automatic, WebSearch -> True, RepeatInterval -> None, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False, Timeout -> Automatic};
+Options[ClaudeEval] = {Fallback -> False, AutoEvaluate -> True, StartTime -> Now, WebFetch -> Automatic, WebSearch -> True, RepeatInterval -> None, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False, Timeout -> Automatic, ReferenceText -> None};
 
 (* StartTime \:30b9\:30b1\:30b8\:30e5\:30fc\:30ea\:30f3\:30b0\:30d8\:30eb\:30d1\:30fc:
    \:958b\:59cb\:6642\:523b\:304c\:672a\:6765\:306a\:3089 SessionSubmit + ScheduledTask \:3067\:9045\:5ef6\:5b9f\:884c\:3001
@@ -11052,6 +11360,7 @@ $iClaudeEvalNotDispatched = Unique["$iClaudeEvalNotDispatched"];
    ============================================================ *)
 
 If[!ValueQ[$ClaudeEvalNaturalDispatch], $ClaudeEvalNaturalDispatch = True];
+If[!ValueQ[$ClaudeEvalNotebookContext], $ClaudeEvalNotebookContext = ""];
 
 $ClaudeEvalNaturalDispatch::usage =
   "$ClaudeEvalNaturalDispatch \:306f Step 4 \:8ffd\:52a0\:306e\:81ea\:7136\:8a00\:8a9e\:30eb\:30fc\:30bf\:30fc\:306e\:6709\:52b9\:30d5\:30e9\:30b0\:3002\n" <>
@@ -11360,6 +11669,31 @@ iClaudeEvalTryPromptRouter[_, _] := $iClaudeEvalNotDispatched;
 iClaudeEvalTryDispatch[task_, optsList_List] :=
   Module[{mode, hook, stVal, riVal, stIsFuture, result, verbose,
           naturalResult, prRouterResult, prDispatch, prPreempts},
+    (* ──────────────────────────────────────────────────────────
+       Notebook-context bridge (A 実装, 2026-06-01):
+       Orchestrator / PromptRouter 経路は worker を CLI サブプロセスで
+       起動するため Global` コンテキスト (a=1234; text="..." 等) を共有
+       できない。単発経路 (iClaudeEvalImpl) は NBGetContext で同コンテキ
+       ストを取り込めているのに、dispatch 経路では取り込まれていなかった。
+       ここで EvaluationNotebook[] のコンテキストを一度だけ文字列として
+       捕捉し、Orchestrator の planner/worker prompt builder が読み取れる
+       共有変数に格納する。文字列なので CLI worker へも安全に伝播する。
+       task 文字列自体は汚さない (PromptRouter のルーティング判定を保つ)。
+       仕様 claude_multi_agent_orchestration_spec §5「共有状態は明示的
+       artifact で受け渡す」に準拠 (変数値を artifact 化して渡す)。 *)
+    If[StringQ[task],
+      Quiet @ Check[
+        Module[{nbCtx, nbObj, afterIdx},
+          nbObj   = EvaluationNotebook[];
+          afterIdx = Quiet @ Check[Length[Cells[nbObj]], 0];
+          If[!IntegerQ[afterIdx], afterIdx = 0];
+          nbCtx = If[Head[nbObj] === NotebookObject,
+            iCaptureNotebookContext[nbObj, afterIdx], ""];
+          If[!StringQ[nbCtx], nbCtx = ""];
+          (* Orchestrator が読む共有変数にセット (未ロードでも害なし) *)
+          ClaudeCode`$ClaudeEvalNotebookContext = nbCtx;
+        ],
+        (ClaudeCode`$ClaudeEvalNotebookContext = ""; Null)]];
     (* Order 2: SourceVault PromptRouter dispatch.
        prDispatch =!= False means the PromptRouter path is considered;
        the final activity gate (ClaudeOrchestrator loaded, etc.) lives

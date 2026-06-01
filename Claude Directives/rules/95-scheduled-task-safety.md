@@ -149,22 +149,6 @@ ParallelSubmit[heavyComputation[data]]
 
 ドキュメント（`api.md` / `user_manual.md` / `README.md`）に独自 ScheduledTask を使用している旨と理由を**明記**すること。
 
-### 事例: 承認後コード実行を ParallelSubmit に送ってはいけない (2026-05-31)
-
-`ClaudeEval` の非同期実行 (`$ClaudeRuntimeAsyncExecution`) で、**生成コードを別カーネル (`ParallelSubmit`) に送る判定 `iShouldExecuteAsync` が FrontEnd 依存式を弾けず**、`NotebookImport` を含む式を別カーネルに送って**フロントエンドと相互待ちデッドロック**を起こした (Mathematica 強制終了が必要になる)。`SystemOpen` の Deny override 承認後にこの経路に入りやすい。
-
-**原因の連鎖**:
-- 生成式が `SourceVaultExtractNotebookTodos` → `iExtractTodoCellsFromPath` → **`NotebookImport[path, style -> "Cell"]`** (FrontEnd 依存) を呼ぶ。
-- `iShouldExecuteAsync` のローカル文脈判定 `$iLocalContextSymbols` に **`NotebookImport` が登録されておらず**、別カーネル送出と判定された。
-- サブカーネルに FrontEnd が無いため `NotebookImport` が返らずデッドロック (セクション B「ParallelSubmit は FrontEnd 通信を一切行わない純粋計算専用」に抵触)。
-
-**対策**:
-1. **FrontEnd / OS / 外部プロセス依存シンボルを async 判定の除外リストに必ず含める**。`$iLocalContextSymbols` に `NotebookImport`, `Import`, `Export`, `SystemOpen`, `Run`, `RunProcess`, `StartProcess`, `CreateProcess`, `FrontEndExecute` 系, ダイアログ系等を登録し、これらを含む式は同期実行 (メインカーネル) に落とす。
-2. **二重防御**: `$NBDenyHeads` / `$NBApprovalHeads` に属する head を含む式は無条件で async 化しない (承認を経た式は性質上 FE/ローカル文脈依存が濃い)。
-3. 同期実行でも `NBExecuteHeldExpr` の `TimeConstrained` で保護され、最悪でもタイムアウトでカーネルが回復する (ParallelSubmit デッドロックのような強制終了は不要になる)。
-
-**判定原則**: コード実行を別カーネルに送ってよいのは、その式が **FrontEnd・OS・パッケージ private context のいずれにも依存しない純粋計算**であると確認できるときだけ。判定が曖昧なら同期実行に倒す。
-
 ---
 
 ## C. 複数 LLM 呼び出しの非同期処理: LLMGraph DAG フレームワーク
@@ -503,6 +487,40 @@ If[!MatchQ[proc, _ProcessObject],
 ```
 
 ただし sync fallback は **そのフェーズ全体がフロントエンドをブロック**する点に注意。LMStudio worker が並列に複数 sync で動くと、各 worker の同期 HTTP 呼び出しの間カーネルが専有される。
+
+### LM Studio MCP (exa 等) の integrations 解決順位 (2026-06-01)
+
+LM Studio は `/api/v1/chat` エンドポイントに `integrations` を渡すことで MCP サーバー (exa, playwright 等) のツールを呼べる。LM Studio 公式仕様:
+
+- `integrations` が **plugin 形式** (`{"mcp/exa"}` のような mcp.json 登録済み ID) の場合、LM Studio 側 Server Settings で **「Allow calling servers from mcp.json」を有効化**しておく必要がある。
+- `integrations` が **ephemeral_mcp 形式** (`{<|"type"->"ephemeral_mcp","server_label"->...,"server_url"->...|>}`) の場合、**「Allow per-request MCPs」を有効化**しておく必要がある。
+- レスポンスは `output` 配列に `type: "message"` / `"tool_call"` / `"reasoning"` を含む。claudecode の解析 (`iQueryLMStudioChat` / `iPrepareLMStudioMCPPS1` の PS1) は `message` を結合し `tool_call` をトレースとして扱う。
+
+claudecode の `iResolveLMStudioIntegrations[model, explicitInteg]` が integrations を **一元的に**解決する。同期経路 (`iQueryLMStudioChat` / `iQueryViaAPI`) も非同期経路 (`iPrepareLMStudioMCPPS1`、これが `DocExpandIdea` → `ClaudeQueryAsync` → `iStartFallbackAsync` の本流) も、すべてこのヘルパーを通る。**解決優先順位**:
+
+1. 呼び出し側 `Integrations` オプション (`ClaudeQuery` / `ClaudeQueryAsync` / `NBCellTransformWithLLM` / `$NBLLMQueryFunc`)
+2. 動的スコープ `ClaudeCode\`Private\`$iLMStudioIntegrationsOverride` (上記オプションが Block で設定)
+3. グローバル変数 `$ClaudeLMStudioIntegrations` (既定 `None`・後方互換)
+4. SourceVault model-registry (`SourceVault\`SourceVaultModelIntegrations["lmstudio", model]`)
+5. `None` → integrations を送らず従来の MCP 無効動作
+
+**MCP ID (`mcp/exa` 等) を `.wl` にハードコードしない** (CLAUDE.md ルール2)。永続化したい場合は SourceVault に登録する:
+
+```mathematica
+(* lmstudio モデルに exa を恒久的に紐づける (再起動後も有効) *)
+SourceVaultSetModel["lmstudio", "local-heavy", "qwen/qwen3-coder-30b",
+  "Integrations" -> {"mcp/exa"}, "ContextLength" -> 32000]
+
+(* 一時的にこのクエリだけ exa を使う *)
+ClaudeQuery["最新の○○を調べて", Integrations -> {"mcp/exa"}]
+
+(* セッション全体 (従来方式・後方互換) *)
+$ClaudeLMStudioIntegrations = {"mcp/exa"};
+```
+
+`DocExpandIdea` (documentation.wl) のような **integrations を明示的に渡す口がない既存 UX** からは、SourceVault 永続化 (順位 4) かグローバル変数 (順位 3) で有効化する。`NBCellTransformWithLLM` 経由でも `Integrations` オプションを pass-through するので、新しい呼び出し側は明示指定もできる。
+
+**context_length の注意**: MCP 使用時はツール定義がプロンプトに乗るため LM Studio 推奨は 16000+ (exa なら 32000 程度)。`SourceVaultSetModel[..., "ContextLength" -> n]` または `$ClaudeLMStudioContextLength` で設定する。整数指定が無い場合は LM Studio UI のモデル設定値がそのまま使われる。
 
 ---
 
