@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  /* === Mathematica-style deck font palette (Hiragino) — see twocolumn template for notes === */
+  :root {
+    --f-body:"Hiragino Kaku Gothic ProN W3","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",sans-serif;
+    --f-medium:"Hiragino Kaku Gothic Std W4","Hiragino Kaku Gothic StdN W4","Yu Gothic UI",sans-serif;
+    --f-head:"Hiragino Kaku Gothic ProN W6","Hiragino Kaku Gothic StdN W8","Hiragino Kaku Gothic ProN","Yu Gothic UI",sans-serif;
+    --f-mincho:"Hiragino Mincho ProN W3","Hiragino Mincho ProN","Yu Mincho",serif;
+  }
+  html, body { width:1920px; height:1080px; overflow:hidden; background:#fff;
+    font-family:var(--f-body); font-weight:normal; color:#1c1c1c; -webkit-font-smoothing:antialiased; }
+  b, strong, .ld { font-family:var(--f-medium); font-weight:normal; }
+  code { font-family:var(--f-medium); font-style:normal; color:#444; }
+  .slide { position:relative; width:1920px; height:1080px; padding:64px 110px 52px; }
+
+  .title { font-family:var(--f-head); font-size:60px; color:#e07c14; letter-spacing:1px; }
+  .bullets { margin-top:40px; }
+
+  /* === Bullet hierarchy (single column, mirrors the reference deck) ===
+     b1 maroon(large) > b2 maroon(small) > b3 GRAY(sub-sub) ; p1/p2/p3 = no-bullet paragraph continuation. */
+  .b1 { position:relative; padding-left:48px; margin-top:26px; font-family:var(--f-medium); font-size:38px; line-height:1.3; }
+  .b1:first-child { margin-top:0; }
+  .b1::before { content:""; position:absolute; left:4px; top:17px; width:20px; height:20px; background:#9d1c1c; }
+  .b2 { position:relative; padding-left:46px; margin-left:54px; margin-top:16px; font-size:32px; line-height:1.32; color:#232323; }
+  .b2::before { content:""; position:absolute; left:6px; top:13px; width:17px; height:17px; background:#9d1c1c; }
+  .b3 { position:relative; padding-left:42px; margin-left:108px; margin-top:13px; font-size:28px; line-height:1.32; color:#3a3a3a; }
+  .b3::before { content:""; position:absolute; left:5px; top:12px; width:15px; height:15px; background:#8a8a8a; }
+  .p1 { margin-left:48px; margin-top:8px; font-size:32px; line-height:1.4; color:#4a4a4a; }    /* paragraph under b1 */
+  .p2 { margin-left:100px; margin-top:7px; font-size:30px; line-height:1.4; color:#4a4a4a; }   /* paragraph under b2 */
+  .sep { font-family:var(--f-medium); color:#b06a16; padding:0 2px; }
+  .mono { color:#3a3a3a; }
+</style>
+</head>
+<body>
+  <div class="slide">
+    <div class="title">Source-First ingest ― 取り込みパイプライン</div>
+
+    <div class="bullets">
+      <div class="b1">各 source を5フェーズで取り込む</div>
+      <div class="b2"><span class="ld">Resolve</span><span class="sep">―</span>URL / arXiv ID / ローカルパスを正規化し source ID を決定</div>
+      <div class="b2"><span class="ld">Fetch</span><span class="sep">―</span>raw bytes を <code>raw/by-hash/sha256-&lt;hash&gt;</code> に保存（内容ハッシュで dedup）</div>
+      <div class="b3">同一内容は <code>AlreadyCurrent</code> として再取得しない<!-- サブサブアイテム --></div>
+      <div class="b2"><span class="ld">Parse</span><span class="sep">―</span>ページ単位でテキスト抽出（PDF は3種の OCR backend で fallback）</div>
+      <div class="b2"><span class="ld">Index</span><span class="sep">―</span><code>meta/sources</code>・<code>meta/snapshots</code> に deterministic な JSON で記録</div>
+      <div class="b2"><span class="ld">Hook</span><span class="sep">―</span>NBAccess hook (P1〜P4) 経由で ClaudeAttach / Orchestrator に通知</div>
+
+      <div class="b1">版固定と再現性</div>
+      <div class="p1">生成物の metadata には、必ず pinned version と snapshot hash を残す。<!-- ノーブレットの付加説明 --></div>
+      <div class="b2"><span class="ld">Floating source</span><span class="sep">―</span><code>arXiv:2401.01234</code>（最新版を指す）</div>
+      <div class="b2"><span class="ld">Pinned source</span><span class="sep">―</span><code>arXiv:2401.01234v2</code>（この生成・再現に使った厳密な版）</div>
+    </div>
+  </div>
+</body>
+</html>

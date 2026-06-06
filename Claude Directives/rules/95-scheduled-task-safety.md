@@ -8,15 +8,18 @@ paths:
 ## 概要
 
 claudecode は ScheduledTask ベースの非同期処理基盤を提供する。
-パッケージ開発時には以下の **5 つの制約・パターン** を厳守すること:
+パッケージ開発時には以下の **7 つの制約・パターン** を厳守すること:
 
 - **A. ScheduledTask 内からの禁止操作**: ClaudeEval / ContinueEval のチェーン内から ClaudeQuery 等を呼ばない
 - **B. 独自 ScheduledTask 作成の禁止**: UI ポーリング用の ScheduledTask を自前で作らず claudecode の共有基盤に委ねる
 - **C. LLMGraph DAG フレームワーク**: 複数 LLM 呼び出しは `LLMGraphDAGCreate` で組み立てる
 - **D. deferred sync runState 仕様**: async ノード handler の戻り値仕様。`RunProcess[..., "Process"]` は無効、`StartProcess` を使う。sync API と async API を混在させない。
 - **E. ローカル LLM の async 化**: LMStudio 等は `iStartFallbackAsync` + 「ダミー proc」パターンで deferred sync に変換する
+- **F. Front End API の不可視性**: scheduled task コンテキストで `EvaluationNotebook[]` 等が値を返さない。Memory Registry Fallback で対処する
+- **G. desktop 副作用操作の無反応**: `SystemOpen` 等は scheduled task / SessionSubmit で silent no-op。メインカーネル評価機会 (`Button` 本体等) で直接実行する
 
 新規パッケージで非同期 LLM 処理を書く前に、最低限 **節 D, E** に目を通すこと。
+desktop 操作 (`SystemOpen` 等) を承認後に実行する設計なら **節 G** を必ず読むこと。
 RunProcess の罠や Pause ループのフロントエンドブロックなど、
 動作実証なしには気づきにくい落とし穴がまとめてある。
 
@@ -618,6 +621,77 @@ iAutoDetectRefs[] :=
 
 ---
 
+## G. SystemOpen 等の desktop/Front End 副作用操作が scheduled task で無反応
+
+### 背景
+
+節 F は「`EvaluationNotebook[]` 等が scheduled task コンテキストで**値を返さない**」問題だった。これとは別軸で、**OS / デスクトップへの副作用を起こす操作は、scheduled task / SessionSubmit コンテキストで呼ぶと「エラーも出さず、ただ何も起きない」**(silent no-op)。`EvaluationNotebook` のような「値が取れない」ではなく「副作用が発火しない」点が異なる。
+
+代表は `SystemOpen` (フォルダ・ファイルを OS 既定アプリで開く)。他に `NotebookOpen` で新規ウィンドウを開く、`SystemOpen` 経由のブラウザ起動なども同様の傾向。
+
+### 切り分け診断 (2026-06-03 実機確認)
+
+`SystemOpen[$TemporaryDirectory]` を 3 つのコンテキストで実行:
+
+| コンテキスト | 結果 |
+|---|---|
+| A. メインカーネルのトップレベル評価 (`SystemOpen[dir]` を直接セル評価) | **フォルダが開く** |
+| B. `SessionSubmit[SystemOpen[dir]]` | 開かない (silent no-op) |
+| C. `SessionSubmit[ScheduledTask[SystemOpen[dir], {0.3, 1}]]` | 開かない (silent no-op) |
+
+**結論**: `SystemOpen` はメインカーネルのトップレベル評価機会でのみ効く。`SessionSubmit` / `ScheduledTask` / 共有 polling tick (`$iSharedPollingTask` 経由、内部的に `SessionSubmit` 相当) の評価コンテキストでは効かない。
+
+### 影響を受けた実例
+
+ClaudeEval の承認 UI で「フォルダを開いて」を承認したのに開かない問題 (2026-06-03)。承認ボタンが
+
+```mathematica
+SessionSubmit[ScheduledTask[
+  Module[{...}, ClaudeRuntime`ClaudeApproveProposal[rid]; ...], {0.3, 1}]]
+```
+
+の中で `ClaudeApproveProposal` → … → `SystemOpen` を呼んでいたため、上記 C と同じコンテキストになり silent no-op していた。診断するまで「queue が回らない」「wrapper が未定義」など複数の別仮説に惑わされたが、真因はこのコンテキスト依存だった。
+
+### 推奨パターン: desktop 操作はメインカーネル評価機会で実行する
+
+承認ボタン等の `Button` 本体は `Method -> "Queued"` のとき**フロントエンドのキューイング評価 = メインカーネル評価機会**で走る。重い処理を非同期化する `SessionSubmit` で全体を包む前に、**軽い desktop 操作 (`SystemOpen` 等) だけはボタン本体 (= メイン評価) で直接実行する**。
+
+```mathematica
+(* ✅ 正しい: desktop 操作はボタン本体 (メイン評価) で直接実行 *)
+Button[label,
+  If[!decided, decided = True;
+    Module[{deskInfo, handledHere = False},
+      (* パス検証だけを行い (SystemOpen は呼ばない)、検証 OK なら... *)
+      deskInfo = NBAccess`NBResolveDesktopActionPath[heldExpr, accessSpec];
+      If[TrueQ[deskInfo["Validated"]],
+        SystemOpen[deskInfo["Path"]];   (* ← ボタン本体 = メイン評価で効く *)
+        handledHere = True];
+      (* desktop 操作でない / 重い処理は従来通り非同期へ *)
+      If[!handledHere,
+        SessionSubmit[ScheduledTask[heavyWork[], {0.3, 1}]]]]],
+  Method -> "Queued"]
+
+(* ❌ 誤り: SystemOpen を SessionSubmit/ScheduledTask の中で呼ぶ → silent no-op *)
+Button[label,
+  SessionSubmit[ScheduledTask[SystemOpen[path], {0.3, 1}]],
+  Method -> "Queued"]
+```
+
+### 設計上のチェック
+
+- `SystemOpen` / `NotebookOpen` (新規ウィンドウ) 等の **OS・デスクトップ副作用操作**を、`SessionSubmit` / `ScheduledTask` / 共有 polling tick の中で呼んでいないか
+- 呼んでいるなら、その操作だけを **メインカーネル評価機会** (`Button` 本体の `Method -> "Queued"`、またはトップレベルセル評価) に移す
+- 非同期化が必要な「重い処理」と、メイン評価が必要な「desktop 副作用」を**分離**する。前者は `SessionSubmit`、後者はボタン本体で直接
+
+### 注意点
+
+- この制約は「FrontEnd ブロックを避けるため非同期化する」という一般方針と緊張する。`SystemOpen` は一瞬で終わるので、ボタン本体で直接呼んでもブロックは無視できる。重い処理 (大量 `NotebookWrite` 等) だけ非同期化する。
+- 共有 polling tick (`ClaudeRegisterPollingTick`) も内部的に `SessionSubmit` 相当で走るため、tick から `SystemOpen` を呼んでも効かない。`"RunInline" -> True` で同期実行しても共有 `ScheduledTask` の評価コンテキスト自体が SessionSubmit 系なので、desktop 操作は依然効かない (検証時に注意)。
+
+詳細は `skills/system-open` を参照。
+
+---
+
 ## デバッグのチェックリスト
 
 非同期処理が「最初は応答するがすぐフリーズする」「動的評価の放棄ダイアログが出る」場合:
@@ -629,3 +703,4 @@ iAutoDetectRefs[] :=
 5. **sync API を非同期化していないか** → 節 D。sync API は sync のまま、非同期は別 API として `xxxAsync` を提供する。
 6. **`$ClaudeModel` がリスト形式 (LMStudio) のとき、CLI 経路の bat に流していないか** → 節 E のモデル振り分けパターンを実装する。
 7. **hook が `EvaluationNotebook[]` 経由で TaggingRule / SelectionMove を取って空が返ってくる** → 節 F 違反。Memory Registry Fallback を導入する。
+8. **`SystemOpen` 等の desktop 操作を承認後に呼んでいるのに「エラーも出ず何も起きない」** → 節 G。`SessionSubmit` / `ScheduledTask` / 共有 tick の中で呼んでいる。`Button` 本体 (`Method -> "Queued"` = メイン評価) で直接実行するよう分離する。

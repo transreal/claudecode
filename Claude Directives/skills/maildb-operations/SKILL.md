@@ -1,224 +1,109 @@
 ---
 name: maildb-operations
-description: Use when the user asks about email, mail, メール, 〆切, deadline, 受信, inbox, 返信, reply, IMAP, or references a mail database (univ, hu2022, apple, etc.). Covers all maildb.wl API usage patterns. Critical: showMails/searchFromMails require a MailDBObject, NOT a string mbox name. Always use mailEnsureLoaded for cached loading. Security routing: メールの privacy > 0.5 は $ClaudePrivateModel に分配。
+description: Use when the user asks about email, mail, メール, 〆切, deadline, 受信, inbox, 返信, reply, IMAP, or references a mail database (univ, hu2022, apple, etc.). 正準システムは SourceVault mail サブシステム (SourceVault_maildb.wl, context SourceVault`): SourceVaultMailEnsureLoaded / SourceVaultMailView / SourceVaultSearchMailSnapshots / SourceVaultInferMailDerivedBatch / SourceVaultMailFetchNew / SourceVaultRegisterMailAccount。旧 maildb.wl は maildb_legacy.wl に改名され参照専用 (mailEnsureLoaded/showMails/searchFromMails/mailAskLLM は新規コードで使わない)。Security routing: privacy > 0.5 は $ClaudePrivateModel (ローカル LLM)。
 ---
 
-# maildb パッケージ操作ガイド
+# メール操作ガイド (正準: SourceVault mail サブシステム)
 
-## セキュリティルーティング（最重要）
+## ⛔ 最重要: メールは SourceVault mail サブシステムを使う
 
-**メールの privacy フィールド（セキュリティレベル）の値に基づき、処理を分配する。**
+**メール操作のコードは `SourceVault\`` context の関数で生成する。**
 
-- `privacy <= 0.5` → `$ClaudeModel`（クラウド LLM）で処理可能
-- `privacy > 0.5` → **$ClaudePrivateModel（ローカル LLM）で処理必須**。`$ClaudeModel` に投入してはならない。
+- ❌ `Needs["Maildb\`"]` / `mailEnsureLoaded` / `showMails` / `searchFromMails` / `mailAskLLM` は**使わない**。`maildb.wl` は廃止され `maildb_legacy.wl` (参照専用) に改名済み。`Maildb\`` パッケージはロードできない。
+- ✅ `SourceVaultMailEnsureLoaded` → `SourceVaultMailView` / `SourceVaultSearchMailSnapshots` を使う。
 
-### ClaudeEval/ClaudeQuery からメール処理コードを生成するとき
+関数名が不確実なら **`Get`/`Import` でファイルを読まず**、`Names["SourceVaultMail*"]` で検索し、`SourceVault_info/docs/api_maildb.md` を参照する (rule 13)。
 
-**privacy > 0.5 のメールを含む可能性がある操作（デフォルト）:**
+## 基本ワークフロー (2 段)
 
-```mathematica
-(* ✅ MinPrivacy/MaxPrivacy を指定しない一般的なメール操作は
-   privacy > 0.5 のメールを含む可能性がある。
-   AutoPrivate -> True の場合: Model/PrivacySpec は自動付与される。
-   AutoPrivate なしの場合: 明示的に Model/PrivacySpec を付与する。 *)
-mdb = mailEnsureLoaded["univ"];
-showMails[mdb, MaxPriority -> 1.0]
-```
-
-**privacy <= 0.5 のメールのみに限定する場合:**
+1. **ロード** (月シャード単位の増分・キャッシュ付き): `SourceVaultMailEnsureLoaded[mbox, period]`
+2. **表示 / 検索** (ロード済み snapshot を絞り込み): `SourceVaultMailView[query, opts]` / `SourceVaultSearchMailSnapshots[query, opts]`
 
 ```mathematica
-(* ✅ MaxPrivacy -> 0.5 で公開メールのみに絞り込む → $ClaudeModel で安全 *)
-mdb = mailEnsureLoaded["univ"];
-showMails[mdb, MaxPrivacy -> 0.5]
+(* univ の 2026年6月分シャードをロードしてから 6/5〜6/6 を一覧 *)
+SourceVaultMailEnsureLoaded["univ", "202606"];
+SourceVaultMailView["", MBox -> "univ",
+  DateFrom -> DateObject[{2026, 6, 5}], DateTo -> DateObject[{2026, 6, 6}],
+  Newest -> True]
 ```
 
-**mailAskLLM でセキュリティを考慮:**
+## 主要関数
 
-```mathematica
-(* ✅ mailAskLLM は内部でセキュリティレベルに基づきモデルを自動分配する *)
-mailAskLLM["univ", "今週の〆切を教えて", Period -> Quantity[1, "Week"]]
+### `SourceVaultMailEnsureLoaded[mbox, period]`
+メモリへ増分ロード。何度呼んでも高速。`<|Status, MBox, Period, Shards, NewlyLoaded, InMemory|>` を返す。
+**period 受理形式**:
+- `"Latest"` または `Automatic` — 直近 (最新) の月シャード
+- `"YYYYMM"` — その月のシャード (例 `"202606"`)
+- `{"YYYYMM", "YYYYMM"}` — 月の範囲
+- `n` (正整数) — 直近 n か月分
+- `All` — 全シャード
 
-(* ✅ 公開メールのみの分析: MaxPrivacy -> 0.5 を指定 *)
-mailAskLLM["univ", "会議の予定", MaxPrivacy -> 0.5]
-```
+(注: `{年,月}` の整数リストや `DateObject` は EnsureLoaded の period には**使わない**。月は `"YYYYMM"` 文字列で渡す。)
 
-**ScheduledTask 内での注意（rules/95-scheduled-task-safety 参照）:**
+### `SourceVaultMailView[query, opts]` / `SourceVaultMailDataset[query, opts]`
+ロード済み snapshot を**対話表 Dataset** (✉本文 / 📎添付 / ↩返信 ボタン付き) で表示。`SourceVaultMailDataset` はプレーン Dataset。`query` は件名/要約の部分文字列 (空文字 `""` で全件)。
+opts (= `SourceVaultSearchMailSnapshots` と同一):
+- `MBox -> "univ"` — メールボックス
+- `DateFrom` / `DateTo` — `DateObject` / 文字列 / `{y,m,d}`。**日単位の包含比較** (`DateFrom=DateTo=同日` で当日が一致)
+- `Newest -> True` — 新着 (日付降順)
+- `Limit -> n` — 件数上限
+- `From`, `FromContact`, `HasAttachment`, `MinPriority`/`MaxPriority`, `MinPrivacy`/`MaxPrivacy`, `SortBy`, `SortOrder`
 
-```mathematica
-(* ❌ ScheduledTask 内で ClaudeQuery を呼んではならない *)
-(* ✅ LLMSynthesize（公開メール）または URLRead（秘密メール→ローカルLLM）を使う *)
-```
+### `SourceVaultSearchMailSnapshots[query, opts]`
+件名/要約の部分一致 + 各種フィルタで snapshot リストを返す (表示用の生データ)。opts は上記と同じ。
 
-## 最重要原則: ロードは一度だけ、絞り込みは Select/Period で
+### `SourceVaultInferMailDerivedBatch[opts]`
+未処理メールの派生 (WorkRequest / PrivacyLevel / Summary) をローカル LLM で増分生成・in-place 更新 (中断耐性)。opts: `Limit` (既定50、範囲全部なら `Infinity`), `DateFrom`/`DateTo` (日付範囲で対象を限定), `CheckpointEvery`, `Persist`。
 
-メールDBは `mailEnsureLoaded` で**一度だけキャッシュ付きロード**し、日付・条件の絞り込みは `showMails` のオプション（`Period` 含む）や `Select` で行う。`loadMailFiles` を異なる Period で繰り返し呼んではならない。
+### `SourceVaultMailFetchNew[mbox, opts]`
+IMAP から新着取得。opts: `Period` (`{年,月}` / `"YYYYMM"` / `"YYYY"` / n日 / `{from,to}`), `Overwrite`, `Process -> False` (LLM 派生を分離)。
 
-```mathematica
-(* ✅ 正しいパターン: キャッシュ付きロード → Period オプションで絞り込み *)
-mdb = mailEnsureLoaded["univ"];
-showMails[mdb, Period -> Quantity[1, "Week"]]
+### 返信 (自動送信しない)
+`SourceVaultMailComposeReply[recordId, opts]` (返信ドラフト生成) / `SourceVaultMailOpenReplyNotebook[recordId]` (返信ノートブックを開く)。
 
-(* ✅ 正しいパターン: キャッシュ付きロード → Select で絞り込み *)
-mdb = mailEnsureLoaded["univ"];
-showMails[mdb["dataset"][Select[#date >= today &]]]
+### アカウント登録
+`SourceVaultRegisterMailAccount[<|"MBox","User","CredKey","Server","Port"|>]` → vault config。ログイン情報をソースにハードコードしない (rule 03)。
 
-(* ❌ 間違い: Period を変えて何度もロードし直す *)
-mdb = loadMailFiles["univ", Period -> Quantity[1, "Day"]];
-```
+## 典型的なユーザー要求 → 生成コード
 
-## 重要: MailDBObject が必要な関数
-
-**`showMails` と `searchFromMails` は MailDBObject を第一引数に取る。mbox 名の文字列を直接渡してはならない。**
-
-```mathematica
-(* ❌ 間違い — showMails は文字列を受け取らない *)
-showMails["univ", MaxItems -> 20]
-
-(* ✅ 正しい — 先に mailEnsureLoaded でロードする *)
-mdb = mailEnsureLoaded["univ"];
-showMails[mdb, MaxItems -> 20]
-```
-
-## API クイックリファレンス
-
-### メール読み込み（キャッシュ付き — 推奨）
-
-```mathematica
-mdb = mailEnsureLoaded["univ"]                    (* デフォルト3ヶ月 *)
-mdb = mailEnsureLoaded["univ", Quantity[6, "Month"]]  (* より長期間 *)
-```
-
-`mailEnsureLoaded` はキャッシュ済みならキャッシュを返す。何度呼んでも高速。
-
-### メール読み込み（キャッシュなし — バッチ処理向け）
-
-```mathematica
-mdb = loadMailFiles["univ"]                              (* 全ファイル *)
-mdb = loadMailFiles["univ", Period -> Quantity[3, "Month"]]
-mdb = loadMailFiles["univ", Period -> 2026]              (* 年指定 *)
-```
-
-### メール表示 — showMails[mdb, opts] / showMails[dataset, opts]
-
-```mathematica
-showMails[mdb]                                           (* 一覧表示 *)
-showMails[mdb, MaxItems -> 20]                           (* 件数制限 *)
-showMails[mdb, Period -> Quantity[1, "Week"]]            (* 直近1週間 *)
-showMails[mdb, Period -> Quantity[3, "Days"]]            (* 直近3日 *)
-showMails[mdb, Period -> {2026, 3}]                      (* 年月指定 *)
-showMails[mdb, Period -> {2026, 3, 16}]                  (* 日付以降 *)
-showMails[mdb, MinPriority -> 0.7, HasDeadline -> True]  (* 重要+〆切 *)
-showMails[mdb, Include -> <|"subject" -> "会議"|>]       (* フィルタ *)
-showMails[mdb, MaxPrivacy -> 0.5]                        (* 公開メールのみ *)
-showMails[mdb["dataset"][Select[...]], MaxItems -> 30]   (* Select で絞り込み *)
-```
-
-Options: MaxItems, Include, MinPriority, MaxPriority, MinPrivacy, MaxPrivacy, HasDeadline, **Period**
-
-**Period オプション:**
-- `Quantity[n, "Week"]`, `Quantity[n, "Day"]`, `Quantity[n, "Month"]` — 直近 n 期間
-- `{year, month}` — 指定年月のメールのみ
-- `{year, month, day}` — 指定日以降のメールのみ
-
-### セマンティック検索 — searchFromMails[mdb, phrase, n, opts]
-
-```mathematica
-searchFromMails[mdb, "研究費", 30]
-searchFromMails[mdb, "会議の日程", 20, HasDeadline -> True]
-searchFromMails[mdb, "出張", 10, Period -> Quantity[1, "Month"]]
-```
-
-Options: HasDeadline, **Period**
-
-### LLM による分析 — mailAskLLM[mbox, question, opts]
-
-**mailAskLLM は mbox 文字列を直接受け取る（内部で mailEnsureLoaded を呼ぶ）。**
-**内部でセキュリティレベルに基づきモデルを自動分配する。**
-
-```mathematica
-mailAskLLM["univ", "〆切作業の一覧を日付順にまとめて",
-  Period -> Quantity[1, "Week"], HasDeadline -> True, IncludeBody -> True]
-```
-
-Options: Period, MaxItems, MinPriority, HasDeadline, IncludeBody, MaxPrivacy
-
-### メール更新
-
-```mathematica
-updateMonthlyMaildb["univ"]                          (* 今月の差分更新 *)
-batchUpdateMaildb["univ", {2026, 3}]                 (* LLM/embedding 再生成 *)
-checkNewMail["univ", Period -> Quantity[2, "Hours"]]  (* 定期チェック *)
-```
-
-### 返信
-
-```mathematica
-sendReply["tagname"]                    (* 日本語で返信 *)
-sendReplyTr["tagname"]                  (* 翻訳して返信（確認後送信） *)
-confirmSendReplyTr["tagname"]           (* 翻訳返信を確定送信 *)
-```
-
-## 日付・条件で絞り込むパターン（Period オプションがないバージョン向けフォールバック）
-
-MailDBObject の `"dataset"` フィールドは Dataset であり、Select で自由に絞り込める。showMails は Dataset も受け取れる。
-
-```mathematica
-(* 今日のメールだけ表示 *)
-mdb = mailEnsureLoaded["univ"];
-today = DateObject[DateList[][[1 ;; 3]]];
-showMails[mdb["dataset"][Select[#date >= today &]]]
-
-(* 今週のメール *)
-weekStart = DatePlus[Now, -Quantity[1, "Week"]];
-showMails[mdb["dataset"][Select[#date >= weekStart &]]]
-
-(* 特定の差出人からの今週のメール *)
-showMails[mdb["dataset"][Select[
-  #date >= weekStart && StringContainsQ[#from, "kaneko"] &]]]
-```
-
-## 典型的なユーザー要求 → 生成コードのパターン
-
-| ユーザーの要求 | 正しいコード |
+| 要求 | コード |
 |---|---|
-| 「今日のunivメールを表示」 | `mdb = mailEnsureLoaded["univ"]; showMails[mdb, Period -> Quantity[1, "Day"]]` |
-| 「今週のメール」 | `mdb = mailEnsureLoaded["univ"]; showMails[mdb, Period -> Quantity[1, "Week"]]` |
-| 「今月のメール」 | `mdb = mailEnsureLoaded["univ"]; showMails[mdb, Period -> Quantity[1, "Month"]]` |
-| 「3月16日から21日のメール」 | `mdb = mailEnsureLoaded["univ"]; showMails[mdb["dataset"][Select[DateObject[{2026,3,16}] <= #date <= DateObject[{2026,3,21}] &]]]` |
-| 「2026年3月のメール」 | `mdb = mailEnsureLoaded["univ"]; showMails[mdb, Period -> {2026, 3}]` |
-| 「今週のメールで〆切のあるもの」 | `mdb = mailEnsureLoaded["univ"]; showMails[mdb, Period -> Quantity[1, "Week"], HasDeadline -> True]` |
-| 「研究費に関するメールを検索」 | `mdb = mailEnsureLoaded["univ"]; searchFromMails[mdb, "研究費", 20]` |
-| 「今月のメールを更新して」 | `updateMonthlyMaildb["univ"]` |
-| 「univの重要メール一覧」 | `mdb = mailEnsureLoaded["univ"]; showMails[mdb, MinPriority -> 0.7]` |
-| 「金子先生からの今週のメール」 | `mdb = mailEnsureLoaded["univ"]; showMails[mdb["dataset"][Select[#date >= DatePlus[Now, -Quantity[1,"Week"]] && StringContainsQ[#from, "kaneko"] &]]]` |
-| 「〆切のある重要メールをまとめて」 | `mailAskLLM["univ", "〆切作業の一覧を日付順にまとめて", Period -> Quantity[1, "Week"], HasDeadline -> True, IncludeBody -> True]` |
-| 「公開メールのみ表示」 | `mdb = mailEnsureLoaded["univ"]; showMails[mdb, MaxPrivacy -> 0.5]` |
+| 「今日の univ メール」 | `SourceVaultMailEnsureLoaded["univ", "Latest"]; SourceVaultMailView["", MBox->"univ", DateFrom->DateObject[Take[DateList[],3]], Newest->True]` |
+| 「2026/6/5〜6/6 の univ メール」 | `SourceVaultMailEnsureLoaded["univ", "202606"]; SourceVaultMailView["", MBox->"univ", DateFrom->DateObject[{2026,6,5}], DateTo->DateObject[{2026,6,6}], Newest->True]` |
+| 「2026年3月のメール」 | `SourceVaultMailEnsureLoaded["univ", "202603"]; SourceVaultMailView["", MBox->"univ", DateFrom->DateObject[{2026,3,1}], DateTo->DateObject[{2026,3,31}], Newest->True]` |
+| 「直近3か月のメール」 | `SourceVaultMailEnsureLoaded["univ", 3]; SourceVaultMailView["", MBox->"univ", Newest->True]` |
+| 「研究費に関するメールを検索」 | `SourceVaultMailEnsureLoaded["univ", "Latest"]; SourceVaultMailView["研究費", MBox->"univ", Newest->True]` |
+| 「重要メール一覧」 | `SourceVaultMailView["", MBox->"univ", MinPriority->0.7, Newest->True]` |
+| 「公開メールのみ」 | `SourceVaultMailView["", MBox->"univ", MaxPrivacy->0.5, Newest->True]` |
+| 「添付のあるメール」 | `SourceVaultMailView["", MBox->"univ", HasAttachment->True, Newest->True]` |
+| 「新着を取得」 | `SourceVaultMailFetchNew["univ", Period->"202606"]` |
+| 「範囲のメールの派生を生成」 | `SourceVaultInferMailDerivedBatch["DateFrom"->DateObject[{2026,6,5}], "DateTo"->DateObject[{2026,6,6}], "Limit"->Infinity]` |
 
-## $ClaudePackageKeywordMap への登録
+## セキュリティルーティング (最重要)
 
-maildb パッケージは初期化時に以下を実行して、ClaudeEval/ClaudeQuery のプロンプトに自動的に api.md が注入されるようにする:
+snapshot の `Derived.PrivacyLevel` > 0.5 のメールは **`$ClaudeModel` (クラウド LLM) に送信しない**。`$ClaudePrivateModel` (ローカル LLM) で処理する。`SourceVaultSearchMailSnapshots[..., MaxPrivacy -> 0.5]` で公開メールのみに絞れる。
 
-```mathematica
-(* maildb.wl の初期化セクション *)
-If[AssociationQ[ClaudeCode`$ClaudePackageKeywordMap],
-  ClaudeCode`$ClaudePackageKeywordMap["maildb"] =
-    {"メール", "mail", "Mail", "univ", "〆切", "deadline",
-     "受信", "inbox", "IMAP", "返信", "reply",
-     "showMails", "searchFromMails", "mailAskLLM",
-     "mailEnsureLoaded", "loadMailFiles", "updateMonthlyMaildb",
-     "sendReply", "checkNewMail"}
-];
-```
+- 本文は暗号化・ヘッダ (件名/From/To/日付) は平文+token (件名は設計上暗号化しない)。
+- 永続データの復号には `NBAccess\`$NBCredentialBackend = "SystemCredential"` が必須 (Memory backend だと別鍵で復号不可 = データ消失)。
+- ScheduledTask 内で `ClaudeQuery` を呼ばない (rules/95)。
 
-## mbox 名
+## 不変条件
 
-利用可能な mbox 名は `$maildbDescriptions` で確認できる。一般的には `"univ"`, `"hu2022"`, `"apple"` など。
+- **重要度は構造計算**: LLM は依頼度 (WorkRequest) のみ判定。優先度は送信者グループ重み (`SourceVaultSetPriorityGroupWeight`) + To/Cc 位置 + ML 判定で `SourceVaultMailComputePriority` が決定的に計算する。
+- **2層アドレス帳 (識別子/実体)**: 取込で From/To/Cc が自動識別子化。実体は後でマージ (`SourceVaultIdentityLinkUI` / `EntityEditUI`)。所有者 = ユーザDB #1 (`SourceVaultOwnerEntity`)。受信者プロフィールは所有者の `LLMProfile` から (ハードコードしない、rule 03)。
 
-## 注意事項
+---
 
-- `showMails` / `searchFromMails` に文字列 mbox 名を渡すと何も起きず未評価で返る。必ず `mailEnsureLoaded` で MailDBObject を取得してから渡すこと。
-- `mailAskLLM` は例外的に mbox 文字列を直接受け取る（内部でロードを行う）。
-- `Period` オプションが使えない古いバージョンでは `mdb["dataset"][Select[...]]` で日付絞り込みを行う。
-- api.md が存在する場合はそちらも参照すること。
-- **privacy > 0.5 のメールは絶対に $ClaudeModel（クラウド LLM）に送信しない。** $ClaudePrivateModel または mailAskLLM（自動ルーティング）を使用する。
+## (参照のみ) 旧 maildb_legacy 対応表
+
+旧 `maildb.wl` は `maildb_legacy.wl` に改名済み。以下の旧 API は **`maildb_legacy.wl` を明示ロードした場合のみ有効**で、**新規コードでは使わない**。
+
+| 旧 (maildb_legacy) | 新 (SourceVault) |
+|---|---|
+| `mailEnsureLoaded["univ"]` | `SourceVaultMailEnsureLoaded["univ", period]` |
+| `showMails[mdb, opts]` | `SourceVaultMailView[query, opts]` / `SourceVaultMailDataset` |
+| `searchFromMails[mdb, phrase, n]` | `SourceVaultSearchMailSnapshots[query, opts]` / `SourceVaultMailView` |
+| `mailAskLLM[...]` | `SourceVaultInferMailDerivedBatch` + `SourceVaultMailComputePriority` |
+| `updateMonthlyMaildb` / `checkNewMail` | `SourceVaultMailFetchNew[mbox, opts]` |
+| `sendReply` / `sendReplyTr` | `SourceVaultMailComposeReply` / `SourceVaultMailOpenReplyNotebook` |
+| `$maildbDescriptions` (ソース直書き) | `SourceVaultRegisterMailAccount[...]` → vault config |

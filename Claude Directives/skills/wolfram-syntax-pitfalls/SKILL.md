@@ -699,3 +699,61 @@ Button[Style[title, "Hyperlink", FontFamily -> ff], action]
 - **出力 `.nb` に `FontFamily->...helper[]` のような未評価の関数呼び出しが焼き込まれていたら罠 #57 を疑う** (`Button`/`Tooltip`/`Grid` のラベルに関数呼び出しを直接書いていないか。`With` で事前評価しているか)。
 - **リンク (Hyperlink) のテキストだけフォントが変わらない / Hyperlink を外したら文字が小さくなったら罠 #58 を疑う** (`"Hyperlink"` を `BaseStyle` でなく `Style` の引数列に置いているか)。
 - **フォント反映を確認するときは、まず `pkg\`Private\`フォント取得関数[]` を単体評価し、期待値の文字列が返るかを最初に確認する** (関数が正しい値を返すか → 出力 `.nb` の `FontFamily` 値が文字列になっているか、の順で切り分ける)。
+
+## SourceVault 暗号化・メール・Dataset UI (2026-06) の罠 (#59–#63)
+
+### 罠 #59: `With[{e = assoc}, e["k"] = v]` は With 定数なのでパート代入できず `Association::setps`
+
+```mathematica
+(* NG: With の束縛はリテラル定数。パート代入不可 → Association::setps *)
+With[{e = Lookup[$store, id, <||>]}, e["Identifiers"] = Append[e["Identifiers"], x]; $store[id] = e]
+(* OK: Module ローカルにする *)
+Module[{e = Lookup[$store, id, <||>]}, e["Identifiers"] = Append[e["Identifiers"], x]; AssociateTo[$store, id -> e]]
+```
+
+`With[{e=...}, e["k"]=v]` は `e` が定数に字句置換されるため `<|...|>["k"]=v` となりパート代入が成立しない (`Association::setps: ... in the part assignment is not a symbol`)。**Association をローカルでコピーして部分更新するときは `Module`、`With` ではない** (罠 #27 と対: 値保持は With、変異は Module)。
+
+### 罠 #60: `Dataset[..., MaxItems -> {a, b}]` の `b` は最大「列数」(行数ではない)
+
+```mathematica
+(* NG: 第2要素を行数 Length[rows] にすると、少件数時に列数まで縛られ列が隠れる *)
+Dataset[rows, MaxItems -> {All, Length[rows]}]   (* 2 行なら 2 列しか出ず列ナビゲータが出る *)
+(* OK: 全行・全列 *)
+Dataset[rows, MaxItems -> {All, All}]
+```
+
+`MaxItems -> {maxRows, maxColumns}`。第2要素は列数。行数を入れると検索結果が少ないときに表が極端に小さく (数列のみ + 「columns」ナビゲータ) なる。
+
+### 罠 #61: `Dataset` は `BaseStyle` オプションを受け付けない (`OptionValue::nodef`)
+
+```mathematica
+(* NG: Dataset に BaseStyle を渡すと OptionValue::nodef: 未知のオプション BaseStyle *)
+Dataset[rows, BaseStyle -> {FontFamily -> ff}]
+(* OK: フォントはセルごとに適用 (各セルを Style で包む) *)
+Dataset[Map[<|"col" -> Style[text, "Text", FontFamily -> ff]|> &, data]]
+```
+
+Dataset 全体の `BaseStyle` は無い。表テキストのフォント/スタイルは**各セルを `Style[…, FontFamily->ff]` で包む**。日付/数値セルも個別に `Style` で包む。
+
+### 罠 #62: Dataset のインタラクティブセルを 1 セルに詰めると `...` 省略される。アクションは別列 + `ItemSize`
+
+```mathematica
+(* NG: ✉Button + 📎ActionMenu + ↩Button を 1 セルの Row に詰める → 幅超過で "..." 省略・押せない *)
+<|"" -> Row[{Button[...], ActionMenu[...], Button[...]}]|>
+(* OK: アクションを別列に分け、Dataset に ItemSize で列幅を与える *)
+<|"" -> Button[...], "Att" -> ActionMenu[...], "Reply" -> Button[...]|>
+Pane[Dataset[rows, ItemSize -> {2, {3, 4, 3}}, MaxItems -> {All, All}], ImageSize -> Full]
+```
+
+Dataset はセル内のインタラクティブ要素 (Button/ActionMenu) を含むセルが**列幅を超えると `...` に省略**する。(1) `ItemSize -> {既定, {列幅...}}` で列幅を明示し、(2) 複数コントロールは**別列に分割**する。左寄せ・先頭表示は `Item[…, Alignment->Left]` (Button のままだと末尾が見えて先頭が切れる)。
+
+### 罠 #63: `ExportString[…, "RawJSON"]` は `Missing[]`/`$Failed` を出力できない。`NBMacWithKeyRef` 等は例外でなく `$Failed` を返す
+
+```mathematica
+(* NG: Missing/$Failed を含む Association を RawJSON 化すると Export::jsonstrictencoding *)
+ExportString[<|"Token" -> $Failed, "Ref" -> Missing["Unlinked"]|>, "RawJSON"]
+(* OK: 保存前に Null へ置換、load 時に Null→Missing *)
+ExportString[rec /. (_Missing | $Failed) -> Null, "RawJSON", "Compact" -> True]
+```
+
+JSONL 永続化で `Missing[]` も `$Failed` も RawJSON にできない (`Export::jsonstrictencoding`)。保存直前に `/. (_Missing | $Failed) -> Null`。さらに、**鍵が無いとき `NBAccess`NBMacWithKeyRef` は例外を投げず `$Failed` を返す**ため、`Quiet@Check[NBMacWithKeyRef[...], Missing[]]` では捕まえられず (`Check` は返り値 `$Failed` を捕捉しない) フィールドに `$Failed` が残り、後の保存で上記エラーになる。`With[{t = Quiet@Check[NBMacWithKeyRef[...], $Failed]}, If[StringQ[t], t, Missing["NoKey"]]]` のように **`StringQ` 判定で Missing にフォールバック**する。JSONL は ISO8859-1 で読み書きし二重 encode を避ける (`skills/jsonl-store-pattern` / `wl-runtime-byte-io`)。

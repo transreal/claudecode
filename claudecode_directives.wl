@@ -1208,6 +1208,7 @@ $ClaudeAlwaysOnRules := {
   "00-autoeval-prohibited",
   "01-wolfram-general",
   "12-function-name-verification",
+  "13-prefer-existing-functions",
   "20-api-key-security",
   "30-encoding-safety",
   "50-file-path",

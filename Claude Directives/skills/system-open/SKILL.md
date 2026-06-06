@@ -52,3 +52,38 @@ SystemOpen[FileNameJoin[{$packageDirectory, "PackageName_info", "history"}]]
 - SystemOpen はファイルの読み書きを行わない（OSに委譲するだけ）
 - ClaudeQuery のリッチレスポンスで自動評価される（$iQuerySafePatterns に登録済み）
 - ファイルが存在しない場合は `If[FileExistsQ[...], SystemOpen[...], "ファイルが見つかりません"]` で安全に処理する
+
+## ❗ 実行コンテキストの制約 (2026-06-03 実機確認)
+
+**SystemOpen はメインカーネルのトップレベル評価機会でのみ効く。** `SessionSubmit` / `ScheduledTask` / 共有 polling tick の評価コンテキストで呼ぶと、**エラーも出さず何も起きない (silent no-op)**。
+
+| コンテキスト | SystemOpen の効き |
+|---|---|
+| トップレベルセル評価 (直接) | ✅ 開く |
+| `Button` 本体 (`Method -> "Queued"` = メイン評価) | ✅ 開く |
+| `SessionSubmit[SystemOpen[...]]` | ❌ 開かない |
+| `SessionSubmit[ScheduledTask[SystemOpen[...], ...]]` | ❌ 開かない |
+| 共有 polling tick (`ClaudeRegisterPollingTick`) 経由 | ❌ 開かない |
+
+承認ボタンや非同期処理の中から「開いて」を実行する設計では、**SystemOpen だけはメイン評価機会で呼ぶ**こと。重い処理を `SessionSubmit` で非同期化していても、desktop 操作はボタン本体 (メイン評価) に分離する。詳細は rule `95-scheduled-task-safety` 節 G。
+
+```mathematica
+(* ✅ 承認ボタン: パス検証は委譲、SystemOpen はボタン本体で直接 *)
+Button["承認",
+  If[!decided, decided = True;
+    Module[{info},
+      info = NBAccess`NBResolveDesktopActionPath[heldExpr, accessSpec];
+      If[TrueQ[info["Validated"]], SystemOpen[info["Path"]]]]],
+  Method -> "Queued"]
+
+(* ❌ SystemOpen を非同期コンテキストで呼ぶと silent no-op *)
+Button["承認",
+  SessionSubmit[ScheduledTask[SystemOpen[path], {0.3, 1}]],
+  Method -> "Queued"]
+```
+
+## 承認付き wrapper (NBOpenFolderWithApproval) の context 注意
+
+LLM が生成する無修飾 `NBOpenFolderWithApproval[...]` は、`$ContextPath` に `NBAccess\`` が無いと `Global\`NBOpenFolderWithApproval` (未定義) に解決され、`ReleaseHold` しても**未評価式のまま**返り SystemOpen に到達しない。
+
+対策として NBAccess は `NBResolveDesktopActionPath[held, accessSpec]` を提供する。これは head の **context に依存せず `SymbolName` で wrapper を検出**し、パス式を安全評価して検証だけ行う (SystemOpen は呼ばない)。呼び出し側 (承認ボタン本体 = メイン評価) が検証済みパスに対して raw `SystemOpen` を直接呼ぶ。これで `Global\`` shadow にも `$ContextPath` にも左右されない。

@@ -81,6 +81,7 @@ Quiet[ClearAll[
   iGetDirPermission, iSetDirPermission,
   iResolveWebFetch, iResolveWebFetchWithFallback,
   iWriteQueryResponse, iWriteQueryResponseQueued, iFlushQueryTextBuf, iSaveDocOptions, iLoadAndMergeDocOptions,
+  iNBLLMQueryFuncImpl,
   iDocGet, iDocInitState, iDocBuildRefSection, iDocGlobalInstructionPrompt,
   iDocBuildAcknowledgmentsPrompt, iDocBuildDisclaimerPrompt, iDocBuildLicensePrompt,
   ClaudePrepareCommit, iCollectChangeSummaries, iFormatCommitMessage, iWrapCommitBodyLines,
@@ -112,6 +113,7 @@ Quiet[ClearAll[
   iIsCUDARequest, iEnsureCUDAExtension, iCUDAUnavailableNote,
   iEnsureSharedPollingTask, iSharedPollingTick,
   ClaudeRegisterPollingTick, ClaudeUnregisterPollingTick, ClaudePollingTickKeys,
+  ClaudeEnqueueFinalAction,
   ClaudeBeginHighPriority, ClaudeEndHighPriority, $ClaudePriorityModeUntil,
   ClaudeBeginParallelKernels,
   iAsyncSchedulingRules,
@@ -186,7 +188,7 @@ Quiet[Scan[
    "LLMGraphDAGInspect","LLMGraphDAGMarkFailed",
    "LLMGraphDAGSnapshot","LLMGraphDAGRestore","LLMGraphDAGListSnapshots","LLMGraphDAGPlot",
    "LLMGraphDAGMergeHistory","$ClaudeSnapshots",
-   "$ClaudeEvalMode","$ClaudeEvalHook","$ClaudeEvalAutoThreshold","$ClaudeEvalVerbose","$claudecodeVersion","$ClaudeEvalAutoLLMMinLength","$ClaudeEvalAutoLLMMinNewlines","$ClaudeEvalNaturalDispatch","$ClaudeEvalNaturalVerbose","$ClaudeEvalNotebookContext",
+   "$ClaudeEvalMode","$ClaudeEvalHook","$ClaudeEvalAutoThreshold","$ClaudeEvalVerbose","$claudecodeVersion","$ClaudeEvalAutoLLMMinLength","$ClaudeEvalAutoLLMMinNewlines","$ClaudeEvalNaturalDispatch","$ClaudeEvalNaturalVerbose","$ClaudeEvalNotebookContext","$ClaudeEvalLastProposedExprString",
    "iLLMGraphNode","iMakeBat","$iMediaMaxImageSize",
    "cleanOutput","stripANSI",
    "NotebookLLMGraphExtractThread","NotebookLLMGraphApplyThread",
@@ -216,9 +218,10 @@ Quiet[Scan[
    "$ClaudePackageKeywordMap",
    "$LLMGraphMaxConcurrency","$LLMGraphAutoStopThreshold",
    "Fallback", "AutoPrivate", "AutoEvaluate", "StartTime", "Timeout",
-   "Integrations",
+   "Integrations", "AutoCellize",
    "TargetFiles", "TargetFunctions", "Mode", "DryRun", "Inherit",
    "License", "Model", "WebFetch", "WebSearch", "RepeatInterval", "PrivacySpec",
+   "OutputMode",
    "Keywords", "Title", "Refetch",
    "Owner", "Repository", "Branch", "BaseBranch",
    "References", "Demos", "Disclaimer", "Acknowledgments",
@@ -1413,6 +1416,12 @@ $ClaudeEvalNotebookContext::usage =
   "\:5358\:767a\:7d4c\:8def\:3068\:540c\:69d8\:306b a=1234; text=\"...\" \:7b49\:306e Global \:5b9a\:7fa9\:3092 worker \:306b\:4f1d\:3048\:308b\:305f\:3081\:306b\:4f7f\:3046\:3002\n" <>
   "\:65e2\:5b9a: \"\"\:3002";
 
+$ClaudeEvalLastProposedExprString::usage =
+  "$ClaudeEvalLastProposedExprString \:306f PromptRouter \:7d4c\:8def\:3067\:76f4\:8fd1\:306b\:5b9f\:884c\:3055\:308c\:305f\n" <>
+  "\:63d0\:6848\:5f0f (ProposedExpression) \:306e InputForm \:6587\:5b57\:5217\:3002SaveLastPrompt \:304c\:3053\:308c\:3092\n" <>
+  "PromptRoute \:306e TargetExprString \:306b\:4fdd\:5b58\:3057\:3001Replayable \:5224\:5b9a\:30fbToInput \:306b\:4f7f\:3046\:3002\n" <>
+  "\:5b9f\:884c\:3055\:308c\:3066\:3044\:306a\:3044\:5834\:5408\:306f Missing[\"NotCaptured\"]\:3002";
+
 $ClaudeEvalAutoLLMMinLength::usage =
   "$ClaudeEvalAutoLLMMinLength \:306f \"Auto\" \:30e2\:30fc\:30c9\:3067 LLM planner \:3092\:8d77\:52d5\:3059\:308b\:6700\:5c0f\:6587\:5b57\:6570\:3002\n" <>
   "\:65e2\:5b9a: 500\:3002\:6587\:5b57\:6570\:672a\:6e80\:304b\:3064\:6539\:884c\:6570\:672a\:6e80\:306a\:3089 LLM planner \:3092\:30b9\:30ad\:30c3\:30d7\:3057\:3066\:5373 Single\:3002";
@@ -1579,6 +1588,12 @@ ClaudePollingTickKeys::usage =
   "ClaudePollingTickKeys[] \:306f\:73fe\:5728\:767b\:9332\:3055\:308c\:3066\:3044\:308b polling tick \:306e key \:4e00\:89a7\:3092\n" <>
   "List \:3067\:8fd4\:3059\:3002registry \:304c\:672a\:521d\:671f\:5316\:306e\:3068\:304d\:306f {} \:3092\:8fd4\:3059\:3002";
 
+ClaudeEnqueueFinalAction::usage =
+  "ClaudeEnqueueFinalAction[action, accessSpec, opts] \:306f\:627f\:8a8d\:6e08\:307f final action \:3092\n" <>
+  "NBAccess PendingFinalActionQueue \:306b\:7a4d\:307f\:3001\:5171\:6709 polling tick \:306b\n" <>
+  "NBFinalActionTick \:3092\:767b\:9332\:3059\:308b (spec \:6848 3-lite)\:3002queue \:304c\:7a7a\:306b\:306a\:3063\:305f\:3089\n" <>
+  "tick \:81ea\:8eab\:304c\:81ea\:5df1\:89e3\:9664\:3059\:308b\:3002\:627f\:8a8d UI \:306e Approve \:304b\:3089\:547c\:3076 (Approve = queue \:6295\:5165\:8a31\:53ef)\:3002";
+
 (* === Z \:6848 (2026-05-17): Public usage \:3092 Begin Private \:524d\:306b\:914d\:7f6e ===
    ClaudeEnsureSilentNotebook \:3068 ClaudeQueryAsyncSilent \:306e usage \:5ba3\:8a00\:306f
    \:5143\:3005 L8299/L8325 (Begin Private \:5185) \:306b\:3057\:304b\:7f6e\:304b\:308c\:3066\:3044\:306a\:304b\:3063\:305f\:305f\:3081\:3001
@@ -1743,6 +1758,7 @@ If[!ValueQ[$ClaudeRuntimeAsyncSuppressInputEval],
    ParallelSubmit \:3092\:8a66\:307f\:308b\:3002ClaudeRuntime \:30ed\:30fc\:30c9\:6642\:306b
    ClaudeBeginParallelKernels[] \:3092\:547c\:3093\:3067 True \:306b\:8a2d\:5b9a\:3055\:308c\:308b\:3002 *)
 If[!ValueQ[$iParallelKernelsReady], $iParallelKernelsReady = False];
+If[!ValueQ[$iNBAccessOnKernelsReady], $iNBAccessOnKernelsReady = False];
 
 (* \:30e2\:30c7\:30ebID\:5b9a\:6570: \:65b0\:30e2\:30c7\:30eb\:30ea\:30ea\:30fc\:30b9\:6642\:306f\:3053\:3053\:3060\:3051\:66f4\:65b0\:3059\:308c\:3070\:3088\:3044\:3002
    Phase 28 (2026-05-12): String "claude-opus-4-7" -> tuple {"claudecode", "claude-opus-4-7"} \:306b\:5909\:66f4\:3002
@@ -4306,7 +4322,8 @@ Options[ClaudeRegisterPollingTick] = {
   "Phase"        -> "external",
   "Caller"       -> "External",
   "Priority"     -> 0,
-  "Suppressible" -> False
+  "Suppressible" -> False,
+  "RunInline"    -> False
 };
 
 ClaudeRegisterPollingTick[key_String, tickFn_, opts:OptionsPattern[]] :=
@@ -4318,6 +4335,7 @@ ClaudeRegisterPollingTick[key_String, tickFn_, opts:OptionsPattern[]] :=
       "caller"       -> OptionValue["Caller"],
       "priority"     -> OptionValue["Priority"],
       "suppressible" -> TrueQ[OptionValue["Suppressible"]],
+      "runInline"    -> TrueQ[OptionValue["RunInline"]],
       "registeredAt" -> AbsoluteTime[]
     |>;
     <|"Status" -> "Registered", "Key" -> key|>
@@ -4334,6 +4352,58 @@ ClaudeUnregisterPollingTick[key_String] :=
 
 ClaudePollingTickKeys[] :=
   If[AssociationQ[$claudeProgress], Keys[$claudeProgress], {}];
+
+(* ============================================================
+   Phase frontend-blocking-queue (2026-06-03, spec 案3-lite 1B/4b):
+   NBAccess PendingFinalActionQueue を共有 polling tick へ統合
+   ============================================================
+   新規 ScheduledTask は作らず、既存の共有 polling tick
+   (ClaudeRegisterPollingTick) に NBFinalActionTick を相乗りさせる。
+   queue にアイテムが積まれている間だけ tick を登録し、空になったら
+   tick 自身が自己解除する (共有 ScheduledTask が無駄に回り続けない)。 *)
+
+$iClaudeFinalActionTickKey = "nbaccess-final-action-queue";
+
+(* 共有 tick から呼ばれる wrapper。NBFinalActionTick を 1 回叩き、
+   queue に Pending/Running が無くなったら自己解除する。 *)
+iClaudeFinalActionTickWrapper[] :=
+  Module[{snap, pending, running, tickR},
+    tickR = Quiet @ Check[NBAccess`NBFinalActionTick[], $Failed];
+    (* デバッグ用: 最後の tick 実行結果を記録 (Doctor/診断で参照)。 *)
+    $iClaudeLastFinalActionTickResult = <|
+      "At" -> AbsoluteTime[], "Result" -> tickR,
+      "Inline" -> True|>;
+    (* queue 状態を見て、未処理 (Pending/Running) が無ければ自己解除 *)
+    snap = Quiet @ Check[NBAccess`NBFinalActionQueueSnapshot[], <||>];
+    pending = Lookup[snap, "Pending", 0];
+    running = Lookup[snap, "Running", 0];
+    If[IntegerQ[pending] && IntegerQ[running] && (pending + running) === 0,
+      Quiet @ Check[ClaudeUnregisterPollingTick[$iClaudeFinalActionTickKey], Null]]
+  ];
+
+(* final action を enqueue し、共有 tick に登録する統合 API。
+   承認 UI の Approve から呼ぶ (spec 12: Approve = queue 投入許可)。
+   action は action association (<|"Action"->...|>) または held expression
+   (HoldComplete[...]、NBOpenFolderWithApproval[path] 等の wrapper を含む) の両対応。 *)
+ClaudeEnqueueFinalAction[action_, accessSpec_Association,
+    opts:OptionsPattern[]] :=
+  Module[{r},
+    r = NBAccess`NBEnqueueFinalAction[action, accessSpec, opts];
+    If[TrueQ[Lookup[r, "Enqueued", False]],
+      (* 共有 polling tick に登録 (未登録なら)。Suppressible -> False で
+         UI 操作中でも安全な隙を狙って実行する。Priority は低め。 *)
+      Quiet @ Check[
+        ClaudeRegisterPollingTick[$iClaudeFinalActionTickKey,
+          Function[Null, iClaudeFinalActionTickWrapper[]],
+          "Phase"        -> "FinalActionQueue",
+          "Caller"       -> "NBAccessFinalAction",
+          "Priority"     -> 5,
+          "Suppressible" -> False,
+          "RunInline"    -> True],
+        Null]];
+    r
+  ];
+Options[ClaudeEnqueueFinalAction] = Options[NBAccess`NBEnqueueFinalAction];
 
 (* ============================================================
    Phase 32e/32f (2026-05-13): \:512a\:5148\:5ea6\:30e2\:30fc\:30c9 + Suppressible
@@ -4433,17 +4503,26 @@ iSharedPollingTick[] := Module[{keys, tickFn, entry, suppressible,
       If[!(highPrio && suppressible),
         tickFn = Lookup[entry, "tickFn", None];
         If[tickFn =!= None,
-          (* 2026-05-16: tick \:5b9f\:884c\:3092 SessionSubmit \:3067\:80cc\:666f\:30bf\:30b9\:30af\:5316\:3002
-             \:65e7\:5b9f\:88c5\:306f Quiet @ Check[tickFn[], Null] \:306e\:540c\:671f\:5b9f\:884c\:3067\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057\:305f\:3002
-             tick \:5185\:306e handler \:304c ClaudeQueryBg \:7b49\:540c\:671f LLM \:547c\:3073\:51fa\:3057\:3092\:884c\:3046\:5834\:5408\:3001
-             \:540c\:671f\:5b9f\:884c\:3060\:3068 LLM \:5fdc\:7b54\:5f85\:3061\:306e\:9593 ScheduledTask \:30bf\:30b9\:30af\:304c\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092
-             \:6291\:3048\:3001\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:306e\:52d5\:7684\:8a55\:4fa1\:304c\:30d6\:30ed\:30c3\:30af\:3055\:308c\:300c\:52d5\:7684\:8a55\:4fa1\:306e\:653e\:68c4\:300d\:30c0\:30a4\:30a2\:30ed\:30b0\:3092
-             \:8a98\:767a\:3059\:308b\:3002SessionSubmit \:7d4c\:7531\:306b\:3057\:3001\:30bf\:30b9\:30af\:5883\:754c\:3067\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:5fdc\:7b54\:3092\:8a31\:3059\:3002
+          (* 2026-06-03 (spec 案3-lite): runInline -> True の tick は
+             SessionSubmit で背景化せず、共有 ScheduledTask の同期コンテキスト
+             (メインカーネル評価機会) で実行する。final action (SystemOpen/
+             NotebookWrite 等の FrontEnd/desktop 操作) は背景サブセッションでは
+             効かない (rules/95: ローカル文脈参照コードは副カーネルで動かない)
+             ため、inline 同期実行が必須。FrontEnd ブロックは最大 1 件・短時間
+             で、AsyncActive でない隙にのみ実行されるので安全。 *)
+          If[TrueQ[Lookup[entry, "runInline", False]],
+            Quiet @ Check[tickFn[], Null],
+            (* 2026-05-16: tick \:5b9f\:884c\:3092 SessionSubmit \:3067\:80cc\:666f\:30bf\:30b9\:30af\:5316\:3002
+               \:65e7\:5b9f\:88c5\:306f Quiet @ Check[tickFn[], Null] \:306e\:540c\:671f\:5b9f\:884c\:3067\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057\:305f\:3002
+               tick \:5185\:306e handler \:304c ClaudeQueryBg \:7b49\:540c\:671f LLM \:547c\:3073\:51fa\:3057\:3092\:884c\:3046\:5834\:5408\:3001
+               \:540c\:671f\:5b9f\:884c\:3060\:3068 LLM \:5fdc\:7b54\:5f85\:3061\:306e\:9593 ScheduledTask \:30bf\:30b9\:30af\:304c\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092
+               \:6291\:3048\:3001\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:306e\:52d5\:7684\:8a55\:4fa1\:304c\:30d6\:30ed\:30c3\:30af\:3055\:308c\:300c\:52d5\:7684\:8a55\:4fa1\:306e\:653e\:68c4\:300d\:30c0\:30a4\:30a2\:30ed\:30b0\:3092
+               \:8a98\:767a\:3059\:308b\:3002SessionSubmit \:7d4c\:7531\:306b\:3057\:3001\:30bf\:30b9\:30af\:5883\:754c\:3067\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:5fdc\:7b54\:3092\:8a31\:3059\:3002
 
-             ClaudeQuery / ClaudeEval (rule 95) \:3068\:540c\:69d8\:306e\:5bfe\:5fdc\:3002With \:3067 fn \:3092\:9759\:7684\:306b
-             \:675f\:7e1b\:3057\:3001Module \:5c40\:6240\:5909\:6570 tickFn$nnnn \:306e\:30b9\:30b3\:30fc\:30d7\:5916\:8a55\:4fa1\:3092\:9632\:3050\:3002 *)
-          With[{fn = tickFn},
-            iScheduleAtAsync[Quiet @ Check[fn[], Null], Now]]]]],
+               ClaudeQuery / ClaudeEval (rule 95) \:3068\:540c\:69d8\:306e\:5bfe\:5fdc\:3002With \:3067 fn \:3092\:9759\:7684\:306b
+               \:675f\:7e1b\:3057\:3001Module \:5c40\:6240\:5909\:6570 tickFn$nnnn \:306e\:30b9\:30b3\:30fc\:30d7\:5916\:8a55\:4fa1\:3092\:9632\:3050\:3002 *)
+            With[{fn = tickFn},
+              iScheduleAtAsync[Quiet @ Check[fn[], Null], Now]]]]]],
     {k, sortedKeys}]];
 
 
@@ -4585,6 +4664,22 @@ iCodeRefsLocalContext[___] := True;  (* \:5b89\:5168\:5074\:30c7\:30d5\:30a9\:30
    - \:6a5f\:5bc6\:30b7\:30f3\:30dc\:30eb\:53c2\:7167\:3042\:308a \[RightArrow] sync
    - \:30ed\:30fc\:30ab\:30eb\:6587\:8108\:53c2\:7167\:3042\:308a \[RightArrow] sync
    - \:305d\:308c\:4ee5\:5916 \[RightArrow] async *)
+(* Phase D-1 (ClaudeEval async-compat spec 6.6): NBSubkernelExecutableQ 経由の
+   薄い wrapper。判定本体は NBAccess`NBSubkernelExecutableQ に一本化。
+   $ClaudeRuntimeAsyncForce は性能 heuristic のみ上書き可で、
+   NBAccess の安全判定 (NBSubkernelExecutableQ=False) は上書きしない。
+   旧 iShouldExecuteAsync[heldExpr, confVarNames_List] は後方互換で残置。 *)
+iShouldExecuteAsync[heldExpr_, accessSpec_Association, effectiveTimeout_:Automatic] :=
+  Module[{},
+    If[!TrueQ[$ClaudeRuntimeAsyncExecution], Return[False]];
+    (* NBAccess の安全判定。False なら Force でも上書きしない。 *)
+    If[! TrueQ[NBAccess`NBSubkernelExecutableQ[heldExpr, accessSpec]],
+      Return[False]];
+    (* ここまで来れば subkernel 実行は安全。性能 heuristic は今は常に True。 *)
+    True
+  ];
+
+
 iShouldExecuteAsync[heldExpr_, confVarNames_List] :=
   Module[{},
     If[!TrueQ[$ClaudeRuntimeAsyncExecution], Return[False]];
@@ -4695,51 +4790,145 @@ ClaudeBeginParallelKernels[___] :=
      "Timeout" -> _, "StartTime" -> _|> \:3092\:8fd4\:3059\:3002
    \:522f\:30ab\:30fc\:30cd\:30eb\:8d77\:52d5\:306b\:5931\:6557\:3057\:305f\:5834\:5408\:306f None \:3092\:8fd4\:3057\:3001
    \:547c\:3073\:51fa\:3057\:5074\:304c\:540c\:671f\:30d1\:30b9\:306b\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3059\:308b\:3002 *)
-iSubmitParallelExecution[heldExpr_, effectiveTimeout_] :=
-  Module[{nKernels, future, isInfinite},
+(* Phase D-2: subkernel に NBAccess をロードする。
+   現行は LaunchKernels するだけで NBAccess を配布していないため、
+   NBExecuteHeldExprSubkernelRaw を subkernel で呼ぶには明示ロードが要る。
+   $packageDirectory (claudecode.wl と同じディレクトリ) の NBAccess.wl を
+   絶対パスで subkernel に Get させる。成功で True を返し $iNBAccessOnKernelsReady に
+   キャッシュ。失敗時 False (呼び出し側で sync fallback)。 *)
+(* 失敗理由を $ClaudeVerbose 時に出すための共通 helper (spec 6.8 挙動 6)。 *)
+iNBAccessOnKernelsLog[reason_String] :=
+  If[TrueQ[$ClaudeVerbose],
+    Quiet @ NBAccess`NBWritePrintNotice[None,
+      "[AsyncSubkernel] iEnsureNBAccessOnParallelKernels: " <> reason,
+      RGBColor[0.5, 0.3, 0.6]]];
+
+(* ロードのみを確認する素の版。
+   subkernel に NBAccess`` をロードし、SubkernelRaw / NBSubkernelExecutableQ /
+   NBAcceptPolicySnapshot / iNBComputePolicyDigest が存在することを確認する
+   (spec 6.8 挙動 1-2)。成功で $iNBAccessOnKernelsReady = True にキャッシュ。 *)
+iEnsureNBAccessOnParallelKernels[] :=
+  Module[{nbPath, loaded, present},
+    If[TrueQ[$iNBAccessOnKernelsReady], Return[True, Module]];
+    nbPath = Quiet @ Check[
+      FileNameJoin[{Global`$packageDirectory, "NBAccess.wl"}], $Failed];
+    If[!StringQ[nbPath] || !FileExistsQ[nbPath],
+      iNBAccessOnKernelsLog["NBAccess.wl path not resolvable"];
+      Return[False, Module]];
+    (* ParallelEvaluate は HoldFirst。nbPath は main の Module ローカル変数なので、
+       そのまま渡すと subkernel では未定義シンボルになる。With で文字列値を
+       展開してから ParallelEvaluate に渡す (これが無いと Needs が失敗する)。 *)
+    loaded = Quiet @ Check[
+      With[{path = nbPath},
+        ParallelEvaluate[
+          Block[{$CharacterEncoding = "UTF-8"},
+            Needs["NBAccess`", path]]]];
+      True,
+      False];
+    If[! TrueQ[loaded],
+      iNBAccessOnKernelsLog["ParallelEvaluate Needs[NBAccess`] failed"];
+      Return[False, Module]];
+    (* spec 6.8 挙動 2: 必須の公開シンボルが subkernel に存在するか確認。
+       NBExecuteHeldExprSubkernelRaw / NBSubkernelExecutableQ /
+       NBAcceptPolicySnapshot が揃っていれば、同梱の Private digest helper も
+       存在する (同一パッケージ)。Private シンボルを名指しで参照すると
+       評価順序やシリアライズの差で誤判定し得るため、公開 API のみ確認する。 *)
+    present = Quiet @ Check[
+      AllTrue[
+        ParallelEvaluate[
+          Length[DownValues[NBAccess`NBExecuteHeldExprSubkernelRaw]] > 0 &&
+          Length[DownValues[NBAccess`NBSubkernelExecutableQ]] > 0 &&
+          Length[DownValues[NBAccess`NBAcceptPolicySnapshot]] > 0],
+        TrueQ],
+      False];
+    If[! TrueQ[present],
+      iNBAccessOnKernelsLog["required NBAccess symbols missing on subkernel"];
+      Return[False, Module]];
+    $iNBAccessOnKernelsReady = True;
+    True
+  ];
+
+(* spec 6.8 / phaseD2 方針 A: accessSpec の PolicySnapshot を各 subkernel に渡し、
+   NBAcceptPolicySnapshot[snapshot] が "Valid" -> True を返すことまで確認する版。
+   main で作った snapshot が subkernel 側 NBAccess の同一 digest helper で
+   照合できることを保証する。1 つでも失敗したら False を返し、
+   呼び出し側 (iSubmitParallelExecution) は async 投入せず None -> sync fallback。
+   snapshot 検証はキャッシュしない (snapshot は実行ごとに変わり得るため)。 *)
+iEnsureNBAccessOnParallelKernels[accessSpec_Association] :=
+  Module[{loadOk, snapshot, valid},
+    (* 1-2. まずロードと必須シンボルを確認 (キャッシュ込み) *)
+    loadOk = iEnsureNBAccessOnParallelKernels[];
+    If[! TrueQ[loadOk], Return[False, Module]];
+
+    (* 3. accessSpec の PolicySnapshot を取り出し、各 subkernel で Valid 確認 *)
+    snapshot = Lookup[accessSpec, "PolicySnapshot", None];
+    If[! AssociationQ[snapshot],
+      iNBAccessOnKernelsLog["accessSpec has no PolicySnapshot Association"];
+      Return[False, Module]];
+
+    (* snapshot は inert なデータのみ (head list 文字列・digest 文字列) なので、
+       With で値展開して ParallelEvaluate に渡しても評価リスクはない
+       (phaseD2 制約 2)。各 subkernel で NBAcceptPolicySnapshot の Valid を確認。 *)
+    valid = Quiet @ Check[
+      With[{snap = snapshot},
+        AllTrue[
+          ParallelEvaluate[
+            TrueQ[NBAccess`NBAcceptPolicySnapshot[snap]["Valid"]]],
+          TrueQ]],
+      False];
+    If[! TrueQ[valid],
+      iNBAccessOnKernelsLog[
+        "snapshot digest mismatch / invalid on one or more subkernels"];
+      Return[False, Module]];
+    True
+  ];
+
+
+(* Phase D-2: subkernel 実行を NBExecuteHeldExprSubkernelRaw 経由にする。
+   シグネチャ変更: accessSpec (ProposalEval + PolicySnapshot) を受け取る。
+   - NBSubkernelExecutableQ で安全確認 (False なら None -> sync fallback)
+   - subkernel に NBAccess をロード (失敗なら None -> sync fallback)
+   - ParallelSubmit には NBExecuteHeldExprSubkernelRaw を渡す
+     (生値/$TimedOut/$Failed を返すので future shape は不変)
+   - ReleaseHold は NBAccess 内部だけに存在する (I1) *)
+iSubmitParallelExecution[heldExpr_, accessSpec_Association, effectiveTimeout_] :=
+  Module[{nKernels, ok, future},
     nKernels = iEnsureParallelKernelsForRuntime[];
     If[!IntegerQ[nKernels] || nKernels === 0, Return[None]];
-    
-    isInfinite = (effectiveTimeout === Infinity);
-    
-    (* \:522f\:30ab\:30fc\:30cd\:30eb\:3067 ReleaseHold \:3092\:5b9f\:884c\:3002
-       Phase 32a (2026-05-13) fix: ParallelSubmit[{vars}, expr] \:306e\:7b2c 1 \:5f15\:6570\:306f
-       \:30b7\:30f3\:30dc\:30eb\:540d\:30ea\:30b9\:30c8\:3092\:6e21\:3059\:69cb\:6587\:3060\:304c\:3001With \:3067\:5024\:7f6e\:63db\:6e08\:307f\:306e
-       \:30ea\:30b9\:30c8 ({HoldComplete[...], 30}) \:3092\:6e21\:3057\:3066\:3044\:305f\:305f\:3081 $Failed \:306b
-       \:306a\:3063\:3066\:3044\:305f\:3002\:6b63\:3057\:304f\:306f With \:3067\:5024\:7f6e\:63db\:3057\:3001ParallelSubmit \:306b\:306f
-       \:5358\:4e00\:5f0f\:3092\:6e21\:3059 (\:7b2c 1 \:5f15\:6570\:306f\:4f7f\:308f\:306a\:3044)\:3002
-       
-       Phase 32b (2026-05-13) fix: TimeConstrained[expr, Infinity, ...] \:306f
-       Mathematica \:30a8\:30e9\:30fc (TimeConstrained::timc: timeout \:306f\:975e\:8ca0\:6570\:5024\:306e\:307f)\:3002
-       Infinity \:306e\:5834\:5408\:306f TimeConstrained \:3092\:30b9\:30ad\:30c3\:30d7\:3057\:3001\:76f4\:63a5 ReleaseHold[he]
-       \:3092\:5225\:30ab\:30fc\:30cd\:30eb\:306b\:6e21\:3059\:3002\:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:306f iAsyncExecutionTickFn \:5074\:3067
-       \:5224\:5b9a\:3057\:306a\:3044\:305f\:3081\:3001\:5225\:30ab\:30fc\:30cd\:30eb\:306f\:5b8c\:4e86\:307e\:3067\:8a55\:4fa1\:3092\:7d9a\:3051\:308b\:3002 *)
-    future = If[isInfinite,
-      Quiet @ Check[
-        With[{he = heldExpr},
-          ParallelSubmit[
-            Quiet[ReleaseHold[he]]]],
-        $Failed],
-      Quiet @ Check[
-        With[{he = heldExpr, tt = effectiveTimeout},
-          ParallelSubmit[
-            Quiet[
-              TimeConstrained[
-                ReleaseHold[he], tt, $TimedOut]]]],
-        $Failed]
-    ];
-    
-    (* Phase 32a fix: Head \:306e\:5224\:5b9a\:3092\:7de9\:3081\:308b\:3002Mathematica \:30d0\:30fc\:30b8\:30e7\:30f3\:306b\:3088\:3063\:3066\:306f
-       Head \:304c EvaluationObject \:4ee5\:5916 (Parallel`Private`evaluationData \:7b49) \:306b
-       \:306a\:308b\:53ef\:80fd\:6027\:304c\:3042\:308b\:3002$Failed \:3060\:3051\:3092\:30c1\:30a7\:30c3\:30af\:3059\:308b\:3002 *)
+
+    (* NBAccess の安全判定。False なら subkernel 実行不可 -> sync fallback *)
+    If[! TrueQ[NBAccess`NBSubkernelExecutableQ[heldExpr, accessSpec]],
+      Return[None]];
+
+    (* subkernel に NBAccess をロードし、accessSpec の PolicySnapshot が
+       各 subkernel で Valid と判定されることまで確認する (spec 6.8 / 方針 A)。
+       失敗なら sync fallback。これにより main で作った snapshot が subkernel
+       判定の正本になり、グローバル状態の同期は不要 (snapshot がすべてを運ぶ)。 *)
+    ok = iEnsureNBAccessOnParallelKernels[accessSpec];
+    If[! TrueQ[ok], Return[None]];
+
+    (* ParallelSubmit に NBExecuteHeldExprSubkernelRaw を渡す。
+       he/spec/tt を With で値置換し、subkernel では HoldComplete の中身は
+       評価されない (NBExecuteHeldExprSubkernelRaw 内部でのみ ReleaseHold)。
+       Infinity も SubkernelRaw 側で TimeConstrained を使わず処理する。 *)
+    future = Quiet @ Check[
+      With[{he = heldExpr, spec = accessSpec, tt = effectiveTimeout},
+        ParallelSubmit[
+          NBAccess`NBExecuteHeldExprSubkernelRaw[he, spec,
+            "TimeConstraint" -> tt]]],
+      $Failed];
+
     If[future === $Failed, Return[None]];
-    
+
     <|
-      "Async"     -> True,
-      "Future"    -> future,
-      "HeldExpr"  -> heldExpr,
-      "Timeout"   -> effectiveTimeout,
-      "StartTime" -> AbsoluteTime[]
+      "Async"           -> True,
+      "Future"          -> future,
+      "HeldExpr"        -> heldExpr,
+      "Timeout"         -> effectiveTimeout,
+      "StartTime"       -> AbsoluteTime[],
+      "ResultShape"     -> "RawCompatible",
+      "AccessSpecDigest" ->
+        Lookup[Lookup[accessSpec, "PolicySnapshot", <||>], "Digest", None]
     |>
   ];
 
@@ -9613,7 +9802,8 @@ Options[ClaudeQueryAsync] = {
   Model -> Automatic,
   PrivacyLevel -> Automatic,
   Timeout -> Automatic,
-  Integrations -> Automatic
+  Integrations -> Automatic,
+  AutoCellize -> True
 };
 
 ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPattern[]] :=
@@ -9621,8 +9811,10 @@ ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPatter
       With[{ig = OptionValue[Integrations]},
         If[ListQ[ig] && Length[ig] > 0, ig, $iLMStudioIntegrationsOverride]]},
   Module[{modelSpec, privLevel, useFallback, availModels, useClaudeCode,
-          jobId, wrappedCallback, accessLevel, norm, hasMedia, mediaFiles},
+          jobId, wrappedCallback, accessLevel, norm, hasMedia, mediaFiles,
+          autoCellize},
     modelSpec = iResolveDefaultModelSpec[OptionValue[Model]];
+    autoCellize = TrueQ[OptionValue[AutoCellize]];
     privLevel = Replace[OptionValue[PrivacyLevel], Automatic -> 0.0];
     useFallback = TrueQ[OptionValue[Fallback]];
     accessLevel = If[privLevel > 0, privLevel, 0.5];
@@ -9693,7 +9885,7 @@ ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPatter
        \:4e00\:62ec\:3067\:30d0\:30a4\:30d1\:30b9\:3057\:3001userCb \:3060\:3051\:3092\:4f8b\:5916\:5b89\:5168\:306b\:547c\:3076\:3002\:3053\:308c\:306b\:3088\:308a hidden notebook \:4e0a\:3067\:306e
        FrontEnd \:64cd\:4f5c (SelectionMove / NotebookWrite / CellTags \:691c\:7d22) \:306e\:30cf\:30f3\:30b0\:3092\:907f\:3051\:308b\:3002 *)
     (* userCb \:306e\:623b\:308a\:5024\:304c thunk \:30ea\:30b9\:30c8 (List \:4e14\:3064\:5404\:8981\:7d20 Function) \:304b\:5224\:5b9a\:3059\:308b\:30d8\:30eb\:30d1 *)
-    wrappedCallback = With[{nb2 = nb, jid = jobId, userCb = callback},
+    wrappedCallback = With[{nb2 = nb, jid = jobId, userCb = callback, ac = autoCellize},
       Function[response,
         Module[{userRet, thunks},
           (* userCb \:3092\:547c\:3073\:3001\:623b\:308a\:5024\:3092\:53d6\:5f97\:3002Print \:7b49\:5358\:7d14 callback \:306f
@@ -9715,7 +9907,7 @@ ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPatter
               userRet,
               (* \:5358\:7d14 callback: \:5fdc\:7b54\:3092\:30bb\:30eb\:5316\:3059\:308b thunk \:30ea\:30b9\:30c8\:3092\:751f\:6210 *)
               If[StringQ[response] && StringTrim[response] =!= "",
-                iWriteQueryResponseQueued[nb2, response],
+                If[TrueQ[ac], iWriteQueryResponseQueued[nb2, response], {}],
                 {}]];
             NBAccess`NBJobResetSlotWritten[jid, 1];
             $iJobActiveNb = None;
@@ -10577,6 +10769,22 @@ This applies to ALL strings: Style text, Grid headers, error messages, comments,
 When data (Dataset, Association, List, etc.) is provided in the prompt, \
 treat it as Mathematica data available in the current session. \
 If the user refers to 'this dataset' or similar, the data shown in the prompt is the target.\n\n\
+DESKTOP / FRONTEND / SIDE-EFFECT ACTIONS (CRITICAL \[LongDash] ABSOLUTE RULE):\n\
+The execution environment enforces a permission model. Certain raw Wolfram heads \
+are blocked outright and CANNOT be approved, so proposing them only produces a refusal.\n\
+- To OPEN A FOLDER or reveal a file/directory in the OS, NEVER write raw SystemOpen[...]. \
+SystemOpen is hard-denied. Instead propose NBOpenFolderWithApproval[path] \
+(the path must be a folder; the environment will show the user an approval button and, \
+if approved, open it safely). Example: to open the folder containing init.m, write \
+NBOpenFolderWithApproval[DirectoryName[FileNameJoin[{$UserBaseDirectory, \"Kernel\", \"init.m\"}]]].\n\
+- Do NOT mix raw side-effect heads (SystemOpen, Run, RunProcess, Export, DeleteFile, \
+URLSubmit, etc.) into a computation. These are hard-denied or require explicit user approval.\n\
+- Keep the SAFE COMPUTATION part (pure math, data transformation) separate and FIRST; \
+put any single user-facing action (open, write, export) as its own final expression \
+using the approval-aware wrapper, not a raw head.\n\
+- If a request can only be done with a hard-denied head and no approval-aware wrapper exists, \
+do NOT propose the raw head. Explain the limitation in prose and suggest a safe alternative \
+(for example, show the folder path as text so the user can open it themselves).\n\n\
 NOTEBOOK CONTEXT RESOLUTION (CRITICAL):\n\
 When the user mentions 'error', 'output', 'result', 'this code', or similar ambiguous references \
 WITHOUT specifying a package name or file name, ALWAYS assume they refer to the \
@@ -11160,7 +11368,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
   ];
 
 (* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:7248 ClaudeEval\:ff08\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:8fd4\:3055\:306a\:3044\:ff09 *)
-Options[ClaudeEval] = {Fallback -> False, AutoEvaluate -> True, StartTime -> Now, WebFetch -> Automatic, WebSearch -> True, RepeatInterval -> None, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False, Timeout -> Automatic, ReferenceText -> None};
+Options[ClaudeEval] = {Fallback -> False, AutoEvaluate -> True, StartTime -> Now, WebFetch -> Automatic, WebSearch -> True, RepeatInterval -> None, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False, Timeout -> Automatic, ReferenceText -> None, OutputMode -> Automatic};
 
 (* StartTime \:30b9\:30b1\:30b8\:30e5\:30fc\:30ea\:30f3\:30b0\:30d8\:30eb\:30d1\:30fc:
    \:958b\:59cb\:6642\:523b\:304c\:672a\:6765\:306a\:3089 SessionSubmit + ScheduledTask \:3067\:9045\:5ef6\:5b9f\:884c\:3001
@@ -11361,6 +11569,8 @@ $iClaudeEvalNotDispatched = Unique["$iClaudeEvalNotDispatched"];
 
 If[!ValueQ[$ClaudeEvalNaturalDispatch], $ClaudeEvalNaturalDispatch = True];
 If[!ValueQ[$ClaudeEvalNotebookContext], $ClaudeEvalNotebookContext = ""];
+If[!ValueQ[$ClaudeEvalLastProposedExprString],
+  $ClaudeEvalLastProposedExprString = Missing["NotCaptured"]];
 
 $ClaudeEvalNaturalDispatch::usage =
   "$ClaudeEvalNaturalDispatch \:306f Step 4 \:8ffd\:52a0\:306e\:81ea\:7136\:8a00\:8a9e\:30eb\:30fc\:30bf\:30fc\:306e\:6709\:52b9\:30d5\:30e9\:30b0\:3002\n" <>
@@ -11620,6 +11830,19 @@ iClaudeEvalHeldExprHeadName[held_] :=
       $Failed]
   ];
 
+(* HoldComplete[expr] / Hold[expr] \:3092 expr \:306e InputForm \:6587\:5b57\:5217\:306b\:3059\:308b (\:8a55\:4fa1\:305b\:305a)\:3002
+   \:518d\:5b9f\:884c\:7528\:306e\:63d0\:6848\:5f0f\:6587\:5b57\:5217\:8a18\:9332\:306b\:4f7f\:3046\:3002
+   Extract \:306e wrapper \:306b HoldAllComplete \:306a Function \:3092\:6e21\:3057\:3001\:4e2d\:8eab\:3092\:672a\:8a55\:4fa1\:306e\:307e\:307e
+   ToString \:3059\:308b\:3002HoldForm \:3092 wrapper \:306b\:3059\:308b\:3068 \"HoldForm[...]\" \:304c\:6587\:5b57\:5217\:306b\:6b8b\:308b\:305f\:3081\:4f7f\:308f\:306a\:3044\:3002 *)
+iClaudeRuntimeHeldToInputString[held_] :=
+  Quiet @ Check[
+    Which[
+      MatchQ[held, _HoldComplete | _Hold] && Length[held] >= 1,
+        Extract[held, {1},
+          Function[Null, ToString[Unevaluated[#], InputForm], HoldAllComplete]],
+      True, Missing["NotCaptured"]],
+    Missing["NotCaptured"]];
+
 (* validate + release + evaluate a PromptRouteProposal *)
 iClaudeRuntimeSubmitProposal[proposal_] :=
   Module[{held, headName},
@@ -11639,6 +11862,13 @@ iClaudeRuntimeSubmitProposal[proposal_] :=
     (* head is allowlisted ReadOnly -> release and evaluate.
        The evaluated result (e.g. the decorated schedule Grid)
        is what ClaudeEval returns. *)
+    (* \:518d\:5b9f\:884c\:7528: \:5b9f\:884c\:3059\:308b\:63d0\:6848\:5f0f\:3092 InputForm \:6587\:5b57\:5217\:5316\:3057\:3066\:5171\:6709\:5909\:6570\:306b\:683c\:7d0d\:3002
+       SaveLastPrompt \:304c\:3053\:308c\:3092\:62fe\:3063\:3066 PromptRoute.TargetExprString \:306b\:4fdd\:5b58\:3057\:3001
+       ToInput \:30dc\:30bf\:30f3\:3084 Replayable \:5224\:5b9a\:306b\:4f7f\:3046\:3002held \:306f HoldComplete[expr]\:3002 *)
+    Quiet @ Check[
+      ClaudeCode`$ClaudeEvalLastProposedExprString =
+        iClaudeRuntimeHeldToInputString[held],
+      ClaudeCode`$ClaudeEvalLastProposedExprString = Missing["NotCaptured"]];
     Quiet @ Check[
       ReleaseHold[held],
       $iClaudeEvalNotDispatched]
@@ -19207,25 +19437,13 @@ ShowClaudePalette[] := (
         Background -> RGBColor[0.65, 0.15, 0.15],
         ImageSize -> {100, 20},
         FrameMargins -> {{4, 4}, {1, 1}},
-        Method -> "Queued"],
-      Spacer[2],
-
-      (* \[HorizontalLine]\[HorizontalLine] \:30b9\:30c6\:30fc\:30bf\:30b9 \[HorizontalLine]\[HorizontalLine] *)
-      Dynamic[
-        With[{nb = InputNotebook[]},
-          Style[
-            If[Head[nb] === NotebookObject,
-              Module[{direct = 0, dep = 0, n = NBAccess`NBCellCount[nb]},
-                Do[Which[
-                  TrueQ[NBAccess`NBGetConfidentialTag[nb, i]] &&
-                    !TrueQ[NBAccess`NBCellGetTaggingRule[nb, i, {"claudecode", "dependent"}]],
-                  direct++,
-                  TrueQ[NBAccess`NBCellGetTaggingRule[nb, i, {"claudecode", "dependent"}]],
-                  dep++], {i, n}];
-                iL[" \:6a5f\:5bc6: ", " Conf: "] <> ToString[direct] <>
-                iL[", \:4f9d\:5b58: ", ", Dep: "] <> ToString[dep]],
-              iL[" \:6a5f\:5bc6: 0", " Conf: 0"]],
-            8, GrayLevel[0.4]]]]
+        Method -> "Queued"]
+      (* \:30b9\:30c6\:30fc\:30bf\:30b9\:884c (\:6a5f\:5bc6/\:4f9d\:5b58\:30ab\:30a6\:30f3\:30bf) \:306f\:524a\:9664 (2026-06-06)\:3002
+         \:5168\:30bb\:30eb\:3092 i=1..n \:3067\:8d70\:67fb\:3057\:3066\:30bb\:30eb\:6bce\:306b CurrentValue[TaggingRules] \:3092\:53d6\:308b
+         O(N) \:306e\:540c\:671f FE \:30af\:30a8\:30ea\:3092\:3001ClaudeEval \:306e\:30bb\:30eb\:66f8\:304d\:8fbc\:307f\:6bce\:306b\:518d\:8a55\:4fa1\:3057\:3066
+         FrontEnd \:3092\:30d6\:30ed\:30c3\:30af\:3057\:3066\:3044\:305f (\:300c\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30f3\:30c4\:3092\:30d5\:30a9\:30fc\:30de\:30c3\:30c8…\:300d)\:3002
+         \:6a5f\:5bc6\:30fb\:4f9d\:5b58\:306f\:30bb\:30eb\:306e\:8272\:30de\:30fc\:30af\:3068\:79d8\:533f\:8ffd\:8de1\:3067\:53b3\:5bc6\:306b\:7ba1\:7406\:6e08\:307f\:306e\:305f\:3081\:3001
+         \:30d1\:30ec\:30c3\:30c8\:3078\:306e\:5e38\:6642\:8868\:793a\:306f\:4e0d\:8981\:3002 *)
 
     }, Alignment -> Center, Spacings -> 0],
     TrackedSymbols :> {$iPaletteModel, $iPaletteEffort, $iPaletteFallback, $iPaletteUpdateApiMd}
@@ -25176,7 +25394,19 @@ NBFileTranslate[inputPath_String, outputPath_String,
    NBCellTransformWithLLM \:304c\:3053\:306e\:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:7d4c\:7531\:3067\:975e\:540c\:671f LLM \:3092\:547c\:3073\:51fa\:3059\:3002
    \:30b7\:30b0\:30cd\:30c1\:30e3: $NBLLMQueryFunc[prompt, callback, Model -> spec, Fallback -> bool]
    ============================================================ *)
-NBAccess`$NBLLMQueryFunc = ClaudeCode`ClaudeQueryAsync;
+(* $NBLLMQueryFunc には ClaudeQueryAsync を直接代入せず、
+   AutoCellize -> False を強制する薄いラッパーを登録する。
+   NBCellTransformWithLLM / documentation.wl の各 callback は
+   セルへのインプレース書き込みのみを行い、thunk リストを返さない。
+   そのため ClaudeQueryAsync の「単純 callback → 応答を自動マークダウン展開セル化」
+   ヒューリスティックが誤発火し、応答が重複セルとして追加書き込まれる問題を防ぐ。
+   $NBLLMQueryFunc の契約は「応答文字列を callback に渡す」だけで、セル化は含まない。 *)
+iNBLLMQueryFuncImpl[prompt_String, callback_, nb_NotebookObject, opts:OptionsPattern[ClaudeCode`ClaudeQueryAsync]] :=
+  ClaudeCode`ClaudeQueryAsync[prompt, callback, nb,
+    AutoCellize -> False,
+    Sequence @@ FilterRules[{opts}, Except[AutoCellize]]];
+
+NBAccess`$NBLLMQueryFunc = iNBLLMQueryFuncImpl;
 
 (* ============================================================
    NBAccess AutoEvaluate \:7981\:6b62\:30d1\:30bf\:30fc\:30f3\:767b\:9332
@@ -26656,14 +26886,33 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
       ],
       
       (* \[HorizontalLine]\[HorizontalLine] ValidateProposal \[HorizontalLine]\[HorizontalLine]
-         \:30d6\:30e9\:30c3\:30af\:30ea\:30b9\:30c8\:65b9\:5f0f: $NBDenyHeads / $NBApprovalHeads \:306e\:307f\:30c1\:30a7\:30c3\:30af\:3002
-         $NBAllowedHeads \:30db\:30ef\:30a4\:30c8\:30ea\:30b9\:30c8\:306f\:4f7f\:308f\:306a\:3044 (\:901a\:5e38\:30b3\:30fc\:30c9\:3092\:8a31\:53ef\:3059\:308b\:305f\:3081)\:3002
-         \:30c4\:30fc\:30eb\:30eb\:30fc\:30d7\:306e mathematica_eval \:306f iToolExecMathematica \:5185\:3067
-         NBValidateHeldExpr \:306b\:3088\:308b strict head check \:3092\:5225\:9014\:5b9f\:884c\:3059\:308b\:3002 *)
+         Phase C-lite (2026-06-03 \:5b9f\:88c5 / 2026-06-05 \:6587\:8a00\:6574\:5408):
+         head \:5224\:5b9a\:306f NBValidateHeldExpr \:306b\:59d4\:8b72\:3057\:3001\:5b9f\:884c\:30b2\:30fc\:30c8
+         (NBExecuteHeldExpr \:306e\:518d\:691c\:8a3c) \:3068\:5b8c\:5168\:4e00\:81f4\:3055\:305b\:308b\:3002\:65e7\:6765\:306e
+         \:30d6\:30e9\:30c3\:30af\:30ea\:30b9\:30c8\:65b9\:5f0f ($NBDenyHeads / $NBApprovalHeads \:306e\:307f) \:3067\:306f
+         unknown head \:304c Permit \:306b\:7d20\:901a\:308a\:3057\:3001\:5b9f\:884c\:6bb5\:968e\:3067\:521d\:3081\:3066
+         NeedsApproval \:62d2\:5426 (\:627f\:8a8d UI \:306a\:3057) \:306b\:306a\:308b\:98df\:3044\:9055\:3044\:304c\:3042\:3063\:305f\:3002
+         NBValidateHeldExpr \:7d4c\:7531\:306b\:3059\:308b\:3053\:3068\:3067\:3001unknown head \:304c
+         NeedsApproval \:306a\:3089 validation \:6bb5\:968e\:3067\:627f\:8a8d UI \:304c\:51fa\:308b\:3002
+         \:30c4\:30fc\:30eb\:30eb\:30fc\:30d7\:306e mathematica_eval \:3082 iToolExecMathematica \:5185\:3067
+         \:540c\:69d8\:306b NBValidateHeldExpr \:3092\:5b9f\:884c\:3059\:308b\:3002 *)
       "ValidateProposal" -> Function[{proposal, contextPacket},
         Module[{heldExpr, code, heads, denied, needsApproval},
           heldExpr = proposal["HeldExpr"];
           code = Lookup[proposal, "RawCode", ""];
+          (* \:518d\:5b9f\:884c\:7528: \:63d0\:6848\:5f0f\:3092\:5171\:6709\:5909\:6570\:306b\:683c\:7d0d\:3002ValidateProposal \:306f
+             \:5b9f\:884c\:30fb\:30b3\:30fc\:30c9\:63d0\:793a\:306e\:3069\:3061\:3089\:306e\:7d4c\:8def\:3067\:3082\:5fc5\:305a\:901a\:308b\:691c\:8a3c\:30d5\:30a7\:30fc\:30ba\:306a\:306e\:3067\:78ba\:5b9f\:3002
+             RawCode (\:751f\:30b3\:30fc\:30c9\:6587\:5b57\:5217) \:3092\:512a\:5148\:3001\:7121\:3051\:308c\:3070 heldExpr \:3092 InputForm \:5316\:3002
+             SaveLastPrompt \:304c\:3053\:308c\:3092\:62fe\:3063\:3066 TargetExprString \:306b\:4fdd\:5b58\:3059\:308b\:3002 *)
+          Quiet @ Check[
+            ClaudeCode`$ClaudeEvalLastProposedExprString =
+              Which[
+                StringQ[code] && StringTrim[code] =!= "", StringTrim[code],
+                heldExpr =!= None,
+                  iClaudeRuntimeHeldToInputString[heldExpr],
+                True, Missing["NotCaptured"]],
+            ClaudeCode`$ClaudeEvalLastProposedExprString =
+              Missing["NotCaptured"]];
           Which[
             (* HeldExpr \:306a\:3057 \[RightArrow] TextOnly *)
             heldExpr === None,
@@ -26676,37 +26925,25 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                 "VisibleExplanation" ->
                   "Code modifies access scope. Review required."|>,
             
-            (* NBAccess \:306e head \:30c1\:30a7\:30c3\:30af *)
+            (* NBAccess の head チェック。Phase C-lite (2026-06-03):
+               旧来はここで独自の簡易判定 (Deny/Approval 以外は全て Permit) を
+               していたため、NBExecuteHeldExpr の C-lite 再検証と食い違い、
+               unknown head が「承認 UI なしで実行段階で拒否」されていた。
+               NBValidateHeldExpr に委譲して判定を完全一致させる。これにより
+               unknown head が NeedsApproval なら validation 段階で承認 UI が出る。 *)
             True,
-              heads = Quiet @ Check[
-                DeleteDuplicates @ Cases[heldExpr,
-                  s_Symbol[___] :> SymbolName[Unevaluated[s]],
-                  {1, Infinity}], {}];
-              denied = Select[heads,
-                MemberQ[NBAccess`$NBDenyHeads, #] &];
-              needsApproval = Select[heads,
-                MemberQ[NBAccess`$NBApprovalHeads, #] &];
-              Which[
-                Length[denied] > 0,
-                  <|"Decision" -> "Deny",
-                    "ReasonClass" -> "ForbiddenHead",
-                    "VisibleExplanation" ->
-                      "Forbidden heads: " <> StringRiffle[denied, ", "],
-                    "SanitizedExpr" -> heldExpr|>,
-                Length[needsApproval] > 0,
-                  <|"Decision" -> "NeedsApproval",
-                    "ReasonClass" -> "AccessEscalationRequired",
-                    "VisibleExplanation" ->
-                      "Heads requiring approval: " <>
-                        StringRiffle[needsApproval, ", "],
-                    "SanitizedExpr" -> heldExpr|>,
-                True,
-                  <|"Decision" -> "Permit",
-                    "ReasonClass" -> "None",
-                    "VisibleExplanation" -> "",
-                    "SanitizedExpr" -> heldExpr,
-                    "RouteAdvice" -> Quiet @ Check[
-                      NBAccess`NBRouteDecision[accessSpec], None]|>
+              Module[{vr},
+                vr = Quiet @ Check[
+                  NBAccess`NBValidateHeldExpr[heldExpr, accessSpec],
+                  <|"Decision" -> "RepairNeeded",
+                    "ReasonClass" -> "ValidationError",
+                    "VisibleExplanation" -> "Validation failed",
+                    "SanitizedExpr" -> heldExpr|>];
+                (* Permit のときは RouteAdvice を付与 (既存挙動互換) *)
+                If[Lookup[vr, "Decision", "Deny"] === "Permit",
+                  Append[vr, "RouteAdvice" -> Quiet @ Check[
+                    NBAccess`NBRouteDecision[accessSpec], None]],
+                  vr]
               ]
           ]
         ]
@@ -26719,8 +26956,23 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
          \:305d\:308c\:4ee5\:5916\:306f\:5f93\:6765\:306e NBExecuteHeldExpr \:3067\:540c\:671f\:5b9f\:884c\:3059\:308b\:3002 *)
       "ExecuteProposal" -> Function[{proposal, validationResult},
         Module[{heldExpr, propExpectedSec, effectiveTimeout,
-                confVarNames, asyncResult},
+                confVarNames, asyncResult, userApprovalMode},
           heldExpr = proposal["HeldExpr"];
+          (* Phase C-lite (2026-06-03): ユーザーが承認 UI で明示承認した proposal は
+             "UserApproved" -> True が刻まれている (ClaudeApproveProposal が付与)。
+             その場合 NBExecuteHeldExpr に ApprovalMode -> "UserApproved" を渡し、
+             NeedsApproval を Permit 昇格させる。Deny は昇格しない (NBAccess 側で保証)。 *)
+          userApprovalMode = If[TrueQ[Lookup[proposal, "UserApproved", False]],
+            "UserApproved", "None"];
+          (* \:518d\:5b9f\:884c\:7528: LLM \:751f\:6210\:30b3\:30fc\:30c9\:3082\:542b\:3081\:3001\:5b9f\:884c\:3059\:308b\:5f0f\:3092 InputForm \:6587\:5b57\:5217\:5316\:3057\:3066
+             \:5171\:6709\:5909\:6570\:306b\:683c\:7d0d\:3002SaveLastPrompt \:304c\:62fe\:3063\:3066 TargetExprString \:306b\:4fdd\:5b58\:3057\:3001
+             ToInput / Replayable \:5224\:5b9a\:306b\:4f7f\:3046\:3002\:5168\:5b9f\:884c\:7d4c\:8def (async/sync/NBExecuteHeldExpr) \:306e
+             \:624b\:524d\:306a\:306e\:3067\:3053\:3053\:304c\:78ba\:5b9f\:306a\:6355\:6349\:70b9\:3002 *)
+          Quiet @ Check[
+            ClaudeCode`$ClaudeEvalLastProposedExprString =
+              iClaudeRuntimeHeldToInputString[heldExpr],
+            ClaudeCode`$ClaudeEvalLastProposedExprString =
+              Missing["NotCaptured"]];
           (* Phase 29 (2026-05-13): proposal \:306e ExpectedSeconds \:3092\:512a\:5148\:3001
              \:306a\:3051\:308c\:3070 adapter \:306e DefaultTimeoutSeconds \:3092\:4f7f\:3046\:3002
              Phase 30 (2026-05-13): Infinity \:3092\:660e\:793a\:7684\:306b\:8a31\:53ef\:3002 *)
@@ -26742,31 +26994,34 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
             If[ListQ[secrets], secrets, {}]];
           
           (* \:975e\:540c\:671f\:5b9f\:884c\:5224\:5b9a \[RightArrow] \:522f\:30ab\:30fc\:30cd\:30eb\:3078\:9001\:4fe1\:8a66\:884c *)
-          If[iShouldExecuteAsync[heldExpr, confVarNames],
-            asyncResult = iSubmitParallelExecution[heldExpr, effectiveTimeout];
+          (* Phase D-1: ProposalEval ロールの accessSpec を作り、
+             NBSubkernelExecutableQ 経由で async 可否を判定する。
+             iSubmitParallelExecution は D-2 で SubkernelRaw 経由に変更予定。 *)
+          With[{asyncSpec = NBAccess`NBMakeRuntimeAccessSpec[
+              <|"ConfidentialSymbols" -> confVarNames, "Secrets" -> secrets,
+                "Caller" -> "ClaudeEvalProposal"|>, "ProposalEval"]},
+          If[iShouldExecuteAsync[heldExpr, asyncSpec, effectiveTimeout],
+            asyncResult = iSubmitParallelExecution[heldExpr, asyncSpec, effectiveTimeout];
             If[AssociationQ[asyncResult] &&
                TrueQ[Lookup[asyncResult, "Async", False]],
-              Return[asyncResult, Module]]];
+              Return[asyncResult, Module]]]];
           
-          (* \:540c\:671f\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3002Phase 32b (2026-05-13) fix:
-             Infinity \:306e\:5834\:5408\:306f NBExecuteHeldExpr \:5185\:306e
-             TimeConstrained[..., Infinity, ...] \:304c Mathematica \:30a8\:30e9\:30fc
-             (TimeConstrained::timc) \:3092\:51fa\:3057\:3066\:672a\:8a55\:4fa1\:3092\:8fd4\:3057\:305f\:308a
-             \:8a55\:4fa1\:3092\:9054\:6210\:3057\:306a\:3044\:3053\:3068\:304c\:3042\:308b\:305f\:3081\:3001\:76f4\:63a5 ReleaseHold \:3092
-             \:4f7f\:3046 (\:305f\:3060\:3057\:540c\:671f\:5b9f\:884c\:306a\:306e\:3067\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092
-             \:30d6\:30ed\:30c3\:30af\:3059\:308b: \:540c\:671f fallback \:30d1\:30b9\:306e\:6027\:8cea\:4e0a\:4e0d\:53ef\:907f)\:3002 *)
-          If[effectiveTimeout === Infinity,
-            Module[{rawSync},
-              rawSync = Quiet @ Check[ReleaseHold[heldExpr], $Failed];
-              If[rawSync === $Failed,
-                <|"Success" -> False, "RawResult" -> None,
-                  "HeldExpr" -> heldExpr,
-                  "Error" -> "Sync execution failed (no timeout)"|>,
-                <|"Success" -> True, "RawResult" -> rawSync,
-                  "HeldExpr" -> heldExpr, "Error" -> None|>]],
-            NBAccess`NBExecuteHeldExpr[heldExpr, accessSpec,
-              "TimeConstraint" -> effectiveTimeout]
-          ]
+          (* 同期フォールバック。Phase D-3 (2026-06-03):
+             旧来は effectiveTimeout === Infinity のとき NBExecuteHeldExpr 内の
+             TimeConstrained[..., Infinity, ...] が timc メッセージで未評価を
+             返す問題を避けるため、直接 ReleaseHold していた (A 分類)。
+             Phase C-1 で NBExecuteHeldExpr に Infinity 分岐
+             (TimeConstrained を使わず Quiet[ReleaseHold]) が実装されたため、
+             この回避は不要になった。Infinity も含め NBExecuteHeldExpr に一本化し、
+             すべての同期実行を NBAccess の再検証 (Permit のみ実行) 経由にする (I1)。
+             これにより Infinity のときだけ検証を素通りしていた抜け穴が塞がる。
+             検証ポリシーは非 Infinity 時と同一 (同じ accessSpec、snapshot なし=
+             current/global mode)。
+             Phase C-lite: ユーザー明示承認時は ApprovalMode -> "UserApproved" を
+             渡し、NeedsApproval (Approval head / unknown head) を Permit 昇格。 *)
+          NBAccess`NBExecuteHeldExpr[heldExpr, accessSpec,
+            "TimeConstraint" -> effectiveTimeout,
+            "ApprovalMode" -> userApprovalMode]
         ]
       ],
       
@@ -26777,6 +27032,11 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
             <|"AccessLevel" -> accessLevel|>];
           ctxAccessSpec["Secrets"] = Join[
             Lookup[ctxAccessSpec, "Secrets", {}], secrets];
+          (* 2026-06-06 \:6f0f\:6d29\:4fee\:6b63: LLM \:304c Out[13] / In[13] / InString[13] / %13 / %
+             \:3067\:6a5f\:5bc6\:30bb\:30eb\:306e\:5165\:529b\:30fb\:51fa\:529b\:3092\:76f4\:63a5\:8aad\:3093\:3060\:5834\:5408\:3082 redact \:3067\:304d\:308b\:3088\:3046\:3001
+             \:6a5f\:5bc6\:884c\:756a\:53f7\:3092 notebook \:304b\:3089\:7b97\:51fa\:3057\:3066 accessSpec \:306b\:6e21\:3059\:3002 *)
+          ctxAccessSpec["ConfidentialLineNumbers"] = Quiet @ Check[
+            NBAccess`NBConfidentialLineNumbers[nb, ctxAccessSpec], {}];
           NBAccess`NBRedactExecutionResult[executionResult, ctxAccessSpec]
         ]
       ],
@@ -28197,15 +28457,52 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
                     Quiet[CurrentValue[nbObj, WindowStatusArea] =
                       iL["ClaudeRuntime: \:5b9f\:884c\:4e2d...",
                          "ClaudeRuntime: Executing..."]];
-                    SessionSubmit[ScheduledTask[
-                      Module[{result, st2},
-                        result = Quiet @ ClaudeRuntime`ClaudeApproveProposal[rid];
-                        st2 = ClaudeRuntime`Private`$iClaudeRuntimes[rid];
-                        If[AssociationQ[st2],
-                          iRuntimeDisplayResult[nbObj, tg, rid]];
-                        Quiet[CurrentValue[nbObj, WindowStatusArea] = ""]
-                      ],
-                      {0.3, 1}]]],
+                    (* 承認 wrapper context 修正 (2026-06-03): SystemOpen 等の
+                       desktop action は SessionSubmit/ScheduledTask 系では効かず、
+                       メインカーネルのトップレベル評価 (= このボタン本体) でのみ
+                       効く。承認済みなのでここでパス検証だけ NBAccess に委ね、
+                       検証 OK なら raw SystemOpen をボタン本体で直接呼ぶ。
+                       重い処理は従来通り SessionSubmit へ。 *)
+                    Module[{rtNow, pend, heldE, accS, deskInfo, handledHere},
+                      handledHere = False;
+                      rtNow = Quiet @ Check[
+                        ClaudeRuntime`Private`$iClaudeRuntimes[rid], None];
+                      If[AssociationQ[rtNow] &&
+                         AssociationQ[Lookup[rtNow, "PendingApproval", None]],
+                        pend = rtNow["PendingApproval"];
+                        heldE = Lookup[Lookup[pend, "Proposal", <||>],
+                          "HeldExpr", None];
+                        accS = Quiet @ Check[
+                          NBAccess`NBMakeRuntimeAccessSpec[
+                            Lookup[pend, "ContextPacket", <||>], "Committer"],
+                          <|"PermissionMode" -> "InteractiveSafe"|>];
+                        If[MatchQ[heldE, HoldComplete[_]] &&
+                           !TrueQ[Quiet @ Check[
+                             ClaudeRuntime`ClaudeRuntimeAsyncActiveQ[], False]],
+                          deskInfo = Quiet @ Check[
+                            NBAccess`NBResolveDesktopActionPath[heldE, accS],
+                            <|"IsDesktopAction" -> False|>];
+                          If[TrueQ[Lookup[deskInfo, "IsDesktopAction", False]] &&
+                             TrueQ[Lookup[deskInfo, "Validated", False]],
+                            (* メインカーネル評価コンテキストで raw SystemOpen *)
+                            Quiet @ Check[
+                              SystemOpen[Lookup[deskInfo, "Path", ""]], Null];
+                            (* runtime を Done にし承認状態を消費 *)
+                            Quiet @ Check[
+                              ClaudeRuntime`ClaudeMarkApprovalConsumed[rid,
+                                "FinalActionExecutedInline"], Null];
+                            handledHere = True;
+                            Quiet[CurrentValue[nbObj, WindowStatusArea] = ""]]]];
+                      If[!handledHere,
+                        SessionSubmit[ScheduledTask[
+                          Module[{result, st2},
+                            result = Quiet @ ClaudeRuntime`ClaudeApproveProposal[rid];
+                            st2 = ClaudeRuntime`Private`$iClaudeRuntimes[rid];
+                            If[AssociationQ[st2],
+                              iRuntimeDisplayResult[nbObj, tg, rid]];
+                            Quiet[CurrentValue[nbObj, WindowStatusArea] = ""]
+                          ],
+                          {0.3, 1}]]]]],
                   Enabled -> Dynamic[!decided],
                   ImageSize -> {If[isDeny, 110, 80], 28},
                   Background -> If[isDeny,
@@ -28277,6 +28574,19 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
           iL["\:26a0\:fe0f ClaudeRuntime: \:5931\:6557 - ",
              "\:26a0\:fe0f ClaudeRuntime: Failed - "] <> errMsg,
           RGBColor[0.8, 0, 0]];
+        
+        (* Phase C-lite (2026-06-03, spec 5A.9): Deny の場合は拒否理由
+           (VisibleExplanation) を併記する。承認 UI (実行/中止ボタン) は
+           出さない。これにより「Deny なのにボタンが出て押しても実行されない」
+           問題を解消する。 *)
+        If[AssociationQ[failDetail] &&
+           Lookup[failDetail, "Decision", ""] === "Deny",
+          Module[{expl = Lookup[failDetail, "VisibleExplanation", ""]},
+            If[StringQ[expl] && expl =!= "",
+              NBAccess`NBWriteCell[nb, Cell[
+                iL["\:5b89\:5168\:691c\:8a3c\:3067\:62d2\:5426: ", "Denied by safety check: "] <> expl,
+                "Text", FontColor -> RGBColor[0.8, 0, 0], FontSize -> 11,
+                CellTags -> "claudecode-notice"]]]]];
         
         (* Phase 29 (2026-05-13): \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:6642\:306f\:5b9f\:884c\:3055\:308c\:305f\:30b3\:30fc\:30c9\:3068\:8abf\:67fb\:30dc\:30bf\:30f3\:3092\:8868\:793a\:3002
            Imai \:5148\:751f\:6307\:91dd: \:300c\:77e5\:308a\:305f\:3044\:306e\:306f\:5b9f\:969b\:306b\:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:3057\:305f\:30b3\:30fc\:30c9\:300d *)

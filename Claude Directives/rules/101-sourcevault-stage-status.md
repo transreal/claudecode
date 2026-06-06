@@ -15,6 +15,7 @@ paths:
   - Phase 35 で `iClaudeQueryBgAPIMultimodal` に CLI リダイレクトが追加され、`$ClaudeModel = {"claudecode", ...}` のままで vision OCR / multimodal が無課金で動作する
   - Phase 35 未満では Stage 4C ClaudeVision backend は `"Error: multimodal API は現在 Anthropic のみ..."` で失敗する
 - ファイル規模 (次フェーズ完了時点): NBAccess.wl **6946 行** / claudecode.wl **28187 行** / SourceVault.wl **10734 行**
+- **2026-06 追加: 暗号化・メール・2層アドレス帳・重要度の構造計算サブシステム** (本体 SourceVault.wl とは別の 4 サブファイル: `NBAccess_crypto.wl` + `SourceVault_{crypto,identity,maildb}.wl`)。旧 maildb.wl は `maildb_legacy.wl` に改名・移植元。私的データ (IMAP ログイン・所有者 identity) はソースから排除し vault config + ユーザDB #1 に外部化。詳細は本ファイル末尾の「暗号化・メール・identity サブシステム」節、API は `SourceVault_info/docs/api_crypto.md` / `api_identity.md` / `api_maildb.md`。**鍵 backend は `SystemCredential` 必須 (Memory だとデータ復号不可)。**
 - **完成済み Stage**: 1 (ingest) / 2 (NBAccess hook P1-P4) / 3 (Context) / 4A (URL/arXiv) / 4B (page extraction + cache) / 4C (3 OCR backends) / 5 (Claim extraction) / 6a (Claim dedup + Compact) / 6c (Evidence Bundle Phase 1) / 8 (vN diff + lifecycle) / 6d (NBAuthorize 2-stage) / 6b (Compiled Registry) / 9 P0 (Notebook Management) / 9 P1 (NBAccess semantic API + SourceVaultMarkTodo + mtime cache + MakeExpression first) / 9 P1 拡張 Steps 1-8 (UpcomingSchedule + PrivacyLevel 体系 + 再起動後高速化) / **次フェーズ (Sync 骨格 + Relink + モデルレジストリ + UUID 埋め込み)**
 
 ## ストレージレイアウト
@@ -106,6 +107,21 @@ paths:
 - **罠 #53 (このフェーズで発見)**: `URLRead[req, fmt, TimeConstraint -> n]` は `URLRead::optx` で静かに失敗し `$Failed` を返す。`TimeConstraint` は `URLRead` のオプションではない
 - **罠 #54 (このフェーズで発見)**: `::usage` 本文の文字列リテラル内に出てくる `"..."` は必ず `\"...\"` にエスケープする。怠ると usage 文字列が途中で終了し `MessageName::messg` でロード失敗。配布前に全 usage の引用符バランスを機械検査する
 - **Dataset の Button セル省略 (このフェーズで再確認)**: Dataset はセル内 Button 等のインタラクティブ要素を構造的に `...` 省略する。クリック可能セルを含む表は `Grid` を使う (UpcomingSchedule の `iSVFormatScheduleDataset` で対応済み)
+
+## 暗号化・メール・identity サブシステム (2026-06) の必須ルール
+
+**SourceVault に at-rest 暗号化・メール (旧 maildb 移植)・2層アドレス帳・重要度の構造計算を追加した。これらは SourceVault.wl 本体ではなく 4 つのサブファイルに分かれてロードされる。**
+
+- **ファイル構成 (集約済み)**: ローダ (`SourceVault.wl` の `iSVLoadPromptRouterExtension`) は依存順に 4 ファイルだけ `Get`: `NBAccess_crypto.wl` (context `NBAccess\``、鍵隔離層、別文脈なので統合不可) → `SourceVault_crypto.wl` (= crypto + keys + keybundle + encryptedstore + release) → `SourceVault_identity.wl` (= addressbook + senderauth + identity + messagerelease) → `SourceVault_maildb.wl` (= maildb + imap + mailui)。各サブファイルは元の `BeginPackage…EndPackage` ブロックを連結 (同一 `SourceVault\`` 文脈で複数ブロックは正常)。旧 SourceVault_keys/keybundle/encryptedstore/release/addressbook/senderauth/imap/messagerelease/mailui.wl は削除済み。**編集はこの 3 ファイル内で行う。**
+- **鍵 backend の不変条件 (最重要・データ消失防止)**: `NBAccess\`$NBCredentialBackend` = "Memory" (揮発・dev) | "SystemCredential" (永続・本番)。`SourceVaultInitializeEncryption[]` は鍵不在時に新規乱数鍵を生成するので、**Memory backend で暗号化したデータは別セッションで復号不可 (鍵消失=不可逆)**。実 vault への書き込み・派生・fetch は必ず `SystemCredential`。テスト・確認用コマンドでも Memory backend で実 vault に書かない。WL14.3 は GCM/組込 HMAC/RSA-PSS 不可 → encrypt-then-MAC + 手製 HMAC-SHA256 (`skills` / memory [[wl-crypto-capabilities]] 参照)。
+- **可搬鍵バンドル**: 鍵はマシンローカル (SystemCredential/DPAPI) なので、別マシン/再インストール復旧には `SourceVaultExportKeyBundle[passphrase]` (scrypt + AES wrap + encrypt-then-MAC) で**Dropbox 外**に退避し各マシンで `SourceVaultImportKeyBundle` する。鍵材料は NBAccess 外に出さず戻り値にも出さない。
+- **RecordId は鍵非依存の決定的 SHA256(canonical{mbox, MessageID})**: 旧実装は鍵 MAC 有無で値が変わり再 import で衝突せず冪等性が壊れた。決定的 SHA256 に固定済み。既 import 済み legacy の再 import は別 RecordId の重複を生むので避ける (補填は content-match backfill)。
+- **2層アドレス帳**: 識別子 (raw email/SNS、取込で自動生成) と実体 (人/組織、後でマージ) を分離。**所有者 = ユーザDB #1** (EntityUid=1, OwnerKind=Self)。所有者のメール/プライマリメール/LLMProfile は #1 に持たせ、派生プロンプト・ReplyAll 自分除外がそこを参照 (私的データをソースに置かない、rule 03)。`SourceVaultIdentityEnsureLoaded` で UI/owner アクセサは未ロードでも自動 load。
+- **永続化の罠**: JSONL は ISO8859-1 で読み書き (ExportString RawJSON のバイト=UTF-8 をそのまま; 二重 encode 回避)。**`ExportString[..., "RawJSON"]` は `Missing[]` も `$Failed` も出力不可** → 保存前に `/. (_Missing | $Failed) -> Null`、load 時に Null→Missing。`NBMacWithKeyRef` は鍵不在で例外でなく `$Failed` を返すので `Quiet@Check` でなく `StringQ` 判定で Missing にフォールバックする (Check は返り値 $Failed を捕まえない)。
+- **設定の外部化 (私的データ脱ハードコード)**: IMAP アカウントは `SourceVaultRegisterMailAccount` → `PrivateVault/config/mailaccounts.jsonl` (パスワードは保存せず CredKey=SystemCredential 名のみ)。グループ重みは `SourceVaultSetPriorityGroupWeight` → `config/prioritygroups.jsonl`。NBRegisterTrustedLocalServer と同方式。これにより別プロセス (WolframScript) からも設定を読めるのが非同期化の enabler。
+- **メール本体**: 本文は `SourceVaultEncryptedPut` でインライン暗号化、ヘッダ (件名/From/To/日付/添付名) は平文+token (件名は設計上暗号化しない)。月シャード `<root>/<mbox>/<yyyymm>.svmail` で Dropbox 増分同期。返信は DraftOnly (自動送信なし)。`SourceVaultMailView` 等の表示は i18n (`$Language` で日英ラベル、コード/スキーマキーは英語固定)。
+- **重要度の構造計算 (hybrid)**: LLM は WorkRequest (依頼度)/Summary/Privacy のみ、優先度は `SourceVaultMailComputePriority` が `Clip[senderWeight + 0.30*workRequest + posAdj(To+0.15/Cc 0/Bulk -0.25) + bulkAdj(-0.15)]` で決定的計算。送信者重みは実体 PriorityWeight or Group→グループ重み config or 0.4。
+- **このフェーズで踏んだ Wolfram の罠 (skills/wolfram-syntax-pitfalls に追記推奨)**: (a) `With[{e=assoc}, e["k"]=v]` は With 定数でパート代入不可 (`Association::setps`) → `Module` ローカルにする。(b) `Dataset[..., MaxItems -> {maxRows, maxColumns}]` の第2要素は**列数**。`{All, Length[rows]}` だと少件数時に列が隠れる → `{All, All}`。(c) Dataset は `BaseStyle` オプション非対応 (`OptionValue::nodef`) → フォントはセル単位 `Style[…, FontFamily->ff]`。(d) Dataset でアクション (Button/ActionMenu) を 1 セルに詰めると幅超過で `...` 省略 → 別列に分割 + `ItemSize` で列幅指定。(e) `Dataset` の Pane ラップ + `(ensure; Module[...])` で包むときは閉じ括弧の整合に注意。
 
 ## 関連 skill (詳細設計)
 

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  /* === Mathematica-style deck font palette (Hiragino, installed on this Windows host) ===
+     Hiragino weights live in SEPARATE font files, so emphasis switches the FAMILY,
+     not font-weight (font-weight:700 on a single-weight face would faux-bold). */
+  :root {
+    --f-body:"Hiragino Kaku Gothic ProN W3","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",sans-serif; /* W3 本文 */
+    --f-medium:"Hiragino Kaku Gothic Std W4","Hiragino Kaku Gothic StdN W4","Yu Gothic UI",sans-serif;        /* W4 中・強調 */
+    --f-head:"Hiragino Kaku Gothic ProN W6","Hiragino Kaku Gothic StdN W8","Hiragino Kaku Gothic ProN","Yu Gothic UI",sans-serif;          /* W8 見出し */
+    --f-maru:"Hiragino Maru Gothic ProN W4","Hiragino Maru Gothic Pro W4",sans-serif;                         /* 丸ゴシック */
+    --f-mincho:"Hiragino Mincho ProN W3","Hiragino Mincho ProN","Yu Mincho",serif;                            /* 明朝 */
+  }
+  html, body {
+    width: 1920px; height: 1080px; overflow: hidden; background: #ffffff;
+    font-family: var(--f-body); font-weight: normal; color: #1c1c1c; -webkit-font-smoothing: antialiased;
+  }
+  b, strong, .lead, .ld { font-family: var(--f-medium); font-weight: normal; }
+  .slide { position: relative; width: 1920px; height: 1080px; padding: 66px 110px 56px; }
+
+  /* Title — orange heavy (W8), top-left (matches deck) */
+  .title { font-family: var(--f-head); font-size: 60px; color: #e07c14; letter-spacing: 1px; }
+
+  /* Two-column body: bullets left, figure right */
+  .body { display: grid; grid-template-columns: 1fr 560px; gap: 70px; margin-top: 40px; }
+
+  /* === Bullet hierarchy ===
+     b1 = maroon square (large) > b2 = maroon square (small) > b3 = GRAY square (sub-sub)
+     p1 / p2 = no-bullet paragraph continuation, aligned under b1 / b2 text (付加説明). */
+  .b1 { position: relative; padding-left: 46px; margin-top: 24px; font-family: var(--f-medium); font-size: 36px; line-height: 1.3; }
+  .b1:first-child { margin-top: 0; }
+  .b1::before { content: ""; position: absolute; left: 4px; top: 15px; width: 19px; height: 19px; background: #9d1c1c; }
+  .b2 { position: relative; padding-left: 46px; margin-left: 50px; margin-top: 16px; font-size: 30px; line-height: 1.32; color: #232323; }
+  .b2::before { content: ""; position: absolute; left: 6px; top: 12px; width: 16px; height: 16px; background: #9d1c1c; }
+  .b3 { position: relative; padding-left: 42px; margin-left: 100px; margin-top: 12px; font-size: 26px; line-height: 1.32; color: #3a3a3a; }
+  .b3::before { content: ""; position: absolute; left: 5px; top: 11px; width: 14px; height: 14px; background: #8a8a8a; }
+  .p1 { margin-left: 46px; margin-top: 8px; font-size: 30px; line-height: 1.36; color: #4a4a4a; }   /* paragraph under b1 */
+  .p2 { margin-left: 96px; margin-top: 7px; font-size: 27px; line-height: 1.36; color: #4a4a4a; }   /* paragraph under b2 */
+  .sep { font-family: var(--f-medium); color: #b06a16; padding: 0 2px; }
+  .dim { color: #5a5a5a; }
+
+  /* Right column: vertical flow figure */
+  .figure { padding-top: 4px; }
+  .figcap { font-family: var(--f-medium); font-size: 21px; color: #9d1c1c; margin-bottom: 18px; letter-spacing: 1px; }
+  .flow { display: flex; flex-direction: column; align-items: center; }
+  .step { width: 460px; background: #faf6f0; border: 1.5px solid #e6d8c4;
+    border-left: 5px solid #e07c14; border-radius: 9px; padding: 13px 22px 12px; position: relative; }
+  .step .no { position: absolute; top: 50%; left: -17px; transform: translateY(-50%);
+    width: 34px; height: 34px; border-radius: 50%; background: #9d1c1c; color: #fff;
+    font-family: var(--f-medium); font-size: 18px; display: flex; align-items: center; justify-content: center; }
+  .step .st { font-family: var(--f-medium); font-size: 25px; color: #2a2a2a; }
+  .step .sd { font-size: 18px; color: #6a6a6a; margin-top: 2px; }
+  .arrow { color: #c98a2c; font-size: 27px; line-height: 1; margin: 4px 0; }
+
+  /* Right column: design principles block (maroon square sub-list) */
+  .principles { margin-top: 30px; }
+  .pcap { font-family: var(--f-medium); font-size: 21px; color: #9d1c1c; margin-bottom: 14px; letter-spacing: 1px; }
+  .pitem { position: relative; padding-left: 32px; margin-top: 11px; font-size: 23px; line-height: 1.3; color: #2a2a2a; }
+  .pitem::before { content: ""; position: absolute; left: 2px; top: 9px; width: 13px; height: 13px; background: #9d1c1c; }
+</style>
+</head>
+<body>
+  <div class="slide">
+    <div class="title">SourceVault ― 機密メール暗号化基盤</div>
+
+    <div class="body">
+      <!-- Left: bullets (demonstrates b1 / b2 / b3 / paragraph) -->
+      <div class="bullets">
+        <div class="b1"><span class="lead">機密メールをローカルで暗号化して守る基盤</span></div>
+        <div class="p1">鍵はマシン内に隔離し、クラウド送信はゲート通過のみ。<!-- ← p1: ノーブレットの付加説明 --></div>
+
+        <div class="b2"><span class="ld">暗号コア</span><span class="sep">―</span>AES-256 ＋ HMAC-SHA256、Encrypt-then-MAC 既定</div>
+        <div class="b2"><span class="ld">鍵の隔離・永続</span><span class="sep">―</span>NBAccess 層 / SystemCredential</div>
+        <div class="b3">鍵材料は戻り値・ログ・record のいずれにも現れない<!-- ← b3: サブサブアイテム (グレー■) --></div>
+        <div class="b2"><span class="ld">暗号化レコードストア</span><span class="sep">―</span>AAD でポリシーを認証 / PrivacyLevel 駆動 / 改ざんは復号拒否</div>
+        <div class="b2"><span class="ld">メールDB 連携</span><span class="sep">―</span>本文を暗号化・ヘッダは平文＋トークン検索、シャードで永続化</div>
+        <div class="b2"><span class="ld">公開ゲート・返信安全</span><span class="sep">―</span>fail-closed / DraftOnly、平文・カプセル・墨消しを判定</div>
+
+        <div class="b1"><span class="lead">周辺機能</span></div>
+        <div class="p1">アドレス帳（識別子⇄実体）／ 送信者認証 ／ 可搬な鍵バンドル ／ IMAP＋ローカル LLM 派生 をまとめて提供。</div>
+      </div>
+
+      <!-- Right: vertical flow figure + design principles -->
+      <div class="figure">
+        <div class="figcap">処理フロー（取込から送信まで暗号化したまま）</div>
+        <div class="flow">
+          <div class="step"><div class="no">1</div><div class="st">取込</div><div class="sd">IMAP 新着取得</div></div>
+          <div class="arrow">▼</div>
+          <div class="step"><div class="no">2</div><div class="st">暗号化</div><div class="sd">本文を Encrypt-then-MAC</div></div>
+          <div class="arrow">▼</div>
+          <div class="step"><div class="no">3</div><div class="st">鍵隔離</div><div class="sd">SystemCredential に永続</div></div>
+          <div class="arrow">▼</div>
+          <div class="step"><div class="no">4</div><div class="st">ストア</div><div class="sd">暗号化したままシャード保存</div></div>
+          <div class="arrow">▼</div>
+          <div class="step"><div class="no">5</div><div class="st">公開ゲート</div><div class="sd">返信・送信を判定して開示</div></div>
+        </div>
+
+        <div class="principles">
+          <div class="pcap">設計原則</div>
+          <div class="pitem">鍵は NBAccess の外に出さない</div>
+          <div class="pitem">非鍵ハッシュを完全性の根拠にしない（MAC・署名で担保）</div>
+          <div class="pitem">canonical JSON で WL バージョン非依存に共有</div>
+          <div class="pitem">機密緩和（loosening）は人間が承認</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

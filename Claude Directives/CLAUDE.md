@@ -65,7 +65,7 @@
 - `notebook-llmgraph-update-pattern` — 外部パッケージから NotebookLLMGraph にノードを追加する際の正しいキャッシュ更新 + Flush パターン
 - `wolfram-syntax-pitfalls` — `Module` 閉じ位置誤りや `Quiet` のエラー隠蔽など、LLM ベースの大規模 .wl 編集で頻発する構文上の罠と診断手順
 - `ui-output-font-customization` — ClaudeEval/SourceVault の表・リスト出力フォント (`$ClaudeStandardFont`/`iSVStandardFont`) を設定追従させる実装パターンと「フォントが効かない」切り分け (罠 #56–#58: ClearAll 順序 / Button ラベル内関数の未評価 / Hyperlink フォント上書き)
-- `maildb-operations` — maildb パッケージの API 使用パターン（showMails/searchFromMails は MailDBObject 必須）
+- `maildb-operations` — メール操作。正準は **SourceVault mail サブシステム** (`SourceVault_maildb.wl`: `SourceVaultMailFetchNew` / `MailView` / `SearchMailSnapshots` / `InferMailDerivedBatch` / `RegisterMailAccount`)。旧 `maildb.wl` は `maildb_legacy.wl` に改名され参照専用 (showMails/searchFromMails/mailEnsureLoaded は legacy)。privacy>0.5 はローカル LLM。
 - `system-open` — SystemOpen によるファイル・フォルダ・ノートブックの開き方
 - `runtime-orchestrator-boundary` — ClaudeRuntime と ClaudeOrchestrator の責務境界、特に並列化の許容範囲（Workflow Migration プロジェクト）
 - `association-mutation-patterns` — Mathematica で Association を更新するときの安全パターン（`ReplacePart` 罠、`Append`/`Join` の使い分け）
@@ -91,6 +91,7 @@
 - `nbaccess-semantic-api` — NBAccess.wl Stage 9 P1 で追加された semantic API 7 個の設計詳細。FrontEnd 不要のファイル直接編集パイプライン (`Import["Notebook"]` → 編集 → `Export[..., "NB"]` の atomic write)、AccessLevel RBAC + DryRun 安全機構 (書き込み系 >= 0.7 必須、default DryRun = True)、CellPath (List of Integer) による CellGroupData ネスト対応の cell 位置記録、iNBIsHeaderLikeAssoc フィルタ (Header と Todo metadata の区別)、NBReadHeader の 3 経路 fallback (Notebook TaggingRules → Cell TaggingRules → BoxData MakeExpression)、With[{c=v}, HoldComplete[c]] による DryRun の Before/After 値埋め込み (罠 #27 回避)、CellGroupData の iNBFlattenCells 再帰展開 (罠 #26 回避)、SourceVaultMarkTodo の薄いラッパー設計、Stage 9 P0 Approval Workflow 経路 (NBOpenAuthorized + NBProcessFile) との使い分け、Stage 9 Phase 3 (P2) ロードマップ
 - `sourcevault-sync-relink-uuid` — SourceVault.wl の notebook source 鮮度管理・移動追跡・UUID 同定 (notebook-management-extraction から分離)。SourceVaultSync (mtime 鮮度トークンで Stale な .nb を再 index)、SourceVaultRelinkSources (UUID / 内容ハッシュ / ファイル名の 3 段照合、シンボリックパス解決で別 PC のパス差を移動と誤検出しない、StaleDuplicate 残骸判定)、Notebook UUID 埋め込み (TaggingRules SourceVault>NotebookUUID、非破壊、ファイルと一緒に移動)
 - `claudeeval-security-guard-placement` — ClaudeEval/ClaudeQuery にセキュリティ・プライバシーガード (クラウド送信拒否、Private ノートブック保護等) を追加するときの配置位置。`$UseClaudeRuntime=True` で Runtime Bridge 経由になるとバイパスされる落とし穴、Deny は最前段 (dispatch 前)・Substitute は共通入口という原則、両経路での発火確認
+- `mathematica-style-slides` — Mathematica ノートブック・プレゼンと連続表示しても違和感がない 16:9 スライド画像 (PNG) を作る手順。HTML/CSS + ヘッドレス Edge レンダリングのパイプライン (日本語が確実・段組が容易)、デッキの見た目仕様 (白背景 / オレンジ見出し `#e07c14` / マルーン四角ビュレット `#9d1c1c` / 第3階層グレー `#8a8a8a` / ノーブレット段落説明)、**Hiragino フォントパレット** (本文 ProN W3・見出し ProN W6＝本文とかな字形をそろえる・強調 Std W4・丸ゴシック・明朝・極太は StdN W8。太字は font-weight でなくファミリ切替で出す)、図は右カラム段組 (Mathematica が苦手な多段組を HTML で再現)、配色は暖色統一。実例 `Templates/Slides/mathematica-style-twocolumn-slide.html` ・ `mathematica-style-bullets-levels.html`
 
 ## ファイル読み込みルール
 
@@ -246,11 +247,13 @@ If[AssociationQ[ClaudeCode`$ClaudePackageKeywordMap],
 
 ### メール操作のセキュリティルーティング原則
 
-maildb のメールデータには `privacy` フィールド（セキュリティレベル）がある。**privacy > 0.5 のメールは `$ClaudeModel`（クラウド LLM）に投入してはならない。** `$ClaudePrivateModel`（ローカル LLM）で処理すること。
+メールの **privacy / PrivacyLevel フィールド（セキュリティレベル）が 0.5 を超えるメールは `$ClaudeModel`（クラウド LLM）に投入してはならない。** `$ClaudePrivateModel`（ローカル LLM）で処理すること。
 
-- `MaxPrivacy -> 0.5` を指定すれば公開メールのみに絞り込める。
-- `mailAskLLM` は内部でセキュリティレベルに基づきモデルを自動分配する。
-- 詳細は `skills/maildb-operations` スキルを参照。
+- 正準のメールシステムは **SourceVault mail サブシステム**（`SourceVault_maildb.wl`）。本文は暗号化・ヘッダは平文+token（件名は設計上暗号化しない）。永続データの復号には `NBAccess`$NBCredentialBackend = "SystemCredential"` が必須（Memory backend だと別鍵で復号不可＝データ消失）。
+- `SourceVaultSearchMailSnapshots[..., MaxPrivacy -> 0.5]` で公開メールのみに絞れる。snapshot の `Derived.PrivacyLevel` がルーティング基準。
+- IMAP アカウント・所有者 identity・グループ重みは**ソースにハードコードせず** vault config（`SourceVaultRegisterMailAccount` 等）とユーザDB #1 に外部化する（rule 03）。
+- 旧 `maildb.wl`（`maildb_legacy.wl`）の `mailAskLLM` 等はセキュリティレベルでモデルを自動分配する（移行参照）。
+- 詳細は `skills/maildb-operations` スキルと `SourceVault_info/docs/`、設計前提は `rules/101-sourcevault-stage-status` の「暗号化・メール・identity サブシステム」節を参照。
 
 ## Wolfram Language 関数名検証ルール（必須）
 
