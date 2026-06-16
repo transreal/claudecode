@@ -67,3 +67,22 @@ grep -n 'StringToByteArray\[[^,]*, *"UTF-8"\]' *.wl
 #   ExportString["RawJSON"] 由来 → ISO8859-1 に直す
 #   WriteRawJSONString 由来 / 通常文字列 → UTF-8 のままで正しい
 ```
+
+## CellEvaluationFunction が受け取る Text セル本文のエスケープ (最重要・実証済み 2026-06-12)
+
+FE は Text 系スタイルの evaluatable セル (例: スタイルシートの ClaudeInput) を評価するとき、`CellEvaluationFunction` の第 1 引数を **.nb ファイル形式でシリアライズして**渡す。日本語は実文字でなく**リテラル `\:XXXX`**（非 BMP は `\|XXXXXX`、バックスラッシュは `\\` に倍化）のまま届く。
+
+- 同じセルを NBAccess の `ExportPacket "InputText"` で読むと実文字が返る。混入点はセル評価経路だけ。
+- これを無変換で `ClaudeEval[task]` 等に渡すと、保存プロンプト (prompt-route-registry.json の Matcher.Examples)・PromptHash・LLM プロンプトの全てに `\:XXXX` が伝播する（2026-06-12 に実害、registry 9 件を修復済み）。
+- 対策: CellEvaluationFunction 内で**カーネル側デコード**を行う（`Templates/Styles/SourceVault default.nb` の ClaudeInput スタイルに実装済み。順序が重要: `\\` collapse を先に適用すると `\\:1234` のようなユーザー入力のリテラルを誤デコードしない）:
+
+```mathematica
+tasktext = StringReplace[tasktext, {
+  "\\\\" -> "\\",
+  "\\|" ~~ h : RegularExpression["[0-9a-fA-F]{6}"] :>
+    FromCharacterCode[FromDigits[h, 16]],
+  "\\:" ~~ h : RegularExpression["[0-9a-fA-F]{4}"] :>
+    FromCharacterCode[FromDigits[h, 16]]}]
+```
+
+- 検証ハーネスの罠 (#28 関連): `ImportString[unicode文字列, "RawJSON"]` は文字コード > 255 で "Out of range Unicode code point" を出して失敗する。JSON 読み取りの検証・実装は `Developer`ReadRawJSONString[content]` を第一選択にする（SourceVault.wl `iLoadRegistryEntries` と同じ 3 段フォールバック）。

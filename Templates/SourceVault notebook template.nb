@@ -10,10 +10,10 @@
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[       154,          7]
-NotebookDataLength[      2414,         71]
-NotebookOptionsPosition[      1758,         52]
-NotebookOutlinePosition[      2253,         71]
-CellTagsIndexPosition[      2210,         68]
+NotebookDataLength[      2462,         71]
+NotebookOptionsPosition[      1806,         52]
+NotebookOutlinePosition[      2301,         71]
+CellTagsIndexPosition[      2258,         68]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
@@ -41,8 +41,8 @@ Cell[BoxData[
 
 Cell["todo item", "TodoItem_1",
  CellChangeTimes->{{3.9892972626256638`*^9, 3.989297264427845*^9}, {
-  3.9893020530274773`*^9, 
-  3.989302053808943*^9}},ExpressionUUID->"f295d508-3b71-5a4e-b861-\
+  3.9893020530274773`*^9, 3.989302053808943*^9}, {3.9901966484467945`*^9, 
+  3.990196649558401*^9}},ExpressionUUID->"f295d508-3b71-5a4e-b861-\
 dc0e91a24119"],
 
 Cell["Template", "Subsubsection",
@@ -50,7 +50,7 @@ Cell["Template", "Subsubsection",
   3.989302049789152*^9}},ExpressionUUID->"9eddde2b-83ab-1648-a6e0-\
 329799360c3c"]
 },
-WindowSize->{571, 627.5},
+WindowSize->{571, 545.5},
 WindowMargins->{{Automatic, 105.5}, {Automatic, 329.5}},
 WindowStatusArea->"",
 TaggingRules-><|"TryRealOnly" -> False|>,
@@ -71,8 +71,8 @@ CellTagsIndex->{}
 (*NotebookFileOutline
 Notebook[{
 Cell[554, 20, 823, 19, 47, "NotebookStatus",ExpressionUUID->"14c36337-2571-7848-bf8e-3dfcda885c91"],
-Cell[1380, 41, 210, 4, 25, "TodoItem_1",ExpressionUUID->"f295d508-3b71-5a4e-b861-dc0e91a24119"],
-Cell[1593, 47, 161, 3, 37, "Subsubsection",ExpressionUUID->"9eddde2b-83ab-1648-a6e0-329799360c3c"]
+Cell[1380, 41, 258, 4, 25, "TodoItem_1",ExpressionUUID->"f295d508-3b71-5a4e-b861-dc0e91a24119"],
+Cell[1641, 47, 161, 3, 37, "Subsubsection",ExpressionUUID->"9eddde2b-83ab-1648-a6e0-329799360c3c"]
 }
 ]
 *)

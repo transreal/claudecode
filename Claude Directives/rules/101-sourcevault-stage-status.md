@@ -201,3 +201,39 @@ SourceVault の運用が始まると `notebooks/` 配下のストアは日々の
 - `iSVSymbolicPath` が旧 PC の Dropbox パス (`C:\Users\imai_\Dropbox\On Work\...` 等) を `{"$onWork", ...}` に正規化できない。`$SourceVaultCloudRoots` に旧ルートのエイリアスを登録できれば、複数 PC をまたいだ二重登録を未然に防げる (現状は Relink の StaleDuplicate 判定で事後的に掃除)
 - `SourceVaultIngest` 時の UUID 自動付与 (取り込み元フォルダのファイルにも UUID を付ける)
 - NBAccess へのパス正規化展開 (Step 5 の `iSVSymbolicPath` 正規化を NBAccess `NBFileSpec` 等にも適用)
+
+## ClaudeEval context budget / X0a + X0b-1 + X1 (2026-06-14〜15、PromptRouter ContextPlan 拡張)
+
+`ClaudeEval[prompt, Model -> {"lmstudio", ...}]` が短コンテキストモデルで `n_keep >= n_ctx` 超過する事故への対策を `claudecode.wl` + `SourceVault.wl` に実装した。設計は `ドキュメント/sourcevault_promptrouter_contextscope_routing_spec_v1.md`、運用要点と罠は **`skills/promptrouter-contextplan-routing`** を必ず参照。
+
+- **真因は実測で確定**: context 肥大の主因は **`iPackageDocsContext` の api.md 青天井注入**(観測 104,606 字)。trivial プロンプトの「モデル」が SourceVault の過剰に広い `$ClaudePackageKeywordMap` に部分一致したため。tools (mcp/exa) は ~600 トークン、notebook/履歴/CLAUDE.md も主因でなかった。**どれが大きいかは各 context 関数の `StringLength` で実測する**(推測しない。LM Studio ログの `n_tokens=20331` はキャッシュ値で誤誘導)。
+- **単一チョークポイント戦略**: `ClaudeEval` の最終送信は `$UseClaudeRuntime` で `iClaudeEvalImpl` (False) と `iClaudeEvalViaRuntimeBridge`→`iAdapterBuildPrompt` (True) に分岐する。境界は**両経路が通る関数**に入れる: `iClaudeSysPrompt` (CLAUDE.md head-keep) / `iResolveLMStudioIntegrations` (ToolDefinitions gate、同期+非同期+bridge を被覆) / `iPackageDocsContext` (関数出口で総量 cap) / 新設 `iAssembleContextForPlan` (notebook tail・history)。`iClaudeEvalImpl` だけ直すと True 経路で効かない (skill `claudeeval-security-guard-placement` と同じ落とし穴)。
+- **planning フラグ**: `ClaudeCode`$ClaudeEvalContextPlanning` (Automatic / False / "LegacyFull")。"LegacyFull"/False で旧 full 挙動に完全可逆。予算は `$ClaudeEvalContextNotebookCharBudget`(8000) / `$ClaudeEvalContextSysPromptCharBudget`(6000) / `$ClaudeEvalPackageDocsCharBudget`(24000) / `$ClaudeEvalUnknownContextSoftLimit`(4096)。hook `$ClaudeEvalContextPlanner`(None) は X0b/X1 用 (SourceVault が planner を登録する package-neutral スロット)。
+- **キーワード過剰マッチの発生源対処**: `SourceVault.wl` の `$ClaudePackageKeywordMap["SourceVault"]` (約 L13976) から汎用語 (モデル/model/一覧/リスト/notebook/検索/新規/タスク/ソース 等) を除去し、**特異語 (関数名・予定/締切/arxiv/横断検索/メール 等) のみ残す**。二重防御として `iPackageDocsContext` 出口の総量 cap は残す。
+- **X0b-1 実装済み (2026-06-15)**: history 実境界化 (`iBoundedHistory`: None 破棄 / Recent n / Full 素通し、`$ClaudeEvalContextHistoryTurns` 既定 12)、planner hook 配線 (`iResolveContextPlanForCall[plan, prompt, nb, idx, access]` が `$ClaudeEvalContextPlanner` を fail-safe に参照、payload に `"Prompt"` を含む)。**非 Runtime 経路 (`iAssembleContextForPlan`) のみ**。
+- **X1 実装済み (2026-06-15)**: LLM 不要の prompt-only 分類器 `SourceVaultClassifyPromptContextDependency[prompt]` (deictic 表は `iSVPRDeicticQ` と共有、history を deictic 判定前に除去して notebook と混同しない)。planner `iSVPRContextPlanner` を hook に登録 (トグル `SourceVault`$SourceVaultContextPlannerEnabled` 既定 True)。**保守的**: High 確信の純粋履歴質問だけ notebook を落とし、Low/SelfContained は既定維持 (starve しない)。
+- **X0b-2 実装済み (2026-06-15)**: Bridge 経路 `iAdapterBuildPrompt` を planner 駆動化 (= **ユーザーの実経路に届く**)。冒頭で `iResolveContextPlanForCall` を呼び、`None` の次元だけ落とす (symCtx / Notebook Context cells / Selected cells を `nbCtxMode`、Turn History / PreviousResult を `histCtxMode` で gate)。**攻めの trim は opt-in フラグ** `SourceVault`$SourceVaultContextPlannerTrimSelfContained` (既定 False。True で SelfContained の Notebook を None に。ライトモデルの prior cell 模倣対策。history は trim しない)。
+- **残作業 (X0b-2 以降)**: `NBGetContext` の group 単位 tail option (現状 assembler は `Full`/`PreviousCellGroup` を bounded `Tail` に丸め)、全 capture 経路の lazy 化、§9 総量バジェット厳密化、(攻めフラグで飢えが出れば) 分類器の `この+名詞` 強化。いずれも現状の安全動作を阻害しない追加改善。
+- **別件 (本作業で発覚)**: 再実行時に `「…」の保存済み候補 N 件` UI で堂々巡りするのは saved-prompt 提案 (`SourceVaultProposeSavedPromptRoute`)。HeavyLLM one-shot を route 化・自動提案しているのが原因 (spec §10.3 違反)。修正 (2026-06-14 実装済み、`SourceVault_promptrouter.wl`): (i) auto-save が UI 表示式を `TargetExprString` に取り込まない (`iSVPRIsMetaDisplayExpr`)、(ii) 提案器が HeavyLLM/AutoCapture-only を提案しない (`iSVPRVersionProposableQ` → `OnlyAutoCaptureHeavyLLM`)、(iii) auto-save が HeavyLLM 一発回答を route 化しない (`iSVPRClassifyReplay`、§10.3。PromptRun 履歴には残す)。フラグ `SourceVault`$SourceVaultPromptSavedProposalActive` / `$SourceVaultPromptAutoSave` で即時無効化可。
+
+## 決定的 FunctionRoute の活性ゲート迂回 (2026-06-15)
+
+「新規ノートブック」/「新しいノートブック」→ `SourceVaultNewNotebook` 等の **deterministic seed FunctionRoute が LLM に流れていた**不具合の修正。`claudecode.wl` の `iClaudeEvalTryPromptRouter`。
+
+- **症状**: `SourceVaultProposePromptRoute["新規ノートブック","Caller"->"ClaudeEval"]` は `Status "Proposed"` / `Method "DeterministicFunctionRoute"` / `SourceVaultNewNotebook[]` を正しく提案するのに、ClaudeEval プロンプトでは LLM が welcome メッセージを生成して関数が呼ばれない。関数単体 `SourceVaultNewNotebook[]` は正常 (テンプレ NB + 日付ヘッダ)。
+- **主因 (実測確定)**: `SourceVaultPromptRouterActiveQ["ClaudeEval"]` = **False** (ClaudeOrchestrator 未ロード)。`iClaudeEvalTryPromptRouter` は saved-prompt proposer を活性ゲートの**前**に置くが、deterministic route はゲート**後**で評価されるため、ゲートで `NotDispatched` → LLM フォールバック。`$ClaudeEvalPromptRouterDispatch` (= Automatic) は無関係。`$ClaudeEvalPromptRouterPreemptsNatural` の値とも独立 (block 1/3 どちらでも PromptRouter は走り、止まるのは内部のゲート)。
+- **修正**: proposal を先に取得し、`Decision.Method` が `"Deterministic*"` (`DeterministicFunctionRoute` / `DeterministicSchedule`) なら **活性ゲートを迂回して即 submit**。非決定的提案 (将来の LLM 経路) は従来どおりゲートを通す。
+- **安全性の根拠**: `SourceVaultProposePromptRoute` は **完全に決定的** (キーワード→seed route/schedule、LLM 呼び出し無し) なのでゲート前呼び出しはコスト 0。`iSVPRProposeFunctionRoute` 自体が FunctionRoute を **`ReadOnly`/`SafeCreate` の allowlist エントリ + `UseAsFunctionRoute->True`** に制限し、さらに claudecode 側 `iClaudeRuntimeSubmitProposal` が `$iClaudeEvalProposalHeadAllowlist` で head 検証する二重ガード。saved-prompt proposer がゲートを跨ぐのと同じ設計思想 (= ClaudeOrchestrator 不要なものはゲートを跨ぐ)。
+- **診断手順**: ①`$ClaudeEvalPromptRouterDispatch` ②`SourceVaultPromptRouterActiveQ["ClaudeEval"]` ③`SourceVaultProposePromptRoute[prompt,"Caller"->"ClaudeEval"]` ④関数単体。②が False かつ③が `Proposed` なら本不具合 (旧版は LLM 行き、修正後は④相当が発火)。詳細は skill `promptrouter-contextplan-routing`。
+
+## ルーティング電源ポリシー / routing model policy (2026-06-15)
+
+ノートPC のバッテリー運用時にローカル LLM ルーティングを避けたい等、**実行環境（電源）に応じて light ルーティングのモデル階層を切替**える機能。詳細は skill **`routing-power-policy`**。
+
+- **状態** `ClaudeCode`$ClaudeRoutingModelPolicy`（`Automatic`(既定) / `"Local"` / `"Cloud"` / `"Off"`）。`Automatic` は電源連動：**AC→Local / バッテリー→Cloud**。
+- **永続化** (2026-06-15): `PersistentValue["ClaudeCode/RoutingModelPolicy", "Local"]` で machine-local 保存。新カーネルの init で `!ValueQ` のとき復元（セッション内リロードは現在値尊重）。パレットのトグルと公開セッター `ClaudeSetRoutingPolicy[p]` が保存する（`$ClaudeRoutingModelPolicy` への直接代入はセッション限り）。
+- **電源検出** `ClaudeCode`Private`iDetectACPower[]`（PowerShell `root\wmi BatteryStatus.PowerOnline`、~30秒キャッシュ、非Windows/デスクトップは `"AC"`）。実効 class は `ClaudeCode`ClaudeRoutingModelClass[]`、状態確認は `ClaudeRoutingPolicyStatus[]`。
+- **パレット** `ShowClaudePalette[]` 設定セクションに「ルート:自動(ローカル)」トグル（雲状態ボタンと同型、`Automatic→Local→Cloud→Off` 循環）。
+- **package-neutral**（rule 11）：claudecode が状態・検出・パレットを所有、SourceVault は `ClaudeRoutingModelClass[]` を**弱参照**するだけ（claudecode は SourceVault を見ない）。
+- **配線**（Part B）：`SourceVaultResolveModelForPromptRouter` が **Light routing のときだけ** policy を反映。`"Off"`→`Status "RoutingDisabled"`、`"Cloud"`→`AllowedTrustDomains` を `{"Cloud"}` に強制（**rule 02**：Haiku を直書きせず Light×Cloud クラスで解決）、`"Local"`/None→無変更（後方互換）。**PrivacyLevel≥0.5 は Cloud policy より優先**（`NeedsPrivateModel`）。
+- **モデル分類ギャップ＝解消済み (2026-06-15)**：`SourceVaultResolveModelForPromptRouter` が契約 query（`WeightClass`＋trust）を **`Class` ベースのレジストリ query**（`Light-Local`/`Light-Cloud`/…）に翻訳し具体モデルまで解決（実登録 `qwen3-swallow-8b-rl-v0.2` / クラウド `claude-haiku-4-5` を確認）。Haiku を Light×Cloud として **seed 登録**（`iModelSeedEntries`、rule 02）。`iResolveRawTrustDomain` は entry の **`Class` から trust domain を導出**（`*-Local`→Local。lmstudio の確定ローカルを privacy floor が正しく許可。precedence: `TrustDomain` 明示 > `Class` > Provider 分類）。`privLevel≥0.5` は Cloud policy より優先。`Automatic` weight は従来どおり `NeedsModelClassification`（推測しない・order6b test 互換）。

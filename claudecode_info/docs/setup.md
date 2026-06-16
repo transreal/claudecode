@@ -210,6 +210,8 @@ $ClaudeFallbackModels = {
 
 ### 6. ドキュメント生成設定
 
+claudecode はパッケージのドキュメント一式（README.md / api.md / setup.md / user_manual.md）を LLM で生成・更新する機能を備えています。生成・更新に使うモデルやリトライ動作は以下のグローバル変数で制御できます：
+
 ```mathematica
 (* ドキュメント生成用モデル *)
 $ClaudeDocModel = "claude-sonnet-4-20250514"
@@ -220,7 +222,15 @@ $ClaudeDocRetryDelay = 60
 
 (* チャンク分割の最大文字数 *)
 $ClaudeDocMaxChunkChars = 60000
+
+(* ドキュメント更新チェーンのスタイル上限（秒）
+   この秒数を超えたチェーンは異常終了とみなして自動解放される *)
+$ClaudeDocUpdateStaleSeconds = 1800
 ```
+
+`$ClaudeDocUpdateStaleSeconds`（既定 1800 秒）は、`ClaudeUpdateDocumentation` の非同期更新チェーンが異常終了した場合に多重起動ガードを自動解放するまでの待機時間です。通常は変更不要ですが、長時間かかるドキュメント更新が多い場合は大きな値に設定してください。
+
+ドキュメントの新規作成は `ClaudeCreateDocumentation`、既存ドキュメントの更新は `ClaudeUpdateDocumentation` で行います（後述の「高度な設定 > ドキュメントの自動生成・更新」を参照）。
 
 ### 7. LLMGraph DAG 並列度の設定
 
@@ -287,7 +297,22 @@ ClaudeQuery["メールを処理するプログラムを作りたい"]
 ContinueUpdate["testpkg", "追加の修正指示"]
 ```
 
-### 5. ClaudeRuntime の動作確認（オプション）
+### 5. ドキュメント生成・更新のテスト
+
+```mathematica
+(* ドキュメント一式の新規作成 *)
+ClaudeCreateDocumentation["testpkg"]
+
+(* 直近の _documentupdate バックアップを基準にドキュメントを更新（既定） *)
+ClaudeUpdateDocumentation["testpkg"]
+
+(* GithubRepositories のコミット版を基準に更新 *)
+ClaudeUpdateDocumentation["testpkg", Baseline -> "Github"]
+```
+
+`ClaudeUpdateDocumentation` の `Baseline` オプションについては後述の「高度な設定 > ドキュメントの自動生成・更新」を参照してください。
+
+### 6. ClaudeRuntime の動作確認（オプション）
 
 ClaudeRuntime をインストールした場合は、以下で動作を確認できます：
 
@@ -306,7 +331,7 @@ Keys[ClaudeRuntime`Private`$iClaudeRuntimes]
 $UseClaudeRuntime = False
 ```
 
-### 6. ChatGPT Codex provider の動作確認（オプション）
+### 7. ChatGPT Codex provider の動作確認（オプション）
 
 ChatGPT Codex CLI をインストールした場合は、provider を `chatgptcodex` に切り替えて動作を確認できます：
 
@@ -339,6 +364,8 @@ claudecode は ClaudeRuntime および ClaudeTestKit の導入にあたり、**�
 - `$UseClaudeRuntime` のデフォルト値は `False` であり、ClaudeRuntime パッケージが存在しない環境でも claudecode は正常に動作します。
 - ClaudeTestKit は開発・テスト用の独立したパッケージであり、claudecode 本体の動作には一切影響しません。
 - ClaudeOrchestrator は claudecode の上位レイヤーとして動作する独立したパッケージです。claudecode 本体の動作には影響しません。
+
+また、`ClaudeUpdateDocumentation` の `Baseline` オプションの既定値は `"LastDocUpdate"` であり、従来どおり直近の `_documentupdate` バックアップを差分基準とします。`Baseline -> "Github"` を明示しない限り、既存のドキュメント更新ワークフローの挙動は変わりません。
 
 ## 設定のカスタマイズ
 
@@ -527,6 +554,45 @@ $ChatgptCodexModel = Automatic
 
 **問題切り分け**：Codex 実行ごとの一時ディレクトリ（既定では `$TemporaryDirectory` 配下の `claudecode-chatgpt-codex`）に、`codex_stderr_*.log` というセッションログが残ります。Codex CLI が出力したエラー内容はこのログで確認できます。
 
+#### 10. ドキュメント更新で「前回バックアップが見つからない」
+
+`ClaudeUpdateDocumentation`（既定の `Baseline -> "LastDocUpdate"`）は、直近の `_documentupdate` バックアップとの差分を基準にドキュメントを更新します。過去の `_documentupdate` バックアップが存在しない場合は基準が取れず、エラーが表示されます。
+
+```mathematica
+(* まずドキュメント一式を新規作成してから更新する *)
+ClaudeCreateDocumentation["pkg"]
+```
+
+GithubRepositories のコミット版を基準にしたい場合は、バックアップの有無に関係なく `Baseline -> "Github"` を指定できます（`GithubRepositories/<パッケージ名>` にコミット版ソースが配置されている必要があります）。
+
+```mathematica
+ClaudeUpdateDocumentation["pkg", Baseline -> "Github"]
+```
+
+`GithubRepositories` ディレクトリが存在しない場合は、`Baseline -> "LastDocUpdate"` を使用してください。
+
+#### 11. ドキュメント更新チェーンが「進行中」と表示される
+
+`ClaudeUpdateDocumentation` は同じパッケージへの多重起動を防ぐガードを備えています。既に更新チェーンが実行中の場合は以下のような警告が表示され、二重起動は行われません：
+
+```
+⚠ <パッケージ名> のドキュメント更新が既に進行中です。完了を待ってから再実行してください。
+```
+
+チェーンが異常終了してガードが解放されない場合は、`$ClaudeDocUpdateStaleSeconds`（既定 1800 秒）経過後に自動解放されます。すぐに解放したい場合は以下を実行してください：
+
+```mathematica
+(* ドキュメント更新チェーンのガードを手動解放 *)
+$iDocUpdateActive = KeyDrop[$iDocUpdateActive, "pkg"]
+```
+
+待機時間を短縮する場合は `$ClaudeDocUpdateStaleSeconds` を小さな値に設定してください：
+
+```mathematica
+(* スタイル上限を短縮（例: 5分） *)
+$ClaudeDocUpdateStaleSeconds = 300
+```
+
 ### デバッグ情報の取得
 
 ```mathematica
@@ -548,6 +614,63 @@ ClaudeBackupDataset[]
 ```
 
 ## 高度な設定
+
+### ドキュメントの自動生成・更新
+
+claudecode は、パッケージのドキュメント一式（README.md / api.md / setup.md / user_manual.md）を LLM で生成・更新する関数を備えています。
+
+- **`ClaudeCreateDocumentation["pkg"]`** ― ドキュメント一式を新規作成します（既存内容を無視して新規生成）。
+- **`ClaudeUpdateDocumentation["pkg"]`** ― 既存ドキュメントを、ソース差分に基づいて更新します。
+
+```mathematica
+(* ドキュメントの新規作成 *)
+ClaudeCreateDocumentation["pkg"]
+
+(* 既存ドキュメントの更新（差分ベース） *)
+ClaudeUpdateDocumentation["pkg"]
+```
+
+`ClaudeUpdateDocumentation` は同じパッケージへの多重起動が禁止されています。既に更新チェーンが実行中の場合は警告が表示され、完了まで再実行は行われません。チェーンが異常終了して解放されなかった場合は `$ClaudeDocUpdateStaleSeconds`（既定 1800 秒）経過後に自動解放されます。
+
+#### Baseline オプション（差分基準の切り替え）
+
+`ClaudeUpdateDocumentation` の `Baseline` オプションで、ソース差分の基準を切り替えられます。
+
+```mathematica
+(* 既定: 直近の _documentupdate バックアップを基準にする *)
+ClaudeUpdateDocumentation["pkg", Baseline -> "LastDocUpdate"]
+
+(* GithubRepositories のコミット版を基準にする *)
+ClaudeUpdateDocumentation["pkg", Baseline -> "Github"]
+```
+
+| `Baseline` の値 | 差分基準 | 用途 |
+|------|---------|------|
+| `"LastDocUpdate"`（既定） | 直近の `_documentupdate` バックアップ | 前回のドキュメント更新以降の変更を反映（従来動作） |
+| `"Github"` | `GithubRepositories/<パッケージ名>` のコミット版ソース | リポジトリのコミット版を基準に、未コミットのソース変更をまとめて反映 |
+
+`Baseline` には `"Github"` と `"LastDocUpdate"` 以外の値を渡しても、自動的に `"LastDocUpdate"` にフォールバックします。
+
+#### `Baseline -> "Github"` での design 新規内容の加味
+
+`Baseline -> "Github"` を指定すると、ドキュメント更新プロンプトには次の 2 つが渡されます：
+
+1. **ソース差分** ― `GithubRepositories/<パッケージ名>` のコミット版ソースと現行ソースとの差分。
+2. **design 新規内容** ― `_info` / design ファイルのうち、コミット版以降に追加された設計内容。
+
+design 新規内容は **api.md 以外**（README.md / setup.md / user_manual.md を含む）に添付されます。これにより、ソース差分だけでは読み取れない設計意図や新機能の背景を補い、新しくなった部分の記述を充実させられます。ソース差分も design 新規内容も両方とも空の場合は、ドキュメントの更新は行われません。
+
+`GithubRepositories` ディレクトリの場所は次のとおりです：
+
+```mathematica
+FileNameJoin[{$packageDirectory, "GithubRepositories", "pkg"}]
+```
+
+このディレクトリにコミット版のソースを配置しておくことで、`Baseline -> "Github"` による差分基準が利用可能になります。
+
+#### 更新提案の自動バージョン保存
+
+`ClaudeUpdateDocumentation` による各ドキュメント更新提案を実行すると、新しい保存バージョンが自動的に作成され、続く更新ターン（auto-save turn）が開始されます。マルチステップのドキュメント更新ワークフローを実行した場合でも、各ステップの追記がまとめて 1 つのバージョンとして完全に保存されます。
 
 ### api.md 自動更新の設定
 
@@ -577,6 +700,22 @@ ClaudeUpdatePackage["pkg", "修正指示", "UpdateApiMd" -> False]
 - **フェーズ 2（usage bi-gram フォールバック）**: フェーズ 1 で対象関数が見つからない場合、usage 文字列への bi-gram マッチにフォールバックします。
 
 推定された関数数が40を超える場合は複合語が汎用的すぎると判断し、パッケージ全体を送信するフォールバックに切り替わります。
+
+### セグメント単位の関数マージ
+
+`ClaudeUpdatePackage` で LLM が部分的なレスポンスを返した場合（一部の関数のみ更新）、連続した行のかたまりを「セグメント」として抽出し、セグメント単位でマージが行われます。
+
+- 各セグメントについて元コードとの照合を行い、一致したセグメントのみ置換されます。
+- 照合に失敗したセグメントは置換されず、以下のような警告としてノートブックに表示されます：
+
+```
+⚠ マージ不一致: 以下の関数はセグメントが元コードと一致せず、置換できませんでした:
+  functionName1, functionName2
+```
+
+- 完全修飾定義（`Pkg\`X` / `Pkg\`Private\`iX` 形式）も認識されます。
+
+この機能は設定不要で自動的に動作します。警告が表示された場合は、LLM の生成コードと元コードの差異を確認してください。
 
 ### 非同期スケジューリング規約の自動注入
 
@@ -674,7 +813,10 @@ ShowClaudePalette[]
 ?ClaudeEval
 ?ClaudeUpdatePackage
 ?ContinueUpdate
+?ClaudeCreateDocumentation
+?ClaudeUpdateDocumentation
 ?$ClaudePackageKeywordMap
 ?$LLMGraphMaxConcurrency
 ?$UseClaudeRuntime
 ?$ClaudeLastRuntimeId
+?$ClaudeDocUpdateStaleSeconds

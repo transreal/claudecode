@@ -507,6 +507,17 @@ claudecode の `iResolveLMStudioIntegrations[model, explicitInteg]` が integrat
 4. SourceVault model-registry (`SourceVault\`SourceVaultModelIntegrations["lmstudio", model]`)
 5. `None` → integrations を送らず従来の MCP 無効動作
 
+**順位 4 は package-neutral な soft-probe である (重要)**。claudecode は
+`Names["SourceVault\`SourceVaultModelIntegrations"]` で**存在を確認してから**呼ぶだけで、
+SourceVault を `Needs`/直接参照しない (rule 11: 基盤パッケージは他パッケージに依存しない)。
+SourceVault 未ロードなら順位 4 はスキップされ `None` へ素通りする (graceful degradation)。
+したがって **SourceVault 側に `SourceVaultModelIntegrations` を実装・変更するだけで、
+claudecode を一切触らずに integrations 解決へ差し込める**。例: SearXNG が使える環境では
+web 検索 backend を exa→SourceVault(MCP) に切替え、使えない環境では exa にフォールバックする
+処理は、SourceVault の `SourceVaultModelIntegrations` 返り値に `SourceVaultSwapWebSearchBackend`
+を適用して実現しており claudecode は無変更 (`rules/105-sourcevault-web-mcp.md` §7b)。
+**この hook を削除したり、claudecode から SourceVault への直接 `Needs`/参照に置き換えたりしてはならない。**
+
 **MCP ID (`mcp/exa` 等) を `.wl` にハードコードしない** (CLAUDE.md ルール2)。永続化したい場合は SourceVault に登録する:
 
 ```mathematica

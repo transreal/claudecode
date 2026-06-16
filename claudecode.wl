@@ -216,6 +216,9 @@ Quiet[Scan[
    "$ClaudeDocModel",
    "$ClaudePrivateModel",
    "$ClaudePackageKeywordMap",
+   "$ClaudePackageAuxKeywordMap",
+   "$ClaudePaletteServiceControls",
+   "ClaudeRegisterPaletteServiceControl","ClaudeUnregisterPaletteServiceControl",
    "$LLMGraphMaxConcurrency","$LLMGraphAutoStopThreshold",
    "Fallback", "AutoPrivate", "AutoEvaluate", "StartTime", "Timeout",
    "Integrations", "AutoCellize",
@@ -223,7 +226,7 @@ Quiet[Scan[
    "License", "Model", "WebFetch", "WebSearch", "RepeatInterval", "PrivacySpec",
    "OutputMode",
    "Keywords", "Title", "Refetch",
-   "Owner", "Repository", "Branch", "BaseBranch",
+   "Owner", "Repository", "Branch", "BaseBranch", "Baseline",
    "References", "Demos", "Disclaimer", "Acknowledgments",
    (* === merged from claudecode_editmodes.wl (Phase 36 stage2 restart) === *)
    "$ClaudeEditModesVersion",
@@ -275,6 +278,30 @@ $ClaudePackageKeywordMap::usage =
   "\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:30ad\:30fc\:30ef\:30fc\:30c9\:304c\:542b\:307e\:308c\:308b\:3068\:3001\:5bfe\:5fdc\:30d1\:30c3\:30b1\:30fc\:30b8\:306e api.md \:304c\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306b\:81ea\:52d5\:6ce8\:5165\:3055\:308c\:308b\:3002\n" <>
   "\:5404\:30d1\:30c3\:30b1\:30fc\:30b8\:304c\:81ea\:8eab\:306e\:30ed\:30fc\:30c9\:6642\:306b\:767b\:9332\:3059\:308b\:3002claudecode.wl \:5074\:306f\:30d1\:30c3\:30b1\:30fc\:30b8\:975e\:4f9d\:5b58\:3002\n" <>
   "\:4f8b: $ClaudePackageKeywordMap[\"maildb\"] = {\"\:30e1\:30fc\:30eb\", \"mail\", \"\:3012\:5207\"};";
+
+$ClaudePaletteServiceControls::usage =
+  "$ClaudePaletteServiceControls is a package-neutral registry (a list of Associations) of " <>
+  "start/stop service toggles shown in ShowClaudePalette, just below the Privacy section. " <>
+  "External packages (e.g. SourceVault MCP) register themselves; claudecode stays package-neutral. " <>
+  "Each entry: <|\"Id\", \"RunningQ\"->(Function[]->True|False|Missing), \"Start\"->Function[], " <>
+  "\"Stop\"->Function[], \"RunningLabel\", \"StoppedLabel\", \"UnknownLabel\", " <>
+  "(opt) \"RunningColor\", \"StoppedColor\"|>. The label follows the live RunningQ state.";
+
+ClaudeRegisterPaletteServiceControl::usage =
+  "ClaudeRegisterPaletteServiceControl[spec] registers a start/stop toggle (keyed by spec[\"Id\"]) " <>
+  "into $ClaudePaletteServiceControls so ShowClaudePalette shows it below Privacy. Re-registering the " <>
+  "same Id replaces it. Returns the Id. Re-run ShowClaudePalette[] to pick up a new registration.";
+
+ClaudeUnregisterPaletteServiceControl::usage =
+  "ClaudeUnregisterPaletteServiceControl[id] removes the palette service toggle with that Id.";
+
+$ClaudePackageAuxKeywordMap::usage =
+  "$ClaudePackageAuxKeywordMap は補助 api_<aux>.md の注入条件を登録する Association。\n" <>
+  "形式: <|pkg -> <|aux -> {キーワード...}|>|>。\n" <>
+  "キーワードが task に含まれるとパッケージ docs 注入のトリガになり、登録済み aux の\n" <>
+  "api_<aux>.md は aux 名またはキーワードが task に一致する場合のみ注入される。\n" <>
+  "未登録の補助 api は従来どおり常に注入される (後方互換)。\n" <>
+  "例: $ClaudePackageAuxKeywordMap[\"SourceVault\"] = <|\"eagle\" -> {\"Eagle\", \"Exif\"}|>;";
   "AutoPrivate \:306f ClaudeQuery/ClaudeEval/ContinueEval \:306e\:30aa\:30d7\:30b7\:30e7\:30f3\:3002\n" <>
   "True: \:79d8\:5bc6\:5909\:6570\:306b\:30a2\:30af\:30bb\:30b9\:3059\:308b\:30bf\:30b9\:30af\:306e\:5834\:5408\:3001\:751f\:6210\:30b3\:30fc\:30c9\:306b\n" <>
   "  Model -> $ClaudePrivateModel, PrivacySpec -> Automatic \:3092\:4ed8\:4e0e\:3059\:308b\:3002\n" <>
@@ -538,6 +565,20 @@ iAcquirePackageLock[packageName_String, nb_NotebookObject] :=
 iReleasePackageLock[packageName_String] :=
   ($iPackageUpdateLocks = KeyDrop[$iPackageUpdateLocks, packageName]);
 
+(* 2026-06-10 (freeze fix): ドキュメント更新チェーンの多重起動ガード。
+   ClaudeUpdateDocumentation / iUpdateDocNext は非同期コールバック連鎖で
+   進行するため iAcquirePackageLock を流用できない (解放点が分散する)。
+   タイムスタンプ方式: 各ステップで時刻を更新し、チェーンが異常終了して
+   解放されなかった場合も stale ($ClaudeDocUpdateStaleSeconds 超) で
+   自動解放する。 *)
+If[!AssociationQ[$iDocUpdateActive], $iDocUpdateActive = <||>];
+If[!NumericQ[$ClaudeDocUpdateStaleSeconds],
+  $ClaudeDocUpdateStaleSeconds = 1800];
+
+iDocUpdateActiveQ[packageName_String] :=
+  With[{t = Lookup[$iDocUpdateActive, packageName, None]},
+    NumericQ[t] && (AbsoluteTime[] - t) < $ClaudeDocUpdateStaleSeconds];
+
 (* \:5206\:96e2\:691c\:8a3c\:7528\:30e2\:30c7\:30eb: \:30c7\:30d5\:30a9\:30eb\:30c8\:306f $ClaudeModel \:3068\:540c\:3058 *)
 If[!StringQ[$ClaudeTestModel],
   $ClaudeTestModel = $ClaudeModel];
@@ -592,7 +633,16 @@ If[Quiet[DownValues[NBAccess`NBSetNotebookPaidAPIAllowed]] === {},
 (* Phase 28 (2026-05-12): \:30d1\:30ec\:30c3\:30c8\:30c7\:30b6\:30a4\:30f3\:3092 Provider + Model \:306e 2 \:30dc\:30bf\:30f3\:306b\:62e1\:5f35\:3002
    \:65e7 $iPaletteModel ("opus"/"sonnet"/"default") \:3068\:306f\:72ec\:7acb\:3057\:3066\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:3092\:7ba1\:7406\:3059\:308b\:3002 *)
 $iPaletteProvider  = "claudecode";    (* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "lmstudio" *)
-$iPaletteModelName = "claude-opus-4-7"; (* \:73fe\:30d7\:30ed\:30d0\:30a4\:30c0\:5185\:306e\:30e2\:30c7\:30eb\:540d *)
+
+(* claudecode/anthropic palette default model: the minor version is owned by
+   SourceVault's model-registry. The palette resolves it via
+   ClaudeResolveModel[provider, intent] (see iPaletteResolveHeavyModel) and must
+   not hard-code a minor version. The static value below is only a fallback for
+   environments where SourceVault is not loaded; bump it on a model release. *)
+$iPaletteHeavyIntent = <|"claudecode" -> "code-heavy", "anthropic" -> "heavy"|>;
+$iPaletteDefaultClaudeModel = "claude-opus-4-8";
+
+$iPaletteModelName = $iPaletteDefaultClaudeModel; (* \:73fe\:30d7\:30ed\:30d0\:30a4\:30c0\:5185\:306e\:30e2\:30c7\:30eb\:540d *)
 
 (* Provider \:5faa\:74b0\:9806\:5e8f\:3002Phase 5 (2026-05-26): chatgptcodex \:3092
    claudecode \:306e\:6b21\:306b\:8ffd\:52a0\:3002\:3069\:3061\:3089\:3082\:30b5\:30d6\:30b9\:30af\:30ea\:30d7\:30b7\:30e7\:30f3\:7d4c\:7531\:306e
@@ -602,64 +652,106 @@ $iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "
 (* \:5404 Provider \:306e\:5019\:88dc\:30e2\:30c7\:30eb\:4e00\:89a7 (Phase 28) \:3002
    \:30af\:30ea\:30c3\:30af\:3067\:3053\:306e\:5217\:3092\:5faa\:74b0\:9078\:629e\:3059\:308b\:3002 *)
 $iPaletteModelsByProvider = <|
-  "claudecode"   -> {"claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"},
+  "claudecode"   -> {"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"},
   (* chatgptcodex: \:30e2\:30c7\:30eb\:5019\:88dc\:306f SourceVault \:304c\:4e00\:5143\:7ba1\:7406\:3059\:308b\:3002
      iPaletteModelsFor \:304c SourceVaultListModels \:7d4c\:7531\:3067\:53d6\:5f97\:3059\:308b\:3002
      \:3053\:306e\:9759\:7684\:30a8\:30f3\:30c8\:30ea\:306f SourceVault \:672a\:30ed\:30fc\:30c9\:6642\:306e\:6700\:5c0f\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3002 *)
   "chatgptcodex" -> {"Automatic"},
-  "anthropic"    -> {"claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"},
+  "anthropic"    -> {"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"},
   "openai"       -> {"gpt-5.5", "gpt-5.5-pro", "gpt-5-mini", "gpt-5-nano"},
   "lmstudio"     -> {"qwen3.6-27b", "qwen3.5-27b", "qwen3-coder-30b", "gpt-oss-120b"}
 |>;
 
-(* resolve the candidate model list for a provider's palette picker.
-   For chatgptcodex the catalog comes from SourceVault, the single
-   source of truth for the provider model registry (SourceVault
-   spec: production .wl files must not hard-code model ids). The
-   "Automatic" entry is always offered first (it omits the model
-   key and uses the Codex CLI default). For every other provider
-   the static $iPaletteModelsByProvider entry is used.
+(* SourceVault model catalog for a provider (a list of model-id strings),
+   or {} when SourceVault is not loaded / returns nothing. *)
+iPaletteSourceVaultModels[provider_String] :=
+  Module[{sv},
+    sv = If[
+      TrueQ[Quiet @ Check[
+        ValueQ[SourceVault`SourceVaultListModels] ||
+        MemberQ[$Packages, "SourceVault`"], False]],
+      Quiet @ Check[SourceVault`SourceVaultListModels[provider], {}],
+      {}];
+    If[ListQ[sv] && AllTrue[sv, StringQ], sv, {}]];
+iPaletteSourceVaultModels[_] := {};
 
-   Falls back to the static entry when SourceVault is not loaded or
-   returns nothing, so the palette keeps working standalone. *)
+(* SourceVault-resolved heavy/default model id for a claude provider, or a
+   Missing[] when SourceVault is unavailable / cannot resolve. This is what
+   makes the palette's minor version track SourceVault's registry instead of a
+   frozen hard-coded id: ClaudeResolveModel[provider, intent] returns the
+   currently registered best model for the intent (e.g. claude-opus-4-8). *)
+iPaletteResolveHeavyModel[provider_String] :=
+  Module[{intent, res},
+    intent = Lookup[$iPaletteHeavyIntent, provider, ""];
+    If[intent === "" ||
+       !TrueQ[Quiet @ Check[
+         ValueQ[SourceVault`ClaudeResolveModel] ||
+         MemberQ[$Packages, "SourceVault`"], False]],
+      Return[Missing["NoSourceVault"]]];
+    res = Quiet @ Check[
+      SourceVault`ClaudeResolveModel[provider, intent],
+      Missing["ResolveFailed"]];
+    If[AssociationQ[res] && StringQ[Lookup[res, "ModelId", Missing[]]],
+      Lookup[res, "ModelId"], Missing["NoModelId"]]];
+iPaletteResolveHeavyModel[_] := Missing["BadProvider"];
+
+(* resolve the candidate model list for a provider's palette picker.
+   The single source of truth for provider model ids -- including the minor
+   version of the Claude models -- is SourceVault. claudecode/anthropic resolve
+   their default heavy model via ClaudeResolveModel (so opening the palette no
+   longer pins a stale hard-coded minor version) and put it first, then list the
+   rest of the registered models as cycle options. chatgptcodex always offers
+   "Automatic" first; lmstudio uses the SourceVault catalog directly. Every
+   branch falls back to the static $iPaletteModelsByProvider entry when
+   SourceVault is not loaded, so the palette keeps working standalone. *)
 iPaletteModelsFor[provider_String] :=
-  If[provider === "chatgptcodex" || provider === "lmstudio",
-    (* Stage 9 P1.5: chatgptcodex \:306b\:52a0\:3048 lmstudio \:3082 SourceVault \:304b\:3089\:30e2\:30c7\:30eb\:540d\:3092
-       \:52d5\:7684\:53d6\:5f97\:3059\:308b\:3002\:30e2\:30c7\:30eb\:540d\:306f SourceVault \:7ba1\:7406\:306a\:306e\:3067\:3001\:30d1\:30ec\:30c3\:30c8\:5019\:88dc\:3082
-       SourceVault \:306e\:5b9f\:540d (\:4f8b: qwen/qwen3.6-27b) \:3092\:4f7f\:3046\:3002\:3053\:308c\:306b\:3088\:308a
-       \:30d1\:30ec\:30c3\:30c8\:9078\:629e\:3068 SourceVault \:30fbLM Studio \:5b9f\:540d\:30fbcontext_length \:89e3\:6c7a\:304c\:6574\:5408\:3059\:308b\:3002
-       SourceVault \:7121\:3057\:74b0\:5883\:3067\:306f\:9759\:7684\:30ea\:30b9\:30c8\:306b\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af (\:5f8c\:65b9\:4e92\:63db)\:3002 *)
-    Module[{sv},
-      sv = If[
-        TrueQ[Quiet @ Check[
-          ValueQ[SourceVault`SourceVaultListModels] ||
-          MemberQ[$Packages, "SourceVault`"], False]],
-        Quiet @ Check[
-          SourceVault`SourceVaultListModels[provider], {}],
-        {}];
-      If[ListQ[sv] && sv =!= {} && AllTrue[sv, StringQ],
-        If[provider === "chatgptcodex",
+  Module[{sv, base, heavy},
+    Which[
+      provider === "chatgptcodex",
+        sv = iPaletteSourceVaultModels[provider];
+        If[sv =!= {},
           Prepend[DeleteCases[sv, "Automatic"], "Automatic"],
-          DeleteCases[sv, "Automatic"]],
+          {"Automatic"}],
+      provider === "lmstudio",
+        sv = iPaletteSourceVaultModels[provider];
+        If[sv =!= {},
+          DeleteCases[sv, "Automatic"],
+          Lookup[$iPaletteModelsByProvider, provider,
+            {$iPaletteDefaultClaudeModel}]],
+      provider === "claudecode" || provider === "anthropic",
+        sv = DeleteCases[iPaletteSourceVaultModels[provider], "Automatic"];
+        base = If[sv =!= {}, sv,
+          Lookup[$iPaletteModelsByProvider, provider,
+            {$iPaletteDefaultClaudeModel}]];
+        heavy = iPaletteResolveHeavyModel[provider];
+        If[StringQ[heavy], DeleteDuplicates[Prepend[base, heavy]], base],
+      True,
         Lookup[$iPaletteModelsByProvider, provider,
-          If[provider === "chatgptcodex", {"Automatic"},
-            {"claude-opus-4-7"}]]]],
-    Lookup[$iPaletteModelsByProvider, provider,
-      {"claude-opus-4-7"}]];
-iPaletteModelsFor[_] := {"claude-opus-4-7"};
+          {$iPaletteDefaultClaudeModel}]]];
+iPaletteModelsFor[_] := {$iPaletteDefaultClaudeModel};
 
 (* \:30e2\:30c7\:30eb\:540d\:3092\:30d1\:30ec\:30c3\:30c8\:30dc\:30bf\:30f3\:7528\:306b\:77ed\:304f\:30e9\:30d9\:30eb\:5316 *)
 iPaletteShortenModelName[mn_String] :=
-  Which[
-    mn === "", "default",
-    StringStartsQ[mn, "claude-opus-4-7"],  "Opus 4.7",
-    StringStartsQ[mn, "claude-opus-4-6"],  "Opus 4.6",
-    StringStartsQ[mn, "claude-sonnet-4-6"], "Sonnet 4.6",
-    StringStartsQ[mn, "claude-haiku-4-5"], "Haiku 4.5",
-    StringStartsQ[mn, "claude-opus"],      "Opus",
-    StringStartsQ[mn, "claude-sonnet"],    "Sonnet",
-    StringStartsQ[mn, "claude-haiku"],     "Haiku",
-    True, StringTake[mn, UpTo[14]]
+  Module[{caps, fam, maj, min},
+    If[mn === "", Return["default"]];
+    (* claude-<family>-<major>-<minor>[...] -> "Family major.minor", so the
+       displayed minor version follows the model id with no code edits on a
+       version bump (e.g. claude-opus-4-8 -> "Opus 4.8"). *)
+    caps = StringCases[mn,
+      StartOfString ~~ "claude-" ~~ f : ("opus" | "sonnet" | "haiku") ~~ "-" ~~
+        a : (DigitCharacter ..) ~~ "-" ~~ b : (DigitCharacter ..) ~~ ___ :>
+        {f, a, b}];
+    If[caps =!= {},
+      {fam, maj, min} = First[caps];
+      Return[
+        Switch[fam, "opus", "Opus", "sonnet", "Sonnet", "haiku", "Haiku",
+          _, fam] <> " " <> maj <> "." <> min]];
+    Which[
+      StringStartsQ[mn, "claude-opus"],   "Opus",
+      StringStartsQ[mn, "claude-sonnet"], "Sonnet",
+      StringStartsQ[mn, "claude-haiku"],  "Haiku",
+      True, StringTake[mn, UpTo[14]]
+    ]
   ];
 iPaletteShortenModelName[_] := "default";
 
@@ -712,7 +804,7 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
       {"claudecode", $ClaudeModel},
     True,
       (* \:4ed6\:3082\:3060\:3081\:306a\:3089\:30c7\:30d5\:30a9\:30eb\:30c8 *)
-      {"claudecode", "claude-opus-4-7"}
+      {"claudecode", $iPaletteDefaultClaudeModel}
   ];
   fallbackP = fromCM[[1]];
   fallbackM = fromCM[[2]];
@@ -729,10 +821,10 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
       MatchQ[v2, "opus" | "sonnet" | "default"]],
       v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteModel"}]];
       Which[
-        v === "opus",    ($iPaletteProvider = "claudecode"; $iPaletteModelName = "claude-opus-4-7"),
+        v === "opus",    ($iPaletteProvider = "claudecode"; $iPaletteModelName = $iPaletteDefaultClaudeModel),
         v === "sonnet",  ($iPaletteProvider = "claudecode"; $iPaletteModelName = "claude-sonnet-4-6"),
-        v === "default", ($iPaletteProvider = "claudecode"; $iPaletteModelName = "claude-opus-4-7"),
-        True,            ($iPaletteProvider = "claudecode"; $iPaletteModelName = "claude-opus-4-7")
+        v === "default", ($iPaletteProvider = "claudecode"; $iPaletteModelName = $iPaletteDefaultClaudeModel),
+        True,            ($iPaletteProvider = "claudecode"; $iPaletteModelName = $iPaletteDefaultClaudeModel)
       ];
       migrated = True,
 
@@ -940,7 +1032,10 @@ ClaudeCreateDocumentation::usage =
   "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3082\:53c2\:7167\:53ef\:80fd\:ff08\:300c\:4e0a\:3067\:8b70\:8ad6\:3055\:308c\:3066\:3044\:308b\:5185\:5bb9\:3092\:53cd\:6620\:3057\:3066\:300d\:306a\:3069\:ff09\:3002\n" <>
   "Option TargetFiles -> Automatic \:3067\:81ea\:52d5\:5224\:5b9a\:3001{\"api.md\"} \:7b49\:3067\:30d5\:30a1\:30a4\:30eb\:6307\:5b9a\:3002\n" <>
   "Option Mode -> \"Update\" (\:65e2\:5b58\:66f4\:65b0) \:307e\:305f\:306f \"Create\" (\:65b0\:898f\:4f5c\:6210)\:3002\n" <>
+  "Option Baseline -> \"LastDocUpdate\" (\:76f4\:8fd1\:306e _documentupdate \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:57fa\:6e96\:3001\:65e2\:5b9a) \:307e\:305f\:306f \"Github\" (GithubRepositories \:30b3\:30df\:30c3\:30c8\:7248\:57fa\:6e96)\:3002\n" <>
+  "  \"Github\" \:3067\:306f\:30b3\:30df\:30c3\:30c8\:7248\:304b\:3089\:306e\:30bd\:30fc\:30b9\:5dee\:5206\:306b\:52a0\:3048\:3001_info/design \:306e\:65b0\:898f\:5185\:5bb9\:3082\:52a0\:5473\:3057\:3066\:8a18\:8ff0\:3092\:6539\:5584\:3059\:308b\:3002\n" <>
   "\:4f8b: ClaudeUpdateDocumentation[\"claudecode\", \"api.md\:306e\:307f\:66f4\:65b0\:3057\:3066\"]\n" <>
+  "\:4f8b: ClaudeUpdateDocumentation[\"pkg\", Baseline -> \"Github\"]\n" <>
   "\:4f8b: ClaudeUpdateDocumentation[\"pkg\", \"...\", TargetFiles -> {\"api.md\"}]";
 
 (* Phase Q-5 \:79fb\:7ba1: ClaudeUpdatePackageHistory::usage \:306f ClaudePackageManager.wl \:3078\:5b8c\:5168\:79fb\:7ba1 *)
@@ -1702,6 +1797,11 @@ If[!ValueQ[$ChatgptCodexSourceExposureMode], $ChatgptCodexSourceExposureMode = "
    keeps the existing behaviour unchanged. *)
 If[!ValueQ[$ClaudeCLIHarnessMode], $ClaudeCLIHarnessMode = "Direct"];
 If[!AssociationQ[$ClaudePackageKeywordMap], $ClaudePackageKeywordMap = <||>];
+If[!AssociationQ[$ClaudePackageAuxKeywordMap], $ClaudePackageAuxKeywordMap = <||>];
+(* package-neutral palette service-toggle registry (external packages register start/stop controls) *)
+If[!ListQ[$ClaudePaletteServiceControls], $ClaudePaletteServiceControls = {}];
+If[!AssociationQ[$iPaletteServiceStateCache], $iPaletteServiceStateCache = <||>];
+If[!IntegerQ[$iPaletteServiceToggleCounter], $iPaletteServiceToggleCounter = 0];
 
 (* --- LM Studio MCP \:7d71\:5408\:5909\:6570\:306e\:65e2\:5b9a\:5024 (2026-04-24 \:8ffd\:52a0) --- *)
 If[!ValueQ[$ClaudeLMStudioIntegrations],     $ClaudeLMStudioIntegrations     = None];
@@ -1742,6 +1842,10 @@ If[!AssociationQ[$LLMGraphMaxConcurrency],
 
 (* ClaudeUpdatePackage \:81ea\:52d5\:30ea\:30c8\:30e9\:30a4: \:30ea\:30ed\:30fc\:30c9\:5f8c\:306e\:30a8\:30e9\:30fc\:3092\:691c\:51fa\:3057\:81ea\:52d5\:4fee\:6b63 *)
 If[!ValueQ[$ClaudeUpdateAutoRetryMax], $ClaudeUpdateAutoRetryMax = 2];
+(* ClaudeUpdatePackage: プロンプトへソース全文をインライン展開する上限文字数。
+   これを超えるファイルは全文を埋め込まず、CLI の Read ツールで参照させる
+   (巨大ファイルでのコンテキスト溢れ・コスト增・応答品質低下を防ぐ)。 *)
+If[!ValueQ[$ClaudeUpdateInlineMaxChars], $ClaudeUpdateInlineMaxChars = 150000];
 $iUpdateRetryCount = 0;
 $iRetryTargetNotebook = None;  (* \:81ea\:52d5\:30ea\:30c8\:30e9\:30a4\:6642\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:53c2\:7167 *)
 
@@ -1766,7 +1870,7 @@ If[!ValueQ[$iNBAccessOnKernelsReady], $iNBAccessOnKernelsReady = False];
    $ClaudeModel \:306e\:578b\:3082\:3053\:308c\:306b\:4f34\:3044 List \:3092\:30c7\:30d5\:30a9\:30eb\:30c8\:3068\:3059\:308b\:304c\:3001
    String \:4e92\:63db\:3068\:3057\:3066\:30e6\:30fc\:30b6\:304c "claude-opus-4-7" \:306e\:3088\:3046\:306b\:8a2d\:5b9a\:3057\:3066\:3082\:52d5\:304f\:3088\:3046
    CLI \:306e --model \:53c2\:7167\:7b87\:6240\:3084\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0\:306f List/String \:4e21\:578b\:3092\:30b5\:30dd\:30fc\:30c8\:3059\:308b\:3002 *)
-$iModelOpus   = {"claudecode", "claude-opus-4-7"};
+$iModelOpus   = {"claudecode", "claude-opus-4-8"};
 $iModelSonnet = {"claudecode", "claude-sonnet-4-6"};
 
 iL[ja_String, en_String] := If[$Language === "Japanese", ja, en];
@@ -3072,7 +3176,7 @@ iLoadClaudeMD[];
 
 (* \:30d7\:30ed\:30f3\:30d7\:30c8\:5148\:982d\:306b CLAUDE.md \:3092\:7d44\:307f\:8fbc\:3080\:30d8\:30eb\:30d1\:30fc *)
 iClaudeSysPrompt[] :=
-  Module[{base},
+  Module[{base, mode, budget},
     base = Which[
       iClaudeDirectivesAvailableQ[],
         iClaudeSysPromptViaDirectives[ToString[$ClaudeModel], ""],
@@ -3081,6 +3185,19 @@ iClaudeSysPrompt[] :=
       True,
         ""
     ];
+    (* X0a: bound the project-guidelines / CLAUDE.md portion of the system
+       prompt under context planning (keep the head = critical top rules,
+       drop the long tail). This is the single chokepoint shared by the legacy
+       (iClaudeEvalImpl), ContinueEval and Runtime-bridge (iAdapterBuildPrompt)
+       paths, so it applies regardless of $UseClaudeRuntime.
+       $claudeMathPromptPrefix is always kept in full.
+       $ClaudeEvalContextPlanning = "LegacyFull" restores the unbounded text. *)
+    mode = ClaudeCode`$ClaudeEvalContextPlanning;
+    If[mode =!= "LegacyFull" && mode =!= False && StringQ[base],
+      budget = ClaudeCode`$ClaudeEvalContextSysPromptCharBudget;
+      If[IntegerQ[budget] && budget > 0 && StringLength[base] > budget,
+        base = StringTake[base, UpTo[budget]] <>
+          "\n\n...[project guidelines truncated to fit the model context]\n\n---\n\n"]];
     base <> $claudeMathPromptPrefix
   ];
 $iJobActiveNb = None;
@@ -3535,7 +3652,8 @@ iConfidentialCellEpilog[] := Quiet @ Module[
     iRebuildConfidentialSymbolsAll[];
     $iEpilogRebuildDone = True];
 
-  If[Length[$confidentialSymbols] > 0 &&
+  If[(Length[$confidentialSymbols] > 0 ||
+      Length[Quiet @ Check[NBAccess`NBGetConfidentialHeads[], <||>]] > 0) &&
      MemberQ[{"Input", "Code"}, NBAccess`NBCellStyle[nb, idx]] &&
      !iIsConfidentialCell[nb, idx] &&
      !iIsExplicitlyUnmarked[nb, idx],
@@ -3559,6 +3677,12 @@ iConfidentialCellEpilog[] := Quiet @ Module[
             RegularExpression["(?<![\\p{L}\\p{N}$])" <> # <>
               "(?![\\p{L}\\p{N}$])"]] &]
       ];
+      (* 機密生成ヘッド (SourceVault 等が NBAccess に登録) の呼び出しも依存秘密。
+         snaps = SourceVaultSearchMailSnapshots[...] のような手入力コードの
+         Output を保護し、LHS の snaps を連鎖登録する *)
+      If[!isDependent,
+        isDependent = TrueQ[Quiet @ Check[
+          NBAccess`NBTextUsesConfidentialHead[inputText], False]]];
       (* Input \:306f\:30de\:30fc\:30af\:3057\:306a\:3044\:3002Output \:306e\:307f\:6a59\:30de\:30fc\:30af\:3002
          \:305f\:3060\:3057 NonConfidential \:3067\:660e\:793a\:89e3\:9664\:6e08\:307f\:306a\:3089\:4e0a\:66f8\:304d\:3057\:306a\:3044 *)
       If[isDependent,
@@ -3679,6 +3803,22 @@ ScanConfidentialCells[nb_NotebookObject] :=
         If[TrueQ[tag] && !TrueQ[depTag],
           iRegisterConfidentialVars[NBAccess`NBCellExtractVarNames[nb, i]]]],
       {i, nCells}];
+    (* 機密生成ヘッド (NBAccess レジストリ) を参照する Input/Code の LHS も
+       直接秘密源として登録する。カーネル再起動後でも
+       snaps = SourceVaultSearchMailSnapshots[...] 由来の taint が
+       変数表に復元され、下流の依存セル走査に乗る *)
+    If[Length[Quiet @ Check[NBAccess`NBGetConfidentialHeads[], <||>]] > 0,
+      Do[
+        Module[{st2, txt2},
+          st2 = Quiet[NBAccess`NBCellStyle[nb, i]];
+          If[MemberQ[{"Input", "Code"}, st2],
+            txt2 = Quiet[NBAccess`NBCellReadInputText[nb, i]];
+            If[StringQ[txt2] &&
+               TrueQ[Quiet @ Check[
+                 NBAccess`NBTextUsesConfidentialHead[txt2], False]],
+              iRegisterConfidentialVars[
+                NBAccess`NBCellExtractVarNames[nb, i]]]]],
+        {i, nCells}]];
     directConfVars = Keys[$confidentialSymbols];
     (* \:6a5f\:5bc6\:89e3\:9664\:6e08\:307f\:30bb\:30eb\:306e\:5909\:6570\:540d\:3092\:53ce\:96c6\:ff08\:4f9d\:5b58\:4f1d\:642c\:306e\:30d5\:30a1\:30a4\:30a2\:30a6\:30a9\:30fc\:30eb\:ff09 *)
     Module[{declVars = {}, rawVN},
@@ -3950,6 +4090,77 @@ iCaptureNotebookContext[nb_NotebookObject, afterIdx_Integer, accessLevel_?Numeri
       accessLevel >= 0.75, <|"AccessLevel" -> 0.75|>,
       True,                <|"AccessLevel" -> 0.5|>
     ]];
+
+(* ===== X0a: ContextPlan assembler core (reused in X0b) =====
+   Returns bounded notebook context + (X0a: pass-through) history for the
+   ClaudeEval send path. Honors ClaudeCode`$ClaudeEvalContextPlanning:
+   "LegacyFull" or False = no bounding (full backward-compatible behaviour). *)
+iEstimateContextTokens[s_String] := Ceiling[StringLength[s]/2];
+iEstimateContextTokens[_] := 0;
+
+iBoundedNotebookContext[s_String, charBudget_Integer] :=
+  If[StringLength[s] <= charBudget, s,
+    "...[older notebook cells omitted]\n" <> StringTake[s, -charBudget]];
+iBoundedNotebookContext[s_, _] := If[StringQ[s], s, ""];
+
+(* X0b: history bounding (was pass-through in X0a). Mode "None" drops history,
+   "Recent" keeps the last n turns, anything else (e.g. "Full") passes through. *)
+iBoundedHistory[h_List, "None", _] := {};
+iBoundedHistory[h_List, "Recent", n_Integer] :=
+  Which[n <= 0, {}, Length[h] <= n, h, True, Take[h, -n]];
+iBoundedHistory[h_List, _, _] := h;
+iBoundedHistory[h_, _, _] := If[ListQ[h], h, {}];
+
+(* X0b: consult the optional package-neutral context planner hook
+   ($ClaudeEvalContextPlanner). A registered planner (set by SourceVault, never
+   referenced by claudecode directly) receives the call context + default plan
+   and returns a refined plan Association. Fail-safe to the default plan. *)
+iResolveContextPlanForCall[defaultPlan_Association, prompt_, nb_, afterIdx_, accessLevel_] :=
+  Module[{hook, p},
+    hook = ClaudeCode`$ClaudeEvalContextPlanner;
+    If[hook === None, Return[defaultPlan, Module]];
+    p = Quiet @ Check[
+      Catch[hook[<|"Prompt" -> prompt, "Notebook" -> nb, "AfterIndex" -> afterIdx,
+        "AccessLevel" -> accessLevel, "DefaultPlan" -> defaultPlan|>],
+        _, Function[{v, t}, $Failed]], $Failed];
+    If[AssociationQ[p], p, defaultPlan]
+  ];
+iResolveContextPlanForCall[defaultPlan_, ___] := defaultPlan;
+
+iAssembleContextForPlan[nb_, afterIdx_Integer, rawHistory_List,
+    plan0_Association, accessLevel_, prompt_:""] :=
+  Module[{mode, plan, nbCtx, nbPlan, nbMode, charBudget, hPlan, hMode, hTurns, hist},
+    mode  = ClaudeCode`$ClaudeEvalContextPlanning;
+    nbCtx = With[{r = Quiet[iCaptureNotebookContext[nb, afterIdx, accessLevel]]},
+      If[StringQ[r], r, ""]];
+    If[mode === "LegacyFull" || mode === False,
+      Return[<|"History" -> rawHistory, "NotebookContext" -> nbCtx,
+        "EstimatedTokens" -> iEstimateContextTokens[nbCtx],
+        "Mode" -> "LegacyFull"|>, Module]];
+    (* a registered SourceVault planner may refine the plan per prompt *)
+    plan = iResolveContextPlanForCall[plan0, prompt, nb, afterIdx, accessLevel];
+    (* notebook *)
+    nbPlan     = Lookup[plan, "Notebook", <||>];
+    nbMode     = Lookup[nbPlan, "Mode", "Tail"];
+    charBudget = Lookup[nbPlan, "CharBudget",
+      ClaudeCode`$ClaudeEvalContextNotebookCharBudget];
+    Which[
+      nbMode === "None", nbCtx = "",
+      nbMode === "Tail" && IntegerQ[charBudget],
+        nbCtx = iBoundedNotebookContext[nbCtx, charBudget]];
+    (* history *)
+    hPlan  = Lookup[plan, "History", <||>];
+    hMode  = Lookup[hPlan, "Mode", "Recent"];
+    hTurns = Lookup[hPlan, "MaxTurns", ClaudeCode`$ClaudeEvalContextHistoryTurns];
+    hist   = iBoundedHistory[rawHistory, hMode,
+      If[IntegerQ[hTurns], hTurns, 12]];
+    <|"History" -> hist, "NotebookContext" -> nbCtx,
+      "EstimatedTokens" -> iEstimateContextTokens[nbCtx], "Mode" -> "Bounded"|>
+  ];
+iAssembleContextForPlan[nb_, afterIdx_Integer, rawHistory_, ___] :=
+  <|"History" -> If[ListQ[rawHistory], rawHistory, {}],
+    "NotebookContext" -> With[{r = Quiet[iCaptureNotebookContext[nb, afterIdx]]},
+      If[StringQ[r], r, ""]], "Mode" -> "Fallback"|>;
 
 
 (* response \:304b\:3089 ```mathematica...``` \:30d6\:30ed\:30c3\:30af\:3092\:9664\:53bb\:3057\:30c6\:30ad\:30b9\:30c8\:306e\:307f\:3092\:53d6\:308a\:51fa\:3059
@@ -4293,6 +4504,196 @@ iClaudeCallPrefix[] :=
 If[!AssociationQ[$claudeProgress], $claudeProgress = <||>];
 If[!AssociationQ[$iDeferredWork], $iDeferredWork = <||>];
 
+(* 2026-06-10 (freeze fix): tick 多重スケジュール抑止の stale 上限 (秒)。
+   tick インスタンスが Abort 等で完了マークを残せなかった場合でも、
+   この秒数を超えたら再スケジュールを許可して自己復旧する。
+   2026-06-12 (freeze fix 2): 90 -> 660 に延長。同期実行キャップ
+   ($ClaudeRuntimeMaxSyncExecutionSeconds = 600) より長くすることで、
+   正当な長時間実行中の tick に重複インスタンスを重ねない
+   (重複は同一 DAG ノードの二重実行を引き起こす)。 *)
+If[!NumericQ[$ClaudeTickInFlightStaleSeconds],
+  $ClaudeTickInFlightStaleSeconds = 660];
+
+(* 2026-06-12 (freeze fix 2): tick 内同期実行 (LLM 提案コード) のハードキャップ秒。
+   LLM 申告の expectedSeconds / Infinity をそのまま採用すると、提案コードの
+   ハングで共有 tick が永久ブロックし FE が完全フリーズする (kill 以外回復不能)。
+   無効化するには ClaudeCode`$ClaudeRuntimeMaxSyncExecutionSeconds = Infinity。 *)
+If[!ValueQ[ClaudeCode`$ClaudeRuntimeMaxSyncExecutionSeconds],
+  ClaudeCode`$ClaudeRuntimeMaxSyncExecutionSeconds = 600];
+
+(* 2026-06-10 (freeze fix): WindowStatusArea 更新の安全ラッパ。
+   共有 polling tick / 非同期 tick 内のステータス表示は、FrontEnd が
+   他処理 (セル描画・別ジョブの NotebookWrite 等) で占有されていると
+   CurrentValue 代入自体が長時間ブロックし、tick 実行が 3 秒間隔を
+   超えて積み上がる。TimeConstrained で上限を切り best-effort にする。 *)
+iSafeSetWindowStatus[nb_, text_] :=
+  Quiet @ Check[
+    TimeConstrained[CurrentValue[nb, WindowStatusArea] = text, 0.3, Null],
+    Null];
+
+(* 2026-06-12 (freeze fix 2): フライトレコーダ。
+   kill が必要な完全フリーズの事後診断用に、tick / 同期実行の開始・終了を
+   軽量なファイル追記ログに記録する。フリーズ後に Mathematica を再起動して
+   ClaudeFreezeReport[] を見れば、"...-start" だけ残って対応する "...-end" が
+   無い行が直近のハング箇所を特定する。FrontEnd 呼び出しを含まないので
+   ログ自体がフリーズ原因になることはない。 *)
+If[!ValueQ[ClaudeCode`$ClaudeFreezeLogEnabled],
+  ClaudeCode`$ClaudeFreezeLogEnabled = True];
+
+iClaudeFreezeLogFile[] :=
+  FileNameJoin[{
+    If[StringQ[$ClaudeWorkingDirectory] && DirectoryQ[$ClaudeWorkingDirectory],
+      $ClaudeWorkingDirectory, $TemporaryDirectory],
+    "claude_freeze_log.txt"}];
+
+iClaudeFreezeLog[tag_String, info_String:""] :=
+  If[TrueQ[ClaudeCode`$ClaudeFreezeLogEnabled],
+    Quiet @ Check[
+      Module[{f = iClaudeFreezeLogFile[], strm},
+        If[FileExistsQ[f] && FileByteCount[f] > 2*^6,
+          Quiet[CopyFile[f, f <> ".old", OverwriteTarget -> True]];
+          Quiet[DeleteFile[f]]];
+        strm = OpenAppend[f, BinaryFormat -> True];
+        BinaryWrite[strm, ExportString[
+          DateString[{"Year", "-", "Month", "-", "Day", " ",
+            "Hour", ":", "Minute", ":", "Second"}] <>
+          " | " <> tag <> If[info === "", "", " | " <> info] <> "\n",
+          "Text", CharacterEncoding -> "UTF-8"]];
+        Close[strm]],
+      Null],
+    Null];
+
+ClaudeCode`ClaudeFreezeReport::usage =
+  "ClaudeFreezeReport[n] はフリーズ診断ログ (claude_freeze_log.txt) の末尾 n 行 (既定 60) を返す。\"-start\" のみで対応する \"-end\" が無い行が直近のハング箇所を示す。$ClaudeFreezeLogEnabled = False で記録を停止できる。";
+ClaudeCode`ClaudeFreezeReport[n_Integer:60] :=
+  Module[{f = iClaudeFreezeLogFile[], lines},
+    If[!FileExistsQ[f],
+      Return[<|"File" -> f, "Tail" -> {}|>]];
+    lines = Quiet @ Check[
+      Block[{$CharacterEncoding = "UTF-8"},
+        Import[f, {"Text", "Lines"}]], {}];
+    If[!ListQ[lines], lines = {}];
+    <|"File" -> f, "Tail" -> Take[lines, -Min[n, Length[lines]]]|>];
+
+(* 2026-06-12 (freeze fix 2): 並行 LLM ジョブ数の上限。
+   多重 ClaudeEval / ClaudeUpdateDocumentation で CLI プロセスと tick 負荷が
+   無制限に積み上がるのを防ぐ。上限到達中の新規ジョブは 5 秒後に再試行
+   (busy-wait しない)。 *)
+If[!ValueQ[ClaudeCode`$ClaudeMaxConcurrentJobs],
+  ClaudeCode`$ClaudeMaxConcurrentJobs = 3];
+
+iClaudeActiveLLMJobCount[] :=
+  If[!AssociationQ[$claudeProgress], 0,
+    Count[Values[$claudeProgress],
+      a_?AssociationQ /; MemberQ[
+        {"polling", "received", "writing", "llmgraph-dag"},
+        Lookup[a, "phase", ""]]]];
+
+(* tick インスタンスの起動ラッパ: 開始/終了をフライトレコーダに記録し、
+   完了時に in-flight マーカーと stale カウンタをクリアする。 *)
+iClaudeScheduleTickInstance[kk_String, fn_] :=
+  iScheduleAtAsync[
+    Module[{t0 = AbsoluteTime[]},
+      iClaudeFreezeLog["tick-start", kk];
+      Quiet @ Check[fn[], Null];
+      iClaudeFreezeLog["tick-end",
+        kk <> " " <> ToString[Round[AbsoluteTime[] - t0, 0.1]] <> "s"];
+      If[AssociationQ[$claudeProgress] && KeyExistsQ[$claudeProgress, kk] &&
+         AssociationQ[$claudeProgress[kk]],
+        $claudeProgress[kk]["tickInFlightAt"] = None;
+        $claudeProgress[kk]["tickStaleCount"] = 0]],
+    Now];
+
+(* ════════════════════════════════════════════════════════
+   2026-06-12: 長時間バッチ提案の External executor 振り分け
+   設計: ドキュメント/ClaudeEval_external_dispatch_design.md
+   対象 head の提案 (例: SourceVaultEagleSummarizeBatch) は tick 内同期実行で
+   メインカーネルを数分占有する代わりに、WolframScript 外部ジョブへ投入する。
+   結果は完了時に FinalActionQueue 経由で発行元 notebook へ summary が書かれる。
+   ════════════════════════════════════════════════════════ *)
+
+If[! ValueQ[ClaudeCode`$ClaudeExternalizeProposals],
+  ClaudeCode`$ClaudeExternalizeProposals = True];
+
+(* head 名 (SymbolName, context 無し) -> per-head 設定。
+   BootstrapFiles: 子プロセスで先行ロードするパッケージ (bare 名は
+   パッケージディレクトリ基準で解決)。Timeout: ジョブ全体の上限秒。 *)
+If[! AssociationQ[ClaudeCode`$ClaudeExternalizableHeads],
+  ClaudeCode`$ClaudeExternalizableHeads = <|
+    "SourceVaultEagleSummarizeBatch" -> <|
+      "BootstrapFiles" -> {"NBAccess.wl", "claudecode.wl",
+                           "SourceVault.wl", "SourceVault_eagle.wl"},
+      "Timeout" -> 3600|>
+  |>];
+
+(* HoldComplete[h[...]] / HoldComplete[h] の head 名 (非評価で取得) *)
+iClaudeProposalHeadName[held_HoldComplete] :=
+  Replace[held, {
+    HoldComplete[(h_Symbol)[___]] :> SymbolName[Unevaluated[h]],
+    HoldComplete[h_Symbol]        :> SymbolName[Unevaluated[h]],
+    _ :> $Failed}];
+iClaudeProposalHeadName[_] := $Failed;
+
+(* External executor の lazy activation。
+   ClaudeRuntime_externalrunner / ClaudeOrchestrator_workflow が未ロードなら False。
+   既に稼働中 (完了 hook 設定済み + poll tick 登録済み) なら何もしない。 *)
+iClaudeEnsureExternalExecutor[] :=
+  Module[{r, pollKey},
+    If[Length[DownValues[ClaudeRuntime`ClaudeActivateExternalExecutor]] === 0 ||
+       Length[DownValues[
+         ClaudeOrchestrator`Workflow`ClaudeSubmitExternalHeldExprJob]] === 0,
+      Return[False]];
+    pollKey = Quiet @ Check[
+      If[StringQ[ClaudeRuntime`$ClaudeExternalPollTickKey],
+        ClaudeRuntime`$ClaudeExternalPollTickKey, "external-job-poll"],
+      "external-job-poll"];
+    If[TrueQ[Quiet @ Check[
+         ClaudeOrchestrator`Workflow`$ClaudeExternalCompletionHook =!= None,
+         False]] &&
+       MemberQ[ClaudePollingTickKeys[], pollKey],
+      Return[True]];
+    r = Quiet @ Check[ClaudeRuntime`ClaudeActivateExternalExecutor[], <||>];
+    TrueQ[Lookup[r, "LauncherWired", False]] &&
+      TrueQ[Lookup[r, "PollRegistered", False]] &&
+      TrueQ[Lookup[r, "CompletionHook", False]]
+  ];
+
+(* 提案 held expr が外部振り分け対象なら投入する。
+   失敗時は <|"Submitted"->False|> を返し、呼び元は従来の同期実行へ
+   フォールバックする (安全側)。 *)
+iClaudeTryExternalizeProposal[heldExpr_, accessSpec_Association, nb_] :=
+  Module[{headName, cfg, submitR},
+    If[! TrueQ[ClaudeCode`$ClaudeExternalizeProposals],
+      Return[<|"Submitted" -> False, "Reason" -> "Disabled"|>]];
+    If[! MatchQ[heldExpr, _HoldComplete],
+      Return[<|"Submitted" -> False, "Reason" -> "NotHeld"|>]];
+    headName = iClaudeProposalHeadName[heldExpr];
+    If[! StringQ[headName] ||
+       ! AssociationQ[ClaudeCode`$ClaudeExternalizableHeads] ||
+       ! KeyExistsQ[ClaudeCode`$ClaudeExternalizableHeads, headName],
+      Return[<|"Submitted" -> False, "Reason" -> "HeadNotConfigured"|>]];
+    cfg = ClaudeCode`$ClaudeExternalizableHeads[headName];
+    If[! AssociationQ[cfg], cfg = <||>];
+    If[! TrueQ[iClaudeEnsureExternalExecutor[]],
+      iClaudeFreezeLog["exec-external-unavailable", headName];
+      Return[<|"Submitted" -> False, "Reason" -> "ExecutorUnavailable"|>]];
+    submitR = Quiet @ Check[
+      ClaudeOrchestrator`Workflow`ClaudeSubmitExternalHeldExprJob[heldExpr,
+        "Timeout"        -> Lookup[cfg, "Timeout", 3600],
+        "BootstrapFiles" -> Lookup[cfg, "BootstrapFiles", {}],
+        "NotifyNotebook" -> If[MatchQ[nb, _NotebookObject], nb, None]],
+      $Failed];
+    If[AssociationQ[submitR] && Lookup[submitR, "Status", ""] === "Submitted",
+      iClaudeFreezeLog["exec-external",
+        headName <> " job=" <> ToString[Lookup[submitR, "JobID", "?"]]];
+      <|"Submitted" -> True, "Submission" -> submitR, "Head" -> headName|>,
+      iClaudeFreezeLog["exec-external-failed",
+        headName <> " " <> ToString[If[AssociationQ[submitR],
+          Lookup[submitR, "Reason", "?"], submitR]]];
+      <|"Submitted" -> False, "Reason" -> "SubmitFailed",
+        "Detail" -> submitR|>]
+  ];
+
 (* === \:5171\:6709\:30dd\:30fc\:30ea\:30f3\:30b0\:30bf\:30b9\:30af ===
    \:8907\:6570\:306e\:975e\:540c\:671f\:30af\:30a8\:30ea\:3092\:540c\:6642\:5b9f\:884c\:3057\:3066\:3082 ScheduledTask \:306f\:5e38\:306b 1 \:3064\:3060\:3051\:3002
    \:500b\:5225\:306b ScheduledTask \:3092\:4f5c\:308b\:3068\:3001\:4e26\:884c\:5b9f\:884c\:6642\:306b\:52d5\:7684\:8a55\:4fa1\:30aa\:30fc\:30d0\:30fc\:30d5\:30ed\:30fc
@@ -4511,7 +4912,9 @@ iSharedPollingTick[] := Module[{keys, tickFn, entry, suppressible,
              ため、inline 同期実行が必須。FrontEnd ブロックは最大 1 件・短時間
              で、AsyncActive でない隙にのみ実行されるので安全。 *)
           If[TrueQ[Lookup[entry, "runInline", False]],
-            Quiet @ Check[tickFn[], Null],
+            (iClaudeFreezeLog["tick-inline-start", k];
+             Quiet @ Check[tickFn[], Null];
+             iClaudeFreezeLog["tick-inline-end", k]),
             (* 2026-05-16: tick \:5b9f\:884c\:3092 SessionSubmit \:3067\:80cc\:666f\:30bf\:30b9\:30af\:5316\:3002
                \:65e7\:5b9f\:88c5\:306f Quiet @ Check[tickFn[], Null] \:306e\:540c\:671f\:5b9f\:884c\:3067\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057\:305f\:3002
                tick \:5185\:306e handler \:304c ClaudeQueryBg \:7b49\:540c\:671f LLM \:547c\:3073\:51fa\:3057\:3092\:884c\:3046\:5834\:5408\:3001
@@ -4521,8 +4924,40 @@ iSharedPollingTick[] := Module[{keys, tickFn, entry, suppressible,
 
                ClaudeQuery / ClaudeEval (rule 95) \:3068\:540c\:69d8\:306e\:5bfe\:5fdc\:3002With \:3067 fn \:3092\:9759\:7684\:306b
                \:675f\:7e1b\:3057\:3001Module \:5c40\:6240\:5909\:6570 tickFn$nnnn \:306e\:30b9\:30b3\:30fc\:30d7\:5916\:8a55\:4fa1\:3092\:9632\:3050\:3002 *)
-            With[{fn = tickFn},
-              iScheduleAtAsync[Quiet @ Check[fn[], Null], Now]]]]]],
+            (* 2026-06-10 (freeze fix): tick 多重スケジュール抑止ガード。
+               前回スケジュールした同一 key の tick インスタンスが未完了の間に
+               共有 tick が再発火すると、one-shot タスクが 3 秒ごとに積み上がり、
+               複数の ClaudeEval / 更新ジョブ並行時にメインカーネルが飽和して
+               FrontEnd がフリーズする。tickInFlightAt マーカーが新しい間は
+               スキップする。
+               2026-06-12 (freeze fix 2): stale 時の扱いを変更。
+               stale = インスタンスがハング中の可能性が高い。無条件に
+               再スケジュールするとハング評価が際限なく積み上がるため、
+               1 回だけ再スケジュールし、2 回連続 stale ならジョブを放棄
+               (KeyDrop) してフライトレコーダに記録する。 *)
+            Module[{inAt = Lookup[entry, "tickInFlightAt", None], staleC},
+              Which[
+                (* 未完了インスタンスあり (新しい): 今回はスキップ *)
+                NumericQ[inAt] &&
+                  AbsoluteTime[] - inAt < $ClaudeTickInFlightStaleSeconds,
+                Null,
+                (* stale: 前回インスタンスが完了マークを残していない *)
+                NumericQ[inAt],
+                (staleC = Lookup[entry, "tickStaleCount", 0] + 1;
+                 If[staleC >= 2,
+                   iClaudeFreezeLog["tick-stale-drop", k];
+                   $claudeProgress = KeyDrop[$claudeProgress, k],
+                   iClaudeFreezeLog["tick-stale-resched", k];
+                   If[AssociationQ[$claudeProgress[k]],
+                     $claudeProgress[k]["tickStaleCount"] = staleC;
+                     $claudeProgress[k]["tickInFlightAt"] = AbsoluteTime[]];
+                   iClaudeScheduleTickInstance[k, tickFn]]),
+                (* 通常: マーカーを付けてインスタンスを起動 *)
+                True,
+                (If[AssociationQ[$claudeProgress[k]],
+                   $claudeProgress[k]["tickInFlightAt"] = AbsoluteTime[]];
+                 iClaudeScheduleTickInstance[k, tickFn])
+              ]]]]]],
     {k, sortedKeys}]];
 
 
@@ -5304,6 +5739,23 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
     excludeRead_:False, excludeDirs_List:{}] :=
   Module[{ts, outFile, promptFile, batFile, proc, startTime, progTag, norm,
           useFallback = TrueQ[$currentUseFallback], useJob},
+    (* 2026-06-12 (freeze fix 2): 並行 LLM ジョブ数ゲート。
+       上限到達中はプロセス起動前に 5 秒後の再試行へ退避する。
+       (ドキュメント更新チェーン等は呼び出し元エントリが
+        received/writing フェーズで 1 スロットを保持し続けるため、
+        チェーン内の次ステップはゲートを通過できる) *)
+    If[iClaudeActiveLLMJobCount[] >= ClaudeCode`$ClaudeMaxConcurrentJobs,
+      iClaudeFreezeLog["job-deferred",
+        "classic active=" <> ToString[iClaudeActiveLLMJobCount[]]];
+      With[{p1 = prompt, c1 = callback, n1 = nb, e1 = extraImageDirs,
+            j1 = jobId, f1 = fallbackModels, x1 = excludeRead,
+            d1 = excludeDirs},
+        Quiet @ Check[
+          SessionSubmit[ScheduledTask[
+            iClaudeQueryAsyncWithProgress[p1, c1, n1, e1, j1, f1, x1, d1],
+            {5, 1}]],
+          $Failed]];
+      Return[Null]];
     useJob = (jobId =!= "");
     norm       = iNormalizePrompt[iInjectAttachments[prompt]];
     ts         = ToString[UnixTime[]] <> "x" <> ToString[RandomInteger[99999]];
@@ -5354,7 +5806,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
          hidden notebook \:3092\:3055\:308f\:3089\:306a\:3044\:3088\:3046 WindowStatusArea \:8a2d\:5b9a\:3082\:30b9\:30ad\:30c3\:30d7\:3059\:308b\:3002 *)
       $claudeProgress[k]["disp"] = iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s", "Querying Claude... 0s"];
       If[uj,
-        Quiet[CurrentValue[nb, WindowStatusArea] = iL[iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s", "Querying Claude... 0s"], "Querying Claude... 0s"]]]
+        iSafeSetWindowStatus[nb, iL[iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s", "Querying Claude... 0s"], "Querying Claude... 0s"]]]
     ];
 
     $claudeProgress[ts]["tickFn"] =
@@ -5377,7 +5829,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
               Module[{now = AbsoluteTime[]},
                 If[now - Lookup[$claudeProgress[k], "lastDispTime", 0] < 1.0, Return[]];
                 $claudeProgress[k]["lastDispTime"] = now;
-                Quiet[CurrentValue[pNb, WindowStatusArea] = text]]];
+                iSafeSetWindowStatus[pNb, text]]];
 
           Which[
             (* === Phase: polling \[LongDash] \:30d7\:30ed\:30bb\:30b9\:5b9f\:884c\:4e2d === *)
@@ -5407,9 +5859,16 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                       iL["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08", "Error: Timeout ("] <> ToString[$ClaudeTimeout] <> iL["\:79d2\:ff09", " sec)"]],
                     iSafeSelectionMoveAfter[pNb];
                     cb[iL["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08", "Error: Timeout ("] <> ToString[$ClaudeTimeout] <> iL["\:79d2\:ff09\:3057\:307e\:3057\:305f\:3002", " sec)."]]],
-                  (* \:6b63\:5e38\:5b8c\:4e86: \:7d50\:679c\:30d5\:30a1\:30a4\:30eb\:3092\:8aad\:307f\:53d6\:308a *)
-                  Module[{retries2 = 0, result2, isEmpty2},
-                    While[!FileExistsQ[oFile] && retries2 < 3, Pause[0.5]; retries2++];
+                  (* \:6b63\:5e38\:5b8c\:4e86: \:7d50\:679c\:30d5\:30a1\:30a4\:30eb\:3092\:8aad\:307f\:53d6\:308a
+                     2026-06-10 (freeze fix): While+Pause の busy-wait を廃止し、
+                     出力ファイル未出現の間はティックをまたいで待つ (最大 3 tick)。
+                     tick 内の Pause はメインカーネルを占有し FrontEnd を固める。 *)
+                  Module[{result2, isEmpty2},
+                    If[!FileExistsQ[oFile] &&
+                       Lookup[$claudeProgress[k], "outFileWaits", 0] < 3,
+                      $claudeProgress[k]["outFileWaits"] =
+                        Lookup[$claudeProgress[k], "outFileWaits", 0] + 1;
+                      Return[]];
                     If[FileExistsQ[oFile] && FileByteCount[oFile] > 0,
                       result2 = iExtractResultFromStreamJson[oFile];
                       Quiet[DeleteFile[oFile]];
@@ -5462,7 +5921,9 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                 (* \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:3092\:4f8b\:5916\:5b89\:5168\:306b\:547c\:3073\:51fa\:3059\:3002
                    cb \:304c\:4f8b\:5916\:3092\:30b9\:30ed\:30fc\:3057\:3066\:3082 queue={} \:306e\:307e\:307e \[RightArrow] phase="done" \:306b\:9077\:79fb\:3057
                    ScheduledTask \:304c\:540c\:3058\:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:3092\:7e70\:308a\:8fd4\:3057\:547c\:3076\:7121\:9650\:30eb\:30fc\:30d7\:3092\:9632\:6b62\:3059\:308b\:3002 *)
+                iClaudeFreezeLog["recv-cb-start", k];
                 Quiet @ Check[queue = cb[$claudeProgress[k]["result"]], queue = {}];
+                iClaudeFreezeLog["recv-cb-end", k];
                 dt = AbsoluteTime[] - t1;
                 If[dt > 1, $iLastSlowCb = <|"elapsed" -> Round[dt, 0.1], "key" -> k|>];
                 If[ListQ[queue] && Length[queue] > 0,
@@ -5470,7 +5931,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                   $claudeProgress[k]["writeTotal"] = Length[queue];
                   $claudeProgress[k]["writeIdx"] = 1;
                   $claudeProgress[k]["phase"] = "writing";
-                  Quiet[CurrentValue[pNb, WindowStatusArea] =
+                  iSafeSetWindowStatus[pNb,
                     iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... ", "Querying Claude... "] <> ToString[elapsed] <> iL["s | \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d (0/", "s | Writing output (0/"] <>
                     ToString[Length[queue]] <> ")"],
                   $claudeProgress[k]["phase"] = "done"]],
@@ -5491,11 +5952,11 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                   (* \:5168\:30b9\:30c6\:30c3\:30d7\:5b8c\:4e86: \:30c6\:30a4\:30eb\:30de\:30fc\:30ab\:30fc\:524a\:9664 *)
                   Module[{tt = Lookup[$claudeProgress[k], "writeTailTag", ""]},
                     If[tt =!= "", Quiet[NBAccess`NBDeleteCellsByTag[pNb, tt]]]];
-                  Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
+                  iSafeSetWindowStatus[pNb, ""];
                   $claudeProgress[k]["phase"] = "done",
                   If[sub === "disp",
                     (* \:8868\:793a\:30c6\:30a3\:30c3\:30af: polling \:3068\:540c\:3058\:30d5\:30a9\:30fc\:30de\:30c3\:30c8 + \:66f8\:304d\:8fbc\:307f\:9032\:6357 *)
-                    Quiet[CurrentValue[pNb, WindowStatusArea] =
+                    iSafeSetWindowStatus[pNb,
                       iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... ", "Querying Claude... "] <> ToString[elapsed] <> iL["s | \:51fa\:529b\:3092\:66f8\:304d\:8fbc\:307f\:4e2d (", "s | Writing output ("] <>
                       ToString[idx] <> "/" <> ToString[total] <> ")"];
                     $claudeProgress[k]["writeSub"] = "exec",
@@ -5539,7 +6000,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                       isHidden = iIsHiddenNotebookQ[pNb]},
                 $claudeProgress = KeyDrop[$claudeProgress, k];
                 If[!isHidden,
-                  Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
+                  iSafeSetWindowStatus[pNb, ""];
                   If[!uj, NBAccess`NBDeleteCellsByTag[pNb, ptag]]
                 ];
                 (* \:91cd\:3044\:51e6\:7406\:3092\:5b8c\:5168\:306b\:5225\:306e ScheduledTask \:3067\:975e\:540c\:671f\:5b9f\:884c\:3002
@@ -7677,11 +8138,35 @@ iResolveLMStudioAPIKey[customURL_String:""] :=
    \:3053\:308c\:306b\:3088\:308a iStartFallbackAsync \:306e\:9577\:3044\:518d\:5e30\:30b7\:30b0\:30cd\:30c1\:30e3\:3092\:5909\:3048\:305a\:306b\:6e08\:3080\:3002 *)
 If[!ValueQ[$iLMStudioIntegrationsOverride], $iLMStudioIntegrationsOverride = None];
 
+(* X0a: ContextPlan ToolDefinitions gate predicate. True when context planning
+   is active and the active default plan disables tool definitions. Applied at
+   the single iResolveLMStudioIntegrations chokepoint so it covers the sync
+   (iQueryLMStudioChat / iQueryViaAPI) and async/bridge (iPrepareLMStudioMCPPS1)
+   paths alike, i.e. independent of $UseClaudeRuntime. *)
+iClaudeEvalToolDefinitionsOffQ[] :=
+  Module[{mode, plan, td},
+    mode = ClaudeCode`$ClaudeEvalContextPlanning;
+    If[mode === "LegacyFull" || mode === False, Return[False]];
+    plan = ClaudeCode`$ClaudeEvalDefaultContextPlan;
+    If[!AssociationQ[plan], Return[False]];
+    td = Lookup[plan, "ToolDefinitions", <||>];
+    AssociationQ[td] && Lookup[td, "Mode", "None"] === "None"
+  ];
+
 iResolveLMStudioIntegrations[model_String, explicitInteg_:Automatic] :=
   Module[{cand},
-    (* 1. \:660e\:793a\:5f15\:6570 *)
+    (* X0a: explicit {} = terminal "no tools" override. *)
+    If[explicitInteg === {}, Return[{}]];
+    (* 1. \:660e\:793a\:5f15\:6570 (explicit non-empty list wins, even under planning) *)
     If[ListQ[explicitInteg] && Length[explicitInteg] > 0,
       Return[explicitInteg]];
+    (* X0a: ContextPlan ToolDefinitions gate. Default-off under context planning
+       so MCP tool schemas (a large token source: ~31K for mcp/exa) and the
+       tool-use nudge are NOT sent for ordinary ClaudeEval sends. Re-enable per
+       call with Integrations -> {...} (above), keep context bounding but allow
+       tools via the plan's "ToolDefinitions" -> <|"Mode" -> "Full"|>, or restore
+       all legacy behaviour with $ClaudeEvalContextPlanning = "LegacyFull". *)
+    If[iClaudeEvalToolDefinitionsOffQ[], Return[{}]];
     (* 2. \:52d5\:7684\:30b9\:30b3\:30fc\:30d7 override *)
     If[ListQ[$iLMStudioIntegrationsOverride] &&
        Length[$iLMStudioIntegrationsOverride] > 0,
@@ -8695,7 +9180,7 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
               "Fallback: " <> prov <> "/" <> mdl <>
               " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... ", "querying... "] <> ToString[elapsed] <> "s"|>;
             (* WindowStatusArea \:306b\:7d4c\:904e\:6642\:9593\:3092\:8868\:793a *)
-            Quiet[CurrentValue[pNb, WindowStatusArea] =
+            iSafeSetWindowStatus[pNb,
               "Fallback: " <> prov <> "/" <> mdl <>
               " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... ", "querying... "] <> ToString[elapsed] <> "s"];
             (* \:9032\:6357\:30c6\:30ad\:30b9\:30c8\:3092\:30b9\:30ed\:30c3\:30c8\:306b\:76f4\:63a5\:66f8\:304d\:8fbc\:307f *)
@@ -8709,7 +9194,7 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
             Quiet[RemoveScheduledTask[sym]];
             $iFallbackActiveTasks = DeleteCases[$iFallbackActiveTasks, sym];
             (* WindowStatusArea \:3092\:30af\:30ea\:30a2 *)
-            Quiet[CurrentValue[pNb, WindowStatusArea] = ""];
+            iSafeSetWindowStatus[pNb, ""];
             If[!uj,
               iFallbackDeleteProgress[pNb, pk],
               (* Job \:30d1\:30b9: \:9032\:6357\:30c6\:30ad\:30b9\:30c8\:3092\:66f4\:65b0\:3057 written=False \:3067 NBEndJob \:306b\:4efb\:305b\:308b *)
@@ -8897,6 +9382,9 @@ ClaudeAbort[] :=
         stopped++],
       {key, keys}];
     $claudeProgress = <||>;
+    (* 2026-06-10 (freeze fix): ドキュメント更新チェーンのガードも解放
+       (停止でチェーンが死ぬと完了分岐に到達しないため) *)
+    $iDocUpdateActive = <||>;
     (* \:5171\:6709\:30dd\:30fc\:30ea\:30f3\:30b0\:30bf\:30b9\:30af\:3092\:505c\:6b62 *)
     If[$iSharedPollingTask =!= None,
       Quiet[StopScheduledTask[$iSharedPollingTask]];
@@ -9156,9 +9644,72 @@ iAutoMarkNewCellsConfidential[nb_NotebookObject, cellCountBefore_Integer] :=
       {idx, newIndices}]
   ];
 
+(* Identity-based variant for the async runtime path. The count-range version
+   above assumes new cells are appended at the end and that no other cells were
+   added since the count was taken. In the async runtime that is false: the user
+   keeps evaluating cells while the model works, and result cells may be inserted
+   at the job anchor, so a positional [before+1 .. after] range marks UNRELATED
+   cells confidential. Here we diff the actual CellObject set captured right
+   before the result is written, so only the cells THIS turn added are marked.
+   NBAccess cell indices follow Cells[nb] order (NBCellCount = Length[Cells[nb]]),
+   so the position in allCells is the NBAccess cellIdx. *)
+iAutoMarkCellsAddedSince[nb_NotebookObject, beforeCells_List] :=
+  Module[{allCells, style},
+    allCells = Quiet @ Cells[nb];
+    If[!ListQ[allCells], Return[]];
+    (* refresh the NBAccess cell cache so NBCellStyle/index align with allCells *)
+    Quiet[NBAccess`NBCellCount[nb]];
+    Do[
+      If[!MemberQ[beforeCells, allCells[[idx]]],
+        style = Quiet @ NBAccess`NBCellStyle[nb, idx];
+        If[MemberQ[{"Input", "Output", "Code", "ExternalLanguage"}, style] &&
+           !TrueQ[NBAccess`NBGetConfidentialTag[nb, idx]],
+          NBAccess`NBMarkCellConfidential[nb, idx]]],
+      {idx, Length[allCells]}]
+  ];
+iAutoMarkCellsAddedSince[_, _] := Null;
+
 (* accessLevel \:304c cloudcode \:306e\:4e0a\:9650\:3092\:8d85\:3048\:308b\:304b\:306e\:5224\:5b9a *)
 iShouldAutoMarkConfidential[accessLevel_?NumericQ] :=
   accessLevel > NBAccess`NBGetProviderMaxAccessLevel["claudecode"];
+
+(* True when the session already has confidential data to protect. *)
+iSessionHasConfidentialContent[] :=
+  Length[$confidentialSymbols] > 0 || Length[$allConfidentialVars] > 0;
+
+(* Gate the local-model "blanket" auto-mark on ACTUAL confidentiality. A routine
+   local-model eval on a clean, public notebook must NOT mark its result
+   confidential: that taints benign variables (e.g. an echoed `m = {...}`), which
+   then cascade through iPrecisionConfidentialCheck's dependency scan and mark
+   unrelated cells (result16b). Mark only when the session already has
+   confidential content, OR the eval is explicitly high-privacy (privSpec
+   AccessLevel > 0.5). iResponseTaintedQ (response references a known confidential
+   variable) still marks independently of this gate. *)
+iShouldBlanketMarkConfidential[accessLevel_, privSpec_] :=
+  TrueQ[iShouldAutoMarkConfidential[accessLevel]] &&
+  (iSessionHasConfidentialContent[] ||
+   (AssociationQ[privSpec] && TrueQ[Lookup[privSpec, "AccessLevel", 0] > 0.5]));
+iShouldBlanketMarkConfidential[___] := False;
+
+(* LLM 応答/生成コードが機密ソースを参照しているかの判定。
+   機密ソース = NBAccess の機密生成ヘッド表 (SourceVault 等がロード時登録) と
+   秘密変数表。クラウドセッション (autoMark=False) でも、これが True なら
+   書き込んだ新規セルを iAutoMarkNewCellsConfidential で自動機密マークする
+   (生成コードの実行結果やインライン化された値の漏えい防止)。
+   引数: 文字列/文字列リストを任意個 (非文字列は無視)。 *)
+iResponseTaintedQ[args___] :=
+  Quiet @ Check[
+    Module[{txt, ks},
+      txt = StringRiffle[Select[Flatten[{args}], StringQ], "\n"];
+      If[txt === "", Return[False, Module]];
+      If[TrueQ[NBAccess`NBTextUsesConfidentialHead[txt]],
+        Return[True, Module]];
+      ks = Keys[NBAccess`NBGetConfidentialVars[]];
+      ks =!= {} && AnyTrue[ks,
+        StringContainsQ[txt,
+          RegularExpression[
+            "(?<![\\p{L}\\p{N}$])" <> # <> "(?![\\p{L}\\p{N}$])"]] &]],
+    False];
 
 Options[ClaudeQuerySync] = {
   Fallback -> False,
@@ -10158,7 +10709,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
                 Cell[iL["Error: \:5fdc\:7b54\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002", "Error: Could not obtain a response."], "Text"]]]}];
             (* \:6700\:5f8c\:306e thunk \:306b\:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7\:51e6\:7406\:3092\:8ffd\:52a0 *)
             AppendTo[cellThunks, Function[
-              If[TrueQ[autoMark],
+              If[TrueQ[autoMark] || iResponseTaintedQ[response],
                 iAutoMarkNewCellsConfidential[nb2, ccBefore]];
               NBAccess`NBJobResetSlotWritten[jid, 1];
               $iJobActiveNb = None;
@@ -10582,6 +11133,18 @@ iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
               nbPrint[nb, iL["\:26a1 \:4e0a\:306e\:30bb\:30eb\:306f\:5916\:90e8\:30b5\:30fc\:30d3\:30b9\:3078\:306e\:66f8\:304d\:8fbc\:307f\:64cd\:4f5c\:3092\:542b\:3080\:305f\:3081\:81ea\:52d5\:5b9f\:884c\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3057\:305f\:3002Shift+Enter \:3067\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002", "\:26a1 External service writes: auto-eval skipped. Press Shift+Enter."]]]],
           {b, mathBlocks}];
         iWriteContinueEvalButton[nb, autoEvaluate];
+        (* Order 9: default-on auto-save of the prompt + proposed expr as
+           a new saved version (weak call; consumes the fresh-task marker
+           so re-renders / ClaudeQuery do not re-save). *)
+        Quiet @ Check[
+          Module[{atask = ClaudeCode`$iClaudeEvalAutoSaveTask,
+                  aturn = ClaudeCode`$iClaudeEvalAutoSaveTurn},
+            If[StringQ[atask] && StringQ[aturn] &&
+               Length[Names["SourceVault`SourceVaultAutoSaveLastPrompt"]] > 0,
+              Symbol["SourceVault`SourceVaultAutoSaveLastPrompt"][atask,
+                "TurnId" -> aturn,
+                "ExprString" -> ClaudeCode`$ClaudeEvalLastProposedExprString]]],
+          Null];
         blocks = #["code"] & /@ mathBlocks,
       (* \:5916\:90e8\:8a00\:8a9e\:30d6\:30ed\:30c3\:30af\:306e\:307f\:306e\:5834\:5408: ExternalLanguage \:30bb\:30eb\:3068\:3057\:3066\:66f8\:304d\:8fbc\:3080 *)
       Length[extBlocks] > 0,
@@ -11022,8 +11585,15 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     lastEntry      = If[Length[history] > 0, Last[history], <||>];
     cellCountAfter = Replace[Lookup[lastEntry, "cellCountAfter",
                        Lookup[lastEntry, "cellCount", 0]], Except[_Integer] -> 0];
-    notebookCtx    = With[{r = Quiet[iCaptureNotebookContext[nb, cellCountAfter, accessLevel]]},
-                       If[StringQ[r], r, ""]];
+    (* X0a: bound notebook context via the ContextPlan assembler core
+       (51K-token incident mitigation). history is passed through unchanged in
+       X0a. Set ClaudeCode`$ClaudeEvalContextPlanning = "LegacyFull" to restore
+       the previous eager full-notebook behaviour. *)
+    {history, notebookCtx} = With[
+      {iCtxRes = iAssembleContextForPlan[nb, cellCountAfter, history,
+         ClaudeCode`$ClaudeEvalDefaultContextPlan, accessLevel, task]},
+      {Lookup[iCtxRes, "History", history],
+       Lookup[iCtxRes, "NotebookContext", ""]}];
 
     (* \[HorizontalLine]\[HorizontalLine] .nb \:30d5\:30a1\:30a4\:30eb\:691c\:51fa: Claude Code \:3092\:30d0\:30a4\:30d1\:30b9\:3057\:3066\:76f4\:63a5 ClaudeProcessFile \:3092\:5b9f\:884c \[HorizontalLine]\[HorizontalLine] *)
     Module[{nbFilePath, nbOutputPath, taskPrompt, nbCallCode},
@@ -11304,11 +11874,22 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
               blocks = {fallbackCode}]];
           (* \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7: \:8efd\:91cf\:64cd\:4f5c\:306e\:307f\:30ad\:30e5\:30fc\:306b\:5165\:308c\:308b\:3002
              \:91cd\:3044 TaggingRules \:66f8\:304d\:8fbc\:307f\:306f done \:30d5\:30a7\:30fc\:30ba\:306b\:79fb\:52d5\:3002 *)
-          If[TrueQ[autoMark],
+          If[TrueQ[autoMark] || iResponseTaintedQ[blocks, textOnly],
             AppendTo[queue, Function[
               iAutoMarkNewCellsConfidential[nb2, ccBefore]]]];
           AppendTo[queue, Function[
             iWriteContinueEvalButton[nb2, ae, copts]]];
+          (* Order 9: \:81ea\:52d5\:4fdd\:5b58 (async \:7d4c\:8def) *)
+          AppendTo[queue, Function[
+            Quiet @ Check[
+              Module[{atask = ClaudeCode`$iClaudeEvalAutoSaveTask,
+                      aturn = ClaudeCode`$iClaudeEvalAutoSaveTurn},
+                If[StringQ[atask] && StringQ[aturn] &&
+                   Length[Names["SourceVault`SourceVaultAutoSaveLastPrompt"]] > 0,
+                  Symbol["SourceVault`SourceVaultAutoSaveLastPrompt"][atask,
+                    "TurnId" -> aturn,
+                    "ExprString" -> ClaudeCode`$ClaudeEvalLastProposedExprString]]],
+              Null]]];
           AppendTo[queue, Function[
             NBAccess`NBJobResetSlotWritten[jid, 1];
             $iJobActiveNb = None;
@@ -11572,6 +12153,65 @@ If[!ValueQ[$ClaudeEvalNotebookContext], $ClaudeEvalNotebookContext = ""];
 If[!ValueQ[$ClaudeEvalLastProposedExprString],
   $ClaudeEvalLastProposedExprString = Missing["NotCaptured"]];
 
+(* ===== ContextPlan routing (X0a: 51K-token incident mitigation) =====
+   Spec: sourcevault_promptrouter_contextscope_routing_spec_v1.md
+   X0a scope: bound the eager notebook context on the ClaudeEval -> LM Studio
+   send path via the single reusable iAssembleContextForPlan core. Fully
+   reversible with $ClaudeEvalContextPlanning = "LegacyFull". History bounding,
+   ToolDefinitions/integrations gating, group-based Tail (NBGetContext option)
+   and the remaining capture call sites are deferred to X0b/X1.
+   Declared with fully-qualified ClaudeCode context names so the symbols are
+   created in the ClaudeCode context regardless of context path (same pattern as
+   $ClaudeEvalPromptRouterDispatch). *)
+If[!ValueQ[ClaudeCode`$ClaudeEvalContextPlanning],
+  ClaudeCode`$ClaudeEvalContextPlanning = Automatic];
+If[!ValueQ[ClaudeCode`$ClaudeEvalContextPlanner],
+  ClaudeCode`$ClaudeEvalContextPlanner = None];
+If[!ValueQ[ClaudeCode`$ClaudeEvalUnknownContextSoftLimit],
+  ClaudeCode`$ClaudeEvalUnknownContextSoftLimit = 4096];
+If[!ValueQ[ClaudeCode`$ClaudeEvalContextNotebookCharBudget],
+  ClaudeCode`$ClaudeEvalContextNotebookCharBudget = 8000];
+If[!ValueQ[ClaudeCode`$ClaudeEvalContextSysPromptCharBudget],
+  ClaudeCode`$ClaudeEvalContextSysPromptCharBudget = 6000];
+If[!ValueQ[ClaudeCode`$ClaudeEvalPackageDocsCharBudget],
+  ClaudeCode`$ClaudeEvalPackageDocsCharBudget = 24000];
+If[!ValueQ[ClaudeCode`$ClaudeEvalContextHistoryTurns],
+  ClaudeCode`$ClaudeEvalContextHistoryTurns = 12];
+If[!ValueQ[ClaudeCode`$ClaudeEvalDefaultContextPlan],
+  ClaudeCode`$ClaudeEvalDefaultContextPlan = <|
+    "Notebook" -> <|"Mode" -> "Tail",
+      "CharBudget" -> ClaudeCode`$ClaudeEvalContextNotebookCharBudget|>,
+    "History" -> <|"Mode" -> "Recent",
+      "MaxTurns" -> ClaudeCode`$ClaudeEvalContextHistoryTurns|>,
+    "ToolDefinitions" -> <|"Mode" -> "None"|>|>];
+
+ClaudeCode`$ClaudeEvalContextPlanning::usage =
+  "$ClaudeEvalContextPlanning controls bounded/lazy context assembly on the " <>
+  "ClaudeEval LLM-send path. Automatic (default): use the registered planner " <>
+  "$ClaudeEvalContextPlanner if set, otherwise $ClaudeEvalDefaultContextPlan " <>
+  "(a bounded plan). \"LegacyFull\" or False: restore the previous eager " <>
+  "full-notebook behaviour (no bounding).";
+ClaudeCode`$ClaudeEvalContextPlanner::usage =
+  "$ClaudeEvalContextPlanner is an optional package-neutral hook. Default None. " <>
+  "Intended to be set by SourceVault at load time; claudecode.wl never depends " <>
+  "on SourceVault directly. Reserved for X0b/X1 (planner-driven context plans).";
+ClaudeCode`$ClaudeEvalUnknownContextSoftLimit::usage =
+  "$ClaudeEvalUnknownContextSoftLimit is the token soft limit used when a " <>
+  "model's maximum context length is unknown (default 4096). It is not an " <>
+  "assumption about any specific model's context length.";
+ClaudeCode`$ClaudeEvalContextNotebookCharBudget::usage =
+  "$ClaudeEvalContextNotebookCharBudget bounds the notebook context string " <>
+  "(characters, tail-kept = most recent cells) on the ClaudeEval send path " <>
+  "when $ClaudeEvalContextPlanning is active. Default 8000.";
+ClaudeCode`$ClaudeEvalContextHistoryTurns::usage =
+  "$ClaudeEvalContextHistoryTurns bounds the session history (most recent N " <>
+  "turns) assembled for the ClaudeEval send path when $ClaudeEvalContextPlanning " <>
+  "is active and the plan's History Mode is \"Recent\". Default 12.";
+ClaudeCode`$ClaudeEvalDefaultContextPlan::usage =
+  "$ClaudeEvalDefaultContextPlan is the package-default context plan used by " <>
+  "iAssembleContextForPlan when no planner is registered. An Association with " <>
+  "\"Notebook\" and \"History\" sub-plans.";
+
 $ClaudeEvalNaturalDispatch::usage =
   "$ClaudeEvalNaturalDispatch \:306f Step 4 \:8ffd\:52a0\:306e\:81ea\:7136\:8a00\:8a9e\:30eb\:30fc\:30bf\:30fc\:306e\:6709\:52b9\:30d5\:30e9\:30b0\:3002\n" <>
   "True (\:65e2\:5b9a) \:306e\:3068\:304d\:3001ClaudeEval[\"...\"] \:306e\:30bf\:30b9\:30af\:6587\:5b57\:5217\:304c\:3001\n" <>
@@ -11604,6 +12244,18 @@ ClaudeCode`$ClaudeEvalPromptRouterDispatch::usage =
 
 If[!ValueQ[ClaudeCode`$ClaudeEvalPromptRouterPreemptsNatural],
   ClaudeCode`$ClaudeEvalPromptRouterPreemptsNatural = True];
+
+(* Order 9 (saved-prompt auto-save): the prompt of the ClaudeEval run
+   currently in flight, set only when the run proceeds to a real LLM
+   call (not when dispatch short-circuits to a saved/schedule route).
+   The completion renderer consumes and clears it, then weak-calls
+   SourceVault`SourceVaultAutoSaveLastPrompt. *)
+If[!ValueQ[ClaudeCode`$iClaudeEvalAutoSaveTask],
+  ClaudeCode`$iClaudeEvalAutoSaveTask = Missing["None"]];
+(* per-turn id so the auto-saver can accumulate every executed proposal
+   of one ClaudeEval turn into a single saved workflow route. *)
+If[!ValueQ[ClaudeCode`$iClaudeEvalAutoSaveTurn],
+  ClaudeCode`$iClaudeEvalAutoSaveTurn = Missing["None"]];
 
 ClaudeCode`$ClaudeEvalPromptRouterPreemptsNatural::usage =
   "$ClaudeEvalPromptRouterPreemptsNatural controls ordering. True " <>
@@ -11678,6 +12330,17 @@ iClaudeEvalExtractScope[task_String] :=
     ]
   ];
 
+(* mail dispatch: extract the mailbox name from a task like "univ\:306e\:65b0\:7740\:30e1\:30fc\:30eb".
+   The mbox is the ASCII token preceding "\:65b0\:7740" (allowing "\:306e" / "\:30a2\:30ab\:30a6\:30f3\:30c8" / spaces between).
+   Returns None when no ASCII mbox token is found. *)
+iClaudeEvalExtractMailbox[task_String] :=
+  Module[{m},
+    m = StringCases[task,
+      RegularExpression["([A-Za-z0-9_.-]+)[^A-Za-z0-9]{0,8}\:65b0\:7740"] :> "$1"];
+    If[ListQ[m] && Length[m] >= 1 && StringQ[First[m]] && First[m] =!= "",
+      First[m], None]];
+iClaudeEvalExtractMailbox[_] := None;
+
 (* \:30d1\:30bf\:30fc\:30f3\:8f9e\:66f8\:3002\:9806\:756a\:306b\:8a66\:884c\:3002
    Step 4 Hotfix 1: RegularExpression \:3092\:3084\:3081\:3001StringExpression \:306e Alternatives \:3067\:8a18\:8ff0\:3002
    StringContainsQ \:304c\:90e8\:5206\:30de\:30c3\:30c1\:3092\:5224\:5b9a\:3059\:308b\:306e\:3067\:30ad\:30fc\:30ef\:30fc\:30c9\:5217\:6319\:3067\:5341\:5206\:3002 *)
@@ -11692,13 +12355,19 @@ $iClaudeEvalNaturalPatterns := {
 
   (* \:300c\:4eca\:65e5\:304b\:3089\:30fb\:30fb\:306e\:4e88\:5b9a\:300d\:7cfb *)
   ("\:4e88\:5b9a" | "\:30b9\:30b1\:30b8\:30e5\:30fc\:30eb" | "\:30bf\:30b9\:30af" |
-   "upcoming" | "schedule") -> "schedule"
+   "upcoming" | "schedule") -> "schedule",
+
+  (* \:300c\:65b0\:7740\:30e1\:30fc\:30eb(\:306e\:30ea\:30b9\:30c8)\:300d\:7cfb: FetchNew + MailView \:3092 LLM \:629c\:304d\:3067\:5b9f\:884c\:3002
+     light \:30e2\:30c7\:30eb\:306e\:30b3\:30fc\:30c9\:751f\:6210\:304c\:4e0d\:5b8c\:5168 (fetch \:306e\:307f / list \:6b20\:843d) \:306b\:306a\:308b\:7d4c\:8def\:3092\:7f6e\:304d\:63db\:3048\:308b *)
+  ("\:65b0\:7740\:30e1\:30fc\:30eb" | "\:30e1\:30fc\:30eb\:306e\:65b0\:7740" |
+   "\:65b0\:7740\:306e\:30e1\:30fc\:30eb" | "new mail" | "new email" |
+   "unread mail") -> "mail_new"
 };
 
 (* \:5b9f\:884c\:30cf\:30f3\:30c9\:30e9\:3002\:5b8c\:5168\:306a\:30c7\:30a3\:30b9\:30d1\:30c3\:30c1\:7d50\:679c (\:5024) \:307e\:305f\:306f $iClaudeEvalNotDispatched \:3092\:8fd4\:3059\:3002 *)
 iClaudeEvalNaturalAct[action_String, task_String, optsList_List] :=
   Module[{verbose = TrueQ[$ClaudeEvalNaturalVerbose],
-          periodDays, scope, result},
+          periodDays, scope, result, mbox},
     Switch[action,
       "schedule",
         periodDays = iClaudeEvalExtractPeriod[task];
@@ -11732,6 +12401,37 @@ iClaudeEvalNaturalAct[action_String, task_String, optsList_List] :=
             "FallbackToCloud" -> "Deny"],
           $Failed];
         If[result === $Failed, Return[$iClaudeEvalNotDispatched]];
+        result,
+      "mail_new",
+        (* deterministic "\:65b0\:7740\:30e1\:30fc\:30eb" route: fetch new mail (no LLM) then show the
+           clickable list (SourceVaultMailView). Replaces the unreliable light-model
+           code-gen that emitted only the fetch and described the list in prose. *)
+        If[Names["SourceVault`SourceVaultMailView"] === {} ||
+           Names["SourceVault`SourceVaultMailFetchNew"] === {},
+          Return[$iClaudeEvalNotDispatched]];
+        mbox = iClaudeEvalExtractMailbox[task];
+        If[verbose,
+          Print[Style[
+            "[Natural Dispatch] mail_new: MBox=" <> ToString[mbox],
+            Italic, RGBColor[0.2, 0.5, 0.7]]]];
+        (* fetch new mail, ISOLATED: its IMAP/Python info messages and any fetch
+           error must NOT abort the listing. Critically, the VIEW below uses
+           Quiet WITHOUT Check: Quiet@Check treats ANY emitted message as failure
+           and would silently fall back to the LLM (the bug that sent
+           "\:65b0\:7740\:30e1\:30fc\:30eb" prompts to the model + approval/garbled output instead of
+           this deterministic route). *)
+        If[StringQ[mbox] && mbox =!= "",
+          Quiet @ Check[
+            Symbol["SourceVault`SourceVaultMailFetchNew"][mbox, "Period" -> "Latest"],
+            Null]];
+        result = Quiet @ If[StringQ[mbox] && mbox =!= "",
+          Symbol["SourceVault`SourceVaultMailView"]["", "MBox" -> mbox],
+          Symbol["SourceVault`SourceVaultMailView"][""]];
+        (* fall back to the LLM only when MailView produced no renderable result
+           (unevaluated head / $Failed / Missing), not merely a message *)
+        If[result === $Failed || result === Null || MissingQ[result] ||
+           StringContainsQ[ToString[Head[result]], "SourceVaultMailView"],
+          Return[$iClaudeEvalNotDispatched]];
         result,
       _,
         $iClaudeEvalNotDispatched
@@ -11804,6 +12504,12 @@ $iClaudeEvalProposalHeadAllowlist = {
   "SourceVault`SourceVaultFindNotebooks",
   "SourceVault`SourceVaultFindTodos",
   "SourceVault`SourceVaultNewNotebook",
+  (* saved-prompt feature (Order 9): both heads are ReadOnly wrappers.
+     SourceVaultRunPrimaryRoute internally re-checks ReadOnly/SafeCreate
+     + the rule-00 deny list before releasing the saved expression, so
+     ClaudeEval never releases a saved expression directly here. *)
+  "SourceVault`SourceVaultRunPrimaryRoute",
+  "SourceVault`SourceVaultPromptVersionsUI",
   "System`Select"
 };
 
@@ -11876,24 +12582,55 @@ iClaudeRuntimeSubmitProposal[proposal_] :=
 iClaudeRuntimeSubmitProposal[___] := $iClaudeEvalNotDispatched;
 
 iClaudeEvalTryPromptRouter[task_String, optsList_List] :=
-  Module[{activeName, proposeName, activeQ, proposal},
+  Module[{activeName, proposeName, activeQ, proposal,
+          savedName, savedProposal, decision, method},
+    (* Order 9 saved-prompt proposer (weak call). This runs BEFORE the
+       Orchestrator activity gate because saved-prompt proposals (exact
+       match -> primary auto-execute, or the saved-versions UI) do not
+       need ClaudeOrchestrator. If it proposes, submit it; if it
+       declines, fall through to the regular router below. *)
+    savedName = "SourceVault`SourceVaultProposeSavedPromptRoute";
+    If[Length[Names[savedName]] > 0,
+      savedProposal = Quiet @ Check[
+        Symbol[savedName][task, "Caller" -> "ClaudeEval"], $Failed];
+      If[AssociationQ[savedProposal] &&
+         Lookup[savedProposal, "Status", ""] === "Proposed",
+        Return[iClaudeRuntimeSubmitProposal[savedProposal]]]];
+
     activeName  = "SourceVault`SourceVaultPromptRouterActiveQ";
     proposeName = "SourceVault`SourceVaultProposePromptRoute";
     (* spec 5.5: weak call only; require the propose API *)
     If[Length[Names[proposeName]] === 0,
       Return[$iClaudeEvalNotDispatched]];
-    (* activity gate (ClaudeOrchestrator loaded, etc.) *)
+    (* Obtain the proposal FIRST. SourceVaultProposePromptRoute is purely
+       deterministic (keyword -> seed FunctionRoute / schedule, no LLM),
+       so calling it carries no cost and needs no ClaudeOrchestrator. A
+       deterministic proposal (Decision.Method "Deterministic*"; the
+       proposer itself restricts FunctionRoutes to ReadOnly/SafeCreate
+       allowlist entries) therefore BYPASSES the activity gate, exactly
+       like the saved-prompt proposer above. This is what lets a
+       deterministic keyword route (e.g. new-notebook ->
+       SourceVaultNewNotebook) fire even when ClaudeOrchestrator is not
+       loaded. A non-deterministic proposal (should a future LLM path emit
+       one) still falls through to the gate below. *)
+    proposal = Quiet @ Check[
+      Symbol[proposeName][task, "Caller" -> "ClaudeEval"],
+      $Failed];
+    If[!AssociationQ[proposal],
+      Return[$iClaudeEvalNotDispatched]];
+    decision = Lookup[proposal, "Decision", <||>];
+    method   = If[AssociationQ[decision],
+      Lookup[decision, "Method", ""], ""];
+    If[Lookup[proposal, "Status", ""] === "Proposed" &&
+       StringQ[method] && StringStartsQ[method, "Deterministic"],
+      Return[iClaudeRuntimeSubmitProposal[proposal]]];
+    (* non-deterministic / Orchestrator-dependent routing: activity gate
+       (ClaudeOrchestrator loaded, etc.) *)
     If[Length[Names[activeName]] > 0,
       activeQ = Quiet @ Check[
         TrueQ[Symbol[activeName]["ClaudeEval"]], False];
       If[!TrueQ[activeQ],
         Return[$iClaudeEvalNotDispatched]]];
-    (* obtain an unevaluated proposal and submit it *)
-    proposal = Quiet @ Check[
-      Symbol[proposeName][task, "Caller" -> "ClaudeEval"],
-      $Failed];
-    If[proposal === $Failed,
-      Return[$iClaudeEvalNotDispatched]];
     iClaudeRuntimeSubmitProposal[proposal]
   ];
 iClaudeEvalTryPromptRouter[_, _] := $iClaudeEvalNotDispatched;
@@ -12104,6 +12841,11 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, single
           "Message" -> "CLI call skipped: rate limit active."|>]]];
     dispatchResult = iClaudeEvalTryDispatch[task, {opts}];
     If[dispatchResult =!= $iClaudeEvalNotDispatched, Return[dispatchResult]];
+    (* Order 9: genuine LLM run (dispatch declined) -> mark the prompt
+       and open a fresh auto-save turn. Each executed proposal of this
+       turn accumulates into one saved workflow route. *)
+    ClaudeCode`$iClaudeEvalAutoSaveTask = task;
+    ClaudeCode`$iClaudeEvalAutoSaveTurn = CreateUUID[];
     iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     $iAllowReadTool = False;
@@ -12483,7 +13225,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
               ]
             ]];
           (* \:9ad8 AccessLevel \:306e\:5834\:5408\:3001\:65b0\:898f\:30bb\:30eb\:3092\:81ea\:52d5\:79d8\:5bc6\:30de\:30fc\:30af *)
-          If[TrueQ[autoMark],
+          If[TrueQ[autoMark] || iResponseTaintedQ[response],
             iAutoMarkNewCellsConfidential[nb2, ccBefore]];
           NBAccess`NBDeleteCellsByTag[nb2, tag2];
           iSessionUpdateLast[nb2, stag2, <|
@@ -13774,11 +14516,18 @@ iDetectBackupChanges[packageName_String] :=
 iExtractFunctions[code_String] :=
   Module[{lines, blocks, current, nameRe, usageRe, optRe},
     lines = StringSplit[code, "\n"];
-    nameRe = RegularExpression["^([a-zA-Z\\$][a-zA-Z0-9\\$]*)\\s*[\\[\\(]"];
+    (* 2026-06-10: Pkg`X / Pkg`Private`iX のような完全修飾定義も認識する。
+       従来は backtick で名前マッチが途切れて継続行扱いになり、完全修飾
+       スタイルのパッケージ (ClaudePackageManager.wl 等) では関数分解・
+       マージ・対象関数推定が全く機能していなかった。 *)
+    nameRe = RegularExpression[
+      "^((?:[a-zA-Z\\$][a-zA-Z0-9\\$]*`)*[a-zA-Z\\$][a-zA-Z0-9\\$]*)\\s*[\\[\\(]"];
     (* FuncName::usage = "..." \[RightArrow] \:30ad\:30fc\:3092 FuncName \:306b\:3059\:308b *)
-    usageRe = RegularExpression["^([a-zA-Z\\$][a-zA-Z0-9\\$]*)::usage\\s*="];
+    usageRe = RegularExpression[
+      "^((?:[a-zA-Z\\$][a-zA-Z0-9\\$]*`)*[a-zA-Z\\$][a-zA-Z0-9\\$]*)::usage\\s*="];
     (* Options[FuncName] = {...} \[RightArrow] \:30ad\:30fc\:3092 FuncName \:306b\:3059\:308b *)
-    optRe = RegularExpression["^Options\\[([a-zA-Z\\$][a-zA-Z0-9\\$]*)\\]\\s*="];
+    optRe = RegularExpression[
+      "^Options\\[((?:[a-zA-Z\\$][a-zA-Z0-9\\$]*`)*[a-zA-Z\\$][a-zA-Z0-9\\$]*)\\]\\s*="];
     blocks = <||>;
     current = None;
     Scan[Function[line,
@@ -13799,7 +14548,10 @@ iExtractFunctions[code_String] :=
           (* \:901a\:5e38\:306e\:95a2\:6570\:5b9a\:7fa9: FuncName[...] := ... *)
           (m = StringCases[line, nameRe :> "$1"]; Length[m] > 0) &&
             !StringStartsQ[line, " "] && !StringStartsQ[line, "\t"] &&
-            (StringContainsQ[line, ":="] || StringContainsQ[line, "= ("]),
+            (StringContainsQ[line, ":="] || StringContainsQ[line, "= ("] ||
+             (* 複数行ヘッダ定義: Fn[ で行が終わり引数が次行に続く形
+                (ClaudePackageManager.wl 等の完全修飾スタイルで頻出) *)
+             StringEndsQ[StringTrim[line], "["]),
             current = First[m];
             If[!KeyExistsQ[blocks, current], blocks[current] = ""];
             blocks[current] = blocks[current] <> line <> "\n",
@@ -13819,6 +14571,124 @@ iExtractFunctions[code_String] :=
       ]
     ], lines];
     blocks
+  ];
+
+(* ============================================================
+   2026-06-10: セグメント単位の関数マージ
+
+   iExtractFunctions は同名キーのブロックを非連続領域 (Public 領域の
+   usage 宣言と Private 領域の実装) にまたがって 1 つに連結する。
+   そのため:
+     (a) usage と実装が離れている標準レイアウトでは、連結ブロックが
+         元ファイルの連続部分文字列にならず StringReplace が常に no-op
+         (従来は mergedCount++ され「マージ完了」と虚偽報告)
+     (b) usage と実装が偶然連続している場合は、間に挟まる
+         Begin["`Private`"] 等の構造行ごと置換されてファイルを破壊
+   ここでは「連続した行のかたまり」をセグメントとして抽出し、
+   {関数名, 種別 (usage/options/def)} 単位で in-place 置換する。
+   構造行 (BeginPackage/Begin/End/EndPackage) はセグメントを終端させ、
+   どのセグメントにも属さないため破壊されない。
+   ============================================================ *)
+
+iExtractFunctionSegments[code_String] :=
+  Module[{lines, segs = {}, curKey = None, curKind = None, curLines = {},
+          nameRe, usageRe, optRe, structRe, flush},
+    lines = StringSplit[code, "\n"];
+    nameRe = RegularExpression[
+      "^((?:[a-zA-Z\\$][a-zA-Z0-9\\$]*`)*[a-zA-Z\\$][a-zA-Z0-9\\$]*)\\s*[\\[\\(]"];
+    usageRe = RegularExpression[
+      "^((?:[a-zA-Z\\$][a-zA-Z0-9\\$]*`)*[a-zA-Z\\$][a-zA-Z0-9\\$]*)::usage\\s*="];
+    optRe = RegularExpression[
+      "^Options\\[((?:[a-zA-Z\\$][a-zA-Z0-9\\$]*`)*[a-zA-Z\\$][a-zA-Z0-9\\$]*)\\]\\s*="];
+    (* 列 0 の構造行のみ (インデントされた文字列連結行などは対象外) *)
+    structRe = RegularExpression[
+      "^(BeginPackage\\[|Begin\\[|End\\[\\]|EndPackage\\[\\])"];
+    flush := (
+      If[curKey =!= None && Length[curLines] > 0,
+        AppendTo[segs, <|"Key" -> curKey, "Kind" -> curKind,
+          "Text" -> StringJoin[(# <> "\n") & /@ curLines]|>]];
+      curKey = None; curKind = None; curLines = {});
+    Scan[Function[line,
+      Module[{m, mu, mo},
+        Which[
+          (* 構造行: セグメント終端。どのセグメントにも含めない
+             (structRe は ^ アンカー付きなので行頭一致のみ) *)
+          StringContainsQ[line, structRe],
+            flush,
+          (mo = StringCases[line, optRe :> "$1"]; Length[mo] > 0) &&
+            !StringStartsQ[line, " "] && !StringStartsQ[line, "\t"],
+            flush; curKey = First[mo]; curKind = "options";
+            AppendTo[curLines, line],
+          (mu = StringCases[line, usageRe :> "$1"]; Length[mu] > 0) &&
+            !StringStartsQ[line, " "] && !StringStartsQ[line, "\t"],
+            flush; curKey = First[mu]; curKind = "usage";
+            AppendTo[curLines, line],
+          (m = StringCases[line, nameRe :> "$1"]; Length[m] > 0) &&
+            !StringStartsQ[line, " "] && !StringStartsQ[line, "\t"] &&
+            (StringContainsQ[line, ":="] || StringContainsQ[line, "= ("] ||
+             StringEndsQ[StringTrim[line], "["]),
+            flush; curKey = First[m]; curKind = "def";
+            AppendTo[curLines, line],
+          StringStartsQ[line, "$"] && StringContainsQ[line, "="] &&
+            !StringStartsQ[line, " "] && !StringStartsQ[line, "\t"],
+            Module[{cm = StringCases[line,
+                RegularExpression["^(\\$[a-zA-Z0-9]+)"] :> "$1"]},
+              If[Length[cm] > 0,
+                flush; curKey = First[cm]; curKind = "def";
+                AppendTo[curLines, line],
+                If[curKey =!= None, AppendTo[curLines, line]]]],
+          True,
+            If[curKey =!= None, AppendTo[curLines, line]]
+        ]
+      ]
+    ], lines];
+    flush;
+    segs
+  ];
+
+(* patch 内の各セグメントを orig の対応セグメント ({Key, Kind} が一致する
+   もの。多重定義は出現順に消費) と in-place 置換する。
+   返値:
+     "Code"        -> 置換後ソース
+     "Replaced"    -> 置換できた関数名リスト
+     "Identical"   -> patch と orig が同一だった関数名リスト (変更なし)
+     "Unmerged"    -> 対応セグメントはあるが verbatim 一致しなかった関数名
+     "AddedBlocks" -> <|関数名 -> 挿入すべきテキスト|> (orig に対応無し)
+   挿入位置の決定は呼び出し側のポリシーに委ねる (legacy は Private 末尾、
+   ClaudePackageManager adapter は Public 領域)。 *)
+iMergeFunctionSegments[orig_String, patch_String] :=
+  Module[{origSegs, patchSegs, working = orig, replaced = {}, identical = {},
+          unmerged = {}, addedBlocks = <||>, origIndex},
+    origSegs  = iExtractFunctionSegments[orig];
+    patchSegs = iExtractFunctionSegments[patch];
+    origIndex = GroupBy[origSegs, ({#["Key"], #["Kind"]} &)];
+    Scan[Function[seg,
+      Module[{k = {seg["Key"], seg["Kind"]}, cands, cand, res},
+        cands = Lookup[origIndex, Key[k], {}];
+        If[Length[cands] === 0,
+          (* orig に対応セグメント無し → 挿入候補 *)
+          addedBlocks[seg["Key"]] =
+            Lookup[addedBlocks, seg["Key"], ""] <> seg["Text"],
+          cand = First[cands];
+          origIndex[k] = Rest[cands];
+          Which[
+            (* 空白差のみは「変更なし」扱い (無意味な whitespace churn と
+               偽の mergedCount を防ぐ) *)
+            cand["Text"] === seg["Text"] ||
+            StringTrim[cand["Text"]] === StringTrim[seg["Text"]],
+              AppendTo[identical, seg["Key"]],
+            True,
+              res = StringReplace[working, cand["Text"] -> seg["Text"], 1];
+              If[res =!= working,
+                working = res; AppendTo[replaced, seg["Key"]],
+                AppendTo[unmerged, seg["Key"]]]
+          ]]]],
+      patchSegs];
+    <|"Code"        -> working,
+      "Replaced"    -> DeleteDuplicates[replaced],
+      "Identical"   -> DeleteDuplicates[identical],
+      "Unmerged"    -> DeleteDuplicates[unmerged],
+      "AddedBlocks" -> addedBlocks|>
   ];
 
 (* \:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:542b\:307e\:308c\:308b\:95a2\:6570\:540d\:3092\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30a8\:30af\:30b9\:30dd\:30fc\:30c8\:540d\:4e00\:89a7\:3068\:7167\:5c04\:3057\:3066\:63a8\:5b9a *)
@@ -14359,7 +15229,8 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
           beginMark, endMark, timestamp, sessionDir, bdir,
           allBlocks, allNames, targets, targetCode,
           jsPlaceholder, jsBlock, updatePromptNorm, imgDirs, jobId,
-          continueAnchorTag = None, preBackupFile = "", cudaRequested = False},
+          continueAnchorTag = None, preBackupFile = "", cudaRequested = False,
+          histBlock, fnIndexBlock, inlineFull},
 
   iPrecisionConfidentialCheck[nb];
   srcFile = iPackageSourceFile[packageName];
@@ -14448,23 +15319,56 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
   ];
 
   beginMark = "===BEGIN_FUNCTIONS==="; endMark = "===END_FUNCTIONS===";
+  (* 2026-06-10 perf: LLM へのコンテキスト供給を改善。
+     - パッケージ履歴の二重ロードを解消 (histBlock に一度だけ取得)
+     - ソースファイルの絶対パスを提示し Read ツールでの参照を明示
+       (CLI には Read が許可され --add-dir に $packageDirectory が含まれる
+        のに従来はパスを教えていなかったため、対象関数モードでは LLM が
+        断片しか見えず、Claude Code 直接依頼より品質が落ちる主因だった)
+     - 全トップレベル定義名の索引を提示 (存在しない関数の捏造防止)
+     - 巨大ファイル ($ClaudeUpdateInlineMaxChars 超) は全文インラインせず
+       Read 参照に切替 (コンテキスト溢れ防止) *)
+  histBlock = iLoadPackageHistory[bdir, packageName];
+  inlineFull = Length[targets] === 0 &&
+    StringLength[currentCode] <= $ClaudeUpdateInlineMaxChars;
+  fnIndexBlock = If[Length[allNames] > 0,
+    With[{idx = StringRiffle[allNames, ", "]},
+      If[StringLength[idx] > 8000, StringTake[idx, 8000] <> " ...", idx]],
+    ""];
   prompt =
     "You are an expert Wolfram Language / Mathematica programmer.\n" <>
     "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n\n" <>
     (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:30bf\:30b9\:30af\:6982\:8981\:3092\:5192\:982d\:306b\:914d\:7f6e *)
     iTaskOverviewBlock["INSTRUCTION: " <> updatePromptNorm["userText"]] <>
-    iLoadPackageHistory[bdir, packageName] <>
-    If[iLoadPackageHistory[bdir, packageName] =!= "", "\n", ""] <>
-    If[Length[targets] === 0,
-      (* targets\:672a\:5224\:5b9a: \:30d5\:30a1\:30a4\:30eb\:5168\:4f53\:3092\:9001\:4fe1\:3059\:308b\:5834\:5408 *)
+    histBlock <>
+    If[histBlock =!= "", "\n", ""] <>
+    "SOURCE FILE (read-only): " <> srcFile <> "\n" <>
+    "You MAY use the Read tool on this file to inspect any part of the package\n" <>
+    "(helper functions, usage declarations, surrounding context) before deciding your changes.\n" <>
+    If[fnIndexBlock =!= "",
+      "ALL top-level definitions in this package: " <> fnIndexBlock <> "\n\n",
+      "\n"] <>
+    Which[
+      Length[targets] > 0,
+      (* targets判定済み: 選択した関数のみ送信 *)
+      "Below are selected function definitions from the Mathematica package `" <> packageName <> ".wl`.\n" <>
+      "Modify them according to the instruction. Return ONLY the modified functions.\n" <>
+      "If the shown functions are not sufficient, Read the SOURCE FILE above for full context;\n" <>
+      "you may also return modified versions of package functions that are not shown below.\n",
+      inlineFull,
+      (* targets未判定 (通常サイズ): ファイル全体を送信 *)
       "Below is the COMPLETE source of the Mathematica package `" <> packageName <> ".wl`.\n" <>
       "Modify ONLY the functions that need to change according to the instruction.\n" <>
       "Return ONLY the modified function definitions (not the entire file).\n" <>
       "IMPORTANT: Do NOT return the entire file. Return ONLY the functions you actually changed.\n" <>
       "All unchanged functions will be preserved automatically by the merge system.\n",
-      (* targets\:5224\:5b9a\:6e08\:307f: \:9078\:629e\:3057\:305f\:95a2\:6570\:306e\:307f\:9001\:4fe1 *)
-      "Below are selected function definitions from the Mathematica package `" <> packageName <> ".wl`.\n" <>
-      "Modify them according to the instruction. Return ONLY the modified functions.\n"
+      True,
+      (* targets未判定 (巨大ファイル): インラインせず Read 参照 *)
+      "The package `" <> packageName <> ".wl` is too large to inline in this prompt (" <>
+      ToString[StringLength[currentCode]] <> " chars).\n" <>
+      "Use the Read tool on the SOURCE FILE above (in chunks if needed) to locate the code to change.\n" <>
+      "Return ONLY the modified function definitions (not the entire file).\n" <>
+      "All unchanged functions will be preserved automatically by the merge system.\n"
     ] <>
     "Your response MUST start with " <> beginMark <> " on the very first line.\n" <>
     "Do NOT write any explanation or text before " <> beginMark <> ".\n" <>
@@ -14477,11 +15381,16 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
         Function[{fp, idx}, "  " <> ToString[First[idx]] <> ". " <> fp <> "\n"],
         updatePromptNorm["filePaths"]]] <> "\n",
       ""] <>
-    If[Length[targets] === 0,
-      "COMPLETE SOURCE (modify only what is needed):\n",
-      "CURRENT FUNCTIONS:\n"
+    Which[
+      Length[targets] > 0, "CURRENT FUNCTIONS:\n",
+      inlineFull, "COMPLETE SOURCE (modify only what is needed):\n",
+      True, "SOURCE NOT INLINED (too large; use the Read tool on the SOURCE FILE path above):\n"
     ] <>
-    beginMark <> "\n" <> ToString[targetCode] <> "\n" <> endMark <> "\n\n" <>
+    beginMark <> "\n" <>
+    If[Length[targets] > 0 || inlineFull,
+      ToString[targetCode],
+      "(source not inlined; read " <> srcFile <> " with the Read tool)"] <>
+    "\n" <> endMark <> "\n\n" <>
     (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:30bf\:30b9\:30af\:8a73\:7d30\:3092\:672b\:5c3e\:306b\:518d\:63b2 *)
     iTaskDetailBlock["INSTRUCTION (FULL)", iExpandSymbolRefs[updatePromptNorm["userText"]]];
 
@@ -14599,7 +15508,8 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
 
           (* --- \:30de\:30fc\:30b8\:30ed\:30b8\:30c3\:30af (targets \:306e\:6709\:7121\:306b\:304b\:304b\:308f\:3089\:305a\:5e38\:306b\:30de\:30fc\:30b8\:3092\:8a66\:307f\:308b) --- *)
           newCode = Module[{code = origCode, updBlks, mergedCount = 0,
-                            newOnlyFuncs = {}, respIsFullFile},
+                            newOnlyFuncs = {}, unmergedFuncs = {},
+                            addedBlocks = <||>, mergeRes, respIsFullFile},
             If[jb =!= "", code = StringReplace[code, jb -> jp, 1]];
             updBlks = iExtractFunctions[newFuncs];
 
@@ -14612,25 +15522,30 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
               (* Claude \:304c\:5168\:30d5\:30a1\:30a4\:30eb\:3092\:8fd4\:3057\:305f\:5834\:5408: \:305d\:306e\:307e\:307e\:63a1\:7528 *)
               nbPrint[nb2, "\:30ec\:30b9\:30dd\:30f3\:30b9\:306f\:5b8c\:5168\:306a\:30d5\:30a1\:30a4\:30eb\:3067\:3059\:3002\:305d\:306e\:307e\:307e\:63a1\:7528\:3057\:307e\:3059\:3002"];
               code = If[jb =!= "", StringReplace[newFuncs, jp -> jb, 1], newFuncs],
-              (* \:90e8\:5206\:7684\:306a\:30ec\:30b9\:30dd\:30f3\:30b9: \:95a2\:6570\:5358\:4f4d\:3067\:30de\:30fc\:30b8 *)
-              Scan[Function[fn,
-                Module[{oldDef, newDef},
-                  oldDef = Lookup[blks, fn, ""];
-                  newDef = Lookup[updBlks, fn, ""];
-                  If[oldDef =!= "" && newDef =!= "",
-                    code = StringReplace[code, oldDef -> newDef, 1];
-                    mergedCount++,
-                    (* \:5143\:30b3\:30fc\:30c9\:306b\:7121\:3044\:65b0\:95a2\:6570 *)
-                    If[oldDef === "" && newDef =!= "",
-                      AppendTo[newOnlyFuncs, fn]]
-                  ]
-                ]
-              ], Keys[updBlks]];
+              (* 部分的なレスポンス: セグメント単位でマージ (2026-06-10)。
+                 従来の iExtractFunctions ブロック全体置換は、usage 宣言と
+                 Private 実装が同名キーに連結されるため
+                 (a) 標準レイアウトでは StringReplace が no-op なのに
+                     mergedCount++ される silent failure、
+                 (b) 連続レイアウトでは Begin[...] 構造行ごと破壊、
+                 の二重の問題があった。iMergeFunctionSegments は連続セグメント
+                 単位で {関数名, 種別} を突き合わせて in-place 置換する。 *)
+              mergeRes = iMergeFunctionSegments[code, newFuncs];
+              code = mergeRes["Code"];
+              mergedCount = Length[mergeRes["Replaced"]];
+              unmergedFuncs = mergeRes["Unmerged"];
+              addedBlocks = mergeRes["AddedBlocks"];
+              newOnlyFuncs = Keys[addedBlocks];
+              If[Length[unmergedFuncs] > 0,
+                nbPrint[nb2, Style[
+                  "\:26a0 \:30de\:30fc\:30b8\:4e0d\:4e00\:81f4: \:4ee5\:4e0b\:306e\:95a2\:6570\:306f\:30bb\:30b0\:30e1\:30f3\:30c8\:304c\:5143\:30b3\:30fc\:30c9\:3068\:4e00\:81f4\:305b\:305a\:3001\:7f6e\:63db\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f:\n  " <>
+                  StringRiffle[unmergedFuncs, ", "] <>
+                  "\nContinueUpdate[] \:3067\:518d\:8a66\:884c\:3067\:304d\:307e\:3059\:3002",
+                  FontColor -> RGBColor[0.8, 0.4, 0]]]];
               (* \:65b0\:898f\:95a2\:6570\:304c\:3042\:308c\:3070\:9069\:5207\:306a\:4f4d\:7f6e\:306b\:633f\:5165 *)
               If[Length[newOnlyFuncs] > 0,
                 Module[{insertCode, codeBefore = code, inserted = False},
-                  insertCode = StringJoin[
-                    Lookup[updBlks, #, ""] & /@ newOnlyFuncs];
+                  insertCode = StringJoin[Values[addedBlocks]];
                   (* \:6226\:75651: End[] + EndPackage[] \:304c\:96a3\:63a5\:3059\:308b\:6a19\:6e96\:69cb\:9020 *)
                   code = StringReplace[code,
                     RegularExpression["(\\n\\s*End\\[\\]\\s*;?\\s*\\n\\s*EndPackage\\[\\])"] :>
@@ -14668,15 +15583,19 @@ iClaudeUpdatePackageImpl[packageName_String, updatePrompt_, targetFuncsOpt_, upd
                       FontColor -> RGBColor[0.8, 0.4, 0]]]]
                 ]
               ];
-              If[mergedCount > 0,
-                nbPrint[nb2, "\:30de\:30fc\:30b8\:5b8c\:4e86: " <> ToString[mergedCount] <>
-                  " \:500b\:306e\:95a2\:6570\:3092\:66f4\:65b0"],
+              Which[
+                mergedCount > 0,
+                  nbPrint[nb2, "\:30de\:30fc\:30b8\:5b8c\:4e86: " <> ToString[mergedCount] <>
+                    " \:500b\:306e\:95a2\:6570\:3092\:66f4\:65b0"],
+                (* 無変更 (LLM が既存定義と同一のコードを返した) *)
+                Length[mergeRes["Identical"]] > 0 && Length[newOnlyFuncs] === 0,
+                  nbPrint[nb2, "\:30de\:30fc\:30b8: \:5909\:66f4\:306a\:3057 (\:30ec\:30b9\:30dd\:30f3\:30b9\:306e\:95a2\:6570\:5b9a\:7fa9\:306f\:65e2\:5b58\:3068\:540c\:4e00\:3067\:3059)"],
                 (* \:30de\:30fc\:30b8\:3067\:304d\:306a\:304b\:3063\:305f\:5834\:5408\:306e\:8b66\:544a\:ff08\:65b0\:898f\:95a2\:6570\:8ffd\:52a0\:306e\:307f\:306e\:5834\:5408\:306f\:507d\:967d\:6027\:306a\:306e\:3067\:9664\:5916\:ff09 *)
-                If[Length[Keys[updBlks]] > 0 && mergedCount === 0 && Length[newOnlyFuncs] === 0,
+                Length[Keys[updBlks]] > 0 && Length[newOnlyFuncs] === 0,
                   nbPrint[nb2, Style[
                     "\:26a0 \:30de\:30fc\:30b8\:5931\:6557: \:30ec\:30b9\:30dd\:30f3\:30b9\:306e\:95a2\:6570\:304c\:5143\:30b3\:30fc\:30c9\:306b\:5bfe\:5fdc\:3057\:307e\:305b\:3093\:3067\:3057\:305f\:3002\n" <>
                     "\:30ec\:30b9\:30dd\:30f3\:30b9\:95a2\:6570: " <> StringRiffle[Keys[updBlks], ", "],
-                    FontColor -> RGBColor[0.8, 0.4, 0]]]]
+                    FontColor -> RGBColor[0.8, 0.4, 0]]]
               ];
               If[jb =!= "", code = StringReplace[code, jp -> jb, 1]];
             ];
@@ -15228,10 +16147,23 @@ iReadDesignMemos[packageName_String] :=
     content
   ];
 
-(* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:7528\:30e2\:30c7\:30eb\:30aa\:30fc\:30d0\:30fc\:30e9\:30a4\:30c9: $ClaudeDocModel \:304c\:8a2d\:5b9a\:3055\:308c\:3066\:3044\:308c\:3070\:305d\:3061\:3089\:3092\:4f7f\:7528 *)
+(* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:7528\:30e2\:30c7\:30eb\:30aa\:30fc\:30d0\:30fc\:30e9\:30a4\:30c9: $ClaudeDocModel \:304c\:8a2d\:5b9a\:3055\:308c\:3066\:3044\:308c\:3070\:305d\:3061\:3089\:3092\:4f7f\:7528\:3002
+   Phase 28 \:4ee5\:964d $ClaudeDocModel / $ClaudeModel \:306f tuple {provider, model} \:5f62\:5f0f\:3082\:53d6\:308b\:305f\:3081\:3001
+   String \:3060\:3051\:3067\:306a\:304f tuple \:3082\:6709\:52b9\:5024\:3068\:3057\:3066\:6271\:3046 (tuple \:3092 String \:6271\:3044\:3057\:3066 Opus \:306b\:843d\:3061\:3066\:3044\:305f\:30d0\:30b0\:3092\:4fee\:6b63)\:3002 *)
 iDocModelOverride[] :=
-  If[StringQ[$ClaudeDocModel] && $ClaudeDocModel =!= "",
-    $ClaudeDocModel, $ClaudeModel];
+  Which[
+    StringQ[$ClaudeDocModel] && $ClaudeDocModel =!= "", $ClaudeDocModel,
+    ListQ[$ClaudeDocModel] && Length[$ClaudeDocModel] >= 2, $ClaudeDocModel,
+    True, $ClaudeModel];
+
+(* \:30ed\:30b0\:8868\:793a\:7528: tuple {provider, model} \:306a\:3089\:30e2\:30c7\:30eb\:540d\:3060\:3051\:3092\:8fd4\:3059\:3002
+   StringJoin \:3067 tuple \:304c "claudecodeclaude-..." \:3068\:9023\:7d50\:3055\:308c\:308b\:306e\:3092\:9632\:3050\:3002 *)
+iDocModelLabel[] :=
+  With[{m = iDocModelOverride[]},
+    Which[
+      StringQ[m], m,
+      ListQ[m] && Length[m] >= 2 && StringQ[Last[m]], Last[m],
+      True, ToString[m, InputForm]]];
 
 (* \:66f4\:65b0\:6307\:793a\:304c\:72ed\:3044\:30b9\:30b3\:30fc\:30d7\:ff08\:30e9\:30a4\:30bb\:30f3\:30b9\:30fb\:514d\:8cac\:30fb\:8b1d\:8f9e\:306e\:307f\:ff09\:304b\:3092\:5224\:5b9a *)
 iIsNarrowScopeInstruction[instruction_String] :=
@@ -15850,13 +16782,33 @@ iDocsAvailableAndFresh[packageName_String] :=
     docsTime >= srcTime
   ];
 
-(* DEPRECATED (Phase 33, 2026-04): \:3053\:306e\:95a2\:6570\:306f claudecode_directives.wl \:306e
-   ClaudeSelectSkillsForTask + ClaudeProjectDirectives \:6a5f\:69cb\:306b\:5f79\:5272\:3092\:79fb\:8b72\:6e08\:307f\:3002
-   \:73fe\:72b6\:3067 iPackageDocsContext \:3092\:547c\:3093\:3067\:3044\:308b\:95a2\:6570\:306f claudecode.wl \:5185\:306b\:5b58\:5728\:3057\:306a\:3044
-   (referencing_syms = {}, iClaudeSysPrompt \:306f\:547c\:3070\:306a\:3044)\:3002$ClaudePackageKeywordMap
-   \:3078\:306e\:767b\:9332 (\:4f8b: maildb.wl) \:306f\:6b8b\:3063\:3066\:3044\:308b\:304c\:3001\:672c\:95a2\:6570\:81ea\:4f53\:306f dead code \:3068\:3057\:3066\:6b8b\:7f6e\:3002
-   \:5c06\:6765\:7684\:306b\:524a\:9664\:3059\:308b\:5834\:5408\:306f\:3001$ClaudePackageKeywordMap \:3092\:53c2\:7167\:3057\:3066\:3044\:308b\:30d1\:30c3\:30b1\:30fc\:30b8\:5074\:306e
-   \:521d\:671f\:5316\:30b3\:30fc\:30c9\:3078\:306e\:5f71\:97ff\:3092\:78ba\:8a8d\:3057\:3066\:304b\:3089\:884c\:3046\:3053\:3068\:3002 *)
+(* 補助 api_<aux>.md の注入判定。
+   $ClaudePackageAuxKeywordMap[pkg][aux] が登録済みの補助 api は、
+   aux 名またはそのキーワードが task に含まれる場合のみ注入する。
+   未登録の補助 api は従来どおり常に注入する (後方互換)。
+   2026-06-12: 「Eagleでファイルにサマリーを追加」等のタスクで
+   api_eagle.md が注入されず SourceVaultEagleSummarize が提案されない
+   問題への対処 (キーワード登録は SourceVault_eagle.wl 側)。 *)
+iAuxApiRelevantQ[pkg_String, apiFile_String, task_String] :=
+  Module[{aux, auxMap, kws},
+    aux = StringDrop[FileBaseName[apiFile], 4];   (* "api_eagle" -> "eagle" *)
+    auxMap = If[AssociationQ[$ClaudePackageAuxKeywordMap],
+      Lookup[$ClaudePackageAuxKeywordMap, pkg, <||>], <||>];
+    If[!AssociationQ[auxMap] || !KeyExistsQ[auxMap, aux],
+      Return[True]];
+    kws = Select[Flatten[{Lookup[auxMap, aux, {}]}], StringQ];
+    StringContainsQ[task, aux, IgnoreCase -> True] ||
+      AnyTrue[kws, StringContainsQ[task, #, IgnoreCase -> True] &]
+  ];
+iAuxApiRelevantQ[___] := True;
+
+(* 注意 (2026-06-12 更新): 旧 Phase 33 コメントは「dead code」としていたが誤り。
+   Phase 30 (2026-04-22) で adapter 経路 iAdapterBuildPrompt から呼び出されており、
+   さらに iClaudeQueryImpl / iClaudeEvalImpl の legacy プロンプト構築からも
+   呼ばれている (計 4 呼び出し箇所)。task に関連する api.md / api_*.md を
+   プロンプトへ注入する現役のゲートである。
+   登録窓口: $ClaudePackageKeywordMap (パッケージ単位) と
+   $ClaudePackageAuxKeywordMap (補助 api_<aux>.md 単位、2026-06-12 追加)。 *)
 (* \:30bf\:30b9\:30af\:6587\:304b\:3089\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:691c\:51fa\:3057\:3001\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3068\:3057\:3066\:8fd4\:3059 *)
 iPackageDocsContext[task_String] :=
   Module[{pkgDir, wlFiles, pacletDirs, allNames, mentioned, ctx = ""},
@@ -15891,6 +16843,17 @@ iPackageDocsContext[task_String] :=
            AnyTrue[kws, StringContainsQ[task, #, IgnoreCase -> True] &],
           AppendTo[mentioned, pkg]],
         {kv, kwMap}]];
+    (* 補助 api キーワード検出: $ClaudePackageAuxKeywordMap[pkg][aux] の
+       キーワードが task に含まれれば pkg を mentioned に加える。
+       補助 api (api_eagle.md 等) だけが該当するタスクでも docs 注入が
+       トリガされるようにする。 *)
+    If[AssociationQ[$ClaudePackageAuxKeywordMap],
+      Do[
+        If[!MemberQ[mentioned, kv[[1]]] && AssociationQ[kv[[2]]] &&
+           AnyTrue[Select[Flatten[Values[kv[[2]]]], StringQ],
+             StringContainsQ[task, #, IgnoreCase -> True] &],
+          AppendTo[mentioned, kv[[1]]]],
+        {kv, Normal[$ClaudePackageAuxKeywordMap]}]];
     If[Length[mentioned] === 0, Return[""]];
     (* \:5404\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306b\:542b\:3081\:308b
        api.md \:3068\:88dc\:52a9 api_*.md \:3092\:6700\:512a\:5148\:3067\:5b8c\:5168\:306b\:8aad\:307f\:8fbc\:3080\:ff08\:30c8\:30fc\:30af\:30f3\:7bc0\:7d04\:306e\:305f\:3081\:4ed6\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:6982\:8981\:306e\:307f\:ff09 *)
@@ -15899,10 +16862,12 @@ iPackageDocsContext[task_String] :=
       If[StringQ[docsDir] && DirectoryQ[docsDir],
         Module[{docFiles, apiFiles, apiContent, summary, isFresh, fileLabel},
           isFresh = iDocsAvailableAndFresh[pkg];
-          (* api.md \:3068 api_*.md \:3092\:5168\:4ef6\:53ce\:96c6\:3002api.md \:3092\:5148\:982d\:306b *)
+          (* api.md \:3068 api_*.md \:3092\:53ce\:96c6\:3002api.md \:3092\:5148\:982d\:306b\:3002
+             \:767b\:9332\:6e08\:307f\:88dc\:52a9 api \:306f task \:3068\:306e\:30ad\:30fc\:30ef\:30fc\:30c9\:4e00\:81f4\:6642\:306e\:307f\:6ce8\:5165 (iAuxApiRelevantQ) *)
           apiFiles = Join[
             Select[{FileNameJoin[{docsDir, "api.md"}]}, FileExistsQ],
-            Sort @ FileNames["api_*.md", docsDir]
+            Select[Sort @ FileNames["api_*.md", docsDir],
+              iAuxApiRelevantQ[pkg, #, task] &]
           ];
           Which[
             (* api.md \:307e\:305f\:306f api_*.md \:304c\:5b58\:5728: \:5168\:90e8\:30d5\:30eb\:8aad\:307f\:8fbc\:307f\:ff08\:6700\:512a\:5148\:ff09 *)
@@ -15935,6 +16900,17 @@ iPackageDocsContext[task_String] :=
           ]
         ]]],
     {pkg, mentioned}];
+    (* (B) cap total injected package-docs size (package-neutral). A loose
+       name/keyword match could otherwise inject 100K+ chars of api docs and
+       blow the model context (observed: 104606 chars for an unrelated prompt).
+       api.md is injected first, so head-keep preserves the primary reference.
+       $ClaudeEvalContextPlanning = "LegacyFull"/False disables the cap. *)
+    Module[{bdg = ClaudeCode`$ClaudeEvalPackageDocsCharBudget,
+            md = ClaudeCode`$ClaudeEvalContextPlanning},
+      If[md =!= "LegacyFull" && md =!= False && IntegerQ[bdg] && bdg > 0 &&
+         StringQ[ctx] && StringLength[ctx] > bdg,
+        ctx = StringTake[ctx, bdg] <>
+          "\n...[package docs truncated to fit the model context]\n"]];
     ctx
   ];
 iEnsureReadmeLast[docs_List] :=
@@ -16105,11 +17081,77 @@ iCreateDocUpdateBackup[packageName_String, srcFile_String, docsDir_String,
     histDir
   ];
 
+(* ============================================================
+   Baseline -> "Github" 用: GithubRepositories のコミット版を基準にする補助関数群。
+   既定の "LastDocUpdate" は従来どおり直近の _documentupdate バックアップを基準にする。
+   ============================================================ *)
+
+(* GithubRepositories 内のパッケージリポジトリのルート *)
+iGithubRepoDir[packageName_String] :=
+  FileNameJoin[{Global`$packageDirectory, "GithubRepositories", packageName}];
+
+(* コミット版のソース .wl (Paclet 形式と平置き形式の両方を試す) *)
+iGithubRepoSourceFile[packageName_String] :=
+  Module[{repoDir = iGithubRepoDir[packageName], paclet, plain},
+    paclet = FileNameJoin[{repoDir, packageName, "Kernel", packageName <> ".wl"}];
+    plain  = FileNameJoin[{repoDir, packageName <> ".wl"}];
+    Which[
+      FileExistsQ[paclet], paclet,
+      FileExistsQ[plain],  plain,
+      True, $Failed]];
+
+(* コミット版の _info/design ディレクトリ (無ければ既定の _info 形式パスを返す) *)
+iGithubRepoDesignDir[packageName_String] :=
+  Module[{repoDir = iGithubRepoDir[packageName], info, paclet},
+    info   = FileNameJoin[{repoDir, packageName <> "_info", "design"}];
+    paclet = FileNameJoin[{repoDir, packageName, "design"}];
+    Which[
+      DirectoryQ[info],   info,
+      DirectoryQ[paclet], paclet,
+      True, info]];
+
+(* 作業ツリーの _info/design から、Github コミット版より「新しくなった」設計ファイル
+   (= コミット版に存在しない or 内容ハッシュが異なる) の本文を読み込み、
+   ドキュメント更新プロンプトに添付する文字列を返す。該当なしなら ""。
+   読み込み対象は iReadDesignMemos と同じく *.md / *.txt / *.wl のみ (.nb/.pdf 等は除外)。 *)
+iComputeNewDesignContent[packageName_String,
+    maxFiles_Integer:6, maxCharsPerFile_Integer:3000] :=
+  Module[{workDesignDir, repoDesignDir, workFiles, newFiles, content},
+    workDesignDir = iDesignDir[packageName];
+    If[!DirectoryQ[workDesignDir],
+      workDesignDir = FileNameJoin[{Global`$packageDirectory, packageName, "design"}]];
+    If[!DirectoryQ[workDesignDir], Return[""]];
+    repoDesignDir = iGithubRepoDesignDir[packageName];
+    workFiles = FileNames[{"*.md", "*.txt", "*.wl"}, workDesignDir];
+    If[Length[workFiles] === 0, Return[""]];
+    (* 新規 = コミット版に無い、または内容(SHA256)が異なる *)
+    newFiles = Select[workFiles,
+      Function[wf,
+        Module[{rf = FileNameJoin[{repoDesignDir, FileNameTake[wf]}]},
+          !FileExistsQ[rf] ||
+          (Quiet @ Check[FileHash[wf, "SHA256"], 0] =!=
+           Quiet @ Check[FileHash[rf, "SHA256"], 1])]]];
+    If[Length[newFiles] === 0, Return[""]];
+    (* 更新の新しいものを優先 (FileDate 降順) *)
+    newFiles = Take[Reverse @ SortBy[newFiles, FileDate], UpTo[maxFiles]];
+    content = StringJoin[
+      ("--- design/" <> FileNameTake[#] <> " ---\n" <>
+       StringTake[Quiet @ Check[Import[#, "Text"], ""], UpTo[maxCharsPerFile]] <>
+       "\n\n") & /@ newFiles];
+    "\n=== NEW/UPDATED DESIGN NOTES (since last GitHub commit) ===\n" <>
+    "These notes describe the intent behind the latest source changes.\n" <>
+    "Use them together with the source diff to document NEW behavior accurately.\n" <>
+    "Priority: source code > these design notes. Do NOT document unimplemented ideas.\n" <>
+    content
+  ];
+
 Options[ClaudeUpdateDocumentation] = {
   Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {},
   Acknowledgments -> {}, License -> "",
   TargetFiles -> Automatic,  (* Automatic=\:81ea\:52d5\:5224\:5b9a, {"api.md"} \:7b49\:3067\:30d5\:30a1\:30a4\:30eb\:6307\:5b9a *)
-  Mode -> "Update"           (* "Update"=\:65e2\:5b58\:3092\:66f4\:65b0, "Create"=\:65b0\:898f\:4f5c\:6210\:ff08\:65e2\:5b58\:5185\:5bb9\:3092\:7121\:8996\:ff09 *)
+  Mode -> "Update",          (* "Update"=\:65e2\:5b58\:3092\:66f4\:65b0, "Create"=\:65b0\:898f\:4f5c\:6210\:ff08\:65e2\:5b58\:5185\:5bb9\:3092\:7121\:8996\:ff09 *)
+  Baseline -> "LastDocUpdate"  (* "LastDocUpdate"=\:76f4\:8fd1\:306e _documentupdate \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:57fa\:6e96(\:5f93\:6765),
+                                  "Github"=GithubRepositories \:30b3\:30df\:30c3\:30c8\:7248\:57fa\:6e96(\:30bd\:30fc\:30b9\:5dee\:5206+design\:65b0\:898f\:5185\:5bb9) *)
 };
 
 (* 1\:5f15\:6570\:7248: \:524d\:56de _documentupdate \:4ee5\:964d\:306e\:5909\:66f4\:3092\:81ea\:52d5\:691c\:51fa\:3057\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0 *)
@@ -16126,7 +17168,8 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
   iLoadAndMergeDocOptions[packageName];
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, sourceCode, docsDir, pkgDir, allDocs,
-          prevBackup, prevSrcFile, diffText, autoInstruction},
+          prevBackup, prevSrcFile, diffText, autoInstruction,
+          baseline, designContext = "", repoSrc},
     iPrecisionConfidentialCheck[nb];
     pkgDir = Global`$packageDirectory;
     If[!StringQ[pkgDir] || pkgDir === "",
@@ -16152,16 +17195,34 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
       nbPrint[nb, "\:30a8\:30e9\:30fc: \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093\:3002\:5148\:306b ClaudeCreateDocumentation[\"" <>
         packageName <> "\"] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
       Return[$Failed]];
-    (* \:524d\:56de _documentupdate \:3068\:306e\:5dee\:5206\:3092\:53d6\:5f97 *)
-    prevBackup = iFindLatestDocBackup[packageName];
-    If[!StringQ[prevBackup] || !DirectoryQ[prevBackup],
-      nbPrint[nb, "\:30a8\:30e9\:30fc: \:524d\:56de\:306e _documentupdate \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002\n" <>
-        "\:5148\:306b ClaudeCreateDocumentation[\"" <> packageName <>
-        "\"] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
-      Return[$Failed]];
-    prevSrcFile = FileNameJoin[{prevBackup, FileNameTake[srcFile]}];
-    diffText = iComputeSourceDiff[prevSrcFile, srcFile];
-    If[diffText === "(\:5909\:66f4\:306a\:3057)",
+    (* \:5dee\:5206\:57fa\:6e96\:3092 Baseline \:30aa\:30d7\:30b7\:30e7\:30f3\:3067\:5207\:308a\:66ff\:3048\:308b *)
+    baseline = Replace[OptionValue[Baseline],
+      Except["Github" | "LastDocUpdate"] -> "LastDocUpdate"];
+    If[baseline === "Github",
+      (* Github コミット版を基準にソース差分 + design 新規内容を取得 *)
+      repoSrc = iGithubRepoSourceFile[packageName];
+      If[!StringQ[repoSrc] || !FileExistsQ[repoSrc],
+        nbPrint[nb, "エラー: GithubRepositories にコミット版ソースが見つかりません:\n  " <>
+          iGithubRepoDir[packageName] <>
+          "\n先にコミット版を GithubRepositories に用意するか、" <>
+          "Baseline -> \"LastDocUpdate\" を使用してください。"];
+        Return[$Failed]];
+      nbPrint[nb, "基準: GithubRepositories コミット版 (" <> repoSrc <> ")"];
+      diffText = iComputeSourceDiff[repoSrc, srcFile];
+      designContext = iComputeNewDesignContent[packageName],
+      (* 既定: 直近の _documentupdate バックアップを基準にする *)
+      prevBackup = iFindLatestDocBackup[packageName];
+      If[!StringQ[prevBackup] || !DirectoryQ[prevBackup],
+        nbPrint[nb, "\:30a8\:30e9\:30fc: \:524d\:56de\:306e _documentupdate \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002\n" <>
+          "\:5148\:306b ClaudeCreateDocumentation[\"" <> packageName <>
+          "\"] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002\n" <>
+          "(Github \:30b3\:30df\:30c3\:30c8\:7248\:57fa\:6e96\:3067\:66f4\:65b0\:3059\:308b\:306b\:306f Baseline -> \"Github\" \:3092\:6307\:5b9a)"];
+        Return[$Failed]];
+      prevSrcFile = FileNameJoin[{prevBackup, FileNameTake[srcFile]}];
+      diffText = iComputeSourceDiff[prevSrcFile, srcFile]];
+    (* \:30bd\:30fc\:30b9\:5dee\:5206\:3082 design \:65b0\:898f\:5185\:5bb9\:3082\:7121\:3051\:308c\:3070\:4f55\:3082\:3057\:306a\:3044 *)
+    If[diffText === "(\:5909\:66f4\:306a\:3057)" &&
+       (!StringQ[designContext] || designContext === ""),
       nbPrint[nb, "\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306b\:5909\:66f4\:304c\:3042\:308a\:307e\:305b\:3093\:3002\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:6700\:65b0\:3067\:3059\:3002"];
       Return[]];
     (* \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:5bfe\:8c61\:306b\:3059\:308b *)
@@ -16197,18 +17258,26 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     If[Length[allDocs] === 0,
       nbPrint[nb, iL["\:30a8\:30e9\:30fc: \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002", "Error: Document file not found."]];
       Return[$Failed]];
-    autoInstruction = "\:524d\:56de\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:4ee5\:964d\:306e\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:5909\:66f4\:3092\:53cd\:6620\:3057\:3066\:3001\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0\:3057\:3066\:304f\:3060\:3055\:3044\:3002" <>
-      "\:8ffd\:52a0\:3055\:308c\:305f\:95a2\:6570\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:306e\:8aac\:660e\:3092\:8ffd\:52a0\:3057\:3001\:524a\:9664\:3055\:308c\:305f\:3082\:306e\:306e\:8aac\:660e\:3092\:524a\:9664\:3059\:308b\:3053\:3068\:3002";
+    autoInstruction = If[baseline === "Github",
+      "GithubRepositories のコミット版以降のソースコード変更を反映して、ドキュメントを更新してください。" <>
+      "追加された関数・オプションの説明を追加し、削除されたものの説明を削除すること。" <>
+      "コードの差分だけでなく、添付された design の新規内容も加味して、新しくなった部分の記述を充実させること。",
+      "\:524d\:56de\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:4ee5\:964d\:306e\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:5909\:66f4\:3092\:53cd\:6620\:3057\:3066\:3001\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0\:3057\:3066\:304f\:3060\:3055\:3044\:3002" <>
+      "\:8ffd\:52a0\:3055\:308c\:305f\:95a2\:6570\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:306e\:8aac\:660e\:3092\:8ffd\:52a0\:3057\:3001\:524a\:9664\:3055\:308c\:305f\:3082\:306e\:306e\:8aac\:660e\:3092\:524a\:9664\:3059\:308b\:3053\:3068\:3002"];
     (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
       "\[FilledRightTriangle] ClaudeUpdateDocumentation: " <> packageName <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
     nbPrint[nb, Style[iL["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:81ea\:52d5\:66f4\:65b0\:958b\:59cb: ", "Auto doc update started: "] <> packageName, Bold]];
-    nbPrint[nb, iL["\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Previous backup: "] <> prevBackup];
+    If[baseline =!= "Github" && StringQ[prevBackup],
+      nbPrint[nb, iL["\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Previous backup: "] <> prevBackup]];
     nbPrint[nb, "\:66f4\:65b0\:5bfe\:8c61: " <> StringRiffle[allDocs, ", "]];
     nbPrint[nb, "\:30bd\:30fc\:30b9\:5dee\:5206: " <> StringTake[diffText, UpTo[200]] <> "\n"];
+    If[StringQ[designContext] && designContext =!= "",
+      nbPrint[nb, "design 新規内容: " <> ToString[
+        Length[StringCases[designContext, "--- design/"]]] <> " 件を加味"]];
     iUpdateDocNext[sourceCode, packageName, nb, docsDir, autoInstruction, allDocs, 1,
-      diffText, srcFile]
+      diffText, srcFile, <||>, "Update", {}, designContext]
   ]]);
 
 (* 2\:5f15\:6570\:7248: \:6307\:793a\:4ed8\:304d\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0 *)
@@ -16235,7 +17304,8 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
   iLoadAndMergeDocOptions[packageName];
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, sourceCode, docsDir, pkgDir, targetDocs,
-          prevBackup, prevSrcFile, diffText, enrichedInstruction, nbCtx},
+          prevBackup, prevSrcFile, diffText, enrichedInstruction, nbCtx,
+          baseline, designContext = "", repoSrc},
     iPrecisionConfidentialCheck[nb];
     pkgDir = Global`$packageDirectory;
     If[!StringQ[pkgDir] || pkgDir === "",
@@ -16271,13 +17341,28 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       nbPrint[nb, "\:30a8\:30e9\:30fc: \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093\:3002\:5148\:306b ClaudeCreateDocumentation[\"" <>
         packageName <> "\"] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
       Return[$Failed]];
-    (* \:524d\:56de\:306e _documentupdate \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3068\:306e\:5dee\:5206\:3092\:53d6\:5f97 *)
-    prevBackup = iFindLatestDocBackup[packageName];
-    diffText = If[StringQ[prevBackup] && DirectoryQ[prevBackup],
-      prevSrcFile = FileNameJoin[{prevBackup, FileNameTake[srcFile]}];
-      nbPrint[nb, iL["\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Previous backup: "] <> prevBackup];
-      iComputeSourceDiff[prevSrcFile, srcFile],
-      "(\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306a\:3057 \[LongDash] \:5168\:30bd\:30fc\:30b9\:3092\:53c2\:7167)"];
+    (* \:5dee\:5206\:57fa\:6e96\:3092 Baseline \:30aa\:30d7\:30b7\:30e7\:30f3\:3067\:5207\:308a\:66ff\:3048\:308b *)
+    baseline = Replace[OptionValue[ClaudeUpdateDocumentation, {opts}, Baseline],
+      Except["Github" | "LastDocUpdate"] -> "LastDocUpdate"];
+    diffText = If[baseline === "Github",
+      (* Github コミット版を基準にソース差分 + design 新規内容を取得 *)
+      repoSrc = iGithubRepoSourceFile[packageName];
+      If[!StringQ[repoSrc] || !FileExistsQ[repoSrc],
+        nbPrint[nb, "エラー: GithubRepositories にコミット版ソースが見つかりません:\n  " <>
+          iGithubRepoDir[packageName] <>
+          "\n先にコミット版を GithubRepositories に用意するか、" <>
+          "Baseline -> \"LastDocUpdate\" を使用してください。"];
+        Return[$Failed]];
+      nbPrint[nb, "基準: GithubRepositories コミット版 (" <> repoSrc <> ")"];
+      designContext = iComputeNewDesignContent[packageName];
+      iComputeSourceDiff[repoSrc, srcFile],
+      (* 既定: 直近の _documentupdate バックアップを基準にする *)
+      prevBackup = iFindLatestDocBackup[packageName];
+      If[StringQ[prevBackup] && DirectoryQ[prevBackup],
+        prevSrcFile = FileNameJoin[{prevBackup, FileNameTake[srcFile]}];
+        nbPrint[nb, iL["\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Previous backup: "] <> prevBackup];
+        iComputeSourceDiff[prevSrcFile, srcFile],
+        "(\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306a\:3057 \[LongDash] \:5168\:30bd\:30fc\:30b9\:3092\:53c2\:7167)"]];
     (* Mode \:3092\:5148\:306b\:89e3\:6c7a *)
     Module[{mode = Replace[OptionValue[ClaudeUpdateDocumentation, {opts}, Mode],
               Except["Create" | "Update"] -> "Update"],
@@ -16315,8 +17400,11 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     (* \:5dee\:5206\:4ed8\:304d\:3067\:9806\:6b21\:66f4\:65b0 *)
     Module[{mf = $iDocMediaFiles},
       $iDocMediaFiles = {};
+      If[StringQ[designContext] && designContext =!= "",
+        nbPrint[nb, "design 新規内容: " <> ToString[
+          Length[StringCases[designContext, "--- design/"]]] <> " 件を加味"]];
       iUpdateDocNext[sourceCode, packageName, nb, docsDir, enrichedInstruction, targetDocs, 1,
-        diffText, srcFile, <||>, mode, mf]]
+        diffText, srcFile, <||>, mode, mf, designContext]]
     ] (* end Module mode *)
   ]]);
 
@@ -16397,12 +17485,21 @@ ClaudeUpdateDocumentation[packageName_String, items_List, opts:OptionsPattern[]]
 iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     docsDir_String, instruction_String, targetDocs_List, idx_Integer,
     diffText_String:"", srcFile_String:"", splitCache_Association:<||>,
-    mode_String:"Update", docMediaFiles_List:{}] :=
+    mode_String:"Update", docMediaFiles_List:{}, designContext_String:""] :=
   Module[{docFile, docPath, currentContent, fullPrompt, histDir,
           split, chunkedSource, narrowQ, savedModel, isReadme, isApi,
           promptParts, useInstruction,
           srcResolved, useSource, useName, effectiveCache},
+    (* 2026-06-10 (freeze fix): 同一パッケージのドキュメント更新チェーンの
+       多重起動ガード。2 本の連鎖が同じ docs/ と履歴を同時更新すると
+       ファイル破損に加え、共有 tick の負荷が倍増し FE フリーズを招く。 *)
+    If[idx === 1 && iDocUpdateActiveQ[packageName],
+      nbPrint[nb, "⚠️ " <> packageName <>
+        " のドキュメント更新が既に進行中です。完了を待ってから再実行してください。"];
+      Return[$Failed]];
+    $iDocUpdateActive[packageName] = AbsoluteTime[];
     If[idx > Length[targetDocs],
+      $iDocUpdateActive = KeyDrop[$iDocUpdateActive, packageName];
       (* \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:5b8c\:4e86 \[RightArrow] \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:4f5c\:6210 *)
       If[StringQ[srcFile] && srcFile =!= "",
         histDir = iCreateDocUpdateBackup[packageName, srcFile, docsDir, instruction];
@@ -16424,7 +17521,7 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         ".wl \:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002",
         FontColor -> RGBColor[0.8, 0.4, 0]]];
       iUpdateDocNext[sourceCode, packageName, nb, docsDir, instruction, targetDocs,
-        idx + 1, diffText, srcFile, splitCache, mode, docMediaFiles];
+        idx + 1, diffText, srcFile, splitCache, mode, docMediaFiles, designContext];
       Return[]];
     useSource = srcResolved["sourceCode"];
     useName = srcResolved["effectiveName"];
@@ -16487,6 +17584,11 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         "SOURCE CODE DIFF (since last documentation update):\n" <>
         "Focus your updates on these changed parts.\n" <>
         diffText <> "\n\n"]];
+
+    (* --- design \:65b0\:898f\:5185\:5bb9 (Baseline -> "Github"): api.md \:4ee5\:5916 (README \:542b\:3080) \:306b\:6dfb\:4ed8 ---
+       \:30bd\:30fc\:30b9\:5dee\:5206\:3060\:3051\:3067\:306f\:8aad\:307f\:53d6\:308c\:306a\:3044\:300c\:8a2d\:8a08\:610f\:56f3\:300d\:3092\:88dc\:3046\:3002 *)
+    If[!isApi && StringQ[designContext] && designContext =!= "",
+      AppendTo[promptParts, designContext <> "\n\n"]];
 
     (* --- \:73fe\:5728\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8: api.md \:4ee5\:5916\:306b\:306e\:307f\:9001\:4fe1 ---
        api.md \:306f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306e\:307f\:304b\:3089\:751f\:6210\:3059\:308b\:3002\:904e\:53bb\:306e api.md \:3092\:53c2\:7167\:3059\:308b\:3068
@@ -16595,7 +17697,21 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         "- Do NOT append raw instruction text, prompt fragments, or update notes.\n" <>
         "- Nothing should be added after \:30e9\:30a4\:30bb\:30f3\:30b9.\n" <>
         "- Preserve the existing design philosophy narrative.\n" <>
-        "- Update feature lists and function counts to match the latest source.\n"]];
+        "- Update feature lists and function counts to match the latest source.\n" <>
+        "- README.md is ONLY a concise overview. The COMPLETE, detailed content " <>
+          "(full usage, every feature and option) belongs in user_manual.md, NOT here. " <>
+          "Summarize briefly and link to user_manual.md instead of duplicating it.\n"]];
+
+    (* --- user_manual.md: \:5168\:5185\:5bb9\:3092\:7db2\:7f85\:3059\:308b\:4e3b\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8 ---
+       README \:306f\:6982\:8981\:306e\:307f\:306a\:306e\:3067\:3001\:8a73\:7d30\:306a\:5168\:5185\:5bb9\:306f\:3053\:3061\:3089\:306b\:96c6\:7d04\:3055\:305b\:308b\:3002 *)
+    If[docFile === "user_manual.md",
+      AppendTo[promptParts,
+        "CRITICAL: user_manual.md is the COMPLETE, comprehensive user manual.\n" <>
+        "It must hold the FULL content: all features, every usage pattern, all options, " <>
+        "workflows, and worked examples. README.md only summarizes and links here \[LongDash] " <>
+        "so the exhaustive material belongs in THIS file.\n" <>
+        "When new functionality appears in the source diff or the design notes above, " <>
+        "document it thoroughly here (not merely as a one-line mention).\n"]];
 
     (* \:30b5\:30f3\:30c9\:30a4\:30c3\:30c1\:69cb\:9020: \:30bf\:30b9\:30af\:8a73\:7d30\:3092\:672b\:5c3e\:306b\:518d\:63b2 *)
     If[!isApi,
@@ -16610,14 +17726,14 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     If[!StringQ[fullPrompt] || StringLength[fullPrompt] < 100,
       nbPrint[nb, "\:26a0 \:30d7\:30ed\:30f3\:30d7\:30c8\:69cb\:7bc9\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3059\:3002"];
       iUpdateDocNext[sourceCode, packageName, nb, docsDir, instruction,
-        targetDocs, idx + 1, diffText, srcFile, split, mode, docMediaFiles];
+        targetDocs, idx + 1, diffText, srcFile, split, mode, docMediaFiles, designContext];
       Return[]];
 
     nbPrint[nb, "\[HorizontalLine] [" <> ToString[idx] <> "/" <> ToString[Length[targetDocs]] <>
       "] " <> docFile <> " \:3092\:66f4\:65b0\:4e2d... (\:30d7\:30ed\:30f3\:30d7\:30c8: " <>
       ToString[StringLength[fullPrompt]] <> " chars, parts: " <>
       ToString[Length[promptParts]] <> ", \:30e2\:30c7\:30eb: " <>
-      iDocModelOverride[] <> ")"];
+      iDocModelLabel[] <> ")"];
 
     (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:7528\:30e2\:30c7\:30eb\:3067\:30af\:30a8\:30ea\:5b9f\:884c *)
     savedModel = $ClaudeModel;
@@ -16626,7 +17742,7 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       With[{nb2 = nb, dd = docsDir, tds = targetDocs, i = idx,
             df = docFile, dp = docPath, sc = sourceCode, pn = packageName,
             instr = instruction, dt = diffText, sf = srcFile, sp = split,
-            md = mode, mf = docMediaFiles},
+            md = mode, mf = docMediaFiles, dc = designContext},
         Function[response,
           Module[{writeResult},
             writeResult = iSafeWriteDoc[dp, response, pn];
@@ -16635,14 +17751,16 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
               nbPrint[nb2, "  \:2717 " <> df <> " \:306e\:66f4\:65b0\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408/\:30b5\:30a4\:30ba\:9000\:884c): " <>
                 StringTake[ToString[response], UpTo[200]]]
             ];
-            iUpdateDocNext[sc, pn, nb2, dd, instr, tds, i + 1, dt, sf, sp, md, mf]
+            iUpdateDocNext[sc, pn, nb2, dd, instr, tds, i + 1, dt, sf, sp, md, mf, dc]
           ]
         ]
       ]},
       If[Length[docMediaFiles] > 0,
-        (* \:753b\:50cf\:4ed8\:304d: Anthropic API \:7d4c\:7531\:3067\:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb\:9001\:4fe1 *)
+        (* \:753b\:50cf\:4ed8\:304d: Anthropic API \:7d4c\:7531\:3067\:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb\:9001\:4fe1\:3002
+           iStartFallbackAsync \[RightArrow] iPrepareAnthropicPS1 \:306f model_String \:524d\:63d0\:306a\:306e\:3067
+           tuple \:3067\:306f\:306a\:304f\:30e2\:30c7\:30eb\:540d\:6587\:5b57\:5217 (iDocModelLabel) \:3092\:6e21\:3059\:3002 *)
         iStartFallbackAsync[fullPrompt, nb, docCallback,
-          {{"anthropic", iDocModelOverride[]}}, 1, "", Automatic, docMediaFiles],
+          {{"anthropic", iDocModelLabel[]}}, 1, "", Automatic, docMediaFiles],
         (* \:753b\:50cf\:306a\:3057: \:5f93\:6765\:30d1\:30b9 *)
         iClaudeQueryAsyncWithProgress[fullPrompt, docCallback, nb]
       ]
@@ -16692,7 +17810,7 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
          \:65e2\:5b58 api.md \:3092\:9001\:308b\:3068\:53e4\:3044\:60c5\:5831\:304c\:6b8b\:5b58\:3057\:4e0d\:5b8c\:5168\:306b\:306a\:308b\:305f\:3081\:3002 *)
       "PACKAGE SOURCE CODE:\n" <>
       iBuildChunkedSource[iSplitSource[sourceCode], "api.md"];
-    nbPrint[nb, "\[HorizontalLine] api.md \:3092\:81ea\:52d5\:66f4\:65b0\:4e2d... (\:30e2\:30c7\:30eb: " <> iDocModelOverride[] <> ")"];
+    nbPrint[nb, "\[HorizontalLine] api.md \:3092\:81ea\:52d5\:66f4\:65b0\:4e2d... (\:30e2\:30c7\:30eb: " <> iDocModelLabel[] <> ")"];
     Module[{savedModel = $ClaudeModel},
     $ClaudeModel = iDocModelOverride[];
     iClaudeQueryAsyncWithProgress[prompt,
@@ -19241,6 +20359,204 @@ iShowConfidentialVars[] :=
 
 (* \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] \:30e1\:30a4\:30f3\:30d1\:30ec\:30c3\:30c8 \[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
 
+(* ===== Routing model policy (power-aware light-model routing) =====
+   Package-neutral state owned by claudecode. SourceVault's light-model
+   resolver reads the effective class via ClaudeRoutingModelClass[]; claudecode
+   never references SourceVault (rule 11). The concrete cloud model is resolved
+   downstream by class (Light x Cloud), never hardcoded here (rule 02). *)
+
+(* persisted across kernel sessions on this machine (PersistentValue "Local"),
+   so a manual pin set "in advance" survives a restart. Default Automatic. *)
+If[!ValueQ[ClaudeCode`$ClaudeRoutingModelPolicy],
+  ClaudeCode`$ClaudeRoutingModelPolicy =
+    With[{v = Quiet @ Check[
+        PersistentValue["ClaudeCode/RoutingModelPolicy", "Local"], $Failed]},
+      If[MemberQ[{Automatic, "Local", "Cloud", "Off"}, v], v, Automatic]]];
+
+ClaudeCode`$ClaudeRoutingModelPolicy::usage =
+  "$ClaudeRoutingModelPolicy controls which model tier the prompt router uses " <>
+  "for light-weight LLM work. Automatic (default) follows the power source " <>
+  "(AC -> local light model, battery -> cloud light model). \"Local\" / " <>
+  "\"Cloud\" / \"Off\" pin the choice. \"Off\" stops light-tier dispatch (the " <>
+  "request falls through to $ClaudeModel; the LLM-free context planner stays " <>
+  "on). Toggle it from the Claude palette or set it directly.";
+
+ClaudeCode`ClaudeRoutingModelClass::usage =
+  "ClaudeRoutingModelClass[] returns the EFFECTIVE routing class string " <>
+  "(\"Local\" | \"Cloud\" | \"Off\") after resolving $ClaudeRoutingModelPolicy " <>
+  "Automatic against the current power source.";
+
+ClaudeCode`ClaudeRoutingPolicyStatus::usage =
+  "ClaudeRoutingPolicyStatus[] returns an Association describing the current " <>
+  "routing policy: \"Policy\" (raw $ClaudeRoutingModelPolicy), \"Power\" " <>
+  "(\"AC\" | \"Battery\" | \"Unknown\") and \"Effective\" (resolved class).";
+
+(* --- power source detection (Windows; cached ~30s to avoid process churn) --- *)
+$iACPowerCache = <|"Value" -> "Unknown", "Time" -> 0.|>;
+
+iDetectACPowerRaw[] :=
+  Module[{cmd, r, out},
+    If[$OperatingSystem =!= "Windows", Return["AC", Module]];  (* assume plugged elsewhere *)
+    cmd = "$w=@(Get-CimInstance -Namespace root\\wmi -ClassName BatteryStatus " <>
+          "-ErrorAction SilentlyContinue); if($w.Count -eq 0){'AC'}" <>
+          "elseif($w[0].PowerOnline){'AC'}else{'Battery'}";
+    r = Quiet @ Check[
+      RunProcess[{"powershell", "-NoProfile", "-NonInteractive", "-Command", cmd},
+        "StandardOutput"], $Failed];
+    If[!StringQ[r], Return["Unknown", Module]];
+    out = ToLowerCase[StringTrim[r]];
+    Which[
+      StringContainsQ[out, "battery"], "Battery",
+      StringContainsQ[out, "ac"],      "AC",
+      True, "Unknown"]];
+
+iDetectACPower[] :=
+  Module[{now = AbsoluteTime[], cv, v},
+    cv = $iACPowerCache;
+    If[AssociationQ[cv] && StringQ[Lookup[cv, "Value", None]] &&
+       Lookup[cv, "Value"] =!= "Unknown" &&
+       (now - Lookup[cv, "Time", 0.]) < 30.,
+      Return[Lookup[cv, "Value"], Module]];
+    v = iDetectACPowerRaw[];
+    $iACPowerCache = <|"Value" -> v, "Time" -> now|>;
+    v];
+
+(* effective class from the cache only (no detection) - for the palette label *)
+iRoutingEffectiveFromCache[] :=
+  Module[{p = ClaudeCode`$ClaudeRoutingModelPolicy, power},
+    If[p === "Local" || p === "Cloud" || p === "Off", Return[ToString[p], Module]];
+    power = Lookup[If[AssociationQ[$iACPowerCache], $iACPowerCache, <||>], "Value", "Unknown"];
+    If[power === "Battery", "Cloud", "Local"]];
+
+ClaudeCode`ClaudeRoutingModelClass[] :=
+  Module[{p = ClaudeCode`$ClaudeRoutingModelPolicy, power},
+    Which[
+      p === "Local" || p === "Cloud" || p === "Off", ToString[p],
+      True,  (* Automatic (or anything unexpected) -> power-driven *)
+        power = iDetectACPower[];
+        If[power === "Battery", "Cloud", "Local"]]];
+
+ClaudeCode`ClaudeRoutingPolicyStatus[] :=
+  <|"Policy" -> ClaudeCode`$ClaudeRoutingModelPolicy,
+    "Power" -> iDetectACPower[],
+    "Effective" -> ClaudeCode`ClaudeRoutingModelClass[]|>;
+
+ClaudeCode`ClaudeSetRoutingPolicy::usage =
+  "ClaudeSetRoutingPolicy[p] sets $ClaudeRoutingModelPolicy to p (Automatic | " <>
+  "\"Local\" | \"Cloud\" | \"Off\") AND persists it on this machine so the " <>
+  "choice survives a kernel restart. Returns p, or $Failed for an invalid value. " <>
+  "Setting $ClaudeRoutingModelPolicy directly is session-only; use this to pin a " <>
+  "choice in advance.";
+ClaudeCode`ClaudeSetRoutingPolicy[p_] :=
+  If[MemberQ[{Automatic, "Local", "Cloud", "Off"}, p],
+    ClaudeCode`$ClaudeRoutingModelPolicy = p; iSaveRoutingPolicy[p]; p,
+    $Failed];
+
+(* --- palette helpers --- *)
+iRoutingClassJP["Local"] := "\:30ed\:30fc\:30ab\:30eb";
+iRoutingClassJP["Cloud"] := "\:30af\:30e9\:30a6\:30c9";
+iRoutingClassJP["Off"]   := "\:505c\:6b62";
+iRoutingClassJP[x_]      := ToString[x];
+
+iRoutingPaletteLabel[] :=
+  Module[{p = ClaudeCode`$ClaudeRoutingModelPolicy, eff = iRoutingEffectiveFromCache[]},
+    If[p === Automatic,
+      iL["\:30eb\:30fc\:30c8:\:81ea\:52d5(" <> iRoutingClassJP[eff] <> ")",
+         "Route:Auto(" <> eff <> ")"],
+      iL["\:30eb\:30fc\:30c8:" <> iRoutingClassJP[ToString[p]],
+         "Route:" <> ToString[p]]]];
+
+iRoutingPaletteColor[] :=
+  Module[{p = ClaudeCode`$ClaudeRoutingModelPolicy, eff = iRoutingEffectiveFromCache[]},
+    Which[
+      p === "Off" || eff === "Off", GrayLevel[0.5],
+      eff === "Cloud", RGBColor[0.25, 0.45, 0.7],
+      eff === "Local", RGBColor[0.2, 0.55, 0.35],
+      True, GrayLevel[0.5]]];
+
+(* persist the policy on this machine so manual pins survive a kernel restart *)
+iSaveRoutingPolicy[v_] := Quiet @ Check[
+  (PersistentValue["ClaudeCode/RoutingModelPolicy", "Local"] = v;), Null];
+
+(* cycle Automatic -> Local -> Cloud -> Off -> Automatic, refreshing power *)
+iCycleRoutingPolicy[] :=
+  (ClaudeCode`$ClaudeRoutingModelPolicy = Switch[ClaudeCode`$ClaudeRoutingModelPolicy,
+     Automatic, "Local", "Local", "Cloud", "Cloud", "Off", "Off", Automatic, _, Automatic];
+   iSaveRoutingPolicy[ClaudeCode`$ClaudeRoutingModelPolicy];
+   With[{v = iDetectACPowerRaw[]},
+     $iACPowerCache = <|"Value" -> v, "Time" -> AbsoluteTime[]|>];);
+
+(* ============================================================
+   package-neutral palette service toggles (start/stop), shown below Privacy.
+   External packages register controls into $ClaudePaletteServiceControls;
+   claudecode stays package-neutral (no knowledge of any specific package).
+   The label follows the live RunningQ state. (rule 11 compliant.)
+   ============================================================ *)
+ClaudeRegisterPaletteServiceControl[spec_Association] := Module[{id},
+  id = Lookup[spec, "Id", $Failed];
+  If[! StringQ[id], Return[$Failed]];
+  $ClaudePaletteServiceControls = Append[
+    DeleteCases[$ClaudePaletteServiceControls, c_ /; Lookup[c, "Id", None] === id],
+    spec];
+  $iPaletteServiceToggleCounter++;
+  id];
+
+ClaudeUnregisterPaletteServiceControl[id_String] := (
+  $ClaudePaletteServiceControls = DeleteCases[$ClaudePaletteServiceControls,
+    c_ /; Lookup[c, "Id", None] === id];
+  $iPaletteServiceStateCache = KeyDrop[$iPaletteServiceStateCache, id];
+  $iPaletteServiceToggleCounter++;
+  id);
+
+(* probe the control's RunningQ with a short TTL cache (avoid hammering on re-render).
+   $iPaletteServiceStateCache is NOT a TrackedSymbol of the section Dynamic, so writing
+   it during render cannot cause a re-render loop. *)
+iPaletteServiceRunningQ[ctrl_Association] := Module[{id, f, now, cached, r},
+  id = Lookup[ctrl, "Id", "?"];
+  f = Lookup[ctrl, "RunningQ", None];
+  now = AbsoluteTime[];
+  cached = Lookup[$iPaletteServiceStateCache, id, None];
+  If[AssociationQ[cached] && NumericQ[Lookup[cached, "At", None]] && (now - cached["At"]) < 4,
+    Return[cached["Value"]]];
+  r = If[f === None, Missing["NoProbe"],
+    Quiet @ Check[TimeConstrained[f[], 5, Missing["ProbeTimeout"]], Missing["ProbeError"]]];
+  $iPaletteServiceStateCache[id] = <|"At" -> now, "Value" -> r|>;
+  r];
+
+iPaletteServiceLabel[ctrl_Association, running_] := Which[
+  running === True,  Lookup[ctrl, "RunningLabel", "Stop"],
+  running === False, Lookup[ctrl, "StoppedLabel", "Start"],
+  True,              Lookup[ctrl, "UnknownLabel", Lookup[ctrl, "StoppedLabel", "Service"]]];
+
+iPaletteServiceColor[ctrl_Association, running_] := Which[
+  running === True,  Lookup[ctrl, "RunningColor", RGBColor[0.2, 0.55, 0.35]],
+  running === False, Lookup[ctrl, "StoppedColor", GrayLevel[0.5]],
+  True,              GrayLevel[0.6]];
+
+iPaletteServiceToggleAction[ctrl_Association, running_] := (
+  Which[
+    running === True, With[{f = Lookup[ctrl, "Stop", None]},  If[f =!= None, Quiet @ Check[f[], Null]]],
+    True,             With[{f = Lookup[ctrl, "Start", None]}, If[f =!= None, Quiet @ Check[f[], Null]]]];
+  (* invalidate cache so the label re-probes the real new state, then force a re-render *)
+  $iPaletteServiceStateCache = KeyDrop[$iPaletteServiceStateCache, Lookup[ctrl, "Id", "?"]];
+  $iPaletteServiceToggleCounter++;
+  With[{inb = InputNotebook[]}, If[Head[inb] === NotebookObject, SetSelectedNotebook[inb]]]);
+
+iClaudePaletteServiceButton[ctrl_Association] := With[{running = iPaletteServiceRunningQ[ctrl]},
+  Button[
+    Style[iPaletteServiceLabel[ctrl, running], Bold, 10, White],
+    iPaletteServiceToggleAction[ctrl, running],
+    Appearance -> "Frameless",
+    Background -> iPaletteServiceColor[ctrl, running],
+    ImageSize -> {100, 22},
+    FrameMargins -> {{4, 4}, {2, 2}},
+    Method -> "Queued"]];
+
+iClaudePaletteServiceSection[] := If[
+  ListQ[$ClaudePaletteServiceControls] && Length[$ClaudePaletteServiceControls] > 0,
+  Column[iClaudePaletteServiceButton /@ $ClaudePaletteServiceControls, Spacings -> 0.3],
+  ""];
+
 ShowClaudePalette[] := (
   If[$claudePalette =!= None, Quiet@NotebookClose[$claudePalette]];
   Quiet[iInstallCellEpilog[InputNotebook[]]];
@@ -19286,7 +20602,15 @@ ShowClaudePalette[] := (
           ImageSize -> {100, 22},
           FrameMargins -> {{4, 4}, {2, 2}},
           Method -> "Queued"],
-        TrackedSymbols :> {$iPaletteCloudState}],
+        TrackedSymbols :> {$iPaletteCloudState},
+        SynchronousUpdating -> False],
+      (* package-neutral service start/stop toggles (e.g. SourceVault MCP), right below Privacy.
+         Empty when no external package has registered a control (rule 11: claudecode owns no
+         package-specific logic). The label follows live RunningQ; re-run ShowClaudePalette[]
+         after a new registration to add a button. *)
+      Dynamic[iClaudePaletteServiceSection[],
+        TrackedSymbols :> {$ClaudePaletteServiceControls, $iPaletteServiceToggleCounter},
+        UpdateInterval -> 15, SynchronousUpdating -> False],
       Spacer[2],
 
       (* \[HorizontalLine]\[HorizontalLine] Claude \:64cd\:4f5c \[HorizontalLine]\[HorizontalLine] *)
@@ -19330,7 +20654,7 @@ ShowClaudePalette[] := (
             $iPaletteProvider = nextProvider;
             (* \:65b0\:30d7\:30ed\:30d0\:30a4\:30c0\:306e\:5148\:982d\:30e2\:30c7\:30eb\:306b\:30ea\:30bb\:30c3\:30c8 *)
             models = iPaletteModelsFor[nextProvider];
-            $iPaletteModelName = If[Length[models] >= 1, models[[1]], "claude-opus-4-7"];
+            $iPaletteModelName = If[Length[models] >= 1, models[[1]], $iPaletteDefaultClaudeModel];
             (* \:65e7 $iPaletteModel \:3082\:540c\:671f (\:4e92\:63db\:306e\:305f\:3081) *)
             $iPaletteModel = Which[
               nextProvider === "claudecode" && StringContainsQ[$iPaletteModelName, "opus"],   "opus",
@@ -19339,7 +20663,7 @@ ShowClaudePalette[] := (
             ];
             iPaletteSyncClaudeModel[];
             iSavePaletteSettings[InputNotebook[]]],
-          Appearance -> "Frameless"]],
+          Appearance -> "Frameless"], SynchronousUpdating -> False],
       Dynamic[
         Button[
           Style[iL["M: ", "M: "] <> iPaletteShortenModelName[$iPaletteModelName],
@@ -19357,7 +20681,21 @@ ShowClaudePalette[] := (
             ];
             iPaletteSyncClaudeModel[];
             iSavePaletteSettings[InputNotebook[]]],
-          Appearance -> "Frameless"]],
+          Appearance -> "Frameless"], SynchronousUpdating -> False],
+      (* \[HorizontalLine] routing model policy (power-aware light routing) \[HorizontalLine] *)
+      Dynamic[
+        Button[
+          Style[iRoutingPaletteLabel[], Bold, 9, White],
+          (iCycleRoutingPolicy[];
+           With[{inb = InputNotebook[]},
+             If[Head[inb] === NotebookObject, SetSelectedNotebook[inb]]]),
+          Appearance -> "Frameless",
+          Background -> iRoutingPaletteColor[],
+          ImageSize -> {110, 22},
+          FrameMargins -> {{4, 4}, {2, 2}},
+          Method -> "Queued"],
+        TrackedSymbols :> {ClaudeCode`$ClaudeRoutingModelPolicy, $iACPowerCache},
+        SynchronousUpdating -> False],
       Dynamic[
         Button[
           Style[iL["\:30a8\:30d5\:30a9\:30fc\:30c8: ", "Effort: "] <>
@@ -19367,7 +20705,7 @@ ShowClaudePalette[] := (
             $iPaletteEffort = Switch[$iPaletteEffort,
               "low", "medium", "medium", "high", "high", "max", "max", "low", _, "medium"];
             iSavePaletteSettings[InputNotebook[]]]),
-          Appearance -> "Frameless"]],
+          Appearance -> "Frameless"], SynchronousUpdating -> False],
       Dynamic[
         Button[
           (* Stage 9 P1.5: \:8868\:793a\:6587\:5b57\:5217\:3092\:8a00\:8a9e\:975e\:4f9d\:5b58\:306e\:82f1\:5358\:8a9e\:306b\:7d71\:4e00 (Cloud \:30d1\:30ec\:30c3\:30c8\:3068\:540c\:65b9\:91dd)\:3002
@@ -19378,7 +20716,7 @@ ShowClaudePalette[] := (
             9, Bold, GrayLevel[0.2]],
           ($iPaletteFallback = !TrueQ[$iPaletteFallback];
            iSavePaletteSettings[InputNotebook[]]),
-          Appearance -> "Frameless"]],
+          Appearance -> "Frameless"], SynchronousUpdating -> False],
       Dynamic[
         Button[
           Style["api.md: " <>
@@ -19388,7 +20726,7 @@ ShowClaudePalette[] := (
             9, Bold, GrayLevel[0.2]],
           ($iPaletteUpdateApiMd = !TrueQ[$iPaletteUpdateApiMd];
            iSavePaletteSettings[InputNotebook[]]),
-          Appearance -> "Frameless"]],
+          Appearance -> "Frameless"], SynchronousUpdating -> False],
       Spacer[2],
 
       (* \[HorizontalLine]\[HorizontalLine] \:30bb\:30c3\:30b7\:30e7\:30f3 \[HorizontalLine]\[HorizontalLine] *)
@@ -19446,7 +20784,12 @@ ShowClaudePalette[] := (
          \:30d1\:30ec\:30c3\:30c8\:3078\:306e\:5e38\:6642\:8868\:793a\:306f\:4e0d\:8981\:3002 *)
 
     }, Alignment -> Center, Spacings -> 0],
-    TrackedSymbols :> {$iPaletteModel, $iPaletteEffort, $iPaletteFallback, $iPaletteUpdateApiMd}
+    TrackedSymbols :> {$iPaletteModel, $iPaletteEffort, $iPaletteFallback, $iPaletteUpdateApiMd},
+    (* 2026-06-12 (freeze fix 3): パレットは常時表示のため、同期 Dynamic だと
+       カーネルが長時間評価 (承認済み提案コードの同期実行等) で占有されている間、
+       FE が再描画のたびに Dynamic 応答を待って UI スレッドごとブロックし
+       ウィンドウが「応答なし」になる。非同期更新に変更。 *)
+    SynchronousUpdating -> False
     ]  (* Dynamic end *)
     ],  (* DynamicModule end *)
     WindowTitle -> "Claude Code",
@@ -24013,7 +25356,7 @@ iShowRateLimitActionUI[nb_, rli_Association, runtimeId_, jobId_] :=
                     iL["\:30ea\:30c8\:30e9\:30a4\:3057\:307e\:3057\:305f\:3002",
                        "Retry executed."],
                     Darker[Green, 0.3]], Null]]],
-            Enabled -> Dynamic[!decided],
+            Enabled -> Dynamic[!decided, SynchronousUpdating -> False],
             ImageSize -> {90, 28},
             Background -> Darker[Green, 0.3],
             Method -> "Queued"],
@@ -24030,7 +25373,7 @@ iShowRateLimitActionUI[nb_, rli_Association, runtimeId_, jobId_] :=
               If[StringQ[jd] && jd =!= "",
                 Quiet[$iJobActiveNb = None];
                 Quiet @ Check[NBAccess`NBEndJob[jd], Null]]],
-            Enabled -> Dynamic[!decided],
+            Enabled -> Dynamic[!decided, SynchronousUpdating -> False],
             ImageSize -> {90, 28},
             Method -> "Queued"]
         }, Spacer[8]]]];
@@ -24106,7 +25449,7 @@ iLLMGraphDAGTick[jobId_String] :=
             If[onComplete =!= None, Quiet[onComplete[job]]]];
           Quiet @ iLLMGraphDAGRecordHistory[job];
           If[nb =!= $Failed,
-            Quiet[CurrentValue[nb, WindowStatusArea] = ""]];
+            iSafeSetWindowStatus[nb, ""]];
           KeyDropFrom[$claudeProgress, jobId];
           (* v2026-04-20 T16: cancelled \:30b8\:30e7\:30d6\:3082 $iLLMGraphDAGJobs \:304b\:3089\:524a\:9664\:3057\:3066
              \:7d2f\:7a4d\:3092\:9632\:3050\:3002\:30d5\:30ea\:30fc\:30ba\:306e\:4e00\:56e0\:3060\:3063\:305f\:53ef\:80fd\:6027\:3002
@@ -24147,7 +25490,7 @@ iLLMGraphDAGTick[jobId_String] :=
               If[onComplete =!= None, Quiet[onComplete[job]]]];
             Quiet @ iLLMGraphDAGRecordHistory[job];
             If[nb =!= $Failed,
-              Quiet[CurrentValue[nb, WindowStatusArea] = ""]];
+              iSafeSetWindowStatus[nb, ""]];
             KeyDropFrom[$claudeProgress, jobId];
             Return[]]]]];
 
@@ -24261,7 +25604,7 @@ iLLMGraphDAGTick[jobId_String] :=
         If[onComplete =!= None, Quiet[onComplete[job]]]];
       Quiet @ iLLMGraphDAGRecordHistory[job];
       If[nb =!= $Failed,
-        Quiet[CurrentValue[nb, WindowStatusArea] = ""]];
+        iSafeSetWindowStatus[nb, ""]];
       If[Length[failedIds] > 0,
         job["completedAt"] = AbsoluteTime[];
         $iLLMGraphDAGJobs[jobId] = job,
@@ -24381,7 +25724,7 @@ iLLMGraphDAGTick[jobId_String] :=
         If[onComplete =!= None, Quiet[onComplete[job]]]];
       Quiet @ iLLMGraphDAGRecordHistory[job];
       If[nb =!= $Failed,
-        Quiet[CurrentValue[nb, WindowStatusArea] = ""]];
+        iSafeSetWindowStatus[nb, ""]];
       If[Length[failedIds] > 0,
         job["completedAt"] = AbsoluteTime[];
         $iLLMGraphDAGJobs[jobId] = job,
@@ -24511,10 +25854,14 @@ iLLMGraphDAGTick[jobId_String] :=
           (* \[HorizontalLine]\[HorizontalLine] Runtime DAG: \:30d5\:30a7\:30fc\:30ba\:306b\:5fdc\:3058\:305f\:30ea\:30c3\:30c1\:8868\:793a \[HorizontalLine]\[HorizontalLine] *)
           turnCount = Lookup[Lookup[job, "context", <||>], "turnCount", 1];
           statusText = Which[
-            (* queryProvider \:304c running \[RightArrow] Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d *)
+            (* queryProvider running -> show the model actually being queried
+               (e.g. a local lmstudio model), not always "Claude" *)
             MemberQ[running, "queryProvider"],
-              iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... ",
-                 "Querying Claude... "] <> ToString[elapsed] <>
+              With[{mlbl = If[StringQ[$iActiveQueryModelLabel] &&
+                              $iActiveQueryModelLabel =!= "",
+                            $iActiveQueryModelLabel, "Claude"]},
+                iL[mlbl <> " \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... ",
+                   "Querying " <> mlbl <> "... "]] <> ToString[elapsed] <>
               "s | Turn " <> ToString[turnCount],
             (* buildContext \:304c running \[RightArrow] \:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:69cb\:7bc9\:4e2d *)
             MemberQ[running, "buildContext"],
@@ -24532,11 +25879,11 @@ iLLMGraphDAGTick[jobId_String] :=
                  "ClaudeRuntime: Processing... "] <>
               ToString[elapsed] <> "s"
           ];
-          Quiet[CurrentValue[nb, WindowStatusArea] = statusText],
-          
+          iSafeSetWindowStatus[nb, statusText],
+
           (* \[HorizontalLine]\[HorizontalLine] \:975e runtime DAG: \:5f93\:6765\:306e\:6c4e\:7528\:8868\:793a \[HorizontalLine]\[HorizontalLine] *)
           If[Length[running] > 0,
-            Quiet[CurrentValue[nb, WindowStatusArea] =
+            iSafeSetWindowStatus[nb,
               "[" <> ToString[elapsed] <> "s] " <>
               StringRiffle[running, ","] <>
               " (" <> ToString[doneCount] <> "/" <>
@@ -25444,7 +26791,7 @@ ClaudeCode`SetPaletteProvider[p_String] := Module[{models},
   If[MemberQ[$iPaletteProviderOrder, p],
     $iPaletteProvider = p;
     models = iPaletteModelsFor[p];
-    $iPaletteModelName = If[Length[models] >= 1, models[[1]], "claude-opus-4-7"];
+    $iPaletteModelName = If[Length[models] >= 1, models[[1]], $iPaletteDefaultClaudeModel];
     (* \:65e7 $iPaletteModel \:3082\:540c\:671f *)
     $iPaletteModel = Which[
       p === "claudecode" && StringContainsQ[$iPaletteModelName, "opus"],   "opus",
@@ -25557,14 +26904,34 @@ iAdapterSelectProvider[prompt_String, routeAdvice_Association, useFallback_] :=
    expression-proposal \:30eb\:30fc\:30d7\:56fa\:6709\:306e\:30eb\:30fc\:30eb\:3092\:8ffd\:52a0\:30bb\:30af\:30b7\:30e7\:30f3\:3068\:3057\:3066\:7d71\:5408\:3002 *)
 iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
   Module[{parts = {}, input, cells, prevResult, selectedIdx, turnHistory,
-          totalCellCount, maxTurnHistoryDetail = 3},
+          totalCellCount, maxTurnHistoryDetail = 3,
+          nbCtxMode = "Tail", histCtxMode = "Recent"},
     input          = Lookup[contextPacket, "Input", ""];
     cells          = Lookup[contextPacket, "Cells", {}];
     prevResult     = Lookup[contextPacket, "PreviousResult", None];
     selectedIdx    = Lookup[contextPacket, "SelectedCells", {}];
     turnHistory    = Lookup[convState, "Messages", {}];
     totalCellCount = Lookup[contextPacket, "TotalCellCount", Length[cells]];
-    
+
+    (* X0b-2: consult the same ContextPlan planner the legacy path uses, so a
+       registered SourceVault planner can scope the Runtime-bridge prompt too.
+       Only "None" drops a dimension here (conservative); "Tail"/"Recent" keep
+       the existing X0a-bounded behaviour. "LegacyFull"/False disables it. *)
+    If[ClaudeCode`$ClaudeEvalContextPlanning =!= "LegacyFull" &&
+       ClaudeCode`$ClaudeEvalContextPlanning =!= False,
+      Module[{planPrompt, planNb, plan},
+        planPrompt = If[AssociationQ[input],
+          ToString[Lookup[input, "OriginalTask",
+            Lookup[input, "Hint", ToString[input]]]],
+          ToString[input]];
+        planNb = Lookup[contextPacket, "Notebook", None];
+        plan = iResolveContextPlanForCall[
+          ClaudeCode`$ClaudeEvalDefaultContextPlan, planPrompt, planNb, 0,
+          Lookup[contextPacket, "AccessLevel", Automatic]];
+        If[AssociationQ[plan],
+          nbCtxMode   = Lookup[Lookup[plan, "Notebook", <||>], "Mode", "Tail"];
+          histCtxMode = Lookup[Lookup[plan, "History", <||>], "Mode", "Recent"]]]];
+
     (* \:65e7 ClaudeEval \:3068\:540c\:3058\:30b7\:30b9\:30c6\:30e0\:30d7\:30ed\:30f3\:30d7\:30c8\:3092\:30d9\:30fc\:30b9\:306b\:4f7f\:7528 *)
     AppendTo[parts, iClaudeSysPrompt[]];
     
@@ -25613,9 +26980,20 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
       fileCtx  = Quiet @ Check[iFileAccessContext[taskStr2], ""];
       pkgDocs  = Quiet @ Check[iPackageDocsContext[taskStr2], ""];
       pkgGuard = Quiet @ Check[iPackageUseGuard[taskStr2], ""];
-      symCtx   = If[Head[nbObj] === NotebookObject,
+      symCtx   = If[Head[nbObj] === NotebookObject && nbCtxMode =!= "None",
         Quiet @ Check[iNotebookDefinedSymbolsContext[nbObj], ""], ""];
-      
+      (* X0a: bound the notebook-defined-symbols dump (symCtx) under context
+         planning; for symbol-heavy notebooks it can dominate the prompt.
+         pkgDocs is now capped inside iPackageDocsContext itself ((B) fix).
+         "LegacyFull"/False disables the bound. *)
+      If[ClaudeCode`$ClaudeEvalContextPlanning =!= "LegacyFull" &&
+         ClaudeCode`$ClaudeEvalContextPlanning =!= False,
+        Module[{bdg = ClaudeCode`$ClaudeEvalContextNotebookCharBudget},
+          If[IntegerQ[bdg] && bdg > 0 &&
+             StringQ[symCtx] && StringLength[symCtx] > bdg,
+            symCtx = StringTake[symCtx, UpTo[bdg]] <>
+              "\n...[notebook-defined symbols truncated to fit the model context]\n"]]];
+
       If[StringQ[symCtx]   && symCtx   =!= "", AppendTo[parts, symCtx]];
       If[StringQ[fileCtx]  && fileCtx  =!= "", AppendTo[parts, fileCtx]];
       If[StringQ[pkgDocs]  && pkgDocs  =!= "", AppendTo[parts, pkgDocs]];
@@ -25677,7 +27055,7 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
           "Both are valid. Use tools when you need web search, " <>
           "file access, or other capabilities beyond Mathematica.\n\n"]]];
     
-    If[Length[cells] > 0 || totalCellCount > 0,
+    If[nbCtxMode =!= "None" && (Length[cells] > 0 || totalCellCount > 0),
       AppendTo[parts,
         "=== Notebook Context (showing " <> ToString[Length[cells]] <>
         " of " <> ToString[totalCellCount] <> " total cells) ===\n"];
@@ -25696,14 +27074,14 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
         AppendTo[parts, "... and " <> ToString[Length[cells] - 10] <> " more\n"]];
       AppendTo[parts, "\n"]];
     
-    If[Length[selectedIdx] > 0,
+    If[nbCtxMode =!= "None" && Length[selectedIdx] > 0,
       AppendTo[parts, "Selected cells: " <> ToString[selectedIdx] <> "\n\n"]];
     
     (* \[HorizontalLine]\[HorizontalLine] \:30de\:30eb\:30c1\:30bf\:30fc\:30f3\:4f1a\:8a71\:5c65\:6b74\:ff08\:30c8\:30fc\:30af\:30f3\:7ba1\:7406\:4ed8\:304d\:ff09 \[HorizontalLine]\[HorizontalLine] *)
     (* Phase 16: ClaudeRuntime \:306e\:5727\:7e2e\:6e08\:307f Messages \:306b\:5bfe\:5fdc\:3002
        Compacted=True \:306e\:30bf\:30fc\:30f3\:306f 1 \:884c\:8981\:7d04\:3067\:8868\:793a\:3002
        \:305d\:308c\:4ee5\:5916\:306f\:76f4\:8fd1 maxTurnHistoryDetail \:4ef6\:3092\:8a73\:7d30\:8868\:793a\:3002 *)
-    If[Length[turnHistory] > 0,
+    If[histCtxMode =!= "None" && Length[turnHistory] > 0,
       AppendTo[parts, "=== Turn History (" <> ToString[Length[turnHistory]] <> " turns) ===\n"];
       Module[{compacted, detailed, nDetail, recentStart},
         (* \:5727\:7e2e\:6e08\:307f\:3068\:975e\:5727\:7e2e\:3092\:5206\:96e2 *)
@@ -25782,7 +27160,7 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
           {i, Max[1, recentStart], Length[detailed]}]];
       AppendTo[parts, "\n"]];
     (* \:65e7\:4e92\:63db: PreviousResult \:304c\:3042\:308b\:304c TurnHistory \:304c\:306a\:3044\:5834\:5408 *)
-    If[Length[turnHistory] === 0 && AssociationQ[prevResult],
+    If[histCtxMode =!= "None" && Length[turnHistory] === 0 && AssociationQ[prevResult],
       AppendTo[parts,
         "=== Previous Result ===\n" <>
         Lookup[prevResult, "Summary", ""] <> "\n\n"]];
@@ -26973,6 +28351,21 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
               iClaudeRuntimeHeldToInputString[heldExpr],
             ClaudeCode`$ClaudeEvalLastProposedExprString =
               Missing["NotCaptured"]];
+          (* Order 9: accumulate THIS executed proposal into the turn's
+             saved workflow route (weak call). Each execution (including
+             post-approval ones that run after the turn-complete callback)
+             appends, so a multi-step workflow is saved in full. Does not
+             clear the turn -> later executions keep accumulating. *)
+          Quiet @ Check[
+            Module[{atask = ClaudeCode`$iClaudeEvalAutoSaveTask,
+                    aturn = ClaudeCode`$iClaudeEvalAutoSaveTurn},
+              If[StringQ[atask] && StringQ[aturn] &&
+                 Length[Names["SourceVault`SourceVaultAutoSaveLastPrompt"]] > 0,
+                Symbol["SourceVault`SourceVaultAutoSaveLastPrompt"][atask,
+                  "TurnId" -> aturn,
+                  "ExprString" ->
+                    ClaudeCode`$ClaudeEvalLastProposedExprString]]],
+            Null];
           (* Phase 29 (2026-05-13): proposal \:306e ExpectedSeconds \:3092\:512a\:5148\:3001
              \:306a\:3051\:308c\:3070 adapter \:306e DefaultTimeoutSeconds \:3092\:4f7f\:3046\:3002
              Phase 30 (2026-05-13): Infinity \:3092\:660e\:793a\:7684\:306b\:8a31\:53ef\:3002 *)
@@ -26986,6 +28379,22 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
             IntegerQ[execTimeout] && execTimeout > 0, execTimeout,
             True, 30
           ];
+          (* 2026-06-12 (freeze fix 2): tick 内同期実行のハードキャップ。
+             Infinity / LLM 申告の巨大 expectedSeconds をそのまま採用すると、
+             提案コードのハングや長大ループで共有 tick が回復不能にブロックし
+             FE が完全フリーズする (Infinity 時 NBExecuteHeldExpr は
+             TimeConstrained 無しの生 ReleaseHold)。上限超過はキャップする。
+             無効化: ClaudeCode`$ClaudeRuntimeMaxSyncExecutionSeconds = Infinity *)
+          If[ClaudeCode`$ClaudeRuntimeMaxSyncExecutionSeconds =!= Infinity &&
+             NumericQ[ClaudeCode`$ClaudeRuntimeMaxSyncExecutionSeconds],
+            If[effectiveTimeout === Infinity ||
+               (NumericQ[effectiveTimeout] && effectiveTimeout >
+                  ClaudeCode`$ClaudeRuntimeMaxSyncExecutionSeconds),
+              iClaudeFreezeLog["exec-timeout-capped",
+                ToString[effectiveTimeout] <> " -> " <>
+                ToString[ClaudeCode`$ClaudeRuntimeMaxSyncExecutionSeconds]];
+              effectiveTimeout =
+                ClaudeCode`$ClaudeRuntimeMaxSyncExecutionSeconds]];
           
           (* \:6a5f\:5bc6\:30b7\:30f3\:30dc\:30eb\:30ea\:30b9\:30c8 (Secrets + ConfidentialSymbols) *)
           confVarNames = DeleteDuplicates @ Join[
@@ -26993,6 +28402,28 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
               Lookup[accessSpec, "ConfidentialSymbols"], {}],
             If[ListQ[secrets], secrets, {}]];
           
+          (* 2026-06-12: 長時間バッチ提案の External executor 振り分け。
+             $ClaudeExternalizableHeads に登録された head (例:
+             SourceVaultEagleSummarizeBatch) は tick 内同期実行せず
+             WolframScript 外部ジョブへ投入し、即時「投入済み」を返す。
+             結果は完了時に FinalActionQueue 経由で notebook に summary が
+             書かれる。投入失敗時は従来の同期実行へフォールバック。
+             設計: ドキュメント/ClaudeEval_external_dispatch_design.md *)
+          With[{extR = iClaudeTryExternalizeProposal[heldExpr, accessSpec, nb]},
+            If[AssociationQ[extR] && TrueQ[extR["Submitted"]],
+              Return[<|
+                "Success"  -> True,
+                "Decision" -> "Permit",
+                "RawResult" -> <|
+                  "ExternalJobSubmitted" -> True,
+                  "Head"  -> Lookup[extR, "Head", "?"],
+                  "JobID" -> Lookup[Lookup[extR, "Submission", <||>],
+                               "JobID", "?"],
+                  "Note"  -> "長時間バッチを外部 WolframScript ジョブへ投入しました。完了時に summary が notebook へ書き込まれます。このタスクへの追加操作は不要です。"|>,
+                "HeldExpr" -> heldExpr,
+                "Error"    -> None,
+                "AuditID"  -> None|>, Module]]];
+
           (* \:975e\:540c\:671f\:5b9f\:884c\:5224\:5b9a \[RightArrow] \:522f\:30ab\:30fc\:30cd\:30eb\:3078\:9001\:4fe1\:8a66\:884c *)
           (* Phase D-1: ProposalEval ロールの accessSpec を作り、
              NBSubkernelExecutableQ 経由で async 可否を判定する。
@@ -27019,9 +28450,22 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
              current/global mode)。
              Phase C-lite: ユーザー明示承認時は ApprovalMode -> "UserApproved" を
              渡し、NeedsApproval (Approval head / unknown head) を Permit 昇格。 *)
-          NBAccess`NBExecuteHeldExpr[heldExpr, accessSpec,
-            "TimeConstraint" -> effectiveTimeout,
-            "ApprovalMode" -> userApprovalMode]
+          (* 2026-06-12 (freeze fix 3): 同期実行中であることをステータスバーに
+             明示する。長いバッチ提案 (例: SourceVault*Batch) の承認後は
+             この間カーネルが占有される。中断は 評価メニュー → 評価中止。 *)
+          iSafeSetWindowStatus[nb,
+            iL["ClaudeRuntime: 提案コード実行中 (最大 " <>
+                 ToString[effectiveTimeout] <> " 秒)...",
+               "ClaudeRuntime: Executing proposal (up to " <>
+                 ToString[effectiveTimeout] <> "s)..."]];
+          iClaudeFreezeLog["exec-start",
+            "timeout=" <> ToString[effectiveTimeout]];
+          Module[{iExecR},
+            iExecR = NBAccess`NBExecuteHeldExpr[heldExpr, accessSpec,
+              "TimeConstraint" -> effectiveTimeout,
+              "ApprovalMode" -> userApprovalMode];
+            iClaudeFreezeLog["exec-end", ""];
+            iExecR]
         ]
       ],
       
@@ -28050,6 +29494,26 @@ iGuardCoreIntegrity[nb_] :=
     False
   ];
 
+(* status label for the model actually being queried, so WindowStatusArea shows
+   e.g. "lmstudio: qwen3-swallow-8b-rl-v0.2" instead of "Claude" when a local
+   model is used. "" -> use the default "Claude" label (anthropic / claudecode /
+   Automatic). modelSpec forms: Automatic | "model" | {provider, model[, url]}. *)
+If[!ValueQ[$iActiveQueryModelLabel], $iActiveQueryModelLabel = ""];
+iModelStatusLabel[Automatic] := "";
+iModelStatusLabel[m_String] :=
+  If[m === "" || StringContainsQ[ToLowerCase[m], "claude"], "", m];
+iModelStatusLabel[m_List] :=
+  Module[{prov, provLC, model},
+    prov   = If[Length[m] >= 1 && StringQ[m[[1]]], m[[1]], ""];
+    provLC = ToLowerCase[prov];
+    model  = If[Length[m] >= 2 && StringQ[m[[2]]], m[[2]], ""];
+    Which[
+      MemberQ[{"anthropic", "claudecode", ""}, provLC], "",
+      model =!= "" && prov =!= "", prov <> ": " <> model,
+      model =!= "", model,
+      True, prov]];
+iModelStatusLabel[_] := "";
+
 iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
     imageDirs_List:{}, autoEvaluate_:True, modelSpec_:Automatic,
     privSpec_:Automatic, autoPrivate_:False, timeout_:Automatic,
@@ -28059,10 +29523,30 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
     
     (* Core integrity check: \:95a2\:6570\:4e0a\:66f8\:304d\:306e\:691c\:51fa *)
     If[!TrueQ[iGuardCoreIntegrity[nb]], Return[$Failed]];
-    
+
+    (* 2026-06-12 (freeze fix 2): 並行 LLM ジョブ数ゲート。
+       上限到達中は副作用 (履歴登録・Job slot 確保) を起こす前に
+       5 秒後の再試行へ退避する (busy-wait しない)。 *)
+    If[iClaudeActiveLLMJobCount[] >= ClaudeCode`$ClaudeMaxConcurrentJobs,
+      iClaudeFreezeLog["job-deferred",
+        "bridge active=" <> ToString[iClaudeActiveLLMJobCount[]]];
+      iSafeSetWindowStatus[nb,
+        iL["Claude: 他ジョブの完了待ち...", "Claude: waiting for other jobs..."]];
+      With[{nb1 = nb, tag1 = tag, task1 = task, img1 = imageDirs,
+            ae1 = autoEvaluate, ms1 = modelSpec, pv1 = privSpec,
+            ap1 = autoPrivate, to1 = timeout, mf1 = mediaFiles},
+        Quiet @ Check[
+          SessionSubmit[ScheduledTask[
+            iClaudeEvalViaRuntimeBridge[nb1, tag1, task1, img1, ae1,
+              ms1, pv1, ap1, to1, mf1],
+            {5, 1}]],
+          $Failed]];
+      Return[Null]];
+
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
+    $iActiveQueryModelLabel = iModelStatusLabel[modelSpec];
     useFallback = TrueQ[$currentUseFallback];
-    
+
     (* \:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:3068\:30b9\:30c6\:30c3\:30d7\:756a\:53f7\:3092\:53d6\:5f97 *)
     history = iSessionHistoryWithInherit[nb, tag];
     step    = Length[iSessionHistory[nb, tag]];
@@ -28082,7 +29566,12 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
     
     (* Job \:30b7\:30b9\:30c6\:30e0\:3067\:8a55\:4fa1\:30bb\:30eb\:76f4\:5f8c\:306b\:30b9\:30ed\:30c3\:30c8\:3092\:4e88\:7d04 *)
     jobId = iBeginJobAtCapturedCell[nb];
-    
+
+    (* Order 9: anchor the auto-save turn to this job so every executed
+       proposal accumulates into one saved workflow route. *)
+    ClaudeCode`$iClaudeEvalAutoSaveTask = task;
+    ClaudeCode`$iClaudeEvalAutoSaveTurn = jobId;
+
     (* ContinueEval \:30dc\:30bf\:30f3\:7528\:30aa\:30d7\:30b7\:30e7\:30f3 *)
     copts = <|
       If[TrueQ[$currentUseFallback], "Fallback" -> True, Nothing],
@@ -28096,7 +29585,9 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
        NotebookCallback \:304c\:672a\:8a2d\:5b9a) \:3092\:9632\:6b62\:3059\:308b\:3002 *)
     meta = <|
       "NotebookCallback" -> Function[{rid},
-        iRuntimeDisplayResult[nb, tag, rid]],
+        iClaudeFreezeLog["display-start", rid];
+        iRuntimeDisplayResult[nb, tag, rid];
+        iClaudeFreezeLog["display-end", rid]],
       "Notebook"      -> nb,
       "Tag"           -> tag,
       "JobId"         -> jobId,
@@ -28105,7 +29596,7 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
       "Step"          -> step,
       "ContinueOpts"  -> copts,
       "CellCountBefore" -> NBAccess`NBCellCount[nb],
-      "AutoMark"      -> iShouldAutoMarkConfidential[accessLevel],
+      "AutoMark"      -> iShouldBlanketMarkConfidential[accessLevel, privSpec],
       "StartTime"     -> AbsoluteTime[]
     |>;
     
@@ -28171,8 +29662,9 @@ iContinueEvalViaRuntimeBridge[nb_NotebookObject, tag_String,
         {}, autoEvaluate, modelSpec, privSpec, autoPrivate, timeout]]];
     
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
+    $iActiveQueryModelLabel = iModelStatusLabel[modelSpec];
     step = Length[iSessionHistory[nb, tag]];
-    
+
     (* \:30bb\:30c3\:30b7\:30e7\:30f3\:30a8\:30f3\:30c8\:30ea\:3092\:767b\:9332\:ff08\:65e7 ContinueEval \:4e92\:63db\:ff09 *)
     iSessionAppend[nb, tag, <|
       "step"        -> step,
@@ -28189,7 +29681,11 @@ iContinueEvalViaRuntimeBridge[nb_NotebookObject, tag_String,
     
     (* Job \:30b7\:30b9\:30c6\:30e0\:3067\:8a55\:4fa1\:30bb\:30eb\:76f4\:5f8c\:306b\:30b9\:30ed\:30c3\:30c8\:3092\:4e88\:7d04 *)
     jobId = iBeginJobAtCapturedCell[nb];
-    
+
+    (* Order 9: continuation gets its own auto-save turn + prompt. *)
+    ClaudeCode`$iClaudeEvalAutoSaveTask = instruction;
+    ClaudeCode`$iClaudeEvalAutoSaveTurn = jobId;
+
     (* ContinueEval \:30dc\:30bf\:30f3\:7528\:30aa\:30d7\:30b7\:30e7\:30f3 *)
     copts = <|
       If[TrueQ[$currentUseFallback], "Fallback" -> True, Nothing],
@@ -28213,7 +29709,7 @@ iContinueEvalViaRuntimeBridge[nb_NotebookObject, tag_String,
           "Step"          -> step,
           "ContinueOpts"  -> copts,
           "CellCountBefore" -> NBAccess`NBCellCount[nb],
-          "AutoMark"      -> iShouldAutoMarkConfidential[accessLevel],
+          "AutoMark"      -> iShouldBlanketMarkConfidential[accessLevel, privSpec],
           "StartTime"     -> AbsoluteTime[]
         |>;
         ClaudeRuntime`Private`$iClaudeRuntimes[runtimeId] = cur]];
@@ -28247,7 +29743,7 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
   Module[{st, status, meta, jobId, ae, autoMark, ccBefore, copts, step,
           response, textOnly, blocks, queue = {}, fallbackCode, lines,
           effectiveAE, isAfterDaemon = False, lastTurnIsTextOnly = False,
-          lastTurnRenderedByPhase20 = False},
+          lastTurnRenderedByPhase20 = False, beforeCells = {}},
     
     (* RuntimeState \:76f4\:63a5\:53c2\:7167\:ff08KeyDrop \:7248\:3067\:306f\:306a\:304f\:5168\:4f53\:ff09 *)
     st = ClaudeRuntime`Private`$iClaudeRuntimes[runtimeId];
@@ -28397,7 +29893,7 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
                         Quiet[CurrentValue[nbObj, WindowStatusArea] = ""]
                       ],
                       {0.3, 1}]]],
-                  Enabled -> Dynamic[!decided],
+                  Enabled -> Dynamic[!decided, SynchronousUpdating -> False],
                   ImageSize -> {130, 38},
                   Background -> Darker[Green, 0.3],
                   Method -> "Queued"],
@@ -28423,7 +29919,7 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
                         Quiet[CurrentValue[nbObj, WindowStatusArea] = ""]
                       ],
                       {0.3, 1}]]],
-                  Enabled -> Dynamic[!decided],
+                  Enabled -> Dynamic[!decided, SynchronousUpdating -> False],
                   ImageSize -> {130, 38},
                   Background -> RGBColor[0.9, 0.6, 0],
                   Method -> "Queued"],
@@ -28441,7 +29937,7 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
                       $iJobActiveNb = None;
                       NBAccess`NBEndJob[jd]];
                     Quiet[CurrentValue[nbObj, WindowStatusArea] = ""]],
-                  Enabled -> Dynamic[!decided],
+                  Enabled -> Dynamic[!decided, SynchronousUpdating -> False],
                   ImageSize -> {100, 38},
                   Method -> "Queued"]
               }, Spacer[8]],
@@ -28503,7 +29999,7 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
                             Quiet[CurrentValue[nbObj, WindowStatusArea] = ""]
                           ],
                           {0.3, 1}]]]]],
-                  Enabled -> Dynamic[!decided],
+                  Enabled -> Dynamic[!decided, SynchronousUpdating -> False],
                   ImageSize -> {If[isDeny, 110, 80], 28},
                   Background -> If[isDeny,
                     RGBColor[0.9, 0.6, 0],
@@ -28523,7 +30019,7 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
                       $iJobActiveNb = None;
                       NBAccess`NBEndJob[jd]];
                     Quiet[CurrentValue[nbObj, WindowStatusArea] = ""]],
-                  Enabled -> Dynamic[!decided],
+                  Enabled -> Dynamic[!decided, SynchronousUpdating -> False],
                   ImageSize -> {80, 28},
                   Method -> "Queued"]
               }, Spacer[8]]
@@ -28979,14 +30475,28 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
               NBAccess`NBEvaluatePreviousCell[nb]]]];
           blocks = {fallbackCode}]]];
     
-    (* \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7 *)
-    If[TrueQ[autoMark],
+    (* \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7 \[LongDash] mark only the cells THIS turn writes
+       (identity diff vs the pre-write snapshot), not a positional count range,
+       so unrelated/intervening cells are never marked confidential. *)
+    If[TrueQ[autoMark] || iResponseTaintedQ[blocks, textOnly],
       AppendTo[queue, Function[
-        iAutoMarkNewCellsConfidential[nb, ccBefore]]]];
+        iAutoMarkCellsAddedSince[nb, beforeCells]]]];
     (* :after daemon \:6b63\:5e38\:5b8c\:4e86\:6642\:306f ContinueEval \:30dc\:30bf\:30f3\:3082\:6291\:5236 *)
     If[!TrueQ[isAfterDaemon],
       AppendTo[queue, Function[
-        iWriteContinueEvalButton[nb, ae, copts]]]];
+        iWriteContinueEvalButton[nb, ae, copts]]];
+      (* Order 9: \:81ea\:52d5\:4fdd\:5b58 (Runtime Bridge \:7d4c\:8def)\:3002\:30bf\:30fc\:30f3\:7d42\:4e86\:6642\:306b
+         $ClaudeEvalLastProposedExprString \:306f\:6700\:7d42\:5b9f\:884c\:5f0f\:306b\:306a\:3063\:3066\:3044\:308b\:3002 *)
+      AppendTo[queue, Function[
+        Quiet @ Check[
+          Module[{atask = ClaudeCode`$iClaudeEvalAutoSaveTask,
+                  aturn = ClaudeCode`$iClaudeEvalAutoSaveTurn},
+            If[StringQ[atask] && StringQ[aturn] &&
+               Length[Names["SourceVault`SourceVaultAutoSaveLastPrompt"]] > 0,
+              Symbol["SourceVault`SourceVaultAutoSaveLastPrompt"][atask,
+                "TurnId" -> aturn,
+                "ExprString" -> ClaudeCode`$ClaudeEvalLastProposedExprString]]],
+          Null]]]];
     AppendTo[queue, Function[
       If[StringQ[jobId] && jobId =!= "",
         NBAccess`NBJobResetSlotWritten[jobId, 1];
@@ -28994,6 +30504,14 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
         NBAccess`NBEndJob[jobId],
         $iJobActiveNb = None]]];
     
+    (* capture the cell set right before the result is written, so the
+       confidential auto-mark (queued above) targets only the cells THIS turn
+       adds -- not cells the user evaluated, or that shifted, while the async
+       runtime was working (result15.nb: an unrelated pre-existing cell got
+       marked confidential by the old positional count-range logic). *)
+    beforeCells = Quiet @ Cells[nb];
+    If[!ListQ[beforeCells], beforeCells = {}];
+
     (* \:30ad\:30e5\:30fc\:3092\:540c\:671f\:5b9f\:884c
        DAG onComplete \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:5185\:3067\:5b9f\:884c\:3055\:308c\:308b\:305f\:3081\:3001
        \:65e7 ScheduledTask \:306e writing \:30d5\:30a7\:30fc\:30ba\:306b\:76f8\:5f53\:3059\:308b\:3002 *)
@@ -31390,7 +32908,7 @@ End[];
 EndPackage[];
 
 (* Phase 33 Task 5 version marker *)
-ClaudeCode`$claudecodeVersion = "2026-05-23-phase-4-20-preflight-7-2-7-5-merged";
+ClaudeCode`$claudecodeVersion = "2026-06-10-update-segment-merge-context-supply";
 (* v2026-05-13 (Phase 32): ClaudeRuntime ExecuteProposal \:3092 ParallelSubmit + \:5171\:6709 polling tick
    \:7d4c\:7531\:3067\:522f\:30ab\:30fc\:30cd\:30eb\:5b9f\:884c\:306b\:3057\:3066\:3001\:30e1\:30a4\:30f3\:30d5\:30ed\:30f3\:30c8\:30a8\:30f3\:30c9\:3092\:30d6\:30ed\:30c3\:30af\:3057\:306a\:3044\:3088\:3046\:306b\:3057\:305f\:3002
    - $ClaudeRuntimeAsyncExecution (\:30c7\:30d5\:30a9\:30eb\:30c8 True) \:3067\:30aa\:30f3/\:30aa\:30d5
@@ -31484,7 +33002,7 @@ ClaudeCode`$claudecodeVersion = "2026-05-23-phase-4-20-preflight-7-2-7-5-merged"
    textOnly \:306f L24463 \:3067 Text \:30bb\:30eb\:3068\:3057\:3066\:65e2\:306b\:66f8\:304b\:308c\:3066\:3044\:308b\:306e\:3067\:8aac\:660e\:306f\:6b8b\:308b\:3002
    \:6700\:7d42 Out \:306f\:4e2d\:9593\:30bf\:30fc\:30f3\:306e\:5b9f\:30b3\:30fc\:30c9\:7d50\:679c\:304c\:305d\:306e\:307e\:307e\:6b8b\:308a\:3001claudecode \:5358\:72ec
    ClaudeEval \:3068\:540c\:3058\:632f\:308b\:821e\:3044\:306b\:306a\:308b\:3002 *)
-ClaudeCode`$claudecodeVersion = "2026-05-23-phase-4-20-preflight-7-2-7-5-merged";
+ClaudeCode`$claudecodeVersion = "2026-06-10-update-segment-merge-context-supply";
 (* v2026-04-30 v2: PreValidate hook \:62e1\:5f35\:3002 result13.nb \:30c6\:30b9\:30c8\:7d50\:679c\:3092\:53cd\:6620\:3002
    - (1) \:7a7a / trivial \:30b3\:30fc\:30c9 \[RightArrow] RepairNeeded (EmptyOrTrivialCode) [\:65e2\:5b58]
    - (2) \:30e1\:30bf\:95a2\:6570\:547c\:3073\:51fa\:3057 \[RightArrow] Deny (MetaCallProposal) [\:65b0\:898f]
