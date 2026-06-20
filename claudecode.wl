@@ -255,6 +255,9 @@ $ClaudeModel::usage =
   "$ClaudeModel \:306f Claude CLI \:306b\:6e21\:3059\:30e2\:30c7\:30eb\:540d\:3002\n"
   "\:4f8b: $ClaudeModel = \"claude-opus-4-6\"; (* \:30c7\:30d5\:30a9\:30eb\:30c8: \"\" \:306f\:7701\:7565\:6642 Claude Code \:81ea\:8eab\:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb *)";
 
+$ClaudeAdvisaryModel::usage =
+  "$ClaudeAdvisaryModel is the model/provider used for the advisory (Codex) role in the spec review-and-revise orchestrator workflow. The Claude Code role uses $ClaudeModel; the Codex (advisory) role uses $ClaudeAdvisaryModel. Default: \"chatgptcodex\". It may also be a {provider, model} tuple, e.g. {\"chatgptcodex\", \"gpt-5-codex\"}.";
+
 $ClaudeStandardFont::usage =
   "$ClaudeStandardFont \:306f ClaudeEval \:304c\:751f\:6210\:3059\:308b\:51fa\:529b\:30b3\:30fc\:30c9 (Grid / Column / Style / Button \:7b49) \:3067\n" <>
   "\:7d71\:4e00\:7684\:306b\:4f7f\:7528\:3055\:308c\:308b\:6a19\:6e96\:30d5\:30a9\:30f3\:30c8\:540d (\:6587\:5b57\:5217)\:3002\n" <>
@@ -285,7 +288,8 @@ $ClaudePaletteServiceControls::usage =
   "External packages (e.g. SourceVault MCP) register themselves; claudecode stays package-neutral. " <>
   "Each entry: <|\"Id\", \"RunningQ\"->(Function[]->True|False|Missing), \"Start\"->Function[], " <>
   "\"Stop\"->Function[], \"RunningLabel\", \"StoppedLabel\", \"UnknownLabel\", " <>
-  "(opt) \"RunningColor\", \"StoppedColor\"|>. The label follows the live RunningQ state.";
+  "(opt) \"RunningColor\", \"StoppedColor\"|>. The label follows the live RunningQ state. " <>
+  "Each *Label may be a String or a 0-arg Function evaluated at render time (e.g. for $Language-aware labels).";
 
 ClaudeRegisterPaletteServiceControl::usage =
   "ClaudeRegisterPaletteServiceControl[spec] registers a start/stop toggle (keyed by spec[\"Id\"]) " <>
@@ -705,7 +709,7 @@ iPaletteResolveHeavyModel[_] := Missing["BadProvider"];
    branch falls back to the static $iPaletteModelsByProvider entry when
    SourceVault is not loaded, so the palette keeps working standalone. *)
 iPaletteModelsFor[provider_String] :=
-  Module[{sv, base, heavy},
+  Module[{sv, base, heavy, live},
     Which[
       provider === "chatgptcodex",
         sv = iPaletteSourceVaultModels[provider];
@@ -713,11 +717,16 @@ iPaletteModelsFor[provider_String] :=
           Prepend[DeleteCases[sv, "Automatic"], "Automatic"],
           {"Automatic"}],
       provider === "lmstudio",
-        sv = iPaletteSourceVaultModels[provider];
-        If[sv =!= {},
-          DeleteCases[sv, "Automatic"],
-          Lookup[$iPaletteModelsByProvider, provider,
-            {$iPaletteDefaultClaudeModel}]],
+        (* Live LM Studio catalog first (loaded-only / all per
+           $ClaudeLMStudioPaletteLoadedOnly), then SourceVault, then static. *)
+        live = iLMStudioPaletteModels[];
+        If[live =!= {},
+          live,
+          sv = iPaletteSourceVaultModels[provider];
+          If[sv =!= {},
+            DeleteCases[sv, "Automatic"],
+            Lookup[$iPaletteModelsByProvider, provider,
+              {$iPaletteDefaultClaudeModel}]]],
       provider === "claudecode" || provider === "anthropic",
         sv = DeleteCases[iPaletteSourceVaultModels[provider], "Automatic"];
         base = If[sv =!= {}, sv,
@@ -812,7 +821,10 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
   Which[
     (* (a) \:65b0\:5f62\:5f0f\:304c\:4fdd\:5b58\:3055\:308c\:3066\:3044\:308b *)
     StringQ[vP] && MemberQ[$iPaletteProviderOrder, vP] &&
-       StringQ[vM] && MemberQ[iPaletteModelsFor[vP], vM],
+       StringQ[vM] && vM =!= "" &&
+       (* lmstudio: accept the saved model without a load-time HTTP query, so the
+          palette restores even when that model is not currently loaded. *)
+       (vP === "lmstudio" || MemberQ[iPaletteModelsFor[vP], vM]),
       $iPaletteProvider  = vP;
       $iPaletteModelName = vM,
 
@@ -1594,6 +1606,13 @@ $ClaudeLMStudioToolNudge::usage =
   "\:4f8b: $ClaudeLMStudioToolNudge = \"\:5fc5\:305a exa \:3067\:691c\:7d22\:3057\:3066\:304b\:3089\:7b54\:3048\:308b\:3053\:3068\:3002\";";
 
 
+$ClaudeLMStudioPaletteLoadedOnly::usage =
+  "$ClaudeLMStudioPaletteLoadedOnly -- palette LMStudio model picker source.\n" <>
+  "True (default): offer only models currently loaded into memory (state==\"loaded\").\n" <>
+  "False: offer all downloaded chat-capable models (llm/vlm; embeddings excluded).\n" <>
+  "Both query the local LM Studio via GET /api/v1/models. When LM Studio is\n" <>
+  "unreachable, the palette falls back to the SourceVault catalog / static list.";
+
 (* ============================================================
    Merged from claudecode_editmodes.wl (Phase 36 stage2 restart)
    ============================================================ *)
@@ -1777,6 +1796,7 @@ Begin["`Private`"];(* ==========================================================
    ============================================================ *)
 
 If[!ValueQ[$ClaudeModel], $ClaudeModel = ""];
+If[!ValueQ[$ClaudeAdvisaryModel], $ClaudeAdvisaryModel = "chatgptcodex"];
 If[!ValueQ[$ClaudeTimeout], $ClaudeTimeout = 1200];
 If[!ValueQ[$ClaudePrivateModel], $ClaudePrivateModel = {}];
 
@@ -1817,6 +1837,8 @@ If[!ValueQ[$ClaudeLMStudioSamplingParams],
 If[!ValueQ[$ClaudeLMStudioMaxOutputTokens],
   (* reasoning \:66b4\:8d70\:6642\:306e\:5b89\:5168\:5f01\:3002context_length \:3088\:308a\:5341\:5206\:5c0f\:3055\:304f *)
   $ClaudeLMStudioMaxOutputTokens = 16000];
+If[!ValueQ[$ClaudeLMStudioPaletteLoadedOnly],
+  $ClaudeLMStudioPaletteLoadedOnly = True];
 If[!ValueQ[$ClaudeLMStudioToolNudge],
   $ClaudeLMStudioToolNudge =
     "[\:30c4\:30fc\:30eb\:5229\:7528\:6307\:793a] \:3042\:306a\:305f\:306b\:306f web \:691c\:7d22\:30c4\:30fc\:30eb (exa \:7b49) \:304c\:5229\:7528\:53ef\:80fd\:3067\:3059\:3002" <>
@@ -8309,6 +8331,127 @@ iResolveLMStudioReasoning[model_String, baseURL_String] :=
     pick
   ];
 iResolveLMStudioReasoning[___] := None;
+
+(* ---- LM Studio palette model list (2026-06-18) ----
+   Resolve the candidate model ids for the palette's Provider=lmstudio picker
+   by querying the local LM Studio. With $ClaudeLMStudioPaletteLoadedOnly == True
+   (default) only models currently held in memory (state == "loaded") are
+   offered; otherwise every downloaded chat-capable model (type llm/vlm, but not
+   embeddings) is offered. Loaded state comes from GET /api/v0/models (which
+   reports per-model "state"); falls back to /api/v1/models then /v1/models when
+   v0 is unavailable. Results are cached per (baseURL, mode) for a
+   short TTL so repeated palette cycle clicks stay stable and don't spam HTTP.
+   Returns {} on any failure so the caller falls back to SourceVault / static. *)
+
+If[!ValueQ[$iLMStudioPaletteModelsCache], $iLMStudioPaletteModelsCache = <||>];
+$iLMStudioPaletteModelsTTL = 30; (* seconds; newer cache entries are reused *)
+
+(* base URL the palette should probe: prefer an lmstudio tuple's url from
+   $ClaudePrivateModel, then $ClaudeModel, else the LM Studio default. *)
+iLMStudioResolvePaletteURL[] :=
+  Which[
+    ListQ[$ClaudePrivateModel] && Length[$ClaudePrivateModel] >= 3 &&
+      StringQ[$ClaudePrivateModel[[1]]] &&
+      ToLowerCase[$ClaudePrivateModel[[1]]] === "lmstudio" &&
+      StringQ[$ClaudePrivateModel[[3]]] && $ClaudePrivateModel[[3]] =!= "",
+      $ClaudePrivateModel[[3]],
+    ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 3 &&
+      StringQ[$ClaudeModel[[1]]] &&
+      ToLowerCase[$ClaudeModel[[1]]] === "lmstudio" &&
+      StringQ[$ClaudeModel[[3]]] && $ClaudeModel[[3]] =!= "",
+      $ClaudeModel[[3]],
+    True, "http://127.0.0.1:1234"];
+
+(* model server root: strip any chat / models path + trailing slash *)
+iLMStudioServerRoot[baseURL_String] :=
+  StringTrim[
+    StringReplace[baseURL,
+      {"/api/v1/chat" -> "", "/api/v1/models" -> "", "/api/v0/models" -> "",
+       "/v1/chat/completions" -> "", "/v1/models" -> ""}],
+    "/"];
+iLMStudioServerRoot[_] := "http://127.0.0.1:1234";
+
+(* GET one models endpoint -> list of entry associations, or $Failed.
+   v0 wraps the list in "data"; v1 wraps it in "models". *)
+iLMStudioFetchModelsAt[modelsURL_String, apiKey_String] :=
+  Module[{resp, body, json, models},
+    resp = Quiet @ Check[
+      URLRead[HTTPRequest[modelsURL,
+        <|Method -> "GET",
+          "Headers" -> {"Authorization" -> "Bearer " <> apiKey}|>],
+        TimeConstraint -> 6], $Failed];
+    If[Head[resp] =!= HTTPResponse || resp["StatusCode"] =!= 200,
+      Return[$Failed]];
+    body = resp["Body"];
+    json = Quiet @ Check[Developer`ReadRawJSONString[body], $Failed];
+    If[!AssociationQ[json],
+      json = Quiet @ Check[ImportString[body, "RawJSON"], $Failed]];
+    If[!AssociationQ[json], Return[$Failed]];
+    models = Lookup[json, "data", Lookup[json, "models", $Failed]];
+    If[!ListQ[models], Return[$Failed]];
+    Select[models, AssociationQ]];
+iLMStudioFetchModelsAt[___] := $Failed;
+
+(* model entry list for the palette. Prefer /api/v0/models (carries per-model
+   "state" -> loaded/not-loaded plus "type"); fall back to /api/v1/models (type
+   but no state) then OpenAI-compat /v1/models (ids only). $Failed if all fail. *)
+iLMStudioFetchModelList[baseURL_String] :=
+  Module[{root, apiKey, r},
+    root = iLMStudioServerRoot[baseURL];
+    apiKey = iResolveLMStudioAPIKey[root];
+    r = iLMStudioFetchModelsAt[root <> "/api/v0/models", apiKey];
+    If[ListQ[r] && Length[r] > 0, Return[r]];
+    r = iLMStudioFetchModelsAt[root <> "/api/v1/models", apiKey];
+    If[ListQ[r] && Length[r] > 0, Return[r]];
+    iLMStudioFetchModelsAt[root <> "/v1/models", apiKey]];
+iLMStudioFetchModelList[___] := $Failed;
+
+(* model id of an entry: prefer "key", else "id" *)
+iLMStudioModelEntryId[e_Association] :=
+  Module[{k},
+    k = Lookup[e, "key", Lookup[e, "id", Missing[]]];
+    If[StringQ[k] && k =!= "", k, Missing[]]];
+iLMStudioModelEntryId[_] := Missing[];
+
+(* chat-capable (llm/vlm)? embeddings are excluded; missing type -> kept *)
+iLMStudioChatModelQ[e_Association] :=
+  Module[{t = Lookup[e, "type", Missing[]]},
+    If[!StringQ[t], True, !StringContainsQ[ToLowerCase[t], "embed"]]];
+iLMStudioChatModelQ[_] := False;
+
+(* currently loaded into memory? exact state == "loaded" *)
+iLMStudioLoadedQ[e_Association] :=
+  Module[{s = Lookup[e, "state", Missing[]]},
+    StringQ[s] && ToLowerCase[s] === "loaded"];
+iLMStudioLoadedQ[_] := False;
+
+(* candidate model id list for the palette (cached). {} on failure. *)
+iLMStudioPaletteModels[] :=
+  Module[{baseURL, loadedOnly, cacheKey, cached, now, models, chat, loaded, pick, ids},
+    baseURL = iLMStudioResolvePaletteURL[];
+    loadedOnly = TrueQ[$ClaudeLMStudioPaletteLoadedOnly];
+    cacheKey = baseURL <> "|" <> If[loadedOnly, "loaded", "all"];
+    now = AbsoluteTime[];
+    cached = Lookup[$iLMStudioPaletteModelsCache, cacheKey, Missing[]];
+    If[AssociationQ[cached] && NumberQ[Lookup[cached, "t", 0]] &&
+       now - cached["t"] < $iLMStudioPaletteModelsTTL,
+      Return[Lookup[cached, "ids", {}]]];
+    models = iLMStudioFetchModelList[baseURL];
+    If[!ListQ[models],
+      (* unreachable: cache an empty result briefly, fall back upstream *)
+      $iLMStudioPaletteModelsCache[cacheKey] = <|"t" -> now, "ids" -> {}|>;
+      Return[{}]];
+    chat = Select[models, iLMStudioChatModelQ];
+    loaded = Select[chat, iLMStudioLoadedQ];
+    (* loaded-only when requested AND at least one loaded model was detected;
+       otherwise show all chat models (covers all-mode and servers that don't
+       report a loaded state). *)
+    pick = If[loadedOnly && Length[loaded] > 0, loaded, chat];
+    ids = Select[DeleteDuplicates[DeleteMissing[iLMStudioModelEntryId /@ pick]],
+      StringQ];
+    $iLMStudioPaletteModelsCache[cacheKey] = <|"t" -> now, "ids" -> ids|>;
+    ids];
+iLMStudioPaletteModels[___] := {};
 
 (* ---- \:30bb\:30c3\:30b7\:30e7\:30f3\:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb\:89e3\:6c7a\:30d8\:30eb\:30d1 ----
    Model \:30aa\:30d7\:30b7\:30e7\:30f3\:304c Automatic (\:307e\:305f\:306f\:975e\:30ea\:30b9\:30c8) \:306e\:3068\:304d\:3001
@@ -14982,7 +15125,8 @@ iGuessTargetFunctions[prompt_String, allFuncNames_List, sourceCode_String] :=
       {"\:30d1\:30ec\:30c3\:30c8", "Palette", "palette"} ->
         {"ShowClaudePalette", "iClaudePaletteButton",
          "iInsertClaudeQueryTemplate", "iInsertClaudeEvalTemplate",
-         "iInsertContinueEvalTemplate"},
+         "iInsertContinueEvalTemplate", "iInsertChatCell",
+         "iEnsureSourceVaultStyleSheet"},
       {"\:30bb\:30c3\:30b7\:30e7\:30f3", "Session", "session", "\:5c65\:6b74"} ->
         {"CreateClaudeSession", "ClaudeShowHistory", "ClaudeListSessions",
          "iSessionTag", "iSessionAppend", "iSessionHistory",
@@ -19704,8 +19848,8 @@ iClaudePaletteButton[label_String, color_, action_] :=
           SetSelectedNotebook[inb]]]],
     Appearance -> "Frameless",
     Background -> color,
-    ImageSize -> {100, 22},
-    FrameMargins -> {{4, 4}, {2, 2}},
+    ImageSize -> {100, 18},
+    FrameMargins -> {{4, 4}, {1, 1}},
     Method -> "Queued"
   ];
 
@@ -20196,6 +20340,28 @@ iInsertClaudeEvalTemplate[] :=
         "\"\[SelectionPlaceholder]\"" <> os, "]"}]]
   ];
 
+(* Chat cell: ensure the SourceVault default stylesheet (which defines the
+   ClaudeInput style), then insert an empty ClaudeInput cell at the cursor.
+   A ClaudeInput cell evaluates (Shift+Enter) its text through ClaudeEval, so
+   it acts as a chat prompt cell. The stylesheet is referenced by name
+   ("SourceVault default.nb"), already installed in the FE StyleSheets dir. *)
+iEnsureSourceVaultStyleSheet[nb_NotebookObject] :=
+  Module[{sd},
+    sd = Quiet @ CurrentValue[nb, StyleDefinitions];
+    If[! StringContainsQ[ToString[sd, InputForm], "SourceVault default"],
+      Quiet @ SetOptions[nb, StyleDefinitions -> "SourceVault default.nb"]];
+    nb];
+iEnsureSourceVaultStyleSheet[_] := $Failed;
+
+iInsertChatCell[] :=
+  Module[{nb},
+    nb = InputNotebook[];
+    If[Head[nb] =!= NotebookObject, Return[$Failed]];
+    iEnsureSourceVaultStyleSheet[nb];
+    NotebookWrite[nb, Cell["", "ClaudeInput"], All];
+    SelectionMove[nb, All, CellContents];
+    nb];
+
 iInsertContinueEvalTemplate[] :=
   With[{nb = InputNotebook[]},
     NBAccess`NBInsertInputAfter[nb,
@@ -20523,10 +20689,19 @@ iPaletteServiceRunningQ[ctrl_Association] := Module[{id, f, now, cached, r},
   $iPaletteServiceStateCache[id] = <|"At" -> now, "Value" -> r|>;
   r];
 
-iPaletteServiceLabel[ctrl_Association, running_] := Which[
-  running === True,  Lookup[ctrl, "RunningLabel", "Stop"],
-  running === False, Lookup[ctrl, "StoppedLabel", "Start"],
-  True,              Lookup[ctrl, "UnknownLabel", Lookup[ctrl, "StoppedLabel", "Service"]]];
+(* A *Label may be a String or a 0-arg Function evaluated at render time, so a
+   registered control can supply $Language-aware (iL) labels that switch without
+   re-registration. Mirrors how RunningQ/Start/Stop are stored as functions. *)
+iPaletteResolveServiceLabel[f_Function] :=
+  With[{r = Quiet @ Check[f[], $Failed]}, If[StringQ[r], r, ""]];
+iPaletteResolveServiceLabel[s_String] := s;
+iPaletteResolveServiceLabel[other_] := ToString[other];
+
+iPaletteServiceLabel[ctrl_Association, running_] :=
+  iPaletteResolveServiceLabel @ Which[
+    running === True,  Lookup[ctrl, "RunningLabel", "Stop"],
+    running === False, Lookup[ctrl, "StoppedLabel", "Start"],
+    True,              Lookup[ctrl, "UnknownLabel", Lookup[ctrl, "StoppedLabel", "Service"]]];
 
 iPaletteServiceColor[ctrl_Association, running_] := Which[
   running === True,  Lookup[ctrl, "RunningColor", RGBColor[0.2, 0.55, 0.35]],
@@ -20548,8 +20723,8 @@ iClaudePaletteServiceButton[ctrl_Association] := With[{running = iPaletteService
     iPaletteServiceToggleAction[ctrl, running],
     Appearance -> "Frameless",
     Background -> iPaletteServiceColor[ctrl, running],
-    ImageSize -> {100, 22},
-    FrameMargins -> {{4, 4}, {2, 2}},
+    ImageSize -> {100, 18},
+    FrameMargins -> {{4, 4}, {1, 1}},
     Method -> "Queued"]];
 
 iClaudePaletteServiceSection[] := If[
@@ -20599,8 +20774,8 @@ ShowClaudePalette[] := (
                SetSelectedNotebook[inb]]]),
           Appearance -> "Frameless",
           Background -> iCloudPaletteColor[$iPaletteCloudState],
-          ImageSize -> {100, 22},
-          FrameMargins -> {{4, 4}, {2, 2}},
+          ImageSize -> {100, 18},
+          FrameMargins -> {{4, 4}, {1, 1}},
           Method -> "Queued"],
         TrackedSymbols :> {$iPaletteCloudState},
         SynchronousUpdating -> False],
@@ -20615,6 +20790,9 @@ ShowClaudePalette[] := (
 
       (* \[HorizontalLine]\[HorizontalLine] Claude \:64cd\:4f5c \[HorizontalLine]\[HorizontalLine] *)
       Style[" Claude", Bold, 8, GrayLevel[0.3]],
+      iClaudePaletteButton["\[SixPointedStar] Chat Cell",
+        RGBColor[0.3, 0.43, 0.7],
+        iInsertChatCell[]],
       iClaudePaletteButton["\[RightPointer] ClaudeQuery",
         RGBColor[0.25, 0.45, 0.7],
         iInsertClaudeQueryTemplate[]],
@@ -20665,23 +20843,46 @@ ShowClaudePalette[] := (
             iSavePaletteSettings[InputNotebook[]]],
           Appearance -> "Frameless"], SynchronousUpdating -> False],
       Dynamic[
-        Button[
-          Style[iL["M: ", "M: "] <> iPaletteShortenModelName[$iPaletteModelName],
-            9, Bold, GrayLevel[0.2]],
-          Module[{models, idx, nextIdx},
-            models = iPaletteModelsFor[$iPaletteProvider];
-            idx = Position[models, $iPaletteModelName];
-            idx = If[Length[idx] >= 1, idx[[1, 1]], 1];
-            nextIdx = Mod[idx, Length[models]] + 1;
-            $iPaletteModelName = models[[nextIdx]];
-            $iPaletteModel = Which[
-              $iPaletteProvider === "claudecode" && StringContainsQ[$iPaletteModelName, "opus"],   "opus",
-              $iPaletteProvider === "claudecode" && StringContainsQ[$iPaletteModelName, "sonnet"], "sonnet",
-              True, "default"
-            ];
-            iPaletteSyncClaudeModel[];
-            iSavePaletteSettings[InputNotebook[]]],
-          Appearance -> "Frameless"], SynchronousUpdating -> False],
+        Row[{
+          Button[
+            Style[iL["M: ", "M: "] <> iPaletteShortenModelName[$iPaletteModelName],
+              9, Bold, GrayLevel[0.2]],
+            Module[{models, idx, nextIdx},
+              models = iPaletteModelsFor[$iPaletteProvider];
+              idx = Position[models, $iPaletteModelName];
+              idx = If[Length[idx] >= 1, idx[[1, 1]], 1];
+              nextIdx = Mod[idx, Length[models]] + 1;
+              $iPaletteModelName = models[[nextIdx]];
+              $iPaletteModel = Which[
+                $iPaletteProvider === "claudecode" && StringContainsQ[$iPaletteModelName, "opus"],   "opus",
+                $iPaletteProvider === "claudecode" && StringContainsQ[$iPaletteModelName, "sonnet"], "sonnet",
+                True, "default"
+              ];
+              iPaletteSyncClaudeModel[];
+              iSavePaletteSettings[InputNotebook[]]],
+            Appearance -> "Frameless"],
+          (* lmstudio: refresh the live loaded-model list on demand *)
+          If[$iPaletteProvider === "lmstudio",
+            Tooltip[
+              Button[
+                Style["\:21bb", 11, Bold, RGBColor[0.2, 0.45, 0.3]],
+                (ClaudeCode`RefreshLMStudioPaletteModels[];
+                 Module[{models},
+                   models = iPaletteModelsFor["lmstudio"];
+                   If[ListQ[models] && Length[models] >= 1 &&
+                      ! MemberQ[models, $iPaletteModelName],
+                     $iPaletteModelName = models[[1]];
+                     iPaletteSyncClaudeModel[]]];
+                 iSavePaletteSettings[InputNotebook[]];
+                 With[{inb = InputNotebook[]},
+                   If[Head[inb] === NotebookObject, SetSelectedNotebook[inb]]]),
+                Appearance -> "Frameless",
+                ImageSize -> {20, 18},
+                FrameMargins -> {{4, 2}, {0, 0}}],
+              iL["LM Studio \:306e\:30ed\:30fc\:30c9\:6e08\:307f\:30e2\:30c7\:30eb\:4e00\:89a7\:3092\:66f4\:65b0",
+                 "Refresh LMStudio loaded-model list"]],
+            Nothing]
+        }], SynchronousUpdating -> False],
       (* \[HorizontalLine] routing model policy (power-aware light routing) \[HorizontalLine] *)
       Dynamic[
         Button[
@@ -20691,8 +20892,8 @@ ShowClaudePalette[] := (
              If[Head[inb] === NotebookObject, SetSelectedNotebook[inb]]]),
           Appearance -> "Frameless",
           Background -> iRoutingPaletteColor[],
-          ImageSize -> {110, 22},
-          FrameMargins -> {{4, 4}, {2, 2}},
+          ImageSize -> {110, 18},
+          FrameMargins -> {{4, 4}, {1, 1}},
           Method -> "Queued"],
         TrackedSymbols :> {ClaudeCode`$ClaudeRoutingModelPolicy, $iACPowerCache},
         SynchronousUpdating -> False],
@@ -20773,7 +20974,7 @@ ShowClaudePalette[] := (
           Print[iL["\:30ad\:30e3\:30f3\:30bb\:30eb\:3057\:307e\:3057\:305f\:3002", "Cancelled."]]]],
         Appearance -> "Frameless",
         Background -> RGBColor[0.65, 0.15, 0.15],
-        ImageSize -> {100, 20},
+        ImageSize -> {100, 18},
         FrameMargins -> {{4, 4}, {1, 1}},
         Method -> "Queued"]
       (* \:30b9\:30c6\:30fc\:30bf\:30b9\:884c (\:6a5f\:5bc6/\:4f9d\:5b58\:30ab\:30a6\:30f3\:30bf) \:306f\:524a\:9664 (2026-06-06)\:3002
@@ -26835,6 +27036,14 @@ ClaudeCode`SetPaletteFallback[v_] := ($iPaletteFallback = TrueQ[v]);
 ClaudeCode`SavePaletteSettings[nb_NotebookObject] := iSavePaletteSettings[nb];
 ClaudeCode`LoadPaletteSettings[nb_NotebookObject] := iLoadPaletteSettings[nb];
 
+(* LMStudio palette model candidates: live query + manual refresh.
+   GetLMStudioPaletteModels[] returns the current candidate list (cached);
+   RefreshLMStudioPaletteModels[] drops the cache and re-queries now. *)
+ClaudeCode`GetLMStudioPaletteModels[]     := iLMStudioPaletteModels[];
+ClaudeCode`RefreshLMStudioPaletteModels[] := (
+  $iLMStudioPaletteModelsCache = <||>;
+  iLMStudioPaletteModels[]);
+
 (* ============================================================
    Phase 12: ClaudeRuntimeAdapter \:7d71\:5408
    ClaudeRuntime \[LeftRightArrow] NBAccess \:306e\:63a5\:7d9a\:5c64\:3092 claudecode.wl \:306b\:7d71\:5408\:3002
@@ -27212,7 +27421,13 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
           "Do NOT claim that 'the search did not return enough information' when " <>
           "the tool results clearly contain the answer. " <>
           "Trust the summary you already have and produce the final answer now, " <>
-          "using the facts from the tool output verbatim where appropriate.\n"],
+          "using the facts from the tool output verbatim where appropriate.\n\n" <>
+          "It is OK to return FEWER items than requested: if the user asked for N " <>
+          "results but the tool output only supports fewer, present the ones you " <>
+          "have and add a short note about the shortfall -- that is a COMPLETE, " <>
+          "acceptable answer. Do NOT loop: do NOT keep deliberating about whether " <>
+          "to search again, and do NOT re-emit a near-identical answer you have " <>
+          "already produced. Output exactly ONE final answer and end with [DONE].\n"],
       
       AssociationQ[input] && Lookup[input, "Type", ""] === "Continuation",
         AppendTo[parts,
@@ -27748,6 +27963,21 @@ iToolExecNotebookInfo[input_Association, nb_] :=
 (* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
    ClaudeBuildRuntimeAdapter
    \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
+(* iResponseSignature (2026-06-18): continuation "going in circles" guard.
+   Returns a stable signature of an assistant response so two consecutive
+   near-identical answers (the slow-model loop failure) can be detected.
+   Prefers the set of URLs (robust for web-search tables); else a normalized
+   alphanumeric prefix. *)
+iResponseSignature[text_String] := Module[{urls, norm},
+  urls = Quiet @ Check[
+    StringCases[text, RegularExpression["https?://[^\\s\"')\\]}>]+"]], {}];
+  If[ListQ[urls] && Length[urls] >= 2,
+    Return[StringRiffle[Sort[DeleteDuplicates[urls]], "|"], Module]];
+  norm = StringReplace[ToLowerCase[text], RegularExpression["[^a-z0-9]+"] -> ""];
+  StringTake[norm, UpTo[500]]
+];
+iResponseSignature[_] := "";
+
 Options[ClaudeBuildRuntimeAdapter] = {
   "AccessLevel"      -> 0.5,
   "Secrets"          -> {},
@@ -27765,8 +27995,8 @@ Options[ClaudeBuildRuntimeAdapter] = {
 
 ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
   Module[{accessLevel, secrets, maxCont, syncProv, provider,
-          useFallback, contCount = 0, accessSpec, modelSpec, timeoutOpt,
-          execTimeout},
+          useFallback, contCount = 0, prevSig = "", accessSpec, modelSpec,
+          timeoutOpt, execTimeout},
     
     accessLevel = OptionValue["AccessLevel"];
     secrets     = OptionValue["Secrets"];
@@ -27795,13 +28025,43 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
        
        \:6ce8\:610f: QueryProviderAsync \:306b lmstudio / chatgptcodex \:306e\:5206\:5c90\:304c\:3042\:308a\:3001
        \:305d\:308c\:4ee5\:5916\:306f Claude CLI \:7d4c\:8def\:306b\:843d\:3061\:308b\:3002 *)
-    If[ListQ[modelSpec] && Length[modelSpec] >= 2,
-      If[StringQ[modelSpec[[1]]] &&
-         (ToLowerCase[modelSpec[[1]]] === "lmstudio" ||
-            iCodexProviderQ[modelSpec[[1]]]),
-        syncProv = False,
-        syncProv = True]];
-    
+    (* 2026-06-20 (palette freeze fix): claudecode (Claude CLI) \:3092\:5f37\:5236 sync \:306e
+       \:5bfe\:8c61\:304b\:3089\:9664\:5916\:3059\:308b\:3002\:30d1\:30ec\:30c3\:30c8\:8868\:793a\:6642\:306f iPaletteSyncClaudeModel \:304c
+       $ClaudeModel = {"claudecode", model} \:306e 2 \:8981\:7d20 list \:3092\:8a2d\:5b9a\:3059\:308b\:305f\:3081\:3001
+       \:65e7\:30b3\:30fc\:30c9\:306f\:3053\:306e\:5206\:5c90\:3067 syncProv=True \:3092\:5f37\:5236\:3057\:3066\:3044\:305f\:3002\:3059\:308b\:3068
+       queryProvider \:304c "sync" \:30ce\:30fc\:30c9\:5316\:3057 Claude CLI \:3092\:5171\:6709 DAG tick \:5185\:3067
+       \:540c\:671f\:5b9f\:884c \[RightArrow] LLM \:5fdc\:7b54 (\:6570\:5341\:79d2) \:306e\:9593\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709 \[RightArrow]
+       FrontEnd \:304c\:5fdc\:7b54\:3067\:304d\:305a\:3001\:5e38\:6642\:8868\:793a\:306e\:30d5\:30ed\:30fc\:30c6\:30a3\:30f3\:30b0\:30d1\:30ec\:30c3\:30c8\:3068
+       \:76f8\:307e\:3063\:3066\:30d5\:30ea\:30fc\:30ba\:3057\:3066\:3044\:305f (\:30d1\:30ec\:30c3\:30c8\:975e\:8868\:793a\:6642\:306f $ClaudeModel="" \:3067
+       2 \:8981\:7d20 list \:306b\:306a\:3089\:305a async \:7d4c\:8def\:306b\:4e57\:308b\:305f\:3081\:518d\:73fe\:3057\:306a\:3044)\:3002
+       Claude CLI \:306f lmstudio / codex \:3068\:540c\:3058\:304f QueryProviderAsync (StartProcess +
+       collectProvider \:30dd\:30fc\:30ea\:30f3\:30b0) \:306e async \:7d4c\:8def\:3092\:6301\:3064\:306e\:3067\:3001\:5f37\:5236 sync \:305b\:305a
+       \:547c\:3073\:51fa\:3057\:5143\:306e SyncProvider \:3092\:5c0a\:91cd\:3059\:308b (ClaudeEval bridge \:306f False=async)\:3002
+       URL \:76f4\:53e9\:304d\:306e\:540c\:671f HTTP (iQueryViaAPI) \:304c\:5fc5\:8981\:306a anthropic/openai \:306e\:307f
+       \:5f93\:6765\:3069\:304a\:308a\:5f37\:5236 sync \:3092\:7dad\:6301\:3059\:308b\:3002 *)
+    If[ListQ[modelSpec] && Length[modelSpec] >= 2 && StringQ[modelSpec[[1]]],
+      Module[{provLC = ToLowerCase[modelSpec[[1]]]},
+        Which[
+          provLC === "lmstudio" || iCodexProviderQ[modelSpec[[1]]],
+            syncProv = False,
+          provLC === "claudecode",
+            Null,  (* \:547c\:3073\:51fa\:3057\:5143\:306e SyncProvider \:3092\:305d\:306e\:307e\:307e\:5c0a\:91cd (\:5f37\:5236\:3057\:306a\:3044) *)
+          True,
+            syncProv = True]]];
+
+    (* 2026-06-18: local / reasoning models take minutes per round and tend to
+       "go in circles" on continuations (e.g. user asked for 5 items but only 4
+       are supported by the tool output). Cap continuations to 2 to prevent a
+       pointless multi-minute loop. An explicitly smaller MaxContinuations wins. *)
+    If[ListQ[modelSpec] && Length[modelSpec] >= 1 && StringQ[modelSpec[[1]]],
+      Module[{prov = ToLowerCase[modelSpec[[1]]],
+              mdl = If[Length[modelSpec] >= 2 && StringQ[modelSpec[[2]]],
+                       ToLowerCase[modelSpec[[2]]], ""]},
+        If[prov === "lmstudio" ||
+           StringContainsQ[mdl,
+             "qwen3" | "deepseek-r1" | "-r1" | "reasoning" | "thinking"],
+          maxCont = Min[maxCont, 2]]]];
+
     accessSpec = <|
       "AccessLevel"          -> accessLevel,
       "ConfidentialSymbols"  -> Which[
@@ -28487,7 +28747,7 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
       
       (* \[HorizontalLine]\[HorizontalLine] ShouldContinue: [DONE] \:30de\:30fc\:30ab\:30fc\:691c\:51fa + \:30ab\:30a6\:30f3\:30bf\:5b89\:5168\:5f01 \[HorizontalLine]\[HorizontalLine] *)
       "ShouldContinue" -> Function[{redactedResult, convState, turnCount},
-        Module[{msgs, lastMsg, lastText, hasDoneMarker = False},
+        Module[{msgs, lastMsg, lastText = "", hasDoneMarker = False, sig},
           contCount++;
           (* \:4e88\:7b97\:30c1\:30a7\:30c3\:30af *)
           If[contCount > maxCont, Return[False, Module]];
@@ -28501,6 +28761,16 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                 "[DONE]" | "[done]" | "[Done]"]]];
           (* [DONE] \:30de\:30fc\:30ab\:30fc\:304c\:3042\:308c\:3070\:5b8c\:4e86 *)
           If[hasDoneMarker, Return[False, Module]];
+          (* 2026-06-18 (c) loop guard: two consecutive responses that are
+             effectively identical (same URL set, etc.) mean the model is going
+             in circles -> stop instead of burning more multi-minute rounds. *)
+          If[StringQ[lastText] && StringLength[lastText] > 0,
+            sig = iResponseSignature[lastText];
+            If[StringLength[sig] >= 40 && sig === prevSig,
+              iClaudeFreezeLog["loop-guard",
+                "no-progress repeat detected; ending continuation"];
+              Return[False, Module]];
+            prevSig = sig];
           (* \:305d\:308c\:4ee5\:5916\:306f\:4e88\:7b97\:5185\:306a\:306e\:3067\:7d99\:7d9a *)
           True
         ]

@@ -1,72 +1,600 @@
 # claudecode API リファレンス
 
-パッケージ名: `ClaudeCode`
-依存: [NBAccess](https://github.com/transreal/NBAccess), [GitHubREST](https://github.com/transreal/github)
-リポジトリ: https://github.com/transreal/claudecode
+## クエリ関数
 
-Claude Code CLI / Anthropic API / OpenAI API / ChatGPT Codex CLI / LM Studio を Wolfram Language から統一インターフェースで呼び出すパッケージ。プロバイダ体系: `"claudecode"`（Claude Code CLI、Pro/Max サブスク、課金なし）/ `"anthropic"`（Anthropic API 直接、課金）/ `"openai"`（OpenAI API、課金）/ `"chatgptcodex"`（ChatGPT Codex CLI、サブスク内）/ `"lmstudio"`（ローカル LLM、課金なし）。
+### ClaudeQuery[task, opts]
+Claude CLI にテキストクエリを送信してノートブックにレスポンスを出力する。
+→ String | $Failed
+Options: Model -> $ClaudeModel, Timeout -> $ClaudeTimeout, Fallback -> False, AutoPrivate -> False, WebSearch -> False, WebFetch -> False, OutputMode -> Automatic, AutoCellize -> False, PrivacySpec -> Automatic, Integrations -> Automatic
+
+### ClaudeQuerySync[task, opts]
+ClaudeQuery の同期版。結果文字列を直接返す。
+→ String | $Failed
+Options: ClaudeQuery と同じ
+
+### ClaudeQueryBg[task, opts]
+バックグラウンド非同期クエリ。ノートブックセルに非同期で結果を書き込む。
+→ String (タスクID) | $Failed
+Options: Model, Timeout, NonBlocking -> True, Fallback, AutoPrivate
+
+### ClaudeQueryAsync[task, opts]
+コールバック付き非同期クエリ。
+→ String (タスクID) | $Failed
+
+### ClaudeQueryAsyncSilent[task, opts]
+結果セルを作成しない非同期クエリ。内部ツール使用向け。
+→ String | $Failed
+
+### ClaudeEnsureSilentNotebook[]
+サイレントノートブック (バックグラウンド出力先) を確保する。
+→ NotebookObject
+
+### ClaudeWriteResponse[text]
+テキストをノートブックのレスポンスセルとして書き込む。
+→ CellObject
+
+### ClaudeMath[task, opts]
+数式生成に特化したクエリ。TraditionalForm 出力を優先する。
+→ Expression | $Failed
+
+### ClaudeExtractCode[response]
+LLM レスポンス文字列からコードブロックを抽出する。
+→ String | $Failed
+
+### ClaudeExtractAllCode[response]
+LLM レスポンス文字列から全コードブロックをリストで抽出する。
+→ {String...}
+
+## 評価・コード生成
+
+### ClaudeEval[task, opts]
+タスクからコードを生成しノートブック内で評価する。ClaudeSpec + 生成 + 実行の統合関数。
+→ Expression | $Failed
+Options: Model -> $ClaudeModel, Timeout -> $ClaudeTimeout, Fallback -> False, AutoPrivate -> False, AutoEvaluate -> True, AutoCellize -> False, PrivacySpec -> Automatic, OutputMode -> Automatic, WebSearch -> False, WebFetch -> False
+
+### ContinueEval[task, opts]
+前回の ClaudeEval 結果を踏まえて継続タスクを実行する。
+→ Expression | $Failed
+Options: ClaudeEval と同じ
+
+### ContinueUpdate[task, opts]
+ContinueEval の変種。前回出力セルをインプレースで更新する。
+→ Expression | $Failed
+
+### ClaudeSpec[task]
+### ClaudeSpec[{task, image, ...}]
+ノートブック内容からプログラムの仕様を生成する。パレットからセル選択で呼び出し可能。画像付きリスト形式でマルチモーダル入力も可能。
+→ String
+
+### ClaudeDebug[task, opts]
+デバッグ用クエリ。エラーメッセージと現在のノートブックコンテキストを自動付加する。
+→ Expression | $Failed
+
+### ClaudeReview[task, opts]
+コードレビュー用クエリ。指定ファイルまたは現在のノートブックを対象にレビューを実施する。
+→ String | $Failed
+Options: TargetFiles -> Automatic, TargetFunctions -> All, Mode -> "review"
+
+### ClaudeReviewChunked[task, opts]
+大規模コードを分割してレビューする。
+→ String | $Failed
+
+## セッション管理
+
+### CreateClaudeSession[name, opts]
+名前付き Claude セッションを作成する。過去の会話履歴を持つセッションコンテキストを確立する。
+→ String (セッションID) | $Failed
+Options: Inherit -> None (継承元セッション名)
+
+### ClaudeRestoreSession[name]
+保存済みセッションをリストアする。
+→ True | $Failed
+
+### ClaudeListSessions[]
+保存済みセッション一覧を返す。
+→ {String...}
+
+### ClaudeDeleteSession[name]
+指定セッションを削除する。
+→ True | $Failed
+
+### ClaudeShowHistory[opts]
+現在のセッション会話履歴をノートブックに表示する。
+→ Null
+Options: OutputMode -> "dataset"
+
+### ClaudeCompactHistory[]
+会話履歴を圧縮して長い会話のコンテキストを縮小する。
+→ True | $Failed
+
+### ClaudeHistorySize[]
+現在の会話履歴のサイズ (文字数) を返す。
+→ Integer
+
+### ClaudeSessionStatus[]
+現在のセッション状態を表示する。
+→ Dataset | Null
+
+## 添付ファイル
+
+### ClaudeAttach[file, opts]
+ファイルまたは URL をセッションの添付ファイルとして登録する。
+→ Association | $Failed
+Options: Keywords -> {}, Title -> Automatic, Refetch -> False
+
+### ClaudeDetach[id]
+添付ファイルをセッションから除去する。
+→ True | $Failed
+
+### ClaudeAttachments[]
+現在の添付ファイル一覧を返す。
+→ Dataset
+
+### ClearAttachments[]
+全添付ファイルをクリアする。
+→ Null
+
+## 状態・制御
+
+### ClaudeStatus[]
+Claude CLI の現在の状態 (実行中/待機中/エラー) を返す。
+→ Association
+
+### ClaudeAbort[]
+実行中の Claude CLI プロセスを中止する。
+→ True | $Failed
+
+### ClaudeRateLimitStatus[]
+レートリミット状態を確認する。
+→ Association
+
+### ClaudeRateLimitClear[]
+レートリミットカウンタをリセットする。
+→ Null
+
+### ClaudeCommand[cmd]
+Claude Code CLI スラッシュコマンドを実行する。
+→ String | $Failed
+例: ClaudeCommand["/compact"]
+
+### ClaudeShowAccessConfig[]
+現在のアクセス設定 (許可ディレクトリ、プロバイダ等) を表示する。
+→ Null
+
+### ClaudeQueryShowContext[]
+次回クエリに使用されるコンテキスト内容をプレビュー表示する。
+→ String
+
+### ShowClaudePalette[]
+Claude Code 操作パレットをノートブックに表示する。
+→ Null
+
+## 機密データ
+
+### MarkConfidential[var]
+変数を機密としてマークする。ClaudeEval でのコード生成時にローカルモデル使用を強制する。
+→ var
+
+### UnmarkConfidential[var]
+機密マークを解除する。
+→ var
+
+### IsConfidential[var]
+変数が機密マークされているか確認する。
+→ True | False
+
+### Confidential[expr]
+式を機密ラッパーで包む。
+→ Confidential[expr]
+
+### NonConfidential[expr]
+機密ラッパーを外す。
+→ expr
+
+### ScanConfidentialCells[]
+現在のノートブック内の機密変数を含むセルをスキャンする。
+→ {CellObject...}
+
+## Web 機能
+
+### ClaudeWebSearch[query, opts]
+Claude CLI 経由でウェブ検索を実行する。
+→ String | $Failed
+Options: Timeout -> $ClaudeTimeout
+
+### ClaudeWebFetch[url, opts]
+Claude CLI 経由で URL のコンテンツを取得する。
+→ String | $Failed
+Options: Timeout -> $ClaudeTimeout
+
+### WebSearch[query]
+ClaudeWebSearch の簡略形。
+→ String | $Failed
+
+### WebFetch[url]
+ClaudeWebFetch の簡略形。
+→ String | $Failed
+
+## ドキュメント生成
+
+### ClaudeCreateDocumentation[packageName, opts]
+パッケージの包括的ドキュメント一式 (api.md, README.md 等) を新規生成する。リミット到達時に自動停止し、再実行で未生成分のみ続行する。README.md は最後に生成される。
+→ True | $Failed
+Options: References -> {}, Demos -> {}, Disclaimer -> {}, License -> "", Acknowledgments -> {}, Model -> $ClaudeDocModel, DryRun -> False
+
+### ClaudeUpdateDocumentation[packageName, instruction, opts]
+既存ドキュメントを指示に従って部分更新する。
+→ True | $Failed
+Options: References -> {}, Demos -> {}, Disclaimer -> {}, License -> "", Acknowledgments -> {}, Model -> $ClaudeDocModel
+
+## ディレクティブ管理
+
+### ClaudeAddDirective[name, content, opts]
+CLAUDE.md にディレクティブを追加する。
+→ True | $Failed
+Options: DryRun -> False
+
+### ClaudeUpdateDirective[name, content, opts]
+既存ディレクティブを更新する。
+→ True | $Failed
+
+### ClaudeRestoreDirective[name]
+バックアップからディレクティブをリストアする。
+→ True | $Failed
+
+### ClaudeListDirectives[]
+登録済みディレクティブ一覧を返す。
+→ Dataset
+
+### ClaudeDirectiveBackupDataset[]
+ディレクティブのバックアップ履歴を Dataset で返す。
+→ Dataset
+
+### ClaudeSyncDirectives[]
+ディレクティブをファイルシステムと同期する。
+→ True | $Failed
+
+## NBAccess 分離検証
+
+### ClaudeCheckSeparation[packageName]
+パッケージの NBAccess 分離原則違反を検証する。結果をキャッシュし ClaudeFixSeparation で再利用される。
+→ Association | $Failed
+
+### ClaudeFixSeparation[packageName]
+ClaudeCheckSeparation の検出結果に基づいて分離違反を修正する。
+→ True | $Failed
+
+## コミット準備
+
+### ClaudePrepareCommit[opts]
+変更差分を解析してコミットメッセージ候補を生成する。
+→ String | $Failed
+Options: BaseBranch -> "main", Owner -> Automatic, Repository -> Automatic, Branch -> Automatic, Baseline -> Automatic, DryRun -> False
+
+## NotebookLLMGraph
+
+### NotebookLLMGraph[nb]
+ノートブックの LLM 依存グラフを取得または構築する。
+→ Graph | $Failed
+
+### NotebookLLMGraphBuild[nb, opts]
+ノートブックから LLM グラフを再構築する。
+→ Graph | $Failed
+Options: Model -> $ClaudeModel
+
+### NotebookLLMGraphPlot[nb, opts]
+LLM グラフを可視化する。
+→ Graphics | $Failed
+
+### NotebookLLMGraphNodes[nb]
+グラフのノード一覧を返す。
+→ {Association...}
+
+### NotebookLLMGraphValidate[nb]
+グラフの整合性を検証する。
+→ True | {String...}
+
+### NotebookLLMGraphFetchResponse[nb, nodeId]
+指定ノードの LLM レスポンスを取得する。
+→ String | $Failed
+
+### NotebookLLMGraphSubSteps[nb, nodeId]
+ノードのサブステップ一覧を返す。
+→ {Association...}
+
+### NotebookLLMGraphFetchL2[nb, nodeId]
+L2 (詳細) レスポンスを取得する。
+→ String | $Failed
+
+### NotebookLLMGraphErrors[nb]
+グラフ内のエラーノード一覧を返す。
+→ {Association...}
+
+### NotebookLLMGraphUpdateL2Status[nb, nodeId, status]
+L2 ステータスを更新する。
+→ True | $Failed
+
+### NotebookLLMGraphPlotL2[nb, opts]
+L2 グラフを可視化する。
+→ Graphics | $Failed
+
+### NotebookLLMGraphRerun[nb, nodeIds, opts]
+指定ノードを再実行する。
+→ True | $Failed
+
+### NotebookLLMGraphInvalidateDownstream[nb, nodeId]
+指定ノードの下流ノードを無効化する。
+→ {String...} (無効化されたノードID)
+
+### NotebookLLMGraphSummary[nb]
+グラフのサマリーを返す。
+→ Association
+
+### NotebookLLMGraphExtractThread[nb, nodeId]
+ノードのスレッドを抽出する。
+→ {Association...}
+
+### NotebookLLMGraphApplyThread[nb, thread]
+スレッドをグラフに適用する。
+→ True | $Failed
+
+## LLMGraphDAG
+
+### LLMGraphDAGCreate[spec, opts]
+DAG 形式の LLM グラフを作成する。
+→ String (DAG ID) | $Failed
+Options: Model -> $ClaudeModel, Timeout -> $ClaudeTimeout
+
+### LLMGraphDAGStatus[dagId]
+DAG の実行状態を返す。
+→ Association
+
+### LLMGraphDAGCancel[dagId]
+DAG 実行をキャンセルする。
+→ True | $Failed
+
+### LLMGraphDAGStop[dagId]
+DAG 実行を停止する。
+→ True | $Failed
+
+### LLMGraphDAGRetry[dagId, nodeId]
+失敗したノードを再試行する。
+→ True | $Failed
+
+### LLMGraphDAGRebuild[dagId]
+DAG を再構築する。
+→ String (新 DAG ID) | $Failed
+
+### LLMGraphDAGFindByContext[context]
+コンテキストに一致する DAG を検索する。
+→ {String...}
+
+### LLMGraphDAGInspect[dagId]
+DAG の詳細情報を表示する。
+→ Dataset | Null
+
+### LLMGraphDAGMarkFailed[dagId, nodeId]
+指定ノードを失敗状態にマークする。
+→ True | $Failed
+
+### LLMGraphDAGSnapshot[dagId, opts]
+DAG のスナップショットを保存する。
+→ String | $Failed
+Options: Title -> Automatic
+
+### LLMGraphDAGRestore[dagId, snapshotName]
+スナップショットから DAG をリストアする。
+→ True | $Failed
+
+### LLMGraphDAGListSnapshots[dagId]
+DAG のスナップショット一覧を返す。
+→ {String...}
+
+### LLMGraphDAGPlot[dagId, opts]
+DAG を可視化する。
+→ Graphics | $Failed
+
+### LLMGraphDAGMergeHistory[dagId1, dagId2]
+2 つの DAG 履歴をマージする。
+→ String (新 DAG ID) | $Failed
+
+### LLMGraphExecute[graph, opts]
+LLM グラフを実行する。
+→ Association | $Failed
+Options: Model -> $ClaudeModel, Timeout -> $ClaudeTimeout
+
+### LLMGraphExecuteStatus[taskId]
+実行タスクの状態を返す。
+→ Association
+
+### LLMGraphExecuteCancel[taskId]
+実行タスクをキャンセルする。
+→ True | $Failed
+
+## ランタイム
+
+### ClaudeBuildRuntimeAdapter[opts]
+ClaudeRuntime 用のアダプタ Association を構築する。"DefaultTimeoutSeconds" キーを持つ。
+→ Association
+Options: ExecutionTimeoutSeconds -> 30 (NBExecuteHeldExpr に渡すタイムアウト秒; proposal["ExpectedSeconds"] > adapter["DefaultTimeoutSeconds"] > 30 の優先順で適用)
+例: adapter = ClaudeBuildRuntimeAdapter["ExecutionTimeoutSeconds" -> 60]
+
+### ClaudeStartRuntime[adapter, opts]
+ランタイムセッションを開始する。
+→ String (ランタイムID) | $Failed
+
+### ClaudeEvalViaRuntime[task, runtimeId, opts]
+ランタイム経由でタスクを評価する。
+→ Expression | $Failed
+Options: Timeout -> $ClaudeTimeout
+
+### ClaudeApproveProposal[proposalId]
+提案されたコードの実行を承認する。
+→ True | $Failed
+
+### ClaudeRuntimeSnapshot[runtimeId, opts]
+ランタイム状態のスナップショットを保存する。
+→ String | $Failed
+
+### ClaudeRuntimeRestore[runtimeId, snapshotName]
+スナップショットからランタイムをリストアする。
+→ True | $Failed
+
+### ClaudeRuntimeListSnapshots[runtimeId]
+ランタイムスナップショット一覧を返す。
+→ {String...}
+
+### ClaudeRegisterDAGRuntime[dagId, runtimeId]
+DAG とランタイムを関連付ける。
+→ True | $Failed
+
+### ClaudeBeginParallelKernels[]
+並列カーネルを事前起動する (Phase 32k)。
+→ Null
+
+## ファイル変換・出力
+
+### NBFileTranslate[file, targetLang, opts]
+ノートブックファイルを他言語/形式に変換する。
+→ String (出力ファイルパス) | $Failed
+Options: Model -> $ClaudeModel, OutputMode -> Automatic
+
+### ClaudeProcessFile[file, task, opts]
+ファイルに対して LLM タスクを実行する。
+→ String | $Failed
+
+### cleanOutput[text]
+出力テキストから不要なフォーマットを除去する。
+→ String
+
+### stripANSI[text]
+ANSI エスケープシーケンスを除去する。
+→ String
+
+## 編集モード (EditModes)
+
+### ClaudeAppendBlockToPackage[packageName, block]
+パッケージファイルにコードブロックを追記する。
+→ True | $Failed
+
+### ClaudeInsertBeforeAnchorInPackage[packageName, anchor, block]
+パッケージファイル内のアンカー行の前にブロックを挿入する。
+→ True | $Failed
+
+### ClaudeParseEditModeResponse[response]
+LLM の編集モードレスポンスをパースして差分操作リストを返す。
+→ {Association...}
+
+### ClaudeAutoDetectEditMode[packageName]
+パッケージのコンテキストから最適な編集モードを自動選択する。
+→ "append" | "insert" | "replace"
+
+### ClaudeBuildEditModePromptInstructions[mode, opts]
+指定編集モード用のプロンプト指示文を構築する。
+→ String
+
+### ClaudeUpdatePackageWithMode[packageName, instruction, mode, opts]
+指定編集モードでパッケージを更新する。
+→ True | $Failed
+
+## パレット サービスコントロール
+
+### ClaudeRegisterPaletteServiceControl[spec]
+ShowClaudePalette の Privacy セクション直下に start/stop トグルを登録する。spec は Association で "Id", "RunningQ" (→True|False|Missing の Function), "Start", "Stop", "RunningLabel", "StoppedLabel", "UnknownLabel" を必須キーとし、省略可能な "RunningColor", "StoppedColor" を持つ。各 Label は String または 0 引数 Function。同一 Id の再登録で上書き。ShowClaudePalette[] で反映される。
+→ String (Id)
+
+### ClaudeUnregisterPaletteServiceControl[id]
+パレットサービストグルを id で削除する。
+→ Null
+
+## ポーリング・優先制御
+
+### ClaudeRegisterPollingTick[key, func]
+定期ポーリングコールバックを登録する。
+→ True
+
+### ClaudeUnregisterPollingTick[key]
+ポーリングコールバックを解除する。
+→ True
+
+### ClaudePollingTickKeys[]
+登録済みポーリングキー一覧を返す。
+→ {String...}
+
+### ClaudeEnqueueFinalAction[func]
+セッション終了時に実行するアクションをエンキューする。
+→ Null
+
+### ClaudeBeginHighPriority[secs]
+指定秒数の間、高優先度モードに移行する。
+→ Null
+
+### ClaudeEndHighPriority[]
+高優先度モードを終了する。
+→ Null
 
 ## グローバル変数
 
 ### $ClaudeModel
-型: {String, String} | String, 初期値: {"claudecode", "claude-opus-4-8"}
-Claude CLI に渡すプロバイダとモデルのタプル。Phase 28 以降は `{provider, modelName}` 形式が標準。文字列単体も後方互換で受け入れる（claudecode 扱い）。`""` で Claude Code 自身のデフォルトモデルを使用。
-例: `$ClaudeModel = {"anthropic", "claude-opus-4-8"}`
+型: {String, String} | String, 初期値: {"claudecode", ""}
+使用モデルを指定する tuple {provider, modelName}。provider は "claudecode" (Claude Code CLI, Pro/Max サブスク内、課金なし), "chatgptcodex" (ChatGPT Codex CLI, サブスク内), "anthropic" (Anthropic API, 課金), "openai" (OpenAI API, 課金), "lmstudio" (ローカル LLM, 課金なし)。
+例: $ClaudeModel = {"claudecode", "claude-opus-4-8"}
+
+### $ClaudeAdvisaryModel
+型: String | {String, String}, 初期値: "chatgptcodex"
+仕様レビュー Orchestrator ワークフローでの Codex (アドバイザリ) ロールに使用するモデル/プロバイダ。Claude Code ロールは $ClaudeModel を使用する。
 
 ### $ClaudeStandardFont
 型: String, 初期値: "Yu Gothic UI"
-ClaudeEval が生成する出力コード (Grid / Column / Style / Button 等) で統一的に使用される標準フォント名。プロンプトに埋め込まれ FontFamily 指定を強制する。ロード後に任意のフォント名を代入して変更可能。
+ClaudeEval が生成する出力コード (Grid/Column/Style/Button 等) で統一使用するフォント名。プロンプトに埋め込まれ FontFamily 指定を強制する。ロード後に任意のフォント名に変更可能。
+
+### $ClaudePrivateModel
+型: {String, String} | {String, String, String}, 初期値: 未設定
+機密データ処理用ローカルモデル指定。AutoPrivate -> True 時に機密変数を含むタスクで使用される。
+例: $ClaudePrivateModel = {"lmstudio", "openai/gpt-oss-20b", "http://127.0.0.1:1234"}
 
 ### $ClaudeTimeout
-型: Number, 初期値: 1200
-ClaudeQuery・ClaudeEval 等のタイムアウト秒数。
+型: Integer, 初期値: 1200
+ClaudeQuery/ClaudeEval 等のデフォルトタイムアウト秒数。
 
 ### $ClaudeVerbose
 型: Boolean, 初期値: False
-True: 履歴コンパクション等の詳細ログを Messages に出力する。False: 重大エラー以外の ClaudeCode ログを抑制する。
+True で履歴コンパクション等の詳細ログを Messages に出力する。
 
 ### $ClaudeWorkingDirectory
 型: String, 初期値: FileNameJoin[{$HomeDirectory, "Claude Working"}]
-Claude Code を起動する作業ディレクトリ。配下の `.claude/CLAUDE.md` / `.claude/rules/` / `.claude/skills/` を Claude Code に読ませる。
+Claude Code CLI の作業ディレクトリ。配下の .claude/CLAUDE.md, .claude/rules/, .claude/skills/ を Claude Code が参照する。
 
 ### $OpenaiWorkingDirectory
 型: String, 初期値: FileNameJoin[{$HomeDirectory, "OpenAI Working"}]
-OpenAI 系 CLI を起動する作業ディレクトリ。
+OpenAI/ChatGPT Codex CLI の作業ディレクトリ。
 
 ### $ClaudeMDPath
 型: String, 初期値: ""
-読み込まれる CLAUDE.md のパス。自動検索されるか手動で上書き設定できる。
+読み込まれる CLAUDE.md のパス。自動検索または手動上書き可能。
 
 ### $ClaudeMDContent
 型: String, 初期値: ""
-読み込まれた CLAUDE.md の内容。空の場合は CLAUDE.md が見つからないか内容がない。
-
-### $ClaudeAccessibleDirs
-型: List, 初期値: {$packageDirectory}
-Claude Code に Read 許可する追加ディレクトリリスト。`iPrepareClaudeProjectDirectory` が一時的に settings.json に注入する。ノートブックの TaggingRules に `NBSetAccessibleDirs` で永続化も可能。NotebookDirectory は初回使用時にダイアログで許可確認する（$packageDirectory 配下を除く）。
-
-### $ClaudeFallbackModels
-型: List, 初期値: {{"chatgptcodex","gpt-5.5"},{"anthropic",$iModelOpus},{"openai","gpt-5.5"}}
-フォールバックモデル優先順位リスト。各要素は `{"provider", "modelName"}` または `{"provider", "modelName", "url"}` の形式。内部的に `NBAccess\`NBSetFallbackModels` に同期される。
-
-### $ClaudePrivateModel
-型: List
-秘密データ処理用のローカルモデル指定。`AutoPrivate -> True` 時に秘密変数を含むタスクの生成コードに使用される。形式: `{"lmstudio", "modelName", "http://127.0.0.1:1234"}`
+読み込まれた CLAUDE.md の内容。空の場合は CLAUDE.md が見つからないか内容が空。
 
 ### $ClaudeSnapshots
 型: String, 初期値: FileNameJoin[{$ClaudeWorkingDirectory, "snapshots"}]
 LLMGraphDAG スナップショットの保存ディレクトリ。
 
-### $ClaudeTestModel
-型: String | List, 初期値: $ClaudeModel
-分離検証 (ClaudeCheckSeparation) 用モデル。
+### $ClaudeAccessibleDirs
+型: {String...}, 初期値: {$packageDirectory}
+Claude Code に Read 許可する追加ディレクトリリスト。iPrepareClaudeProjectDirectory が一時的に settings.json に注入する。ノートブックの TaggingRules に NBSetAccessibleDirs で永続化も可能。NotebookDirectory は初回使用時にダイアログで許可確認される ($packageDirectory 配下を除く)。
+
+### $ClaudeFallbackModels
+型: {{String...}...}, 初期値: {{"chatgptcodex","gpt-5.5"},{"anthropic","claude-opus-4-8"},{"openai","gpt-5.5"}}
+フォールバックモデル優先順位リスト。各要素は {provider, modelName} または {provider, modelName, url}。内部的に NBAccess`NBSetFallbackModels に同期される。
 
 ### $ClaudeDocModel
-型: String | List, 初期値: $iModelSonnet (最新 Sonnet)
-ドキュメント生成・更新時に使用するモデル。`""` で $ClaudeModel と同じモデルを使用。旧来のモデル ID が残っている場合も自動更新される。
+型: {String, String} | String, 初期値: {"claudecode", "claude-sonnet-4-6"}
+ドキュメント生成/更新時に使用するモデル。"" で $ClaudeModel と同じモデルを使用。
 
 ### $ClaudeDocRetryDelay
-型: Number, 初期値: 60
+型: Numeric, 初期値: 60
 ドキュメント生成のリトライ待機秒数。
 
 ### $ClaudeDocMaxRetries
@@ -75,49 +603,93 @@ LLMGraphDAG スナップショットの保存ディレクトリ。
 
 ### $ClaudeDocMaxChunkChars
 型: Integer, 初期値: 60000
-プロンプト中ソースの最大文字数。
+プロンプト中ソースコードの最大文字数。
+
+### $ClaudeDocUpdateStaleSeconds
+型: Numeric, 初期値: 1800
+ドキュメント更新チェーン多重起動ガードのタイムスタンプ有効期限 (秒)。この時間を超えると stale とみなしロックを自動解放する。
 
 ### $ClaudeEvalMaxDepth
 型: Integer, 初期値: 5
-ClaudeEval が再帰的に ClaudeEval を生成する際の最大深度。0 で再帰禁止。大きくすると多段階の自動タスク連鎖が可能。
+ClaudeEval が再帰的に ClaudeEval を生成する際の最大深度。0 で再帰禁止。大きくすると多段階自動タスク連鎖が可能。
+
+### $ClaudeEvalMode
+型: String | Automatic, 初期値: Automatic
+ClaudeEval の評価モード。
+
+### $ClaudeEvalHook
+型: Function | None, 初期値: None
+ClaudeEval 実行前に呼ばれるフック関数。
+
+### $ClaudeEvalAutoThreshold
+型: Integer
+ClaudeEval の自動評価閾値 (文字数)。
+
+### $ClaudeEvalVerbose
+型: Boolean, 初期値: False
+ClaudeEval の詳細ログ出力フラグ。
+
+### $ClaudeEvalAutoLLMMinLength
+型: Integer
+自然言語自動 LLM 判定の最小テキスト長。
+
+### $ClaudeEvalAutoLLMMinNewlines
+型: Integer
+自然言語自動 LLM 判定の最小改行数。
+
+### $ClaudeEvalNaturalDispatch
+型: Boolean
+自然言語ディスパッチ有効化フラグ。
+
+### $ClaudeEvalNaturalVerbose
+型: Boolean
+自然言語ディスパッチの詳細ログフラグ。
+
+### $ClaudeEvalNotebookContext
+型: Boolean | Automatic
+ClaudeEval でノートブックコンテキストを含めるか。
+
+### $ClaudeEvalLastProposedExprString
+型: String
+最後に提案されたコード文字列。デバッグ用。
 
 ### $ClaudePackageKeywordMap
-型: Association
-外部パッケージがキーワードを登録するための Association。プロンプトにキーワードが含まれると対応パッケージの api.md がコンテキストに自動注入される。各パッケージが自身のロード時に登録する。claudecode.wl 側はパッケージ非依存。
-例: `$ClaudePackageKeywordMap["maildb"] = {"メール", "mail", "〒切"};`
+型: Association, 初期値: <||>
+外部パッケージがキーワードを登録する Association。プロンプトにキーワードが含まれると対応パッケージの api.md がコンテキストに自動注入される。claudecode.wl 自体はパッケージ非依存。各パッケージが自身のロード時に登録する。
+例: $ClaudePackageKeywordMap["maildb"] = {"メール", "mail", "受信"}
 
 ### $ClaudePackageAuxKeywordMap
-型: Association
-補助 `api_<aux>.md` の注入条件を登録する Association。形式: `<|pkg -> <|aux -> {キーワード...}|>|>`。キーワードが task に含まれると登録済み aux の `api_<aux>.md` が注入される。未登録の補助 api は従来どおり常に注入される（後方互換）。
-例: `$ClaudePackageAuxKeywordMap["SourceVault"] = <|"eagle" -> {"Eagle", "Exif"}|>;`
+型: Association, 初期値: <||>
+補助 api_<aux>.md の注入条件を登録する Association。形式: <|pkg -> <|aux -> {キーワード...}|>|>。キーワードが task に含まれると aux の api_<aux>.md が注入される。未登録の補助 api は従来通り常に注入される (後方互換)。
+例: $ClaudePackageAuxKeywordMap["SourceVault"] = <|"eagle" -> {"Eagle", "Exif"}|>
 
 ### $ClaudePaletteServiceControls
-型: List (Association のリスト), 初期値: {}
-ShowClaudePalette のプライバシーセクション直下に表示される開始/停止サービストグルのレジストリ。外部パッケージが登録する。各エントリ形式: `<|"Id"->..., "RunningQ"->(Function[]->True|False|Missing), "Start"->Function[], "Stop"->Function[], "RunningLabel"->..., "StoppedLabel"->..., "UnknownLabel"->..., "RunningColor"->...(opt), "StoppedColor"->...(opt)|>`。ラベルは RunningQ の状態に追従する。
+型: {Association...}, 初期値: {}
+ShowClaudePalette の Privacy セクション直下に表示される start/stop サービストグルのレジストリ。外部パッケージが ClaudeRegisterPaletteServiceControl で登録する。claudecode.wl 自体はパッケージ中立。
 
 ### $LLMGraphMaxConcurrency
 型: Integer
-LLMGraph の最大並列実行数。
+LLM グラフの最大並行実行数。
 
 ### $LLMGraphAutoStopThreshold
 型: Integer
-LLMGraph の自動停止閾値（エラーノード数）。
+LLM グラフの自動停止閾値 (エラー数)。
 
 ### $ClaudeRoutingProviders
-型: List
-ルーティングプロバイダリスト。
+型: {String...}
+ルーティング対象プロバイダリスト。
 
 ### $UseClaudeRuntime
-型: Boolean
-ClaudeRuntime を使用するかどうかのフラグ。
+型: Boolean, 初期値: False
+ClaudeRuntime 経由での評価を有効にするフラグ。
 
 ### $ClaudeLastRuntimeId
-型: String
-最後に起動した ClaudeRuntime の ID。
+型: String | None
+最後に使用したランタイム ID。
 
 ### $ClaudeRuntimeAsyncExecution
 型: Boolean
-Phase 32: コード実行を非同期化 (ParallelSubmit) するフラグ。
+ランタイムの非同期実行 (ParallelSubmit) 有効化フラグ (Phase 32)。
 
 ### $ClaudeRuntimeAsyncForce
 型: Boolean
@@ -125,11 +697,29 @@ Phase 32: コード実行を非同期化 (ParallelSubmit) するフラグ。
 
 ### $ClaudeRuntimeAsyncSuppressInputEval
 型: Boolean
-非同期実行時に入力セル評価を抑制するフラグ。
+非同期実行時の入力評価抑制フラグ。
 
-### $ClaudePriorityModeUntil
-型: Number
-高優先モードの終了時刻 (AbsoluteTime 値)。
+### $claudecodeVersion
+型: String
+パッケージのバージョン文字列。
+
+### $ClaudeEditModesVersion
+型: String
+編集モードモジュール (claudecode_editmodes.wl) のバージョン文字列。
+
+### $ClaudeEditModeAppendTagOpen
+型: String
+追記モードの開始タグ文字列。
+
+### $ClaudeEditModeAppendTagClose
+型: String
+追記モードの終了タグ文字列。
+
+### $ClaudeEditModeInsertTagClose
+型: String
+挿入モードの終了タグ文字列。
+
+## ChatGPT Codex 統合
 
 ### $ChatgptCodexExe
 型: String
@@ -137,669 +727,139 @@ ChatGPT Codex CLI の実行ファイルパス。
 
 ### $ChatgptWorkingDirectory
 型: String
-ChatGPT Codex を起動する作業ディレクトリ。
+ChatGPT Codex CLI の作業ディレクトリ ($OpenaiWorkingDirectory と同値)。
 
 ### $ChatgptAccessibleDirs
-型: List
-ChatGPT Codex に Read 許可する追加ディレクトリリスト。
+型: {String...}
+ChatGPT Codex CLI に許可する追加ディレクトリリスト。
 
 ### $ChatgptCodexHomeDirectory
 型: String
-ChatGPT Codex のホームディレクトリ。
+ChatGPT Codex CLI のホームディレクトリ。
 
 ### $ChatgptCodexPermissionProfile
 型: String
-ChatGPT Codex のパーミッションプロファイル。
+Codex の権限プロファイル名。
 
 ### $ChatgptCodexApprovalPolicy
 型: String
-ChatGPT Codex の承認ポリシー。
+Codex の承認ポリシー ("auto" | "confirm" 等)。
 
 ### $ChatgptCodexModel
-型: String | Automatic
-ChatGPT Codex に渡すモデル名。Automatic でデフォルトモデルを使用。
+型: String | Automatic, 初期値: Automatic
+Codex CLI が使用するモデル名。Automatic で CLI 既定モデルを使用。パレットで "chatgptcodex" プロバイダ選択時に $iPaletteModelName と同期される。
 
 ### $ChatgptCodexHarnessMode
 型: String
-ChatGPT Codex のハーネスモード。
+Codex CLI ハーネスモード。
 
 ### $ChatgptCodexRetainTempProjects
 型: Boolean
-一時プロジェクトを保持するかどうかのフラグ。
+一時プロジェクトを保持するか。
 
 ### $ChatgptCodexSourceExposureMode
 型: String
-ソースコード露出モード。
+ソースコードの Codex への公開モード。
 
 ### $ClaudeCLIHarnessMode
 型: String
-Claude CLI のハーネスモード（Phase 4: CLI ハーネスマテリアライゼーション）。
+Claude CLI ハーネスモード (Phase 4)。
 
-### $ClaudeEditModesVersion
-型: String
-ClaudeEditModes のバージョン文字列。
-
-### $ClaudeEditModeAppendTagOpen
-型: String
-追記ブロックモードの開始タグ。
-
-### $ClaudeEditModeAppendTagClose
-型: String
-追記ブロックモードの終了タグ。
-
-### $ClaudeEditModeInsertTagClose
-型: String
-挿入モードの終了タグ。
-
-## クエリ関数
-
-### ClaudeQuery[task, opts]
-LLM にタスクを投げて文字列応答を返す（同期、進捗表示あり）。
-→ String
-Options: Model -> $ClaudeModel (使用モデル), Timeout -> $ClaudeTimeout, Fallback -> False, AutoPrivate -> False, WebSearch -> False, WebFetch -> False, Integrations -> Automatic, PrivacySpec -> Automatic, NonBlocking -> False
-
-### ClaudeQuerySync[task, opts]
-フロントエンドをブロックして応答を待つ同期クエリ。
-→ String
-Options: ClaudeQuery と同じ
-
-### ClaudeQueryBg[task, opts]
-バックグラウンドで LLM クエリを実行し、完了時にノートブックセルに書き込む。multimodal 対応: `{prompt, image}` リスト形式で Image オブジェクトを渡せる（claudecode プロバイダでは tmp PNG 経由で CLI にリダイレクト）。
-→ TaskObject | Null
-Options: Model -> $ClaudeModel, Timeout -> $ClaudeTimeout, NonBlocking -> False, Fallback -> False, AutoPrivate -> False, WebSearch -> False, WebFetch -> False
-
-### ClaudeQueryAsync[task, opts]
-非同期でクエリを実行し、進捗をリアルタイム表示する。
-→ Null
-
-### ClaudeQueryAsyncSilent[task, opts]
-非同期クエリ（進捗表示なし）。
-→ Null
-
-### ClaudeEval[task, opts]
-LLM にコードを生成させてノートブック上で評価・実行する主力関数。`$ClaudeEvalMaxDepth` で再帰深度を制御する。`$iClaudeEvalCurrentDepth` で現在の再帰深度を追跡。
-→ Null
-Options: Model -> $ClaudeModel, Timeout -> $ClaudeTimeout, Fallback -> False, AutoPrivate -> False, AutoEvaluate -> True, AutoCellize -> True, WebSearch -> False, WebFetch -> False, PrivacySpec -> Automatic, OutputMode -> Automatic
-
-### ContinueEval[opts]
-直前の ClaudeEval の続きを実行する。
-→ Null
-Options: ClaudeEval と同じ
-
-### ContinueUpdate[opts]
-直前のタスクに対して更新指示を行う。
-→ Null
-
-### ClaudeMath[expr, opts]
-数式・計算タスクに特化したクエリ。
-→ String | Expression
-
-### ClaudeExtractCode[response]
-LLM 応答文字列からコードブロックを抽出する。
-→ String
-
-### ClaudeExtractAllCode[response]
-LLM 応答文字列から全コードブロックをリストで返す。
-→ List
-
-### ClaudeSpec[task]
-ノートブック内容からプログラムの仕様を生成する。`{task, image, ...}` リスト形式で画像付き仕様生成も可能。パレットからはセル選択で呼び出し可能。
-→ Null
-
-### ClaudeDebug[task, opts]
-エラー情報・変数状態をコンテキストに含めてデバッグ支援クエリを送る。
-→ Null
-
-### ClaudeReview[task, opts]
-コードレビュー専用クエリ。
-→ Null
-Options: TargetFiles -> Automatic, TargetFunctions -> Automatic, Baseline -> None, Model -> $ClaudeModel
-
-### ClaudeReviewChunked[task, opts]
-大きなファイルをチャンク分割してレビューする。
-→ Null
-
-### ClaudeWriteResponse[text, nb]
-LLM 応答テキストをノートブックの出力セルに書き込む。
-→ Null
-
-### ClaudeEnsureSilentNotebook[]
-サイレント出力用ノートブックを確保して返す。
-→ NotebookObject
-
-### cleanOutput[str]
-LLM 出力の不要文字を除去して整形する。
-→ String
-
-### stripANSI[str]
-ANSI エスケープシーケンスを除去する。
-→ String
-
-## セッション管理
-
-### CreateClaudeSession[name, opts]
-名前付きセッションを新規作成する。
-→ Association
-Options: Inherit -> None (継承元セッション名)
-
-### ClaudeRestoreSession[name]
-保存済みセッションを復元する。
-→ Association | $Failed
-
-### ClaudeListSessions[]
-保存済みセッションの一覧を返す。
-→ List
-
-### ClaudeDeleteSession[name]
-セッションを削除する。
-→ Null
-
-### ClaudeShowHistory[opts]
-現在のセッション履歴をノートブックに表示する。
-→ Null
-
-### ClaudeHistorySize[]
-現在の履歴サイズ（トークン数概算）を返す。
-→ Integer
-
-### ClaudeCompactHistory[opts]
-履歴を要約してコンパクト化する。
-→ Null
-
-### ClaudeSessionStatus[]
-現在のセッション状態をノートブックに表示する。
-→ Null
-
-### ClaudeQueryShowContext[]
-次のクエリで送信されるコンテキスト全体を表示する。
-→ String
-
-### ClaudeShowAccessConfig[]
-アクセス設定（許可ディレクトリ・プライバシー設定等）を表示する。
-→ Null
-
-## 添付ファイル管理
-
-### ClaudeAttach[files]
-ファイルまたは URL をセッションに添付する。
-→ List
-
-### ClaudeDetach[spec]
-添付ファイルをセッションから取り外す。
-→ Null
-
-### ClaudeAttachments[]
-現在の添付ファイル一覧を返す。
-→ List
-
-### ClearAttachments[]
-全添付ファイルをクリアする。
-→ Null
-
-## レートリミット管理
-
-### ClaudeRateLimitStatus[]
-レートリミット状態を返す。
-→ Association
-
-### ClaudeRateLimitClear[]
-レートリミットカウンタをリセットする。
-→ Null
-
-## プライバシー管理
-
-### MarkConfidential[expr]
-式を機密情報としてマークする。
-→ Confidential[expr]
-
-### UnmarkConfidential[expr]
-機密マークを解除する。
-→ expr
-
-### IsConfidential[expr]
-式が機密マークされているか判定する。
-→ True | False
-
-### ScanConfidentialCells[nb]
-ノートブック内の機密セルをスキャンしてリストを返す。
-→ List
-
-## Web 操作
-
-### ClaudeWebSearch[query, opts]
-Claude Code CLI 経由で Web 検索を実行する。
-→ String
-
-### ClaudeWebFetch[url, opts]
-Claude Code CLI 経由で URL の内容を取得する。
-→ String
-
-### WebSearch[query, opts]
-汎用 Web 検索ラッパー。
-→ String
-
-### WebFetch[url, opts]
-汎用 Web フェッチラッパー。
-→ String
-
-## コマンド・ユーティリティ
-
-### ClaudeCommand[cmd, opts]
-Claude Code CLI に任意のコマンドを送信する。
-→ String
-
-### ClaudeStatus[]
-現在の Claude Code 接続状態を表示する。
-→ Null
-
-### ClaudeAbort[]
-実行中のクエリを中断する。
-→ Null
-
-### ClaudeCheckSeparation[opts]
-パッケージの Public/Private シンボル分離状態を検証する。結果は `$iSeparationCheckCache` にキャッシュされ ClaudeFixSeparation で再利用される。
-→ Association
-Options: Model -> $ClaudeTestModel
-
-### ClaudeFixSeparation[opts]
-ClaudeCheckSeparation の結果を基にパッケージの分離問題を修正する。
-→ Null
-
-## コミット支援
-
-### ClaudePrepareCommit[opts]
-変更差分から Git コミットメッセージを生成する。
-→ String
-Options: Owner -> Automatic, Repository -> Automatic, Branch -> Automatic, DryRun -> False
-
-## ドキュメント生成
-
-### ClaudeCreateDocumentation[packageName, opts]
-パッケージの README.md・api.md 等のドキュメントを新規生成する。
-→ Null
-Options: Model -> $ClaudeDocModel, Title -> Automatic, Keywords -> {}, References -> {} (参考文献 URL/書籍名リスト), Demos -> {} (デモ URL リスト), Disclaimer -> {} (免責文言リスト), Acknowledgments -> {} (謝辞文言リスト), License -> "" (ライセンス), Owner -> Automatic, Repository -> Automatic, Branch -> "main", BaseBranch -> "main", Refetch -> False
-
-### ClaudeUpdateDocumentation[packageName, opts]
-既存ドキュメントを更新する。多重起動をタイムスタンプ方式で防止（`$ClaudeDocUpdateStaleSeconds` 秒超で自動解放）。
-→ Null
-Options: ClaudeCreateDocumentation と同じ
-
-## ディレクティブ管理
-
-### ClaudeAddDirective[name, content]
-CLAUDE.md に新規ディレクティブを追加する。
-→ Null
-
-### ClaudeRestoreDirective[name]
-バックアップからディレクティブを復元する。
-→ Null
-
-### ClaudeListDirectives[]
-登録済みディレクティブの一覧を返す。
-→ List
-
-### ClaudeUpdateDirective[name, content]
-既存ディレクティブを更新する。
-→ Null
-
-### ClaudeDirectiveBackupDataset[]
-ディレクティブのバックアップデータセットを返す。
-→ Dataset
-
-### ClaudeSyncDirectives[]
-ディレクティブを同期する。
-→ Null
-
-## ファイル処理
-
-### NBFileTranslate[file, opts]
-ノートブックファイルの翻訳・変換を行う。
-→ Null
-
-### ClaudeProcessFile[file, task, opts]
-指定ファイルに対してタスクを実行する。
-→ Null
-
-## パレット
-
-### ShowClaudePalette[]
-Claude Code 操作パレットを表示する。Provider ボタン（claudecode → chatgptcodex → anthropic → openai → lmstudio の順に循環）と Model ボタン（現プロバイダの候補列を循環）の 2 ボタン構成。$iPaletteProvider / $iPaletteModelName がリアルタイムで $ClaudeModel に同期される。
-→ Null
-
-### ClaudeRegisterPaletteServiceControl[spec]
-ShowClaudePalette のプライバシーセクション直下に表示される開始/停止トグルを登録する。同じ Id を再登録すると置換される。登録後は `ShowClaudePalette[]` を再実行して反映する。
-→ String (Id)
-
-### ClaudeUnregisterPaletteServiceControl[id]
-パレットサービストグルを Id で削除する。
-→ Null
-
-## LLMGraph (ノートブックグラフ)
-
-### NotebookLLMGraph[nb, opts]
-ノートブックの LLM グラフを取得または生成する。
-→ Association
-
-### NotebookLLMGraphPlot[nb, opts]
-LLM グラフを可視化する。
-→ Graphics
-
-### NotebookLLMGraphBuild[nb, opts]
-LLM グラフを構築する。
-→ Association
-
-### NotebookLLMGraphNodes[nb]
-グラフのノード一覧を返す。
-→ List
-
-### NotebookLLMGraphValidate[nb]
-グラフの整合性を検証する。
-→ Association
-
-### NotebookLLMGraphFetchResponse[node, opts]
-指定ノードの LLM 応答を取得する。
-→ String
-
-### NotebookLLMGraphSubSteps[node]
-ノードのサブステップを返す。
-→ List
-
-### NotebookLLMGraphFetchL2[node, opts]
-L2 レベルの応答を取得する。
-→ String
-
-### NotebookLLMGraphErrors[nb]
-グラフのエラー一覧を返す。
-→ List
-
-### NotebookLLMGraphUpdateL2Status[nb]
-L2 ノードのステータスを更新する。
-→ Null
-
-### NotebookLLMGraphPlotL2[nb, opts]
-L2 グラフを可視化する。
-→ Graphics
-
-### NotebookLLMGraphRerun[node, opts]
-指定ノードを再実行する。
-→ Null
-
-### NotebookLLMGraphInvalidateDownstream[node]
-指定ノードの下流を無効化する。
-→ Null
-
-### NotebookLLMGraphSummary[nb]
-グラフの要約を返す。
-→ Association
-
-### NotebookLLMGraphExtractThread[nb, opts]
-スレッドを抽出する。
-→ List
-
-### NotebookLLMGraphApplyThread[nb, thread, opts]
-スレッドをグラフに適用する。
-→ Null
-
-## LLMGraph 実行
-
-### LLMGraphExecute[graph, opts]
-LLM グラフを実行する。
-→ Association
-
-### LLMGraphExecuteStatus[execId]
-実行ステータスを返す。
-→ Association
-
-### LLMGraphExecuteCancel[execId]
-実行をキャンセルする。
-→ Null
-
-## LLMGraph DAG
-
-### LLMGraphDAGCreate[spec, opts]
-DAG（有向非巡回グラフ）を作成する。
-→ Association
-
-### LLMGraphDAGStatus[dagId]
-DAG の実行ステータスを返す。
-→ Association
-
-### LLMGraphDAGCancel[dagId]
-DAG の実行をキャンセルする。
-→ Null
-
-### LLMGraphDAGStop[dagId]
-DAG の実行を停止する。
-→ Null
-
-### LLMGraphDAGRetry[dagId, opts]
-失敗ノードを再試行する。
-→ Null
-
-### LLMGraphDAGRebuild[dagId, opts]
-DAG を再構築する。
-→ Association
-
-### LLMGraphDAGFindByContext[context]
-コンテキストから DAG を検索する。
-→ Association | $Failed
-
-### LLMGraphDAGInspect[dagId]
-DAG の詳細情報を表示する。
-→ Null
-
-### LLMGraphDAGMarkFailed[dagId, nodeId]
-指定ノードを失敗マークする。
-→ Null
-
-### LLMGraphDAGSnapshot[dagId, opts]
-DAG のスナップショットを `$ClaudeSnapshots` に保存する。
-→ String (スナップショット名)
-
-### LLMGraphDAGRestore[snapshotName]
-スナップショットから DAG を復元する。
-→ Association
-
-### LLMGraphDAGListSnapshots[]
-スナップショット一覧を返す。
-→ List
-
-### LLMGraphDAGPlot[dagId, opts]
-DAG を可視化する。
-→ Graphics
-
-### LLMGraphDAGMergeHistory[dagId1, dagId2]
-2 つの DAG の履歴をマージする。
-→ Association
-
-## ClaudeRuntime
-
-### ClaudeBuildRuntimeAdapter[opts]
-ランタイムアダプタを構築する。返り値の Association に `"DefaultTimeoutSeconds"` キーとして保持される。タイムアウト優先順: `proposal["ExpectedSeconds"]` > `adapter["DefaultTimeoutSeconds"]` > 30 (旧デフォルト)。
-→ Association
-Options: ExecutionTimeoutSeconds -> 30 (デフォルトタイムアウト秒数)
-
-### ClaudeStartRuntime[adapter, opts]
-ランタイムを起動する。
-→ String (ランタイム ID)
-
-### ClaudeEvalViaRuntime[expr, adapter, opts]
-ランタイム経由でコードを実行する。タイムアウト発生時は showLLMCallLog / ClaudeTurnTrace ボタンをセルに追加する。
-→ Expression | $Failed
-
-### ClaudeApproveProposal[proposal]
-LLM が生成した実行提案を承認して実行する。`proposal["ExpectedSeconds"]` が指定されている場合にタイムアウトを動的設定する。
-→ Expression | $Failed
-
-### ClaudeRuntimeSnapshot[runtimeId]
-ランタイム状態のスナップショットを保存する。
-→ String
-
-### ClaudeRuntimeRestore[snapshotName]
-スナップショットからランタイムを復元する。
-→ Association
-
-### ClaudeRuntimeListSnapshots[]
-ランタイムスナップショット一覧を返す。
-→ List
-
-### ClaudeRegisterDAGRuntime[dagId, runtimeId]
-DAG にランタイムを登録する。
-→ Null
-
-## 並列・優先制御
-
-### ClaudeBeginParallelKernels[opts]
-パラレルカーネルを前置起動する（Phase 32k）。
-→ Null
-
-### ClaudeBeginHighPriority[duration]
-指定秒数の間、高優先モードに入る。`$ClaudePriorityModeUntil` を更新する。
-→ Null
-
-### ClaudeEndHighPriority[]
-高優先モードを終了する。
-→ Null
-
-### ClaudeRegisterPollingTick[key, func, interval]
-ポーリングティックを登録する。
-→ Null
-
-### ClaudeUnregisterPollingTick[key]
-ポーリングティックを解除する。
-→ Null
-
-### ClaudePollingTickKeys[]
-登録済みポーリングティックキーの一覧を返す。
-→ List
-
-### ClaudeEnqueueFinalAction[func]
-セッション終了時に実行するアクションをキューに追加する。
-→ Null
-
-## エディットモード (claudecode_editmodes)
-
-### ClaudeAppendBlockToPackage[packageFile, block, tag]
-パッケージファイルに指定ブロックを追記モードで追加する。$ClaudeEditModeAppendTagOpen / Close を使用する。
-→ Null
-
-### ClaudeInsertBeforeAnchorInPackage[packageFile, block, anchor]
-パッケージファイルのアンカー位置の前にブロックを挿入する。$ClaudeEditModeInsertTagClose を使用する。
-→ Null
-
-### ClaudeParseEditModeResponse[response]
-LLM のエディットモード応答をパースして編集操作リストを返す。
-→ List
-
-### ClaudeAutoDetectEditMode[task, opts]
-タスク内容からエディットモードを自動検出する。
-→ String
-
-### ClaudeBuildEditModePromptInstructions[mode]
-指定エディットモード用のプロンプト指示文字列を構築する。
-→ String
-
-### ClaudeUpdatePackageWithMode[packageFile, task, opts]
-エディットモードを使ってパッケージファイルを LLM で更新する。
-→ Null
-Options: Mode -> Automatic, DryRun -> False, TargetFiles -> Automatic, TargetFunctions -> Automatic, Model -> $ClaudeModel
-
-## オプションキー
+## オプション
 
 ### Fallback
-ClaudeQuery / ClaudeEval / ContinueEval のオプション。True: Claude Code 利用不可時にフォールバックモデルに自動切替（アクセスレベルに応じた利用可能モデルのみ）。False (デフォルト): エラーをそのまま返す。
+ClaudeQuery/ClaudeEval/ContinueEval のオプション。True: Claude Code 利用不可時に $ClaudeFallbackModels の優先順でフォールバックモデルに自動切替。アクセスレベルに応じて利用可能なモデルのみにフォールバックする。False (デフォルト): エラーをそのまま返す。
 
 ### AutoPrivate
-ClaudeQuery / ClaudeEval / ContinueEval のオプション。True: 秘密変数にアクセスするタスクの場合、生成コードに `Model -> $ClaudePrivateModel, PrivacySpec -> Automatic` を付与する。False (デフォルト): 通常動作。
-
-### Integrations
-ClaudeQuery / ClaudeQueryAsync のオプション。LM Studio /api/v1/chat の MCP サーバー/プラグインリストを指定する。lmstudio モデル時のみ有効。Automatic (デフォルト): `$ClaudeLMStudioIntegrations` → SourceVault の順で解決。明示リストを渡すとそれが最優先される。
-例: `Integrations -> {"mcp/exa"}`
-
-### References
-ClaudeCreateDocumentation / ClaudeUpdateDocumentation のオプション。URL や書籍名のリストを指定すると README.md に参考文献セクションを追加する。デフォルト: `{}`
-
-### Demos
-ClaudeCreateDocumentation / ClaudeUpdateDocumentation のオプション。デモ動画や使用例の URL リストを指定すると README.md に反映される。デフォルト: `{}`
-
-### Disclaimer
-ClaudeCreateDocumentation / ClaudeUpdateDocumentation のオプション。免責事項セクションに追加する文言リストを指定する。デフォルト: `{}`
-
-### Acknowledgments
-ClaudeCreateDocumentation / ClaudeUpdateDocumentation のオプション。謝辞セクションに追加する文言リストを指定する。指定時は README.md の免責事項の前に配置される。デフォルト: `{}`
-
-### License
-ClaudeCreateDocumentation / ClaudeUpdateDocumentation のオプション。`""` (デフォルト): `GitHubREST\`$GitHubLicenseHolder` が非空なら MIT ライセンスを自動挿入。文字列指定: そのままライセンステキストとして挿入。
-例: `License -> "MIT"`, `License -> "Apache-2.0 License..."`
-
-### Model
-各クエリ・ドキュメント関数のオプション。使用モデルを指定する。String または `{provider, modelName}` タプル。デフォルト: `$ClaudeModel`
-
-### Timeout
-各クエリ関数のオプション。タイムアウト秒数を指定する。デフォルト: `$ClaudeTimeout` (1200)
-
-### NonBlocking
-ClaudeQueryBg のオプション。True: 非ブロッキングモードで実行する。デフォルト: False
-
-### DryRun
-ClaudeUpdatePackageWithMode / ClaudePrepareCommit のオプション。True: 実際の変更を加えずに実行結果をプレビューする。デフォルト: False
-
-### Mode
-ClaudeUpdatePackageWithMode のオプション。エディットモードを指定する。デフォルト: Automatic
-
-### TargetFiles
-ClaudeReview / ClaudeUpdatePackageWithMode のオプション。対象ファイルリストを指定する。デフォルト: Automatic
-
-### TargetFunctions
-ClaudeReview / ClaudeUpdatePackageWithMode のオプション。対象関数リストを指定する。デフォルト: Automatic
+ClaudeQuery/ClaudeEval/ContinueEval のオプション。True: 機密変数にアクセスするタスクの場合、生成コードに Model -> $ClaudePrivateModel, PrivacySpec -> Automatic を付与する。False (デフォルト): 通常動作。
 
 ### AutoEvaluate
-ClaudeEval のオプション。True (デフォルト): 生成コードを自動実行する。
+ClaudeEval のオプション。True (デフォルト): 生成コードを自動評価する。False: コードセルを生成するが評価しない。
 
 ### AutoCellize
-ClaudeEval のオプション。True (デフォルト): 結果をセル化する。
+ClaudeQuery/ClaudeEval のオプション。True: レスポンスを自動的にセル化する。False (デフォルト): 通常出力。
 
-### WebSearch
-クエリ関数のオプション。True: Claude Code CLI の Web 検索ツールを許可する。デフォルト: False
-
-### WebFetch
-クエリ関数のオプション。True: Claude Code CLI の WebFetch ツールを許可する。デフォルト: False
-
-### PrivacySpec
-クエリ関数のオプション。プライバシー仕様を指定する。デフォルト: Automatic
+### Integrations
+ClaudeQuery/ClaudeQueryAsync のオプション。lmstudio モデル使用時のみ有効。LM Studio /api/v1/chat の MCP サーバ/プラグインリストを指定する。Automatic (デフォルト): $ClaudeLMStudioIntegrations → SourceVault の順で解決。明示リストを渡すと最優先される。
+例: Integrations -> {"mcp/exa"}
 
 ### OutputMode
-ClaudeEval のオプション。出力モードを指定する。デフォルト: Automatic
+ClaudeQuery/ClaudeEval のオプション。出力形式を指定する。Automatic (デフォルト): コンテキストに応じて自動選択。
 
-### Keywords
-ClaudeCreateDocumentation のオプション。キーワードリストを指定する。デフォルト: `{}`
-
-### Title
-ClaudeCreateDocumentation のオプション。ドキュメントタイトルを指定する。デフォルト: Automatic
-
-### Refetch
-ドキュメント更新時のオプション。True: 強制再取得する。デフォルト: False
-
-### Owner
-GitHub オーナー名を指定するオプション。デフォルト: Automatic
-
-### Repository
-GitHub リポジトリ名を指定するオプション。デフォルト: Automatic
-
-### Branch
-GitHub ブランチ名を指定するオプション。デフォルト: Automatic
-
-### BaseBranch
-GitHub ベースブランチ名を指定するオプション。デフォルト: "main"
-
-### Baseline
-ClaudeReview のオプション。比較ベースラインを指定する。デフォルト: None
+### PrivacySpec
+ClaudeQuery/ClaudeEval のオプション。Automatic (デフォルト): 機密変数検出時に自動処理。
 
 ### RepeatInterval
-繰り返し実行間隔を指定するオプション（秒）。
+一部クエリ関数のオプション。定期繰り返し実行の間隔秒数を指定する。
 
-### StartTime
-開始時刻を指定するオプション。
+### Model
+ClaudeQuery/ClaudeEval/ClaudeCreateDocumentation 等のオプション。このクエリのみに使用するモデル/プロバイダ tuple を指定する。グローバル $ClaudeModel を上書きする。
+
+### WebSearch
+ClaudeQuery/ClaudeEval のオプション。True: CLI の WebSearch ツール許可フラグを付与する。False (デフォルト)。
+
+### WebFetch
+ClaudeQuery/ClaudeEval のオプション。True: CLI の WebFetch ツール許可フラグを付与する。False (デフォルト)。
+
+### Timeout
+ClaudeQuery/ClaudeEval/ClaudeBuildRuntimeAdapter 等のオプション。タイムアウト秒数。デフォルト $ClaudeTimeout。
+
+### DryRun
+ClaudeAddDirective/ClaudePrepareCommit 等のオプション。True: 実際の変更を行わずに結果をプレビューする。False (デフォルト)。
+
+### Mode
+ClaudeReview/ClaudeUpdatePackageWithMode 等のオプション。動作モードを指定する文字列。
+
+### TargetFiles
+ClaudeReview のオプション。レビュー対象ファイルのリスト。Automatic (デフォルト): 現在のノートブック。
+
+### TargetFunctions
+ClaudeReview のオプション。レビュー対象関数のリスト。All (デフォルト): 全関数。
 
 ### Inherit
-CreateClaudeSession のオプション。継承元セッション名を指定する。デフォルト: None
+CreateClaudeSession のオプション。継承元セッション名。None (デフォルト)。
+
+### References
+ClaudeCreateDocumentation/ClaudeUpdateDocumentation のオプション。README.md に追加する参考文献 (URL または書籍名) のリスト。
+例: References -> {"https://...", "書籍名"}
+
+### Demos
+ClaudeCreateDocumentation/ClaudeUpdateDocumentation のオプション。README.md に反映するデモ動画/使用例 URL のリスト。
+例: Demos -> {"https://youtu.be/..."}
+
+### Disclaimer
+ClaudeCreateDocumentation/ClaudeUpdateDocumentation のオプション。README.md の免責事項セクションに追加する文言リスト。
+
+### License
+ClaudeCreateDocumentation/ClaudeUpdateDocumentation のオプション。"" (デフォルト): GitHubREST`$GitHubLicenseHolder が非空なら MIT ライセンスを自動挿入。文字列指定: そのままライセンステキストとして挿入。
+例: License -> "MIT"
+
+### Acknowledgments
+ClaudeCreateDocumentation/ClaudeUpdateDocumentation のオプション。README.md の謝辞セクションに追加する文言リスト。免責事項の前に配置される。
+
+### Keywords
+ClaudeAttach のオプション。添付ファイルの検索キーワードリスト。
+
+### Title
+ClaudeAttach のオプション。添付ファイルのタイトル。Automatic (デフォルト): URL またはファイル名から自動生成。
+
+### Refetch
+ClaudeAttach のオプション。True: キャッシュを無視して URL を再取得する。False (デフォルト)。
+
+### Owner
+ClaudePrepareCommit のオプション。GitHub リポジトリオーナー名。
+
+### Repository
+ClaudePrepareCommit のオプション。GitHub リポジトリ名。
+
+### Branch
+ClaudePrepareCommit のオプション。対象ブランチ名。
+
+### BaseBranch
+ClaudePrepareCommit のオプション。比較基準ブランチ名。デフォルト "main"。
+
+### Baseline
+ClaudePrepareCommit のオプション。差分比較のベースラインコミット。
+
+### StartTime
+一部クエリ関数のオプション。処理開始タイムスタンプを指定する。

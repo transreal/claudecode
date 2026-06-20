@@ -35,6 +35,7 @@
 
 - まず対象ファイルとその周辺依存を読んでから編集する。
 - 公開シンボル・ノートブック UX・既存ワークフローを壊さない最小差分を優先する。
+- Claude Code / ChatGPT Codex はローカル tool を起動できても、モデル本体への送信先は cloud/remote LLM として扱う。ローカル実行権限とモデルへのデータ release 権限を混同してはならない。Notebook cell 本文、mail body、Eagle/PDF 原文など privacy が 0.5 以上のデータを Claude Code / Codex の model context に送ってはならず、返却は cloud-safe な metadata / summary / referencesOnly / redacted projection に限定する。高 privacy データを扱う必要がある場合は、NBAccess の authorization のもとで local/private LLM または main kernel 側で処理し、cloud-safe projection だけを返す。
 
 ## ディレクティブ構造
 
