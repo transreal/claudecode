@@ -28,7 +28,7 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 **LM Studio の主モデル利用と MCP ツール連携**: `$ClaudeModel` に LM Studio のエンドポイントを直接指定することで、すべての ClaudeEval/ClaudeQuery を LM Studio 経由で実行できます。さらに `$ClaudeLMStudioIntegrations` に MCP サーバー ID を指定すると、LM Studio がサーバー側で tool-call を自動実行し、Web 検索等の MCP ツールをローカル LLM から呼び出せます。これにより、プライバシーを優先しながら外部ツール統合を実現できます。
 
-**ChatGPT Codex CLI の provider 利用**: Claude Code CLI に加えて、OpenAI の ChatGPT Codex CLI を provider として利用できます。`$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定すると、ClaudeEval/ClaudeQuery が Codex CLI 経由で実行されます。Codex provider は Claude CLI と同じ非同期実行経路で動作し、Codex 実行ごとに一時的な作業ディレクトリと CODEX_HOME を作成して `codex login` の認証情報を引き継ぎます。Codex のモデル名は SourceVault のモデルレジストリが一元管理し、具体的な LLM モデル ID をパッケージソースに直書きしない設計を採っています。
+**ChatGPT Codex CLI の provider 利用**: Claude Code CLI に加えて、OpenAI の ChatGPT Codex CLI を provider として利用できます。`$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定すると、ClaudeEval/ClaudeQuery が Codex CLI 経由で実行されます。Codex provider は Claude CLI と同じ非同期実行経路で動作し、Codex 実行ごとに一時的な作業ディレクトリと CODEX_HOME を作成して `codex login` の認証情報を引き継ぎます。Codex のモデル名は SourceVault のモデルレジストリが一元管理し、具体的な LLM モデル ID をパッケージソースに直書きしない設計を採っています。**仕様レビュー合意ワークフロー**では `$ClaudeAdvisaryModel`（既定: `{"chatgptcodex", "Automatic"}`）が Codex アドバイザリーロールのモデルとして使用されます。
 
 パッケージ管理機能 (`ClaudeUpdatePackage`, `ClaudeRestorePackage`) では、既存の .wl パッケージを Claude の支援で更新し、差分ベースの自動バックアップにより安全なイテレーションを実現します。バックアップシステムは `SequenceAlignment` ベースの差分保存を採用し、`.cz`（ベースライン）・`.cdiff`（差分）・`.unchanged`（参照）の3形式でストレージ消費を大幅に削減します。差分チェーンの中間ノードを削除する際も依存関係を自動解決し、復元不能になることを防止します。既存の生バックアップは `ClaudeMigrateBackupHistory` で差分形式に一括変換できます。コード生成・マージ後には検証テストが自動生成・実行され（`===BEGIN_TESTS===` ～ `===END_TESTS===` ブロック）、意図した変更が正しく反映されているか確認します。LLM レスポンスは「連続した行のかたまり（セグメント）」単位でマージされるため、マージ精度が大幅に向上しています。`パッケージ名\`関数名` / `パッケージ名\`Private\`内部関数名` のような完全修飾定義も正しく認識されます。
 
@@ -297,7 +297,8 @@ ShowClaudePalette[]
 
 | 変数 | デフォルト | 説明 |
 |------|-----------|------|
-| `$ClaudeModel` | `{"claudecode", "claude-opus-4-7"}` | Claude CLI に渡すモデル名。タプル `{provider, model}` 形式が標準。`{"lmstudio", "モデル名", "http://host:port"}` 形式で LM Studio を主モデルとして直接指定することも可能。`{"chatgptcodex", Automatic}` 形式で ChatGPT Codex CLI を provider として指定することも可能 |
+| `$ClaudeModel` | `{"claudecode", ""}` | Claude CLI に渡すモデル名。タプル `{provider, model}` 形式が標準。`""` で各 CLI のデフォルトモデルを使用。`{"lmstudio", "モデル名", "http://host:port"}` 形式で LM Studio を主モデルとして直接指定することも可能。`{"chatgptcodex", Automatic}` 形式で ChatGPT Codex CLI を provider として指定することも可能 |
+| `$ClaudeAdvisaryModel` | `{"chatgptcodex", "Automatic"}` | 仕様レビュー合意ワークフローにおける Codex アドバイザリーロールのモデル指定。`$ClaudeModel` と同形式 |
 | `$ClaudeStandardFont` | `"Yu Gothic UI"` | ClaudeEval が生成する出力コード（Grid/Column/Style/Button 等）で統一使用されるフォント名。ロード後に任意のフォント名を代入して変更可能 |
 | `$ClaudeTimeout` | `1200` | タイムアウト秒数 |
 | `$ClaudeVerbose` | `False` | `True` で履歴コンパクション等の詳細ログを出力 |
@@ -306,13 +307,13 @@ ShowClaudePalette[]
 | `$ClaudeMDContent` | `""` | 読み込まれた CLAUDE.md の内容。空の場合は未検出または内容なし |
 | `$ClaudeAccessibleDirs` | `{$packageDirectory}` | Claude Code に Read 許可する追加ディレクトリ。パスを見せないことがファイアウォールの本質であり、安易な追加は避けること |
 | `$ClaudeNBDirAccess` | `"list"` | NotebookDirectory のアクセスレベル（`"list"` / `"read"` / `"readwrite"`） |
-| `$ClaudeFallbackModels` | `{{"chatgptcodex","gpt-5.5"},{"anthropic","claude-opus-4-7"},{"openai","gpt-5.5"}}` | フォールバックモデル優先順位。各要素は `{provider, model}` または `{provider, model, url}`。`"lmstudio"` プロバイダーでローカル LLM も指定可能 |
+| `$ClaudeFallbackModels` | `{{"chatgptcodex","gpt-5.5"},{"anthropic","claude-opus-4-8"},{"openai","gpt-5.5"}}` | フォールバックモデル優先順位。各要素は `{provider, model}` または `{provider, model, url}`。`"lmstudio"` プロバイダーでローカル LLM も指定可能 |
 | `$ClaudePrivateModel` | `{}` | 秘密データ処理用のローカルモデル指定 |
 | `$ClaudeLMStudioIntegrations` | `{}` | LM Studio 使用時に有効にする MCP サーバー ID のリスト（例: `{"mcp/exa"}`）。mcp.json に登録済みのサーバーを指定すると、LM Studio がサーバー側で tool-call を自動実行する |
 | `$ClaudeTestModel` | `$ClaudeModel と同じ` | `ClaudeCheckSeparation` 等のテスト用モデル名 |
 | `$ClaudeImageModels` | `{{"openai","gpt-image-1"},{"openai","dall-e-3"}}` | 画像生成モデルのリスト |
 | `$ClaudeTTSModels` | `{{"openai","tts-1-hd"},{"openai","tts-1"}}` | 音声生成モデルのリスト |
-| `$ClaudeDocModel` | `"claude-sonnet-4-6"` | ドキュメント生成・更新時に使用するモデル。`""` で `$ClaudeModel` と同じモデルを使用 |
+| `$ClaudeDocModel` | `{"claudecode", "claude-sonnet-4-6"}` | ドキュメント生成・更新時に使用するモデル。`""` で `$ClaudeModel` と同じモデルを使用。未カスタマイズ時は最新 Sonnet に自動更新される |
 | `$ClaudeDocRetryDelay` | `60` | ドキュメント生成のリトライ待機秒数 |
 | `$ClaudeDocMaxRetries` | `3` | ドキュメント生成の最大リトライ回数 |
 | `$ClaudeDocMaxChunkChars` | `60000` | プロンプト中ソースの最大文字数 |
@@ -512,7 +513,7 @@ ClaudeEval["タスクの説明"]   (* 再び CLI 経由 *)
 ```mathematica
 (* フォールバックモデルにローカルモデルを追加 *)
 $ClaudeFallbackModels = {
-  {"anthropic", "claude-opus-4-7"},
+  {"anthropic", "claude-opus-4-8"},
   {"openai", "gpt-5.5"},
   {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}
 };
@@ -564,7 +565,7 @@ $ClaudeModel = {"chatgptcodex", Automatic}
 ClaudeEval["1 から 100 までの和を求めてください"]
 
 (* provider を Claude Code に戻す *)
-$ClaudeModel = {"claudecode", "claude-opus-4-7"}
+$ClaudeModel = {"claudecode", "claude-opus-4-8"}
 ```
 
 Codex provider は Claude CLI と同じ非同期実行経路で動作します。Codex 実行ごとに一時的な作業ディレクトリと `CODEX_HOME` を作成し、`codex login` の認証情報（`auth.json`）を自動的に引き継いだうえで、`codex exec` をバックグラウンドで起動して結果をポーリングします。実行中にカーネルがブロックされることはありません。

@@ -256,7 +256,31 @@ $ClaudeModel::usage =
   "\:4f8b: $ClaudeModel = \"claude-opus-4-6\"; (* \:30c7\:30d5\:30a9\:30eb\:30c8: \"\" \:306f\:7701\:7565\:6642 Claude Code \:81ea\:8eab\:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb *)";
 
 $ClaudeAdvisaryModel::usage =
-  "$ClaudeAdvisaryModel is the model/provider used for the advisory (Codex) role in the spec review-and-revise orchestrator workflow. The Claude Code role uses $ClaudeModel; the Codex (advisory) role uses $ClaudeAdvisaryModel. Default: \"chatgptcodex\". It may also be a {provider, model} tuple, e.g. {\"chatgptcodex\", \"gpt-5-codex\"}.";
+  "$ClaudeAdvisaryModel is the {provider, model} spec for the advisory (Codex) role in the spec review-and-revise orchestrator workflow, matching the form of $ClaudeModel. The Claude Code role uses $ClaudeModel; the Codex (advisory) role uses $ClaudeAdvisaryModel. Default: {\"chatgptcodex\", \"Automatic\"} (Automatic = the codex CLI default model). Example: {\"chatgptcodex\", \"gpt-5.5\"}. A bare provider string \"chatgptcodex\" is also accepted.";
+
+ClaudeSpecStatus::usage =
+  "ClaudeSpecStatus[] shows the SourceVault spec/consensus drafting status for the current notebook's project (TaggingRule SourceVaultSpecProjectId), or lists running background consensus jobs if there is no notebook project. ClaudeSpecStatus[\"project\"] reports a specific project: spec/review version counts, latest verdict, latest spec sv:// URI, last update time, and whether a background consensus job is still running. Uses only SourceVault (no workflow engine needed).";
+
+ClaudeSpecVersions::usage =
+  "ClaudeSpecVersions[] / ClaudeSpecVersions[\"project\"] lists every recorded spec and review version for the project as a Dataset (columns: Role, Round, Verdict, Seq, CreatedAtUTC, URI). Versions come from the SourceVault pointer chains orch/<project>/spec and orch/<project>/review, written by both the consensus (Codex<->Claude) and single-model spec flows. Only the sv:// URI is shown (the internal ref is never surfaced). ClaudeSpecVersions[\"project\", \"spec\"|\"review\"|\"requirements\"] restricts to one role. Pass a URI from the table to ClaudeSpecText to read that version's body.";
+
+ClaudeSpecText::usage =
+  "ClaudeSpecText[uri] returns the stored Text of a spec/review/requirements version given its sv:// URI (the URI column from ClaudeSpecVersions). Both sv:// forms (sv://snapshot/Class/hex and sv://snapshot/Class:hex) and a raw snapshot:Class:hex ref are accepted; no manual ref conversion is needed.";
+
+ClaudeOpenSourceVaultURI::usage =
+  "ClaudeOpenSourceVaultURI[uri] resolves a sv:// snapshot URI (spec/review/requirements) and opens its stored content in a NEW notebook window (metadata grid + Text body, and Findings for reviews). This is the action behind the clickable sv:// links the spec/consensus flow writes into the notebook. Returns the new NotebookObject, or $Failed if the snapshot cannot be loaded.";
+
+CreateImplementationWorkflow::usage =
+  "CreateImplementationWorkflow[name, approvedSpec] implements an approved design spec AS a codified SVWorkflow_<Name> package under SourceVault_workflows/<name>/, using the spec-impl SourceVault workflow run in a background driver. approvedSpec may be an sv:// URI, a snapshot ref, or raw spec text. The implementer ($ClaudeModel) writes the package and the verifier ($ClaudeAdvisaryModel) checks it against the spec, feeding back until consensus; complex work is split into stages via an auxiliary spec reviewed first. Progress (running model + phase) is shown in the WindowStatusArea; on completion the generated workflow's launch function is registered (session + promptrouter) and a summary is written back to the notebook. Options: \"Notes\", \"ClaudeModel\", \"AdvisaryModel\", \"MaxRounds\", \"Nb\", \"Launch\". Returns a background job id.";
+
+LaunchImplementationWorkflow::usage =
+  "LaunchImplementationWorkflow[name, args] loads the generated codified workflow named name (SourceVault`SourceVaultLoadWorkflow[name]) and invokes its launch entry (WorkflowInfo[\"Launch\"]) with the given args. Returns an association with the launch context, entry, and result. Use this to (re)launch a workflow created by CreateImplementationWorkflow.";
+
+ClaudeImplStatus::usage =
+  "ClaudeImplStatus[] shows the live status of the spec-impl (\:4ed5\:69d8\:5b9f\:88c5) workflow run(s) for the current notebook: current phase, running model, stage, round, message, and the SourceVault artifact/verify chain counts and latest verdict. While a workflow runs the same status also appears automatically in the notebook's window status area. ClaudeImplStatus[\"<workflow>\"] reports a specific workflow (running or finished). Returns a Dataset.";
+
+ClaudeImplMonitor::usage =
+  "ClaudeImplMonitor[] returns a live Dynamic panel (auto-refreshing every ~2s) of ClaudeImplStatus[] for placing in a notebook cell to watch a running spec-impl workflow.";
 
 $ClaudeStandardFont::usage =
   "$ClaudeStandardFont \:306f ClaudeEval \:304c\:751f\:6210\:3059\:308b\:51fa\:529b\:30b3\:30fc\:30c9 (Grid / Column / Style / Button \:7b49) \:3067\n" <>
@@ -1796,7 +1820,7 @@ Begin["`Private`"];(* ==========================================================
    ============================================================ *)
 
 If[!ValueQ[$ClaudeModel], $ClaudeModel = ""];
-If[!ValueQ[$ClaudeAdvisaryModel], $ClaudeAdvisaryModel = "chatgptcodex"];
+If[!ValueQ[$ClaudeAdvisaryModel], $ClaudeAdvisaryModel = {"chatgptcodex", "Automatic"}];
 If[!ValueQ[$ClaudeTimeout], $ClaudeTimeout = 1200];
 If[!ValueQ[$ClaudePrivateModel], $ClaudePrivateModel = {}];
 
@@ -13178,6 +13202,33 @@ ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := Module[{pa
     ]
   ]];
 
+(* spec-generation globals: restored 2026-06-20. These assignments were missing
+   from the live file though referenced by iClaudeSpecImpl (legacy) and by
+   iRunSourceVaultSpecFromCells. Their absence caused StringJoin::string on
+   $claudeSpecPrefix and Sequence@@$specCellOpts failures. *)
+If[! StringQ[$claudeSpecPrefix],
+  $claudeSpecPrefix =
+    "You are an expert software architect and specification writer for Wolfram Language / Mathematica.\n\
+Your task is to analyze the given notebook content or instructions and produce a SPECIFICATION document, NOT executable code.\n\n\
+OUTPUT FORMAT RULES:\n\
+- Write the specification as structured plain text in Japanese.\n\
+- Use numbered sections (1. 2. 3.) and sub-items for organization.\n\
+- Include: \:76ee\:7684, \:5165\:529b/\:51fa\:529b\:306e\:5b9a\:7fa9, \:51e6\:7406\:30d5\:30ed\:30fc\:306e\:6982\:8981, \:30c7\:30fc\:30bf\:69cb\:9020, \:5236\:7d04\:6761\:4ef6/\:524d\:63d0\:6761\:4ef6, \:30a8\:30e9\:30fc\:30cf\:30f3\:30c9\:30ea\:30f3\:30b0\:65b9\:91dd\n\
+- Do NOT produce executable Mathematica code. Instead describe WHAT the program should do, not HOW.\n\
+- Do NOT use markdown bold (**text**) or heading syntax (# ## ###).\n\
+- Do NOT use markdown tables (no |---|).\n\
+- If images are attached, analyze them as part of the specification context.\n\n\
+NOTE: Some cells in the notebook are marked as confidential and excluded. Do NOT ask for confidential data.\n\
+SYMBOL REFERENCE: <<n>> in the prompt refers to a specific symbol in the user's kernel.\n\n"];
+
+If[! ListQ[$specCellOpts],
+  $specCellOpts = {
+    Background -> RGBColor[0.92, 0.92, 1.0],
+    CellFrame -> {{3, 3}, {1, 1}},
+    CellFrameColor -> RGBColor[0.35, 0.3, 0.7],
+    CellDingbat -> Cell["\[FilledDiamond]", FontColor -> RGBColor[0.35, 0.3, 0.7], FontSize -> 14],
+    FontSize -> 12}];
+
 iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :=
   Module[{step, entry, jobId, history, contextPrompt,
           nbFilePath, nbFileCtx = ""},
@@ -20290,7 +20341,984 @@ iRunClaudeQueryFromCells[] :=
 
 (* \:30d1\:30ec\:30c3\:30c8\:304b\:3089\:547c\:3070\:308c\:308b: \:9078\:629e\:30bb\:30eb\:ff08\:306a\:3051\:308c\:3070\:5168\:30bb\:30eb\:ff09\:3067 ClaudeSpec \:3092\:5b9f\:884c
    \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:672b\:5c3e\:306b\:4ed5\:69d8\:30bb\:30eb\:3092\:8ffd\:52a0\:3059\:308b *)
-iRunClaudeSpecFromCells[] :=
+(* ============================================================
+   SourceVault-backed spec generation (palette "Spec" button).
+   When SourceVault is loaded the palette routes here: notebook content
+   is saved as versioned requirements in SourceVault, then $ClaudeModel
+   drafts a spec referencing them (async, FE-safe). The sv:// links and
+   the spec are written back into the notebook. Pressing the button again
+   on the edited notebook produces a version-up spec.
+   ============================================================ *)
+
+iSVSpecAvailableQ[] := Length[DownValues[SourceVault`SourceVaultSaveImmutableSnapshot]] > 0;
+
+(* Project-id slug from a notebook base name. Earlier versions replaced every
+   non-ASCII-alnum char with "_", so an all-Japanese title (e.g.
+   "\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:7d71\:5408\:30a2\:30c3\:30d7\:30c7\:30fc\:30c8") collapsed to "______________" \[LongDash] meaningless.
+   SourceVault pointer/lock paths keep Unicode and only strip filesystem-reserved
+   chars (SourceVault_core iSafeLockName), so we may preserve Unicode letters and
+   digits here. We only fold runs of unsafe chars / whitespace to a single "_". *)
+iSVSpecSanitize[s_String] := Module[{t},
+  t = StringReplace[s, RegularExpression["[^\\p{L}\\p{N}_-]+"] -> "_"];
+  t = StringReplace[t, RegularExpression["_{2,}"] -> "_"];
+  t = StringTrim[t, "_"];
+  If[t === "", "nbspec", t]];
+iSVSpecSanitize[_] := "nbspec";
+
+(* a stored project id is "degenerate" if its base part is only underscores
+   (produced by the old ASCII-only sanitizer on a non-ASCII title). Such ids are
+   regenerated so the meaningful Unicode title is used instead. *)
+iSVSpecProjectIdDegenerateQ[id_String] :=
+  StringMatchQ[id, RegularExpression["_+(-[0-9a-fA-F]{6})?"]];
+iSVSpecProjectIdDegenerateQ[_] := False;
+
+iSVSpecRefToURI[ref_String] := With[{p = StringSplit[ref, ":"]},
+  If[Length[p] >= 3 && p[[1]] === "snapshot", "sv://snapshot/" <> p[[2]] <> "/" <> p[[3]], ref]];
+iSVSpecRefToURI[_] := "<no-ref>";
+
+(* stable per-notebook project id (TaggingRule; survives re-runs and saves) *)
+iSVSpecProjectId[nb_NotebookObject] := Module[{cur, base, id},
+  cur = Quiet @ CurrentValue[nb, {TaggingRules, "SourceVaultSpecProjectId"}];
+  If[StringQ[cur] && cur =!= "" && ! iSVSpecProjectIdDegenerateQ[cur], Return[cur]];
+  base = Quiet @ Check[NotebookFileName[nb], $Failed];
+  id = If[StringQ[base],
+    iSVSpecSanitize[FileBaseName[base]] <> "-" <> StringTake[Hash[base, "SHA256", "HexString"], 6],
+    "nbspec-" <> StringTake[StringReplace[CreateUUID[], "-" -> ""], 10]];
+  Quiet[CurrentValue[nb, {TaggingRules, "SourceVaultSpecProjectId"}] = id];
+  id];
+
+iSVSpecSaveRequirements[project_String, round_Integer, text_String] := Module[{snap},
+  snap = SourceVault`SourceVaultSaveImmutableSnapshot["OrchRequirements", <|
+    "Project" -> project, "Round" -> round, "Role" -> "requirements",
+    "Text" -> text, "CreatedBy" -> "notebook"|>];
+  SourceVault`SourceVaultAtomicUpdatePointer["orch/" <> project <> "/requirements", Lookup[snap, "Ref"]];
+  Lookup[snap, "Ref"]];
+
+iSVSpecSaveSpec[project_String, round_Integer, text_String, reqRef_, parentSpecRef_] := Module[{snap, ref},
+  snap = SourceVault`SourceVaultSaveImmutableSnapshot["OrchSpec", <|
+    "Project" -> project, "Round" -> round, "Role" -> "spec", "Text" -> text,
+    "RequirementsRef" -> reqRef, "ParentSpecRef" -> parentSpecRef, "CreatedBy" -> "claude"|>];
+  ref = Lookup[snap, "Ref"];
+  SourceVault`SourceVaultAtomicUpdatePointer["orch/" <> project <> "/spec", ref];
+  SourceVault`SourceVaultAppendEvent[<|"EventClass" -> "OrchHandoff", "Project" -> project,
+    "Round" -> round, "Role" -> "spec", "From" -> "notebook", "To" -> "claude", "Value" -> ref|>];
+  ref];
+
+iSVSpecPrevSpec[project_String] := Module[{rep, ref, rec},
+  rep = Quiet @ SourceVault`SourceVaultPointerReplay["orch/" <> project <> "/spec"];
+  ref = If[AssociationQ[rep], Lookup[rep, "Value", Missing[]], Missing[]];
+  If[! StringQ[ref], Return[<|"Has" -> False, "Round" -> 0, "Ref" -> "none", "Text" -> ""|>]];
+  rec = Quiet @ SourceVault`SourceVaultLoadImmutableSnapshot[ref];
+  <|"Has" -> True, "Ref" -> ref,
+    "Round" -> If[AssociationQ[rec], Lookup[rec, "Round", 0], 0],
+    "Text" -> If[AssociationQ[rec], Lookup[rec, "Text", ""], ""]|>];
+
+iRunSourceVaultSpecFromCells[] := Module[
+  {nb, cellIndices, collected, items, norm, reqText, project, prev, version,
+   reqRef, prevSpecRef, prevSpecText, prompt, jobId, tag, step},
+  nb = iUserNotebook[];
+  If[Head[nb] =!= NotebookObject, Return[$Failed]];
+  NBAccess`NBInvalidateCellsCache[nb];
+  cellIndices = NBAccess`NBSelectedCellIndices[nb];
+  If[Length[cellIndices] === 0,
+    Module[{nCells = NBAccess`NBCellCount[nb], curIdx = iGetCursorCellIndex[nb]},
+      Which[
+        curIdx > 0, cellIndices = {curIdx},
+        nCells === 0, MessageDialog["No cells in notebook."]; Return[$Failed],
+        True, cellIndices = Range[nCells]]]];
+  collected = iCollectCellContent[nb, cellIndices, False];
+  items = Lookup[collected, "Items", {}];
+  If[Lookup[collected, "Excluded", 0] > 0,
+    MessageDialog[ToString[collected["Excluded"]] <>
+      " confidential/dependency cell(s) were excluded from the prompt."]];
+  norm = iNormalizePrompt[items];
+  reqText = Lookup[norm, "text", ""];
+  If[! StringQ[reqText] || StringTrim[reqText] === "",
+    MessageDialog["No notebook content to use as requirements."]; Return[$Failed]];
+
+  project = iSVSpecProjectId[nb];
+  prev = iSVSpecPrevSpec[project];
+  version = Lookup[prev, "Round", 0] + 1;
+  prevSpecRef = Lookup[prev, "Ref", "none"];
+  prevSpecText = Lookup[prev, "Text", ""];
+  reqRef = iSVSpecSaveRequirements[project, version, reqText];
+
+  prompt = "You are a software architect. From the notebook requirements below, produce a design SPECIFICATION (describe what to build, not executable code) in Markdown.\n\n" <>
+    iLanguageInstruction["general"] <> "\n" <>
+    If[$ClaudeMDContent =!= "", "## Project guidelines (CLAUDE.md)\n\n" <> $ClaudeMDContent <> "\n\n---\n\n", ""] <>
+    If[TrueQ[Lookup[prev, "Has", False]],
+      "This is a VERSION-UP (v" <> ToString[version] <> "). The notebook requirements were edited. " <>
+      "Produce an updated FULL design spec reflecting the changes, keeping what still applies.\n\n" <>
+      "=== Previous spec (v" <> ToString[Lookup[prev, "Round", 0]] <> ") ===\n" <> prevSpecText <> "\n\n",
+      "Produce the initial design spec (v1) from the requirements below.\n\n"] <>
+    "=== Notebook requirements ===\n" <> reqText <>
+    "\n\nOutput ONLY the design spec in Markdown.";
+
+  NBAccess`NBMoveToEnd[nb];
+  tag = iSessionTag[];
+  step = Length[iSessionHistory[nb, tag]];
+  iSessionAppend[nb, tag, <|"step" -> step, "time" -> AbsoluteTime[],
+    "instruction" -> "[SVSpec v" <> ToString[version] <> "] " <> project,
+    "fullPrompt" -> iCompressForHistory[prompt], "cellCount" -> NBAccess`NBCellCount[nb],
+    "response" -> "(processing)", "code" -> ""|>];
+  $currentUseFallback = True;
+  jobId = iBeginJobAtCapturedCell[nb];
+
+  iClaudeQueryAsyncWithProgress[
+    prompt,
+    With[{nb2 = nb, jid = jobId, proj = project, ver = version, rr = reqRef,
+          psr = prevSpecRef, stag = tag},
+      Function[response,
+        Module[{specText, specRef, header},
+          NBAccess`NBJobMoveToAnchor[jid];
+          $iJobActiveNb = nb2;
+          specText = cleanMarkdown @ StringTrim[response];
+          specRef = iSVSpecSaveSpec[proj, ver, specText, rr, psr];
+          header = "SourceVault spec v" <> ToString[ver] <> "  (project: " <> proj <> ")\n" <>
+            "spec:         " <> iSVSpecRefToURI[specRef] <> "\n" <>
+            "requirements: " <> iSVSpecRefToURI[rr] <>
+            If[psr =!= "none", "\nprevious:     " <> iSVSpecRefToURI[psr], ""];
+          NBAccess`NBWriteCell[nb2, Cell[header, "Text", Sequence @@ $specCellOpts,
+            CellTags -> {"sourcevault-spec-link"}]];
+          NBAccess`NBWriteCell[nb2, Cell[specText, "Text", Sequence @@ $specCellOpts,
+            CellTags -> {"sourcevault-spec-output"}]];
+          (* clickable spec URI after the spec, then the version history *)
+          NBAccess`NBWriteCell[nb2, Cell[BoxData @ iSVConsensusURIRowBoxes[iSVSpecRefToURI[specRef], ""],
+            "Output", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-spec-uri"}]];
+          NBAccess`NBWriteCell[nb2, Cell[BoxData @ iSVConsensusProcessBoxes[proj],
+            "Output", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-spec-process"}]];
+          $iJobActiveNb = None;
+          NBAccess`NBEndJob[jid];
+          iSessionUpdateLast[nb2, stag, <|"response" -> response, "code" -> ""|>]
+        ]]],
+    nb, {}, jobId
+  ]];
+
+(* ============================================================
+   Palette consensus flow: when SourceVault AND ClaudeOrchestrator are
+   loaded, the palette runs the full Codex<->Claude review loop
+   (SourceVaultWorkflow`SpecReview`RunSpecReview, loaded on demand via the
+   SourceVault workflow registry) in a background wolframscript driver,
+   polls for the result, and appends the consensus sv:// chain + final spec
+   to the notebook. FE-safe: the multi-minute loop runs off the FE kernel;
+   notebook writes use the $iJobActiveNb guard.
+   ============================================================ *)
+
+If[! ValueQ[$iOrchWolframScript], $iOrchWolframScript = "wolframscript"];
+If[! ValueQ[$iOrchConsensusDriver],
+  $iOrchConsensusDriver = FileNameJoin[{Global`$packageDirectory,
+    "SourceVault_workflows", "spec-review", "palette_driver.wls"}]];
+If[! ValueQ[$iOrchConsensusMaxRounds], $iOrchConsensusMaxRounds = 3];
+If[! ValueQ[$iOrchConsensusMaxTicks], $iOrchConsensusMaxTicks = 280]; (* ~280*3s ~ 14 min *)
+If[! ValueQ[$iOrchConsensusJobs], $iOrchConsensusJobs = <||>];
+If[! ValueQ[$iOrchConsensusPoller], $iOrchConsensusPoller = None];
+
+iSVConsensusAvailableQ[] := iSVSpecAvailableQ[] && MemberQ[$Packages, "ClaudeOrchestrator`"];
+
+iOrchWriteUTF8[p_, s_] := Module[{st = OpenWrite[p, BinaryFormat -> True]},
+  BinaryWrite[st, StringToByteArray[If[StringQ[s], s, ""], "UTF-8"]]; Close[st]];
+
+(* ============================================================
+   Clickable sv:// links + drafting-process tables (shared by the consensus and
+   single-model spec write-backs). A link is a Button whose action calls the
+   PUBLIC ClaudeOpenSourceVaultURI (resolvable at click time), with the URI
+   captured as a literal via With so the box is self-contained.
+   ============================================================ *)
+
+(* open a sv:// snapshot's stored content in a new window *)
+ClaudeOpenSourceVaultURI[uri_String] := Module[{ref, rec, text, findings, metaRows},
+  ref = iSVSpecURIToRef[uri];
+  rec = Quiet @ SourceVault`SourceVaultLoadImmutableSnapshot[ref];
+  If[! AssociationQ[rec],
+    MessageDialog[iL["SourceVault \:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:3092\:8aad\:307f\:8fbc\:3081\:307e\:305b\:3093\:3067\:3057\:305f:\n",
+      "Could not load SourceVault snapshot:\n"] <> uri];
+    Return[$Failed]];
+  text = Lookup[rec, "Text", ""];
+  findings = Lookup[rec, "Findings", ""];
+  metaRows = Select[
+    Join[{"URI" -> uri},
+      (# -> Lookup[rec, #, ""]) & /@ {"Project", "Role", "Round", "Verdict", "CreatedBy",
+        "RequirementsRef", "ParentSpecRef", "TargetSpecRef"}],
+    (Last[#] =!= "" && ! MissingQ[Last[#]]) &];
+  CreateDocument[
+    Flatten[{
+      Cell[uri, "Subsection"],
+      Cell[BoxData @ ToBoxes @ Grid[
+          {Style[First[#], Bold], Last[#]} & /@ metaRows,
+          Alignment -> Left, Frame -> All, FrameStyle -> GrayLevel[0.8]],
+        "Output"],
+      Cell[If[StringQ[text] && text =!= "", text, "(no text)"], "Text"],
+      If[StringQ[findings] && findings =!= "" && findings =!= "[]",
+        {Cell[iL["\:30ec\:30d3\:30e5\:30fc\:6240\:898b (Findings)", "Findings"], "Subsection"],
+         Cell[findings, "Program"]},
+        Nothing]}],
+    WindowTitle -> uri]
+];
+ClaudeOpenSourceVaultURI[_] := $Failed;
+
+(* inline clickable link expression (high level; ToBoxes at the call site) *)
+iSVURILink[uri_String] /; StringStartsQ[uri, "sv://"] := With[{u = uri},
+  Tooltip[
+    Button[
+      Style[u, FontFamily -> "Courier", FontSize -> 10,
+        FontColor -> RGBColor[0.1, 0.2, 0.7]],
+      ClaudeCode`ClaudeOpenSourceVaultURI[u],
+      Appearance -> "Frameless", Method -> "Queued", FrameMargins -> 0,
+      BaseStyle -> {}],
+    iL["\:30af\:30ea\:30c3\:30af\:3067\:65b0\:898f\:30a6\:30a3\:30f3\:30c9\:30a6\:306b\:8868\:793a", "Click to open in a new window"]]];
+iSVURILink[uri_String] := uri;
+iSVURILink[_] := "";
+
+(* one chain table: Seq / Round / Verdict / CreatedAtUTC / clickable URI *)
+iSVProcessTable[rows_List] := If[rows === {},
+  Style[iL["(\:306a\:3057)", "(none)"], Gray, Italic],
+  Grid[
+    Prepend[
+      Function[r, {Lookup[r, "Seq", ""], Lookup[r, "Round", ""], Lookup[r, "Verdict", ""],
+        Lookup[r, "CreatedAtUTC", ""], iSVURILink[Lookup[r, "URI", ""]]}] /@ rows,
+      Style[#, Bold] & /@ {"Seq", "Round", "Verdict", "CreatedAtUTC", "URI"}],
+    Frame -> All, FrameStyle -> GrayLevel[0.8], Alignment -> {Left, Center},
+    Spacings -> {1, 0.6}, Background -> {None, {1 -> GrayLevel[0.9]}}]];
+
+(* boxes: the spec drafting process (spec chain + review chain) for a project *)
+iSVConsensusProcessBoxes[proj_String] := ToBoxes @ Column[{
+    Style[iL["\:4ed5\:69d8\:7b56\:5b9a\:306e\:904e\:7a0b", "Spec drafting process"], Bold, 13],
+    Style[iL["\:63d0\:6848\:3055\:308c\:305f\:4ed5\:69d8 (spec \:30c1\:30a7\:30fc\:30f3)", "Proposed specs (spec chain)"], Bold, 11],
+    iSVProcessTable[iSVSpecVersionRows[proj, "spec"]],
+    Style[iL["\:30ec\:30d3\:30e5\:30fc (review \:30c1\:30a7\:30fc\:30f3)", "Reviews (review chain)"], Bold, 11],
+    iSVProcessTable[iSVSpecVersionRows[proj, "review"]]},
+  Alignment -> Left, Spacings -> 0.8];
+
+(* boxes: approved spec/review URIs as clickable links, shown after the spec *)
+iSVConsensusURIRowBoxes[specURI_String, reviewURI_String] := ToBoxes @ Column[{
+    If[specURI =!= "",
+      Row[{Style[iL["\:627f\:8a8d\:3055\:308c\:305f\:4ed5\:69d8 URI: ", "approved spec URI: "], Bold],
+        iSVURILink[specURI]}], Nothing],
+    If[reviewURI =!= "",
+      Row[{Style[iL["\:627f\:8a8d\:3055\:308c\:305f\:30ec\:30d3\:30e5\:30fc URI: ", "approved review URI: "], Bold],
+        iSVURILink[reviewURI]}], Nothing]},
+  Alignment -> Left, Spacings -> 0.5];
+
+iOrchConsensusWriteBack[jid_, job_, res_] := Module[
+  {nb = job["Nb"], proj = job["Project"], specText, specURI, reviewURI, header},
+  $iJobActiveNb = nb;
+  Quiet @ NBAccess`NBMoveToEnd[nb];
+  If[AssociationQ[res] && Lookup[res, "Status", ""] === "Done",
+    specText = Quiet @ Check[ByteArrayToString[ReadByteArray[job["SpecOut"]], "UTF-8"], ""];
+    specURI = ToString @ Lookup[res, "ApprovedSpecURI", ""];
+    reviewURI = ToString @ Lookup[res, "ApprovedReviewURI", ""];
+    header = "SourceVault consensus spec  (project: " <> proj <> ")\n" <>
+      "final verdict: " <> ToString @ Lookup[res, "FinalStatus", "?"] <>
+      "   rounds: " <> ToString @ Lookup[res, "Rounds", "?"];
+    NBAccess`NBWriteCell[nb, Cell[header, "Text", Sequence @@ $specCellOpts,
+      CellTags -> {"sourcevault-consensus-link"}]];
+    (* the final spec text *)
+    NBAccess`NBWriteCell[nb, Cell[If[StringQ[specText] && specText =!= "", specText, "(no spec text)"],
+      "Text", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-consensus-output"}]];
+    (* approved spec/review URIs as clickable links, right after the spec *)
+    NBAccess`NBWriteCell[nb, Cell[BoxData @ iSVConsensusURIRowBoxes[specURI, reviewURI],
+      "Output", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-consensus-uri"}]];
+    (* the full drafting process (spec/review chains, clickable URIs) *)
+    NBAccess`NBWriteCell[nb, Cell[BoxData @ iSVConsensusProcessBoxes[proj],
+      "Output", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-consensus-process"}]],
+    NBAccess`NBWriteCell[nb, Cell[
+      "SourceVault consensus run did not complete: " <> ToString @ Lookup[res, "Status", "Unknown"] <>
+      " " <> ToString @ Lookup[res, "Error", ""], "Text", Sequence @@ $specCellOpts,
+      CellTags -> {"sourcevault-consensus-error"}]]];
+  $iJobActiveNb = None;
+  Quiet[CurrentValue[nb, WindowStatusArea] = ""];
+];
+
+(* progress (written by the spec-review handlers via the driver) -> status text *)
+iOrchConsensusStatusMsg[prog_Association] := Module[{phase, model, rnd, msg},
+  phase = Lookup[prog, "Phase", "?"];
+  model = Lookup[prog, "Model", ""];
+  rnd = Lookup[prog, "Round", 1];
+  msg = Lookup[prog, "Message", ""];
+  "[spec] " <> ToString[phase] <>
+    If[StringQ[model] && model =!= "", " | model: " <> model, ""] <>
+    If[IntegerQ[rnd] && rnd > 1, " | round " <> ToString[rnd], ""] <>
+    If[StringQ[msg] && msg =!= "", " | " <> msg, ""]];
+iOrchConsensusStatusMsg[_] := "[spec] drafting...";
+
+iOrchConsensusTick[] := (
+  Scan[
+    Function[jid,
+      Module[{job = $iOrchConsensusJobs[jid], res, prog},
+        job["Ticks"] = Lookup[job, "Ticks", 0] + 1;
+        $iOrchConsensusJobs[jid] = job;
+        (* live progress -> WindowStatusArea (running model + phase) *)
+        If[StringQ[Lookup[job, "ProgressFile", None]] && FileExistsQ[job["ProgressFile"]],
+          prog = Quiet @ Check[Get[job["ProgressFile"]], <||>];
+          If[AssociationQ[prog],
+            iSafeSetWindowStatus[job["Nb"], iOrchConsensusStatusMsg[prog]]]];
+        Which[
+          FileExistsQ[job["ResultFile"]],
+            res = Quiet @ Check[Get[job["ResultFile"]], $Failed];
+            Quiet @ iOrchConsensusWriteBack[jid, job, res];
+            $iOrchConsensusJobs = KeyDrop[$iOrchConsensusJobs, jid],
+          job["Ticks"] > $iOrchConsensusMaxTicks,
+            Quiet @ iOrchConsensusWriteBack[jid, job, <|"Status" -> "Timeout"|>];
+            $iOrchConsensusJobs = KeyDrop[$iOrchConsensusJobs, jid]
+        ]]],
+    Keys[$iOrchConsensusJobs]];
+  (* all jobs done -> drop our tick; the shared poller auto-stops when empty *)
+  If[Length[$iOrchConsensusJobs] === 0,
+    Quiet @ ClaudeUnregisterPollingTick["orchConsensus"]]
+);
+
+(* 2026-06-20 fix: use the proven shared polling task (CreateScheduledTask 3s,
+   repeating, FE-safe) via ClaudeRegisterPollingTick, instead of the previous
+   SessionSubmit[ScheduledTask[..., {3}]] which fired only ONCE (before the
+   background driver finished) so the result was never written back. *)
+iOrchConsensusEnsurePoller[] :=
+  Quiet @ ClaudeRegisterPollingTick["orchConsensus", iOrchConsensusTick];
+
+iRunOrchConsensusFromCells[] := Module[
+  {nb, cellIndices, collected, items, norm, reqText, project, prev, version,
+   reqRef, runDir, reqFile, cfgFile, resultFile, specOut, progressFile, advisary, claude, jobId, proc},
+  nb = iUserNotebook[];
+  If[Head[nb] =!= NotebookObject, Return[$Failed]];
+  NBAccess`NBInvalidateCellsCache[nb];
+  cellIndices = NBAccess`NBSelectedCellIndices[nb];
+  If[Length[cellIndices] === 0,
+    Module[{nC = NBAccess`NBCellCount[nb], ci = iGetCursorCellIndex[nb]},
+      Which[ci > 0, cellIndices = {ci},
+        nC === 0, MessageDialog["No cells in notebook."]; Return[$Failed],
+        True, cellIndices = Range[nC]]]];
+  collected = iCollectCellContent[nb, cellIndices, False];
+  items = Lookup[collected, "Items", {}];
+  If[Lookup[collected, "Excluded", 0] > 0,
+    MessageDialog[ToString[collected["Excluded"]] <> " confidential/dependency cell(s) were excluded."]];
+  norm = iNormalizePrompt[items];
+  reqText = Lookup[norm, "text", ""];
+  If[! StringQ[reqText] || StringTrim[reqText] === "",
+    MessageDialog["No notebook content to use as requirements."]; Return[$Failed]];
+  If[! FileExistsQ[$iOrchConsensusDriver],
+    MessageDialog["Consensus driver not found:\n" <> $iOrchConsensusDriver]; Return[$Failed]];
+
+  project = iSVSpecProjectId[nb];
+  prev = iSVSpecPrevSpec[project];
+  version = Lookup[prev, "Round", 0] + 1;
+  reqRef = iSVSpecSaveRequirements[project, version, reqText];
+
+  runDir = FileNameJoin[{$TemporaryDirectory, "orchcons_" <> StringReplace[CreateUUID[], "-" -> ""]}];
+  Quiet @ CreateDirectory[runDir, CreateIntermediateDirectories -> True];
+  reqFile = FileNameJoin[{runDir, "req.txt"}];
+  cfgFile = FileNameJoin[{runDir, "config.wl"}];
+  resultFile = FileNameJoin[{runDir, "result.wl"}];
+  specOut = FileNameJoin[{runDir, "spec.txt"}];
+  progressFile = FileNameJoin[{runDir, "progress.wl"}];
+  iOrchWriteUTF8[reqFile, reqText];
+  advisary = If[ValueQ[$ClaudeAdvisaryModel], $ClaudeAdvisaryModel, {"chatgptcodex", "Automatic"}];
+  claude = If[ValueQ[$ClaudeModel], $ClaudeModel, ""];
+  Put[<|"Project" -> project, "Version" -> version, "RequirementsFile" -> reqFile,
+    "PrevSpecRef" -> Lookup[prev, "Ref", "none"], "AdvisaryModel" -> advisary,
+    "ClaudeModel" -> claude, "MaxRounds" -> $iOrchConsensusMaxRounds,
+    "PackageName" -> Automatic, "ResultFile" -> resultFile, "SpecOutFile" -> specOut,
+    "ProgressFile" -> progressFile,
+    "PackageRoot" -> Global`$packageDirectory, "WorkflowSlug" -> "spec-review",
+    (* propagate the FE kernel's output language to the background driver:
+       the literal $Language (so the wolframscript kernel inherits it) and a
+       ready-made prompt directive built here where iLanguageInstruction lives. *)
+    "Language" -> $Language, "LanguageInstruction" -> iLanguageInstruction["general"]|>, cfgFile];
+
+  NBAccess`NBMoveToEnd[nb];
+  $iJobActiveNb = nb;
+  NBAccess`NBWriteCell[nb, Cell[
+    "SourceVault consensus drafting started (project: " <> project <> ", target v" <> ToString[version] <>
+    "). Codex<->Claude review loop is running in the background; the result will be appended here.",
+    "Text", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-consensus-pending"}]];
+  $iJobActiveNb = None;
+  iSafeSetWindowStatus[nb, "[spec] starting..."];
+
+  proc = StartProcess[{$iOrchWolframScript, "-file", $iOrchConsensusDriver, cfgFile}];
+  jobId = "orchcons-" <> StringReplace[CreateUUID[], "-" -> ""];
+  $iOrchConsensusJobs[jobId] = <|"Nb" -> nb, "ResultFile" -> resultFile, "SpecOut" -> specOut,
+    "ProgressFile" -> progressFile,
+    "Project" -> project, "Version" -> version, "Proc" -> proc, "Ticks" -> 0|>;
+  iOrchConsensusEnsurePoller[];
+  jobId
+];
+
+(* palette spec button: consensus (SourceVault+ClaudeOrchestrator) > single-model (SourceVault) > legacy *)
+iRunClaudeSpecFromCells[] := Which[
+  iSVConsensusAvailableQ[], iRunOrchConsensusFromCells[],
+  iSVSpecAvailableQ[], iRunSourceVaultSpecFromCells[],
+  True, iRunClaudeSpecFromCellsLegacy[]];
+
+(* ============================================================
+   Spec implementation flow (palette "Impl"): implement an APPROVED spec as a
+   codified SVWorkflow_<Name> package via the spec-impl SourceVault workflow,
+   run in a background wolframscript driver. The implementer ($ClaudeModel)
+   writes the package; the verifier ($ClaudeAdvisaryModel) checks it against
+   the spec and feeds back; complex work is split into stages reviewed first.
+   FE-safe: the multi-minute loop runs off the FE kernel; a progress file is
+   polled to update the WindowStatusArea (running model + phase), and the result
+   is written back via the $iJobActiveNb guard. On completion the generated
+   workflow's launch is registered (session + promptrouter).
+   ============================================================ *)
+
+If[! ValueQ[$iSpecImplDriver],
+  $iSpecImplDriver = FileNameJoin[{Global`$packageDirectory,
+    "SourceVault_workflows", "spec-impl", "palette_impl_driver.wls"}]];
+If[! ValueQ[$iSpecImplMaxRounds], $iSpecImplMaxRounds = 3];
+If[! ValueQ[$iSpecImplMaxTicks], $iSpecImplMaxTicks = 600]; (* ~600*3s ~ 30 min *)
+If[! ValueQ[$iSpecImplJobs], $iSpecImplJobs = <||>];
+If[! ValueQ[$iSpecImplLaunchers], $iSpecImplLaunchers = <||>];
+
+iSpecImplAvailableQ[] := iSVSpecAvailableQ[] &&
+  Length[DownValues[SourceVault`SourceVaultLoadWorkflow]] > 0;
+
+(* CamelCase canonical name (mirror of the workflow registry's iSVWFCanonicalSlug) *)
+iSpecImplCanonName[slug_String] := Module[{parts},
+  parts = Select[StringSplit[slug, Except[WordCharacter] ..], # =!= "" &];
+  If[parts === {}, slug, StringJoin[Capitalize /@ parts]]];
+
+(* find the latest APPROVED spec for a project. Prefer the review chain (a
+   consensus review whose Verdict is Approved names the spec it approved via
+   TargetSpecRef); fall back to the latest spec pointer (single-model flow). *)
+iSpecImplApprovedSpec[project_String] := Module[{rh, approved, rec, specRef, rep},
+  rh = With[{h = Quiet @ SourceVault`SourceVaultPointerHistory["orch/" <> project <> "/review"]},
+    If[ListQ[h], h, {}]];
+  approved = Last[
+    Select[rh,
+      Function[ev,
+        With[{r = Quiet @ SourceVault`SourceVaultLoadImmutableSnapshot[Lookup[ev, "Value", ""]]},
+          AssociationQ[r] && Lookup[r, "Verdict", ""] === "Approved"]]],
+    Missing["NoApprovedReview"]];
+  If[! MissingQ[approved],
+    rec = Quiet @ SourceVault`SourceVaultLoadImmutableSnapshot[Lookup[approved, "Value", ""]];
+    specRef = If[AssociationQ[rec], Lookup[rec, "TargetSpecRef", ""], ""];
+    If[StringQ[specRef] && specRef =!= "" && specRef =!= "none",
+      Return[<|"Found" -> True, "Ref" -> specRef, "URI" -> iSVSpecRefToURI[specRef], "Via" -> "review"|>]]];
+  (* fallback: latest spec pointer *)
+  rep = Quiet @ SourceVault`SourceVaultPointerReplay["orch/" <> project <> "/spec"];
+  specRef = If[AssociationQ[rep], Lookup[rep, "Value", ""], ""];
+  If[StringQ[specRef] && specRef =!= "",
+    <|"Found" -> True, "Ref" -> specRef, "URI" -> iSVSpecRefToURI[specRef], "Via" -> "spec"|>,
+    <|"Found" -> False|>]];
+
+(* derive a workflow name from the spec text (BeginPackage > H1 > project) *)
+iSpecImplDeriveName[specText_String, project_String] := Module[{bp, h1, w},
+  bp = StringCases[specText, "BeginPackage[\"" ~~ n : (Except["`"] ..) ~~ "`" :> n, 1];
+  If[bp =!= {}, Return[iSVSpecSanitize[First[bp]]]];
+  h1 = StringCases[specText, StartOfLine ~~ "# " ~~ t : (Except["\n"] ..) :> t, 1];
+  If[h1 =!= {},
+    w = StringCases[First[h1], (LetterCharacter | "_") ~~ (WordCharacter ...), 1];
+    If[w =!= {}, Return[iSVSpecSanitize[First[w]]]]];
+  iSVSpecSanitize[project]];
+iSpecImplDeriveName[_, project_String] := iSVSpecSanitize[project];
+
+(* a folder slug not colliding with an existing SourceVault_workflows/<slug> *)
+iSpecImplUniqueSlug[name_String] := Module[{root, base = name, n = 1, cand},
+  root = FileNameJoin[{Global`$packageDirectory, "SourceVault_workflows"}];
+  cand = base;
+  While[DirectoryQ[FileNameJoin[{root, cand}]] &&
+        FileNames["*", FileNameJoin[{root, cand}]] =!= {},
+    n++; cand = base <> "-v" <> ToString[n]];
+  cand];
+
+(* collect implementation notes from the selected cell(s) and their neighbours *)
+iSpecImplCollectNotes[nb_NotebookObject] := Module[{sel, nC, lo, hi, idxs, collected, items, norm},
+  NBAccess`NBInvalidateCellsCache[nb];
+  sel = NBAccess`NBSelectedCellIndices[nb];
+  nC = NBAccess`NBCellCount[nb];
+  If[Length[sel] === 0,
+    With[{c = iGetCursorCellIndex[nb]}, If[c > 0, sel = {c}]]];
+  If[Length[sel] === 0, Return[""]];
+  lo = Max[1, Min[sel] - 2]; hi = Min[nC, Max[sel] + 2];
+  idxs = Range[lo, hi];
+  collected = iCollectCellContent[nb, idxs, False];
+  items = Lookup[collected, "Items", {}];
+  If[items === {}, Return[""]];
+  norm = iNormalizePrompt[items];
+  With[{t = Lookup[norm, "text", ""]}, If[StringQ[t], t, ""]]];
+
+(* ---- progress -> WindowStatusArea ---- *)
+iSpecImplStatusMsg[prog_Association] := Module[{phase, model, si, ns, rnd, msg},
+  phase = Lookup[prog, "Phase", "?"];
+  model = Lookup[prog, "Model", ""];
+  si = Lookup[prog, "StageIndex", 1];
+  ns = Lookup[prog, "NumStages", 1];
+  rnd = Lookup[prog, "Round", 1];
+  msg = Lookup[prog, "Message", ""];
+  "[spec-impl] " <> ToString[phase] <>
+    If[StringQ[model] && model =!= "", " | model: " <> model, ""] <>
+    If[IntegerQ[ns] && ns > 1, " | stage " <> ToString[si] <> "/" <> ToString[ns], ""] <>
+    If[IntegerQ[rnd] && rnd > 1, " | round " <> ToString[rnd], ""] <>
+    If[StringQ[msg] && msg =!= "", " | " <> msg, ""]];
+iSpecImplStatusMsg[_] := "[spec-impl] running...";
+
+(* register the generated workflow's launch (session registry + promptrouter) *)
+iSpecImplRegisterLaunch[slug_String, displayName_String] := Module[{ctx, info, launch, route},
+  ctx = SourceVault`SourceVaultWorkflowContext[slug];
+  (* read the generated workflow's metadata (load on demand) *)
+  Quiet @ Check[SourceVault`SourceVaultLoadWorkflow[slug], Null];
+  info = Quiet @ Check[Symbol[ctx <> "WorkflowInfo"][], <||>];
+  launch = If[AssociationQ[info], Lookup[info, "Launch", "Run"], "Run"];
+  (* (1) session registry *)
+  $iSpecImplLaunchers[slug] = <|
+    "Slug" -> slug, "Display" -> displayName, "Context" -> ctx,
+    "Launch" -> launch, "RegisteredAt" -> AbsoluteTime[]|>;
+  (* (2) promptrouter discovery route (launch is approval-gated for prompts) *)
+  route = <|
+    "Type" -> "PromptRoute", "RouteId" -> "impl-" <> slug,
+    "RouteVersion" -> 1, "SchemaVersion" -> 1,
+    "Matcher" -> <|"Kind" -> "DeterministicPattern",
+      "KeywordsAny" -> DeleteDuplicates[Select[{slug, displayName,
+        slug <> " workflow", displayName <> " \:5b9f\:884c"}, StringQ[#] && # =!= "" &]]|>,
+    "Target" -> <|"Kind" -> "Workflow", "WorkflowSlug" -> slug, "LaunchFunction" -> launch|>,
+    "Privacy" -> <|"PrivacyLevel" -> 0.0|>, "Source" -> "UserDefined"|>;
+  Quiet @ Check[
+    If[Length[DownValues[SourceVault`SourceVaultRegisterPromptRoute]] > 0,
+      SourceVault`SourceVaultRegisterPromptRoute[route, "DryRun" -> False]], Null];
+  <|"Slug" -> slug, "Context" -> ctx, "Launch" -> launch|>];
+
+(* clickable launch button + summary boxes for the write-back cell *)
+iSpecImplSummaryBoxes[slug_String, res_Association] := With[
+  {st = ToString @ Lookup[res, "FinalStatus", "?"],
+   rounds = ToString @ Lookup[res, "Rounds", "?"],
+   gen = Lookup[res, "GeneratedFiles", {}],
+   aURI = ToString @ Lookup[res, "ArtifactURI", ""],
+   vURI = ToString @ Lookup[res, "VerifyURI", ""],
+   pURI = ToString @ Lookup[res, "PlanURI", ""],
+   s = slug},
+  ToBoxes @ Column[Flatten[{
+    Row[{Style[iL["\:5b9f\:88c5\:30ef\:30fc\:30af\:30d5\:30ed\:30fc: ", "Impl workflow: "], Bold], s}],
+    Row[{Style["status: ", Bold], st, "   rounds: ", rounds}],
+    If[gen =!= {},
+      Column[Prepend[gen, Style[iL["\:751f\:6210\:30d5\:30a1\:30a4\:30eb", "Generated files"], Bold]]],
+      Nothing],
+    If[aURI =!= "" && aURI =!= "<no-ref>",
+      Row[{Style["artifact: ", Bold], iSVURILink[aURI]}], Nothing],
+    If[vURI =!= "" && vURI =!= "<no-ref>",
+      Row[{Style["verify: ", Bold], iSVURILink[vURI]}], Nothing],
+    If[pURI =!= "" && pURI =!= "<no-ref>",
+      Row[{Style["plan: ", Bold], iSVURILink[pURI]}], Nothing]
+    }], Alignment -> Left, Spacings -> 0.6]];
+
+(* ---- render the generated workflow's example.md as notebook cells ----
+   Markdown headings -> Subsection/Subsubsection, prose -> Text, fenced code ->
+   Input (WL) / Program (other) cells. Code cells are NOT auto-evaluated: the
+   examples include firing calls (e.g. running ClaudeUpdateDocumentation) that
+   must only run on the user's explicit Shift+Enter. This is far more useful than
+   a lone launch button: the example shows how to load, inspect, and run the
+   generated workflow, as ready-to-run cells. *)
+iSpecImplCodeCell[lang_String, code_String] := With[{c = StringTrim[code]},
+  If[c === "", Nothing,
+    If[MemberQ[{"wolfram", "mathematica", "wl", ""}, ToLowerCase[lang]],
+      Cell[c, "Input"], Cell[c, "Program"]]]];
+
+iSpecImplTextCells[txt_String] := Module[{lines, buf = {}, sown},
+  lines = StringSplit[txt, "\n"];
+  sown = Reap[
+    Do[
+      Module[{hd = StringCases[line,
+          StartOfString ~~ h : ("#" ..) ~~ Whitespace ~~ rest___ ~~ EndOfString :>
+            {StringLength[h], rest}, 1]},
+        Which[
+          hd =!= {},
+            If[StringTrim[StringRiffle[buf, "\n"]] =!= "",
+              Sow[Cell[cleanMarkdown @ StringTrim @ StringRiffle[buf, "\n"], "Text"]]]; buf = {};
+            Sow[Cell[cleanMarkdown @ StringTrim[hd[[1, 2]]],
+              Switch[hd[[1, 1]], 1, "Subsection", _, "Subsubsection"]]],
+          StringTrim[line] === "",
+            If[StringTrim[StringRiffle[buf, "\n"]] =!= "",
+              Sow[Cell[cleanMarkdown @ StringTrim @ StringRiffle[buf, "\n"], "Text"]]]; buf = {},
+          True, AppendTo[buf, line]]],
+      {line, lines}];
+    If[StringTrim[StringRiffle[buf, "\n"]] =!= "",
+      Sow[Cell[cleanMarkdown @ StringTrim @ StringRiffle[buf, "\n"], "Text"]]];
+  ][[2]];
+  If[sown === {}, {}, First[sown]]];
+
+iSpecImplMarkdownCells[md_String] := Module[{segs},
+  segs = StringSplit[md,
+    "```" ~~ lang : (WordCharacter ...) ~~ "\n" ~~ Shortest[code___] ~~ "\n" ~~ "```" :>
+      {"CODE", lang, code}];
+  Flatten @ Map[
+    Function[seg,
+      If[MatchQ[seg, {"CODE", _, _}],
+        iSpecImplCodeCell[seg[[2]], seg[[3]]],
+        iSpecImplTextCells[seg]]],
+    segs]];
+
+iSpecImplExampleCells[targetDir_String] := Module[{exs, md},
+  exs = Quiet @ Check[FileNames["example.md", targetDir, Infinity], {}];
+  If[! ListQ[exs] || exs === {}, Return[{}]];
+  md = Quiet @ Check[ByteArrayToString[ReadByteArray[First[exs]], "UTF-8"], ""];
+  If[! StringQ[md] || StringTrim[md] === "", Return[{}]];
+  iSpecImplMarkdownCells[md]];
+iSpecImplExampleCells[_] := {};
+
+(* ---- "implementation & review process" tables (mirror of the spec-drafting
+   process boxes, but over the impl/<name>/{plan,planreview,artifact,verify}
+   chains), with clickable sv:// URI links ---- *)
+
+(* RUN status (PASS/FAIL/NOT-RUN/-) parsed from an artifact's step log *)
+iSpecImplStepsRun[steps_String] := With[
+  {m = StringCases[steps, RegularExpression["(?im)^\\s*RUN\\s*:\\s*(PASS|FAIL|NOT-RUN)"] :> "$1", 1]},
+  If[m =!= {}, ToUpperCase[First[m]], "-"]];
+iSpecImplStepsRun[_] := "-";
+
+iSpecImplVersionRows[name_String, suffix_String] := Module[{hist},
+  hist = Quiet @ SourceVault`SourceVaultPointerHistory["impl/" <> name <> "/" <> suffix];
+  If[! ListQ[hist], Return[{}]];
+  Function[ev,
+    With[{rec = Quiet @ SourceVault`SourceVaultLoadImmutableSnapshot[Lookup[ev, "Value", ""]]},
+      <|"Seq" -> Lookup[ev, "Sequence", ""],
+        "Stage" -> If[AssociationQ[rec], Lookup[rec, "Stage", ""], ""],
+        "Round" -> If[AssociationQ[rec], Lookup[rec, "Round", ""], ""],
+        "Status" -> Which[
+          ! AssociationQ[rec], "",
+          suffix === "artifact", iSpecImplStepsRun[Lookup[rec, "Steps", ""]],
+          True, Lookup[rec, "Verdict", ""]],
+        "Steps" -> If[AssociationQ[rec], Lookup[rec, "Steps", ""], ""],
+        "CreatedAtUTC" -> Lookup[ev, "CreatedAtUTC", ""],
+        "URI" -> iSVSpecRefToURI[Lookup[ev, "Value", ""]]|>]] /@ hist];
+
+iSpecImplProcessTable[rows_List, statusLabel_String] := If[rows === {},
+  Style[iL["(\:306a\:3057)", "(none)"], Gray, Italic],
+  Grid[
+    Prepend[
+      Function[r, {Lookup[r, "Seq", ""], Lookup[r, "Stage", ""], Lookup[r, "Round", ""],
+        Lookup[r, "Status", ""], Lookup[r, "CreatedAtUTC", ""], iSVURILink[Lookup[r, "URI", ""]]}] /@ rows,
+      Style[#, Bold] & /@ {"Seq", "Stage", "Round", statusLabel, "CreatedAtUTC", "URI"}],
+    Frame -> All, FrameStyle -> GrayLevel[0.8], Alignment -> {Left, Center},
+    Spacings -> {1, 0.6}, Background -> {None, {1 -> GrayLevel[0.9]}}]];
+
+iSpecImplProcessBoxes[name_String] := ToBoxes @ Column[Flatten[{
+    Style[iL["\:5b9f\:88c5\:3068\:30ec\:30d3\:30e5\:30fc\:306e\:904e\:7a0b", "Implementation & review process"], Bold, 13],
+    With[{plan = iSpecImplVersionRows[name, "plan"]},
+      If[plan =!= {}, {Style[iL["\:5206\:5272\:5b9f\:88c5\:4ed5\:69d8 (plan \:30c1\:30a7\:30fc\:30f3)", "Split-impl plan (plan chain)"], Bold, 11],
+        iSpecImplProcessTable[plan, "Status"]}, Nothing]],
+    With[{pr = iSpecImplVersionRows[name, "planreview"]},
+      If[pr =!= {}, {Style[iL["\:5206\:5272\:5b9f\:88c5\:4ed5\:69d8\:30ec\:30d3\:30e5\:30fc (planreview \:30c1\:30a7\:30fc\:30f3)", "Plan review (planreview chain)"], Bold, 11],
+        iSpecImplProcessTable[pr, "Verdict"]}, Nothing]],
+    Style[iL["\:5b9f\:88c5 (artifact \:30c1\:30a7\:30fc\:30f3)", "Implementation (artifact chain)"], Bold, 11],
+    iSpecImplProcessTable[iSpecImplVersionRows[name, "artifact"], "Run"],
+    Style[iL["\:30ec\:30d3\:30e5\:30fc (verify \:30c1\:30a7\:30fc\:30f3)", "Review (verify chain)"], Bold, 11],
+    iSpecImplProcessTable[iSpecImplVersionRows[name, "verify"], "Verdict"]}],
+  Alignment -> Left, Spacings -> 0.8];
+
+(* per-stage implementation step log (code / tests / run / verify), inline *)
+iSpecImplStepsBoxes[name_String] := Module[{rows},
+  rows = Select[iSpecImplVersionRows[name, "artifact"],
+    StringQ[Lookup[#, "Steps", ""]] && StringTrim[Lookup[#, "Steps", ""]] =!= "" &];
+  If[rows === {}, Return[None]];
+  ToBoxes @ Column[Flatten[{
+    Style[iL["\:5b9f\:88c5\:30b9\:30c6\:30c3\:30d7 (\:30b3\:30fc\:30c9\:4f5c\:6210 / \:30c6\:30b9\:30c8\:4f5c\:6210 / \:30c6\:30b9\:30c8\:5b9f\:884c / \:7d50\:679c\:691c\:8a3c)",
+      "Implementation steps (code / tests / run / verify)"], Bold, 13],
+    Function[r, {
+      Style[iL["\:30b9\:30c6\:30fc\:30b8 ", "Stage "] <> ToString[Lookup[r, "Stage", ""]] <>
+        " / round " <> ToString[Lookup[r, "Round", ""]] <> "   [run: " <> ToString[Lookup[r, "Status", ""]] <> "]",
+        Bold, 11],
+      Style[Lookup[r, "Steps", ""], FontFamily -> "Courier", FontSize -> 11]}] /@ rows}],
+    Alignment -> Left, Spacings -> 0.6]];
+iSpecImplStepsBoxes[_] := None;
+
+iSpecImplWriteBack[jid_, job_, res_] := Module[{nb = job["Nb"], slug = job["Slug"], header},
+  $iJobActiveNb = nb;
+  Quiet @ NBAccess`NBMoveToEnd[nb];
+  If[AssociationQ[res] && Lookup[res, "Status", ""] === "Done",
+    header = "SourceVault workflow implementation  (workflow: " <> slug <> ")\n" <>
+      "final status: " <> ToString @ Lookup[res, "FinalStatus", "?"] <>
+      "   rounds: " <> ToString @ Lookup[res, "Rounds", "?"] <>
+      "   impl: " <> ToString @ Lookup[res, "ImplModel", "?"] <>
+      "   verify: " <> ToString @ Lookup[res, "VerifyModel", "?"];
+    NBAccess`NBWriteCell[nb, Cell[header, "Text", Sequence @@ $specCellOpts,
+      CellTags -> {"sourcevault-impl-link"}]];
+    NBAccess`NBWriteCell[nb, Cell[BoxData @ iSpecImplSummaryBoxes[slug, res],
+      "Output", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-impl-summary"}]];
+    (* implementation & review process (artifact + verify [+ plan] chains, URI links) *)
+    NBAccess`NBWriteCell[nb, Cell[BoxData @ iSpecImplProcessBoxes[slug],
+      "Output", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-impl-process"}]];
+    (* per-stage step log: code -> tests -> run -> verify *)
+    With[{stepsB = iSpecImplStepsBoxes[slug]},
+      If[stepsB =!= None,
+        NBAccess`NBWriteCell[nb, Cell[BoxData @ stepsB,
+          "Output", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-impl-steps"}]]]];
+    (* register the generated workflow's launch (session + promptrouter) *)
+    If[TrueQ[job["Launch"]] && Lookup[res, "FinalStatus", ""] === "Approved",
+      Quiet @ iSpecImplRegisterLaunch[slug, Lookup[job, "Display", slug]]];
+    (* render the generated workflow's example.md as ready-to-run notebook cells
+       (more useful than a lone launch button: shows how to load / inspect / run
+       the workflow as actual cells; code cells are inserted but NOT evaluated) *)
+    With[{exCells = iSpecImplExampleCells[Lookup[job, "TargetDir", ""]]},
+      If[exCells =!= {},
+        NBAccess`NBWriteCell[nb, Cell[iL["\:4f7f\:7528\:4f8b (example.md)", "Usage (example.md)"],
+          "Subsection", CellTags -> {"sourcevault-impl-example"}]];
+        Scan[NBAccess`NBWriteCell[nb, Append[#, CellTags -> {"sourcevault-impl-example"}]] &, exCells]]],
+    NBAccess`NBWriteCell[nb, Cell[
+      "SourceVault workflow implementation did not complete: " <>
+      ToString @ Lookup[res, "Status", "Unknown"] <> " " <> ToString @ Lookup[res, "Error", ""],
+      "Text", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-impl-error"}]]];
+  $iJobActiveNb = None;
+  Quiet[CurrentValue[nb, WindowStatusArea] = ""];
+];
+
+iSpecImplTick[] := (
+  Scan[
+    Function[jid,
+      Module[{job = $iSpecImplJobs[jid], res, prog},
+        job["Ticks"] = Lookup[job, "Ticks", 0] + 1;
+        $iSpecImplJobs[jid] = job;
+        (* live progress -> WindowStatusArea *)
+        If[StringQ[job["ProgressFile"]] && FileExistsQ[job["ProgressFile"]],
+          prog = Quiet @ Check[Get[job["ProgressFile"]], <||>];
+          If[AssociationQ[prog],
+            iSafeSetWindowStatus[job["Nb"], iSpecImplStatusMsg[prog]]]];
+        Which[
+          FileExistsQ[job["ResultFile"]],
+            res = Quiet @ Check[Get[job["ResultFile"]], $Failed];
+            Quiet @ iSpecImplWriteBack[jid, job, res];
+            $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid],
+          job["Ticks"] > $iSpecImplMaxTicks,
+            Quiet @ iSpecImplWriteBack[jid, job, <|"Status" -> "Timeout"|>];
+            $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid]
+        ]]],
+    Keys[$iSpecImplJobs]];
+  If[Length[$iSpecImplJobs] === 0,
+    Quiet @ ClaudeUnregisterPollingTick["specImpl"]]
+);
+
+iSpecImplEnsurePoller[] :=
+  Quiet @ ClaudeRegisterPollingTick["specImpl", iSpecImplTick];
+
+(* ---- on-demand status query (live progress + SourceVault chain summary) ---- *)
+iImplChainLen[slug_String, suffix_String] :=
+  With[{h = Quiet @ SourceVault`SourceVaultPointerHistory["impl/" <> slug <> "/" <> suffix]},
+    If[ListQ[h], Length[h], 0]];
+
+iImplLatestVerdict[slug_String] := Module[{h, rec},
+  h = Quiet @ SourceVault`SourceVaultPointerHistory["impl/" <> slug <> "/verify"];
+  If[! ListQ[h] || h === {}, Return["(none)"]];
+  rec = Quiet @ SourceVault`SourceVaultLoadImmutableSnapshot[Last[h]["Value"]];
+  If[AssociationQ[rec], Lookup[rec, "Verdict", "?"], "?"]];
+
+iImplJobProgress[job_Association] := If[
+  StringQ[Lookup[job, "ProgressFile", None]] && FileExistsQ[job["ProgressFile"]],
+  Quiet @ Check[Get[job["ProgressFile"]], <||>], <||>];
+
+iImplStatusRow[job_Association] := Module[{slug = Lookup[job, "Slug", "?"], prog},
+  prog = iImplJobProgress[job];
+  <|"Workflow" -> slug, "Running" -> True,
+    "Phase" -> Lookup[prog, "Phase", "(starting)"],
+    "Model" -> Lookup[prog, "Model", ""],
+    "Stage" -> (ToString @ Lookup[prog, "StageIndex", 1] <> "/" <> ToString @ Lookup[prog, "NumStages", 1]),
+    "Round" -> Lookup[prog, "Round", 1],
+    "Message" -> Lookup[prog, "Message", ""],
+    "Artifacts" -> iImplChainLen[slug, "artifact"],
+    "Verifies" -> iImplChainLen[slug, "verify"],
+    "LatestVerdict" -> iImplLatestVerdict[slug],
+    "PollTicks" -> Lookup[job, "Ticks", 0],
+    "UpdatedAtUTC" -> Lookup[prog, "UpdatedAtUTC", ""]|>];
+
+iImplStatusRowBySlug[slug_String] := <|
+  "Workflow" -> slug, "Running" -> False, "Phase" -> "(not running)", "Model" -> "",
+  "Stage" -> "", "Round" -> "", "Message" -> "",
+  "Artifacts" -> iImplChainLen[slug, "artifact"], "Verifies" -> iImplChainLen[slug, "verify"],
+  "LatestVerdict" -> iImplLatestVerdict[slug], "PollTicks" -> 0, "UpdatedAtUTC" -> ""|>;
+
+ClaudeImplStatus[] := Module[{jobs, nb, mine},
+  jobs = If[ValueQ[$iSpecImplJobs], $iSpecImplJobs, <||>];
+  nb = Quiet @ iUserNotebook[];
+  mine = Select[Values[jobs], (Head[nb] =!= NotebookObject) || (Lookup[#, "Nb", None] === nb) &];
+  Which[
+    mine =!= {}, Dataset[iImplStatusRow /@ mine],
+    AssociationQ[jobs] && Length[jobs] > 0, Dataset[iImplStatusRow /@ Values[jobs]],
+    True,
+      "No running spec-impl workflow. While one runs, live status also shows in the " <>
+      "notebook window status area (bottom of the window). " <>
+      "Use ClaudeImplStatus[\"<workflow>\"] for a specific (running or finished) workflow."]];
+
+ClaudeImplStatus[slug_String] := Module[{jobs, running},
+  jobs = If[ValueQ[$iSpecImplJobs], $iSpecImplJobs, <||>];
+  running = Select[Values[jobs], Lookup[#, "Slug", ""] === slug &];
+  Dataset[{If[running =!= {}, iImplStatusRow[First[running]], iImplStatusRowBySlug[slug]]}]];
+
+ClaudeImplMonitor[] := Dynamic[
+  Refresh[ClaudeImplStatus[], UpdateInterval -> 2, TrackedSymbols :> {}],
+  SynchronousUpdating -> False];
+
+(* ---- public factory: create (implement) + register a workflow from a spec ---- *)
+Options[CreateImplementationWorkflow] = {
+  "Notes" -> "", "ClaudeModel" -> Automatic, "AdvisaryModel" -> Automatic,
+  "MaxRounds" -> Automatic, "Nb" -> Automatic, "Launch" -> True};
+
+CreateImplementationWorkflow[name_String, approvedSpec_String, opts:OptionsPattern[]] := Module[
+  {nb, slug, runDir, notesFile, cfgFile, resultFile, progressFile, targetDir,
+   specRef, specText, claude, advisary, maxRounds, notes, proc, jobId},
+  If[! iSpecImplAvailableQ[],
+    MessageDialog[iL[
+      "SourceVault \:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:6a5f\:80fd\:304c\:5229\:7528\:3067\:304d\:307e\:305b\:3093 (SourceVault \:672a\:30ed\:30fc\:30c9)\:3002",
+      "SourceVault workflow support is not available (SourceVault not loaded)."]];
+    Return[$Failed]];
+  If[! FileExistsQ[$iSpecImplDriver],
+    MessageDialog["spec-impl driver not found:\n" <> $iSpecImplDriver]; Return[$Failed]];
+  nb = OptionValue["Nb"] /. Automatic -> iUserNotebook[];
+  slug = iSpecImplUniqueSlug[iSVSpecSanitize[name]];
+  notes = OptionValue["Notes"] /. (x_ /; ! StringQ[x]) -> "";
+  maxRounds = OptionValue["MaxRounds"] /. Automatic -> $iSpecImplMaxRounds;
+  claude = If[ValueQ[$ClaudeModel], $ClaudeModel, ""];
+  advisary = If[ValueQ[$ClaudeAdvisaryModel], $ClaudeAdvisaryModel, {"chatgptcodex", "Automatic"}];
+  claude = OptionValue["ClaudeModel"] /. Automatic -> claude;
+  advisary = OptionValue["AdvisaryModel"] /. Automatic -> advisary;
+  (* spec may be sv:// URI / snapshot ref / raw text *)
+  If[StringStartsQ[approvedSpec, "sv://"] || StringStartsQ[approvedSpec, "snapshot:"],
+    specRef = approvedSpec; specText = "",
+    specRef = ""; specText = approvedSpec];
+
+  runDir = FileNameJoin[{$TemporaryDirectory, "specimpl_" <> StringReplace[CreateUUID[], "-" -> ""]}];
+  Quiet @ CreateDirectory[runDir, CreateIntermediateDirectories -> True];
+  notesFile = FileNameJoin[{runDir, "notes.txt"}];
+  cfgFile = FileNameJoin[{runDir, "config.wl"}];
+  resultFile = FileNameJoin[{runDir, "result.wl"}];
+  progressFile = FileNameJoin[{runDir, "progress.wl"}];
+  targetDir = FileNameJoin[{Global`$packageDirectory, "SourceVault_workflows", slug}];
+  iOrchWriteUTF8[notesFile, notes];
+
+  Put[<|"Name" -> slug, "SpecRef" -> specRef, "SpecText" -> specText,
+    "NotesFile" -> notesFile, "ClaudeModel" -> claude, "AdvisaryModel" -> advisary,
+    "MaxRounds" -> maxRounds, "MaxAuxRounds" -> $iSpecImplMaxRounds,
+    "ProgressFile" -> progressFile, "ResultFile" -> resultFile,
+    "PackageRoot" -> Global`$packageDirectory, "WorkflowSlug" -> "spec-impl",
+    "Language" -> $Language, "LanguageInstruction" -> iLanguageInstruction["general"]|>, cfgFile];
+
+  If[Head[nb] === NotebookObject,
+    NBAccess`NBMoveToEnd[nb];
+    $iJobActiveNb = nb;
+    NBAccess`NBWriteCell[nb, Cell[
+      "SourceVault workflow implementation started (workflow: " <> slug <>
+      "). The implement<->verify loop is running in the background; the result will be appended here.",
+      "Text", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-impl-pending"}]];
+    $iJobActiveNb = None;
+    iSafeSetWindowStatus[nb, "[spec-impl] starting..."]];
+
+  proc = StartProcess[{$iOrchWolframScript, "-file", $iSpecImplDriver, cfgFile}];
+  jobId = "specimpl-" <> StringReplace[CreateUUID[], "-" -> ""];
+  $iSpecImplJobs[jobId] = <|"Nb" -> nb, "Slug" -> slug, "Display" -> name,
+    "ResultFile" -> resultFile, "ProgressFile" -> progressFile, "TargetDir" -> targetDir,
+    "Launch" -> TrueQ[OptionValue["Launch"]], "Proc" -> proc, "Ticks" -> 0|>;
+  iSpecImplEnsurePoller[];
+  jobId
+];
+
+(* ---- public launcher: load + invoke a generated workflow's launch entry ---- *)
+LaunchImplementationWorkflow[slug_String, args___] := Module[{load, ctx, info, launch, res},
+  load = Quiet @ Check[SourceVault`SourceVaultLoadWorkflow[slug], $Failed];
+  ctx = If[AssociationQ[load], Lookup[load, "Context", SourceVault`SourceVaultWorkflowContext[slug]],
+    SourceVault`SourceVaultWorkflowContext[slug]];
+  (* tolerant: proceed if WorkflowInfo is callable, even when the load status is
+     not a clean "Loaded" (benign load-time messages must not block launching). *)
+  info = Quiet @ Check[Symbol[ctx <> "WorkflowInfo"][], <||>];
+  If[! AssociationQ[info],
+    Return[<|"Status" -> "LoadFailed", "Slug" -> slug, "Context" -> ctx, "Detail" -> load|>]];
+  launch = Lookup[info, "Launch", ""];
+  If[! StringQ[launch] || launch === "",
+    Return[<|"Status" -> "NoLaunchEntry", "Slug" -> slug, "Context" -> ctx, "Info" -> info|>]];
+  res = Quiet @ Check[Symbol[ctx <> launch][args], $Failed];
+  <|"Status" -> "Launched", "Slug" -> slug, "Context" -> ctx, "Launch" -> launch, "Result" -> res|>];
+
+(* ---- palette entry: implement the current notebook's latest approved spec ---- *)
+iRunSpecImplFromCells[] := Module[{nb, project, approved, specText, name, notes},
+  nb = iUserNotebook[];
+  If[Head[nb] =!= NotebookObject, Return[$Failed]];
+  If[! iSpecImplAvailableQ[],
+    MessageDialog[iL[
+      "SourceVault \:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:6a5f\:80fd\:304c\:5229\:7528\:3067\:304d\:307e\:305b\:3093\:3002",
+      "SourceVault workflow support is not available."]]; Return[$Failed]];
+  project = iSVSpecProjectId[nb];
+  approved = iSpecImplApprovedSpec[project];
+  If[! TrueQ[Lookup[approved, "Found", False]],
+    MessageDialog[iL[
+      "\:627f\:8a8d\:6e08\:307f\:306e\:4ed5\:69d8\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002\:5148\:306b\:300c\:4ed5\:69d8\:751f\:6210\:300d\:3067\:4ed5\:69d8\:3092\:627f\:8a8d\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+      "No approved spec found for this notebook. Run the \"Spec\" button to generate and approve a spec first."]];
+    Return[$Failed]];
+  specText = Quiet @ Check[ClaudeSpecText[Lookup[approved, "URI", ""]], ""];
+  If[! StringQ[specText], specText = ""];
+  name = iSpecImplDeriveName[specText, project];
+  notes = iSpecImplCollectNotes[nb];
+  CreateImplementationWorkflow[name, Lookup[approved, "URI", ""],
+    "Notes" -> notes, "Nb" -> nb]
+];
+
+(* ---- status display (FE-side; SourceVault version chain + background jobs) ---- *)
+iSpecStatusRow[proj_String] := Module[{sh, rh, lastV, jobs, pending},
+  sh = With[{h = Quiet @ SourceVault`SourceVaultPointerHistory["orch/" <> proj <> "/spec"]},
+    If[ListQ[h], h, {}]];
+  rh = With[{h = Quiet @ SourceVault`SourceVaultPointerHistory["orch/" <> proj <> "/review"]},
+    If[ListQ[h], h, {}]];
+  lastV = If[rh =!= {},
+    With[{rec = Quiet @ SourceVault`SourceVaultLoadImmutableSnapshot[Last[rh]["Value"]]},
+      If[AssociationQ[rec], Lookup[rec, "Verdict", "?"], "?"]], "(no review yet)"];
+  jobs = If[ValueQ[$iOrchConsensusJobs], $iOrchConsensusJobs, <||>];
+  pending = Select[Values[jobs], Lookup[#, "Project", ""] === proj &];
+  <|"Project" -> proj, "Running" -> (pending =!= {}),
+    "PollTicks" -> If[pending =!= {}, Lookup[First[pending], "Ticks", 0], 0],
+    "SpecVersions" -> Length[sh], "ReviewVersions" -> Length[rh],
+    "LatestVerdict" -> lastV,
+    "LatestSpec" -> If[sh =!= {}, iSVSpecRefToURI[Last[sh]["Value"]], ""],
+    "UpdatedAtUTC" -> If[sh =!= {}, Last[sh]["CreatedAtUTC"], ""]|>];
+
+ClaudeSpecStatus[proj_String] := Dataset[{iSpecStatusRow[proj]}];
+
+ClaudeSpecStatus[] := Module[{nb, proj, jobs, projs},
+  jobs = If[ValueQ[$iOrchConsensusJobs], $iOrchConsensusJobs, <||>];
+  nb = Quiet @ iUserNotebook[];
+  proj = If[Head[nb] === NotebookObject,
+    Quiet @ CurrentValue[nb, {TaggingRules, "SourceVaultSpecProjectId"}], Missing[]];
+  Which[
+    StringQ[proj] && proj =!= "", ClaudeSpecStatus[proj],
+    AssociationQ[jobs] && Length[jobs] > 0,
+      projs = DeleteDuplicates[Cases[Values[jobs], a_ :> Lookup[a, "Project", Nothing]]];
+      Dataset[iSpecStatusRow /@ projs],
+    True,
+      "No current-notebook project and no running jobs. Use ClaudeSpecStatus[\"<project>\"]."]];
+
+(* ---- full version listing: every spec/review version with its sv:// URI ---- *)
+iSVSpecVersionRows[proj_String, role_String] := Module[{hist},
+  hist = Quiet @ SourceVault`SourceVaultPointerHistory["orch/" <> proj <> "/" <> role];
+  If[! ListQ[hist], Return[{}]];
+  Function[ev,
+    With[{rec = Quiet @ SourceVault`SourceVaultLoadImmutableSnapshot[Lookup[ev, "Value", ""]]},
+      <|"Role" -> role,
+        "Round" -> If[AssociationQ[rec], Lookup[rec, "Round", ""], ""],
+        "Verdict" -> If[AssociationQ[rec], Lookup[rec, "Verdict", ""], ""],
+        "Seq" -> Lookup[ev, "Sequence", ""],
+        "CreatedAtUTC" -> Lookup[ev, "CreatedAtUTC", ""],
+        "URI" -> iSVSpecRefToURI[Lookup[ev, "Value", ""]]|>]] /@ hist];
+
+ClaudeSpecVersions[proj_String, role_String] /;
+    MemberQ[{"spec", "review", "requirements"}, role] :=
+  Dataset[iSVSpecVersionRows[proj, role]];
+ClaudeSpecVersions[proj_String] :=
+  Dataset[Join[iSVSpecVersionRows[proj, "spec"], iSVSpecVersionRows[proj, "review"]]];
+ClaudeSpecVersions[] := Module[{nb, proj},
+  nb = Quiet @ iUserNotebook[];
+  proj = If[Head[nb] === NotebookObject,
+    Quiet @ CurrentValue[nb, {TaggingRules, "SourceVaultSpecProjectId"}], Missing[]];
+  If[StringQ[proj] && proj =!= "", ClaudeSpecVersions[proj],
+    "No current-notebook project. Use ClaudeSpecVersions[\"<project>\"]."]];
+
+(* normalize any URI/ref form -> snapshot:Class:hex (so callers only ever use URIs) *)
+iSVSpecURIToRef[s_String] := Module[{body, parts},
+  Which[
+    StringStartsQ[s, "snapshot:"], s,
+    StringStartsQ[s, "sv://snapshot/"],
+      body = StringDrop[s, StringLength["sv://snapshot/"]];
+      parts = StringSplit[body, {"/", ":"}];
+      If[Length[parts] >= 2, "snapshot:" <> parts[[1]] <> ":" <> Last[parts], s],
+    True, s]];
+iSVSpecURIToRef[x_] := x;
+
+ClaudeSpecText[uriOrRef_String] := Module[{rec},
+  rec = Quiet @ SourceVault`SourceVaultLoadImmutableSnapshot[iSVSpecURIToRef[uriOrRef]];
+  If[AssociationQ[rec], Lookup[rec, "Text", Missing["NoText"]],
+    Failure["SpecSnapshotUnresolved", <|"Input" -> uriOrRef|>]]];
+
+iRunClaudeSpecFromCellsLegacy[] :=
   Module[{nb, cellIndices, collected, items, norm, task, nCells, curIdx},
     nb = iUserNotebook[];
     If[Head[nb] =!= NotebookObject, Return[$Failed]];
@@ -20420,25 +21448,25 @@ iWriteContinueEvalButton[nb_NotebookObject, autoEvaluate_:True, callerOpts_Assoc
             ],
             iL[" \:3067\:7d99\:7d9a\:3001",
                " to continue, or "],
-            (* Stage 9 P1.5: \:4eca\:5b9f\:884c\:3057\:305f\:30d7\:30ed\:30f3\:30d7\:30c8\:3068\:95a2\:6570\:3092
-               SourceVault \:306b\:4fdd\:5b58\:3059\:308b\:30dc\:30bf\:30f3\:3002\:30af\:30ea\:30c3\:30af\:3067
-               SaveLastPrompt[""] \:3092 Input \:30bb\:30eb\:306b\:51fa\:529b\:3057\:3001
-               \:30e6\:30fc\:30b6\:30fc\:304c\:30e1\:30e2\:3092\:8a18\:5165\:3057\:3066\:5b9f\:884c\:3059\:308b\:3002 *)
+            (* Stage 9 P1.5: the prompt is already auto-saved on every run
+               (SourceVaultAutoSaveLastPrompt), so this button only ADDS A MEMO
+               to that saved version. Click writes AddPromptMemo[""] to an Input
+               cell for the user to fill in the memo and evaluate. *)
             ButtonBox[
-              "SaveLastPrompt",
+              "AddPromptMemo",
               BaseStyle -> "Hyperlink",
               ButtonFunction :> Module[{target = InputNotebook[]},
                 NBAccess`NBWriteInputCellAndMaybeEvaluate[
                   target,
-                  RowBox[{"SaveLastPrompt", "[", "\"\"", "]"}],
+                  RowBox[{"AddPromptMemo", "[", "\"\"", "]"}],
                   False
                 ]
               ],
               Evaluator -> Automatic,
               Method -> "Queued"
             ],
-            iL["[\"\:30e1\:30e2\"] \:3067\:30d7\:30ed\:30f3\:30d7\:30c8\:3092\:4fdd\:5b58\:3067\:304d\:307e\:3059\:3002",
-               "[\"memo\"] to save this prompt."]
+            iL["[\"\:30e1\:30e2\"] \:3067\:30e1\:30e2\:3092\:8ffd\:52a0\:3067\:304d\:307e\:3059\:3002",
+               "[\"memo\"] to add a memo."]
           }],
           "Print", FontWeight -> Bold, FontColor -> GrayLevel[0.4], FontSize -> 11,
           CellTags -> {"claudecode-notice"}
@@ -20808,6 +21836,9 @@ ShowClaudePalette[] := (
       iClaudePaletteButton[iL["\[FilledDiamond] \:4ed5\:69d8\:751f\:6210", "\[FilledDiamond] Spec"],
         RGBColor[0.35, 0.3, 0.7],
         iRunClaudeSpecFromCells[]],
+      iClaudePaletteButton[iL["\[FilledDiamond] \:4ed5\:69d8\:5b9f\:88c5", "\[FilledDiamond] Impl"],
+        RGBColor[0.3, 0.35, 0.6],
+        iRunSpecImplFromCells[]],
       iClaudePaletteButton[iL["\[FilledSquare] \:5b9f\:884c\:505c\:6b62", "\[FilledSquare] Abort"],
         RGBColor[0.7, 0.15, 0.15],
         (ClaudeCode`ClaudeAbort[];

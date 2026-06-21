@@ -1,5 +1,3 @@
----
-
 # claudecode 使用例集
 
 このドキュメントでは、[claudecode](https://github.com/transreal/claudecode) パッケージの代表的な使用例を紹介します。
@@ -894,3 +892,118 @@ ClaudePrepareCommit["myUtils",
 ### 変更サマリーの自動整形
 
 バックアップ履歴から収集された変更点は、適切な日本語で 72 文字での折り返しを含む箇条書き形式に自動整形されます。各変更点には変更の種類（追加/修正/削除）も自動判定されて含まれます。
+
+---
+
+## 27. 仕様生成と実装ワークフロー（ClaudeSpec / SourceVault 統合）
+
+SourceVault と連携して、ノートブック内容から仕様を策定し、コンセンサス（Claude ↔ Codex）レビューを経て承認済み仕様をコードとして実装するワークフローを提供します。
+
+### 仕様のステータス確認（ClaudeSpecStatus）
+
+現在のノートブックプロジェクトの仕様策定状況を確認します。
+
+```mathematica
+(* 現在のノートブックのプロジェクトのステータスを表示 *)
+ClaudeSpecStatus[]
+```
+
+> ノートブックの TaggingRule `SourceVaultSpecProjectId` に紐付くプロジェクトの仕様・レビューバージョン数、最新の Verdict、最新の仕様 sv:// URI、最終更新時刻、バックグラウンドコンセンサスジョブの進行状況が表示されます。SourceVault のみを使用し、ワークフローエンジンは不要です。
+
+```mathematica
+(* 特定プロジェクトのステータスを表示 *)
+ClaudeSpecStatus["my-feature-spec"]
+```
+
+> Dataset 形式でプロジェクトの詳細ステータスが返されます。
+
+### 仕様バージョン一覧（ClaudeSpecVersions）
+
+プロジェクトに記録された全仕様・レビューバージョンをリスト表示します。
+
+```mathematica
+(* 現在のノートブックのプロジェクト全バージョンを取得 *)
+ClaudeSpecVersions[]
+
+(* 特定プロジェクトを指定 *)
+ClaudeSpecVersions["my-feature-spec"]
+
+(* ロールを絞り込み: "spec" | "review" | "requirements" *)
+ClaudeSpecVersions["my-feature-spec", "spec"]
+ClaudeSpecVersions["my-feature-spec", "review"]
+```
+
+> Dataset 形式で返されます（列: Role, Round, Verdict, Seq, CreatedAtUTC, URI）。URI 列の値を `ClaudeSpecText` に渡すと、その版の本文を取得できます。
+
+### 仕様テキストの取得（ClaudeSpecText）
+
+sv:// URI から仕様・レビューのテキスト本文を取得します。
+
+```mathematica
+(* ClaudeSpecVersions の URI 列から取得した URI を渡す *)
+ClaudeSpecText["sv://snapshot/spec/abc123def456"]
+```
+
+> sv:// 形式（`sv://snapshot/Class/hex` または `sv://snapshot/Class:hex`）と生の `snapshot:Class:hex` 参照の両方に対応しています。手動での参照変換は不要です。
+
+### sv:// URI をノートブックで開く（ClaudeOpenSourceVaultURI）
+
+仕様策定フローがノートブックに書き込む sv:// クリッカブルリンクの実体です。URI の内容を新しいノートブックウィンドウで開きます。
+
+```mathematica
+ClaudeOpenSourceVaultURI["sv://snapshot/spec/abc123def456"]
+```
+
+> メタデータグリッドと本文（Text セル）を含む新しいノートブックウィンドウが開きます。レビュースナップショットの場合は Findings セクションも表示されます。スナップショットが読み込めない場合は `$Failed` を返します。
+
+### アドバイザリモデルの設定（$ClaudeAdvisaryModel）
+
+仕様レビュー＆改訂オーケストレータワークフローのアドバイザリ（Codex）役モデルを指定します。`$ClaudeModel` と同じ `{provider, model}` タプル形式です。
+
+```mathematica
+(* デフォルト: ChatGPT Codex CLI の既定モデルを使用 *)
+$ClaudeAdvisaryModel = {"chatgptcodex", "Automatic"}
+
+(* 特定のモデルを指定 *)
+$ClaudeAdvisaryModel = {"chatgptcodex", "gpt-5.5"}
+
+(* ベアプロバイダ文字列も受け付ける *)
+$ClaudeAdvisaryModel = "chatgptcodex"
+```
+
+> Claude Code 役は `$ClaudeModel`、Codex（アドバイザリ）役は `$ClaudeAdvisaryModel` を使用します。
+
+### 実装ワークフローの作成（CreateImplementationWorkflow）
+
+承認済み設計仕様を `SourceVault_workflows/<name>/` 配下のコード化された SVWorkflow パッケージとして実装します。
+
+```mathematica
+(* 承認済み仕様の sv:// URI から実装ワークフローを作成 *)
+jobId = CreateImplementationWorkflow["MyFeature",
+  "sv://snapshot/spec/abc123def456"]
+```
+
+> バックグラウンドドライバが起動し、実装者（`$ClaudeModel`）がパッケージを作成、検証者（`$ClaudeAdvisaryModel`）が仕様に照らして確認するコンセンサスループが実行されます。複雑な作業はステージに分割され、補助仕様が先にレビューされます。進行状況（実行中モデル＋フェーズ）は `WindowStatusArea` に表示されます。完了後、生成されたワークフローの起動関数がセッションと promptrouter に登録され、サマリーがノートブックに書き込まれます。
+
+オプションで詳細を制御できます。
+
+```mathematica
+CreateImplementationWorkflow["MyFeature",
+  "sv://snapshot/spec/abc123def456",
+  "Notes" -> "日本語コメントを使用すること",
+  "ClaudeModel" -> {"claudecode", "claude-opus-4-8"},
+  "AdvisaryModel" -> {"chatgptcodex", "Automatic"},
+  "MaxRounds" -> 5]
+```
+
+> バックグラウンドで実行され、ジョブ ID が返されます。`approvedSpec` には sv:// URI のほかスナップショット参照や生の仕様テキストも渡せます。
+
+### 実装ワークフローの起動（LaunchImplementationWorkflow）
+
+`CreateImplementationWorkflow` で生成されたワークフローを（再）起動します。
+
+```mathematica
+LaunchImplementationWorkflow["MyFeature", <|"param1" -> "value1"|>]
+```
+
+> ワークフロー（`SourceVaultLoadWorkflow["MyFeature"]`）をロードし、その起動エントリ（`WorkflowInfo["Launch"]`）を指定の引数で呼び出します。起動コンテキスト、エントリ、結果を含む Association が返されます。

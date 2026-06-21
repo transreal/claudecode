@@ -1,5 +1,3 @@
----
-
 ## 設計思想と実装の概要
 
 ClaudeCode は以下の設計原則に基づいています。
@@ -25,7 +23,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **Windows エンコーディング安全な API 通信（マルチモーダル対応）**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス（`Fallback -> True`）では Anthropic API のマルチモーダル `content` 配列を構築して送信します。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換（ShiftJIS 等）による日本語文字化けが発生しません。
 - **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすると、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、危険な操作に対して承認フロー(`NeedsApproval`)を提供します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、`ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode 単独ロード時はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。
 - **ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすると、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。rate-limit 検出・自動待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断します。
-- **SourceVault 連携（PromptRouter ブリッジ）**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`（`HoldComplete`）の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず（rule 11）、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター（spec 5.3 / 24.3）にフォールバックします。
+- **SourceVault 連携（PromptRouter ブリッジ）**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`（`HoldComplete`）の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず（rule 11）、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター（spec 5.3 / 24.3）にフォールバックします。SourceVault をロードすると、仕様書の審査・実装ワークフロー化 API（`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`）も利用可能になります。
 - **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG（有向非巡回グラフ）として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。`$LLMGraphMaxConcurrency` によりカテゴリ別の並列度を制御でき、DAG ジョブの作成・実行・キャンセル・再構築を行う `LLMGraphDAGCreate` / `LLMGraphDAGRebuild` 系の API も提供されます。
 - **[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージする機能を提供します。
 
@@ -137,6 +135,14 @@ $ClaudeEvalPromptRouterDispatch = Automatic
 (* True (デフォルト): PromptRouter が自然言語ルーターより先に走る
    False: 自然言語ルーターを先に試し、未マッチのときのみ PromptRouter を試す *)
 $ClaudeEvalPromptRouterPreemptsNatural = True
+
+(* 仕様審査ワークフローのアドバイザリーロール用モデル
+   実装者ロール: $ClaudeModel、審査者（アドバイザリー）ロール: $ClaudeAdvisaryModel
+   $ClaudeModel と同じ {provider, model} タプル形式で指定する
+   デフォルト: {"chatgptcodex", Automatic}（Codex CLI の既定モデルを使用）
+   後方互換として "chatgptcodex" のようなベア文字列も受け入れる
+   例: $ClaudeAdvisaryModel = {"chatgptcodex", "gpt-5.5"} *)
+$ClaudeAdvisaryModel = {"chatgptcodex", Automatic}
 ```
 
 ### パッケージキーワード自動注入システム
@@ -246,6 +252,13 @@ ClaudePrepareCommit["MyPackage"]
 | | `$ClaudeLastRuntimeId` | 最後に使用したランタイム ID |
 | **SourceVault 連携** | `$ClaudeEvalPromptRouterDispatch` | PromptRouter ブリッジの有効/無効 |
 | | `$ClaudeEvalPromptRouterPreemptsNatural` | 自然言語ルーターとの実行順序制御 |
+| | `$ClaudeAdvisaryModel` | 仕様審査アドバイザリーロールのモデル指定 |
+| | `ClaudeSpecStatus` | spec/consensus 状態の確認 |
+| | `ClaudeSpecVersions` | spec/review バージョン一覧 |
+| | `ClaudeSpecText` | sv:// URI から spec/review 本文を取得 |
+| | `ClaudeOpenSourceVaultURI` | sv:// URI を新規ノートブックで開く |
+| | `CreateImplementationWorkflow` | 承認済み仕様からワークフローを実装 |
+| | `LaunchImplementationWorkflow` | 生成ワークフローの起動 |
 | **[実験的] LLMGraph** | `NotebookLLMGraphPlot` | DAG 可視化 |
 | | `NotebookLLMGraphNodes` | 全ノード取得 |
 | | `NotebookLLMGraphSummary` | Status/L2 統計 Dataset |
@@ -724,7 +737,7 @@ ClaudeQuery の応答中でも、「AI で画像を生成して」「フォト�
 (* 基本的な音声生成 *)
 ClaudeSpeech["こんにちは、世界"]
 
-(* オプション指定 *)
+(* オプション指定 *)```mathematica
 ClaudeSpeech["Hello, world!",
   "Model" -> "tts-1-hd",
   "Voice" -> "nova",
@@ -1670,7 +1683,7 @@ ClaudeRateLimitClear[]
 
 ### SourceVault 連携（オプション）
 
-[SourceVault](https://github.com/transreal/SourceVault) は claudecode とは独立したオプションパッケージで、`ClaudeEval` のディスパッチ経路に **PromptRouter ブリッジ**（Order 2 ディスパッチ）を追加します。SourceVault が提供するソース管理機能と組み合わせて、タスク文字列を ReadOnly な許可済み呼び出しに変換し、安全な実行経路を確立します。
+[SourceVault](https://github.com/transreal/SourceVault) は claudecode とは独立したオプションパッケージで、`ClaudeEval` のディスパッチ経路に **PromptRouter ブリッジ**（Order 2 ディスパッチ）を追加します。SourceVault が提供するソース管理機能と組み合わせて、タスク文字列を ReadOnly な許可済み呼び出しに変換し、安全な実行経路を確立します。また、`ClaudeSpec` と連携した仕様書・審査・実装ワークフローの API も提供します。
 
 #### 設計原則: hard dependency を持たない
 
@@ -1740,6 +1753,107 @@ ClaudeResolveModel["chatgptcodex", "code-heavy"]
 
 - `SourceVaultListModels[provider]` — 指定 provider の選択可能な全モデル ID を列挙します。
 - `ClaudeResolveModel[provider, intent]` — 用途に応じた最適モデル 1 件を解決します。
+
+#### 仕様・審査ワークフロー（ClaudeSpec + SourceVault）
+
+SourceVault をロードすると、`ClaudeSpec` で生成した仕様書のバージョン管理・コンセンサス審査・実装ワークフロー化を行う API が追加で利用できます。仕様書の sv:// URI はノートブックにクリッカブルリンクとして書き込まれ、`ClaudeOpenSourceVaultURI` でワンクリック閲覧できます。
+
+##### ClaudeSpecStatus — spec/consensus 状態の確認
+
+```mathematica
+(* カレントノートブックのプロジェクトの状態を表示 *)
+ClaudeSpecStatus[]
+
+(* 特定プロジェクトを指定 *)
+ClaudeSpecStatus["my-project"]
+```
+
+カレントノートブックのプロジェクト ID（TaggingRule `SourceVaultSpecProjectId`）に紐づく spec/review のバージョン数・最新 Verdict・最新 spec の sv:// URI・最終更新時刻・バックグラウンドの consensus ジョブ稼働状況を Dataset として返します。プロジェクト ID が未設定の場合は実行中の consensus ジョブ一覧を表示します。ワークフローエンジン（ClaudeOrchestrator 等）は不要で、SourceVault のみで動作します。
+
+##### ClaudeSpecVersions — spec/review バージョン一覧
+
+```mathematica
+(* 全バージョンを Dataset で取得 *)
+ClaudeSpecVersions[]
+ClaudeSpecVersions["my-project"]
+
+(* ロールで絞り込む *)
+ClaudeSpecVersions["my-project", "spec"]
+ClaudeSpecVersions["my-project", "review"]
+ClaudeSpecVersions["my-project", "requirements"]
+```
+
+各行に `Role`・`Round`・`Verdict`・`Seq`・`CreatedAtUTC`・`URI` が含まれます。バージョンは SourceVault のポインタチェーン（`orch/<project>/spec` および `orch/<project>/review`）から取得されます。URI 列の sv:// リンクを `ClaudeSpecText` に渡すとそのバージョンの本文を取得できます。
+
+##### ClaudeSpecText — spec/review 本文の取得
+
+```mathematica
+(* sv:// URI から仕様書・審査内容の本文を取得 *)
+text = ClaudeSpecText["sv://snapshot/Spec/abcdef1234567890"]
+```
+
+`ClaudeSpecVersions` の URI 列の値をそのまま渡します。`sv://snapshot/Class/hex` 形式と `sv://snapshot/Class:hex` 形式、および生の `snapshot:Class:hex` ref の 3 形式すべてに対応しています。
+
+##### ClaudeOpenSourceVaultURI — sv:// URI を新規ノートブックで開く
+
+```mathematica
+(* 仕様書・審査結果を新規ノートブックウィンドウで表示 *)
+nb = ClaudeOpenSourceVaultURI["sv://snapshot/Spec/abcdef1234567890"]
+```
+
+spec/review/requirements の sv:// URI を受け取り、メタデータグリッドと本文（Text セル）を含む新規ノートブックウィンドウを開きます。審査（review）の場合は Findings セクションも表示されます。
+
+これは spec/consensus ワークフローがノートブックに書き込んだクリッカブルな sv:// リンクをクリックしたときの動作です。`NotebookObject` を返します。URI が解決できない場合は `$Failed` を返します。
+
+##### CreateImplementationWorkflow — 承認済み仕様からワークフローを実装
+
+`CreateImplementationWorkflow` は承認済み仕様（sv:// URI・スナップショット ref・生テキストのいずれか）を受け取り、`SourceVault_workflows/<name>/` 配下に `SVWorkflow_<Name>` パッケージとして実装します。実装は `$ClaudeModel`（実装者ロール）と `$ClaudeAdvisaryModel`（審査者ロール）の 2 モデルが協働する review-and-revise ループで進み、合意が得られるまでフィードバックを繰り返します。複雑な作業はサブ仕様（補助スペック）に分割して先に審査します。
+
+```mathematica
+(* 承認済み仕様 URI からワークフローをバックグラウンド実装 *)
+jobId = CreateImplementationWorkflow["MyWorkflowName",
+  "sv://snapshot/Spec/abcdef1234567890"]
+
+(* オプション指定 *)
+jobId = CreateImplementationWorkflow["MyWorkflowName", approvedSpecText,
+  "Notes"          -> "追加の実装ノート",
+  "ClaudeModel"    -> {"claudecode", "claude-opus-4-8"},
+  "AdvisaryModel"  -> {"chatgptcodex", "Automatic"},
+  "MaxRounds"      -> 5,
+  "Launch"         -> True]
+```
+
+| オプション | デフォルト | 説明 |
+|---|---|---|
+| `"Notes"` | `""` | 実装時の追加指示 |
+| `"ClaudeModel"` | `$ClaudeModel` | 実装者ロールのモデル（`{provider, model}` タプル） |
+| `"AdvisaryModel"` | `$ClaudeAdvisaryModel` | 審査者（アドバイザリー）ロールのモデル |
+| `"MaxRounds"` | `$iOrchConsensusMaxRounds` | 最大レビュー回数 |
+| `"Nb"` | （カレントノートブック） | 結果を書き込むノートブック |
+| `"Launch"` | `True` | 完了後にワークフローを起動するか |
+
+進捗は `WindowStatusArea` にリアルタイム表示（実行中モデル・フェーズ）されます。完了するとワークフローの起動関数がセッションと PromptRouter に登録され、ノートブックにサマリーが書き込まれます。バックグラウンドジョブ ID を返します。
+
+**`$ClaudeAdvisaryModel` の設定**
+
+`CreateImplementationWorkflow` の審査者ロールに使用するモデルは `$ClaudeAdvisaryModel` で制御します。`$ClaudeModel` と同じ `{provider, model}` タプル形式で指定します。デフォルトは `{"chatgptcodex", Automatic}`（Codex CLI の既定モデルを使用）です。
+
+```mathematica
+(* 審査者を特定の Codex モデルに固定する場合 *)
+$ClaudeAdvisaryModel = {"chatgptcodex", "gpt-5.5"}
+
+(* 審査者も Claude Code にする場合 *)
+$ClaudeAdvisaryModel = {"claudecode", "claude-opus-4-8"}
+```
+
+##### LaunchImplementationWorkflow — 生成ワークフローの起動
+
+```mathematica
+(* CreateImplementationWorkflow で生成したワークフローを（再）起動 *)
+result = LaunchImplementationWorkflow["MyWorkflowName", args]
+```
+
+`SourceVaultLoadWorkflow[name]` でワークフローをロードし、`WorkflowInfo["Launch"]` の起動エントリを `args` で呼び出します。起動コンテキスト・エントリ・結果を含む Association を返します。`CreateImplementationWorkflow` 完了後に自動起動されない場合（`"Launch" -> False` 指定時）や、後から手動で再起動したい場合に使用します。
 
 ### ClaudeTestKit（テストフレームワーク）
 
@@ -1827,5 +1941,5 @@ ClaudeStatus[]
 - [claudecode_directives](https://github.com/transreal/claudecode_directives) — rules/skills ディレクトリのデフォルトコンテンツ管理（オプション）
 - [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) — ランタイムセッション管理・承認フロー・スナップショット機構（オプション）
 - [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) — rate-limit 検出・自動復旧・リトライスケジューリング・ClaudeEval 非同期化（オプション）
-- [SourceVault](https://github.com/transreal/SourceVault) — PromptRouter ブリッジ経由のタスクディスパッチ・ReadOnly 許可リストによる安全実行（オプション）
+- [SourceVault](https://github.com/transreal/SourceVault) — PromptRouter ブリッジ経由のタスクディスパッチ・ReadOnly 許可リストによる安全実行・仕様審査ワークフロー API（オプション）
 - [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) — claudecode / ClaudeRuntime の自動テストフレームワーク（オプション）

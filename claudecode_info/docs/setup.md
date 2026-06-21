@@ -430,6 +430,20 @@ claudecode のパレットで provider を `ChatGPTCodex` に切り替えると�
 
 `Automatic` を選ぶと Codex CLI の既定モデルが使われます（`config.toml` の `model` キーを省略）。具体的なモデルを選ぶと、そのモデル名が Codex 実行時の設定に反映されます。
 
+#### アドバイザリーモデルの設定（仕様レビュー・実装ワークフロー用）
+
+`$ClaudeAdvisaryModel` は、仕様レビュー＆改訂オーケストレーターワークフローや `CreateImplementationWorkflow` における Codex（アドバイザリー）役のモデルを指定します。`$ClaudeModel` と同じ `{provider, model}` タプル形式で指定します。
+
+```mathematica
+(* 既定値: {"chatgptcodex", "Automatic"} （Automatic = Codex CLI 既定モデル） *)
+$ClaudeAdvisaryModel = {"chatgptcodex", "Automatic"}
+
+(* 具体的なモデルを指定する場合 *)
+$ClaudeAdvisaryModel = {"chatgptcodex", "gpt-5.5"}
+```
+
+`$ClaudeAdvisaryModel` を明示的に設定しない場合、ワークフロー実行時に `{"chatgptcodex", "Automatic"}` が自動的に使用されます。なお、ベア文字列 `"chatgptcodex"` も後方互換のため引き続き受け付けます。
+
 ## トラブルシューティング
 
 ### よくある問題と解決方法
@@ -820,3 +834,4 @@ ShowClaudePalette[]
 ?$UseClaudeRuntime
 ?$ClaudeLastRuntimeId
 ?$ClaudeDocUpdateStaleSeconds
+?$ClaudeAdvisaryModel
