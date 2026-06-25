@@ -5,6 +5,17 @@ description: Use when generating or updating package documentation with ClaudeCr
 
 # ドキュメント生成ルール
 
+## GithubRepositories の編集禁止（必須）
+
+**`GithubRepositories/` 配下のファイルは編集してはならない。**
+
+`$packageDirectory/GithubRepositories/<パッケージ名>/` に置かれたファイルは、ローカルの `<パッケージ名>_info/docs/` との差分を取って GitHub への更新コミットメッセージを作成するためのリファレンスとして保持されている。編集すると差分が失われ、コミットメッセージの作成ワークフローが壊れる。
+
+- ✅ 編集してよいのは `<パッケージ名>_info/docs/` 以下のファイル（例: `ClaudeRuntime_info/docs/api.md`）
+- ❌ `GithubRepositories/ClaudeRuntime/ClaudeRuntime_info/docs/api.md` などは編集しない
+
+この制約は、`ClaudeUpdateDocumentation` による自動生成・`ClaudeUpdatePackage` によるパッケージ更新・手動でのドキュメント修正、いずれの場合にも適用される。
+
 ## api.md の役割（最重要）
 
 **api.md はパッケージの「唯一の真実のソース」である。** LLM がこのファイルだけを読んで、パッケージの全公開関数を正しく使えるコードを書けなければならない。

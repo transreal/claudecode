@@ -89,6 +89,24 @@ RegularExpression["(?<![\\p{L}\\p{N}$])" <> varName <> "(?![\\p{L}\\p{N}$])"]
 RegularExpression["[\\p{L}$][\\p{L}\\p{N}$]*"]
 ```
 
+### context / symbol は数字で始めない（日本語は可、数字は不可）
+
+WL の context セグメント・シンボル名は **letter（日本語を含む）か `$` で始まらねばならず、数字で始められない**。
+**日本語シンボルは有効**（`設計仕様V2` / `株価V2` は正常）。問題になるのは **先頭の数字**。
+slug やファイル名（日付始まり `20260622-...` 等）から context / シンボルを機械生成すると踏みやすい。
+
+```mathematica
+BeginPackage["MyPkg`20260622Foo`"]  (* ✗ BeginPackage::cxt: Invalid context specified *)
+BeginPackage["MyPkg`株価V2`"]        (* ✓ 日本語始まりは有効 *)
+BeginPackage["MyPkg`W20260622Foo`"]  (* ✓ letter 始まりにすれば有効 *)
+```
+
+`.wl` を静的 parse する段階では context は文字列リテラル扱いで通ってしまい、**実ロード時**
+（`BeginPackage` 実行）に初めて `BeginPackage::cxt` で落ちる（生成は成功なのに使う段でエラー）。
+自由文字列から leaf を作るときは、先頭が数字なら letter を前置する（folder / slug / 表示名は数字始まりのままでよい。
+補正するのは symbol leaf だけ）。同じ context を複数箇所で導出するなら全箇所に同一ガードを入れる。詳細は
+`skills/wolfram-syntax-pitfalls` 罠 #64。
+
 ## D. Windows ShiftJIS 問題の回避
 
 必要なら非 ASCII を `\:XXXX` に変換して ASCII ファイル化する。

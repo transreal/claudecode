@@ -11,6 +11,7 @@ description: Use for Wolfram Language / Mathematica coding, editing, notebook ou
 
 - 主言語は Wolfram Language とする。
 - 新しい組み込み関数で自然に書ける場合は、古い回避策よりも最新の標準関数を優先する。
+- **組み込み関数を使う前に、引数形・オプション・戻り値の型/形状を必ず Mathematica のドキュメント (`ref/<Name>`) で確認する。推測で書かない。** 特に data / import / plot / 外部連携系は戻り値の Head が想定と異なることが多い (例: 罠 #20 の `FinancialData` → `TimeSeries`)。戻り値の実際の Head に合わせて処理を書く。
 - Python 連携が必要なときは `ExternalFunction` / `ExternalEvaluate` を優先候補にする。
 - Java 連携が必要なときは J/Link の利用を許容する。
 - Notebook スタイルは `Subsection` / `Item` / `Subitem` / `Text` を優先し、`Section` は使わない。
@@ -154,6 +155,16 @@ Scan[
 - 1 つ目: Module の close
 - 2 つ目: Function の close
 となるのを忘れない。深いネストでは Python などで括弧バランスを静的検証するのが確実 (例えば `(`, `)`, `[`, `]`, `{`, `}`, `<|`, `|>` の各々の閉じ忘れ判定)。
+
+### #20: FinancialData など data 系は TimeSeries を返す (list ではない)
+`FinancialData[id, prop, {start, end}]` は **`TimeSeries`** を返す (`{{date, value}, ...}` の list ではない)。`AdjustedClose` も有効プロパティで TimeSeries を返す。
+```mathematica
+(* NG: ListQ ゲートで TimeSeries が弾かれ、全系列が落ちてプロットが空になる *)
+goodSeriesQ[d_] := ListQ[d] && Length[d] > 0 && AnyTrue[d, MatchQ[#, {_, _}] &];
+(* OK: TimeSeries も受ける。ts["Path"] で {date, value} 列を得る *)
+goodSeriesQ[ts_TimeSeries] := goodSeriesQ[ts["Path"]];
+```
+`ts["Path"]` の値は `Quantity` のことがあるので `QuantityMagnitude` で数値化する。「Approved / 動くはずなのにグラフが出ない」ときの典型。**戻り値の型は推測せずドキュメントで確認する**（コーディング方針参照）。data / import / plot / 外部連携系の組み込みは特に Head を確認すること。
 
 ### その他: Association 関連
 - `ReplacePart` は **既存のキー** に対する置換のみ。Association に **新しいキー** を追加するときは `Append[assoc, <|"new" -> val|>]` を使う。`ReplacePart[assoc, "new" -> val]` は silently に無視される。

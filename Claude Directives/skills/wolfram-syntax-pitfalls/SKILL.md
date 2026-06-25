@@ -53,6 +53,41 @@ Mathematica は `\u3002` を **未知エスケープ** として error にする
 "\:3002"   (* ✓ 「。」 (句点) *)
 ```
 
+### 罠 #64: context / symbol の leaf を**数字で始めてはいけない** (`BeginPackage::cxt`)
+
+WL の context セグメント・シンボル名は **letter (日本語を含む) か `$` で始まらねばならず、数字で始められない**。
+slug やファイル名（日付始まり `20260622-...` 等）から context / シンボルを機械的に導出すると踏む。
+
+```mathematica
+BeginPackage["MyPkg`20260622Foo`"]   (* ✗ BeginPackage::cxt: Invalid context specified ... *)
+BeginPackage["MyPkg`株価V2`"]         (* ✓ 日本語始まりは有効 *)
+BeginPackage["MyPkg`W20260622Foo`"]   (* ✓ letter 始まりにすれば有効 *)
+```
+
+**日本語シンボルは原因ではない**（`設計仕様V2` / `株価V2` は正常にロードできる）。原因は **leaf 先頭の数字**。
+
+**罠の見えにくさ**: `.wl` を静的 parse（`ToExpression[..., HoldComplete]` や load smoke test）する分には、
+context は単なる **文字列リテラル** なので通ってしまう。無効さは **実ロード時**（`BeginPackage` 実行）に
+初めて `BeginPackage::cxt` で顕在化する → 「生成は成功 (Approved / parse OK) なのに、使う段でエラー」。
+
+**対策**: 自由文字列から context / シンボル leaf を作るときは、先頭が数字なら letter を前置する。
+folder / slug / 表示名は数字始まりのままでよい（補正するのは symbol leaf だけ）:
+
+```mathematica
+canonLeaf[s_] := Module[{parts, c},
+  parts = Select[StringSplit[s, Except[WordCharacter] ..], # =!= "" &];
+  c = If[parts === {}, s, StringJoin[Capitalize /@ parts]];
+  If[StringQ[c] && c =!= "" && StringStartsQ[c, DigitCharacter], "W" <> c, c]];
+```
+
+**同じ context を複数箇所で導出している場合は、全箇所に同一ガードを入れる**（片方だけ直すと
+`BeginPackage` が宣言する context と参照側の期待 context がズレて LoadFailed になる）。SourceVault では
+`iSVWFCanonicalSlug`（registry, authoritative）/ `iCanonicalName`（SVWorkflow_SpecImpl）/ `iSpecImplCanonName`
+（claudecode）の 3 ミラーに同一ガードを入れた（2026-06-22、日付ファイル名のワークフローで実際に踏んだ）。
+
+**検出**: ロードで `BeginPackage::cxt: Invalid context` が出たら leaf の先頭を確認。
+`StringStartsQ[leaf, DigitCharacter]` が True なら本罠。
+
 ## C. 演算子優先順位の罠
 
 ### 罠 #9: `UnsameQ` 演算子は `=!=` (`!==` ではない)
@@ -577,6 +612,7 @@ iLoadJSONFromFile[path_String] :=
 - 既存 code をデバッグするとき: $Failed が説明できないなら罠 #16 を疑う
 - `Return` で抜けないなら罠 #12 / #15 を疑う
 - `\u` エスケープでエラーが出たら罠 #11 を疑う
+- **ロード時に `BeginPackage::cxt: Invalid context` が出たら罠 #64 を疑う** (context/symbol leaf が数字始まり。slug/ファイル名由来。日本語シンボルは無関係。先頭が数字なら letter 前置)
 - `Needs` が見つからないと言ってきたら罠 #13 を疑う
 - `OptionValue::optnf` がパッケージ関数内で出たら罠 #18 を疑う (Block の中ではないか)
 - 構文エラーが出たコメント直後の行を見たら罠 #17 を疑う
