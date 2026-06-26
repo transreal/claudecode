@@ -80,6 +80,20 @@ Options: Opt1 -> Default1 (説明), Opt2 -> Default2 (説明)
 - 関数の説明を求められたとき: **api.md → user_manual.md → ソースコード** の順
 - api.md に記載されていない関数やオプションを推測で生成してはならない
 
+### api.md の更新方針（既存 doc を保全して同期）
+
+api.md / api_*.md は **既存ファイルを「更新」する**（ソースから完全再生成して上書きしない）。理由: 既存の api doc には**ソースコードからは導出できない人手の prose**（概要、設計ノート、規約、節の解説、worked example）が含まれており、これらは保全しなければならない。
+
+更新プロンプト（`iBuildDocPrompt` / `iUpdateDocNext`）は CURRENT DOCUMENT を含め、LLM に次を指示する:
+
+- ソース由来でない curated prose（概要・規約・例）は**必ず残す**。
+- 全関数シグネチャ・オプション・デフォルト値を**現ソースに同期**し、矛盾する記述を修正する。
+- ソースに**新規追加された**公開関数/オプションを追記し、ソースから**削除された**エントリのみ削除する。
+- CURRENT DOCUMENT が空なら、ソースから全生成する。
+- 結果は CURRENT DOCUMENT と**同等以上の充実度**であること（`iSafeWriteDoc` のサイズ退行ガードが既存の 40% 未満への縮小を拒否する）。
+
+⚠️ 旧方針（「Generate ENTIRELY from source. Do NOT reference any prior version.」＝ソースから完全再生成）は **2026-06-25 に廃止**。薄いソースの api doc で curated prose を失い、サイズ退行ガードに弾かれる（あるいは閾値超で気づかず prose を喪失する）ため。「唯一の真実のソース」であることと、ソースから毎回作り直すことは別物——既存 prose を保ちつつソースに同期する。
+
 ## ドキュメントキューの順序（厳守）
 
 **README.md は必ず最後に生成/更新する。これは絶対的なルールである。**
@@ -229,9 +243,33 @@ README.md は以下の構造を**この順序で**持たなければならない
 
 ## ドキュメント書き込みの安全機構
 
-`iSafeWriteDoc` による保護:
-- **サイズ退行ガード**: 既存ドキュメントの 40% 未満に縮小する場合は書き込みを拒否
+`iSafeWriteDoc` による保護（いずれかに該当したら**書き込まず `$Failed`**＝ファイルは変更しない）:
+- **サイズ退行ガード**: 既存ドキュメントの 40% 未満に縮小する場合は拒否
 - **タイトル整合性チェック**: README.md の先頭 `# タイトル` がパッケージ名と一致しない場合は拒否（LLM が別のドキュメント内容を返した場合の防護）
+- **切り詰め（truncation）検出** (`iDocLooksTruncated`): 応答が途中で切れた場合を検出して拒否。サイズ 40% ガードを通過しても壊れるため必須。確実な兆候のみ: ①未閉じコードフェンス（``` が奇数）②文・構文の途中で終端（末尾が読点 `、`/`，`/`,` や開き括弧 `(`/`（`/`「`）。
+
+## 失敗時の停止（fail-fast）と再開（resumption）— 必須
+
+途中失敗で「壊れたまま続行」「再実行で更新済みファイルまで再生成」する事故を防ぐため、`ClaudeUpdateDocumentation` の更新チェーン（`iUpdateDocNext`）は次のように動く:
+
+- **fail-fast（チェーン即中断）**: あるファイルの応答が
+  - システム的失敗（API エラー / 利用制限 / プロバイダ内部エラー / 空応答 = `iIsAPIErrorResponse`）、または
+  - 品質失敗（切り詰め / サイズ退行 / タイトル不整合 = `iSafeWriteDoc` が `$Failed`）
+  のいずれかなら、**そのファイルを書かず、残りのファイルにも進まずチェーン全体を中断する**。以前は品質失敗を skip して次へ進み、エラーが出ても更新を続けていた（これがバグ）。中断時もそれまでに成功したファイルは保全される。
+- **resumption（再開）**: 更新サイクルは「ソース内容＋指示＋対象ファイル集合」のハッシュ `iDocCycleKey` で識別され、成功したファイルは `<docsDir>/.docupdate_progress.json` に記録される。中断後に**同じソース状態で再実行すると、更新済みファイルをスキップして残りから再開**する。サイクル完全完了時に進捗ファイルはクリアされる（次回はソース変更で新サイクル）。ソースを編集すれば cycleKey が変わり全ファイル再生成。
+- すべて完了済みで再実行した場合は「既に更新済み」と表示して何もしない。
+
+## 大量ファイルの並列更新（LLM 並列投入）
+
+SourceVault のように **README 以外が閾値 `$iDocParallelThreshold`（既定 5）以上** になる更新では、`ClaudeUpdateDocumentation` は逐次チェーン（`iUpdateDocNext`）でなく **並列コーディネータ `iUpdateDocsParallel`** に振り分け、各 doc の LLM 呼び出しを**並列投入**する。
+
+- **プロンプト構築の共有**: 1 doc 分のプロンプトは純関数 `iBuildDocPrompt[sourceCode, pkg, docsDir, docFile, instruction, diffText, mode, designContext, splitCache]` が組み立てる（逐次・並列で共有。README は兄弟 doc をディスクから読むため、呼ぶ前に兄弟が書き込まれている必要がある）。
+- **並列度**: `$LLMGraphMaxConcurrency["cli"]`（既定 3）。`iClaudeQueryAsyncWithProgress`（claudecode 共有ポーリング）にファンアウトするので **rule 95 準拠**（独自 ScheduledTask を作らない）。
+- **README は必ず最後**: README 以外を全て並列で書き込み終えてから、README を 1 本だけ実行（更新済み兄弟を読んで概要生成）。README-last ルールを並列でも厳守。
+- **fail-fast**: いずれかの doc が API エラー/品質失敗なら新規投入を止め、飛行中が drain したら中断（成功分は保存・記録済み）。
+- **resumption**: 成功 doc は進捗記録され、再実行で未完了分から再開（並列でも Step 1 の仕組みをそのまま使う）。
+- **画像添付（list 版）は逐次のみ**: media files があるときは並列化せず `iUpdateDocNext`。
+- 少数（閾値未満）は逐次のまま（オーバーヘッド回避）。
 
 ## API エラー・利用制限の保護（必須）
 

@@ -14,7 +14,7 @@ GitHub: https://github.com/transreal/claudecode_directives
 ### $ClaudeModelCapabilities
 型: Association, キー: {provider, model} tuple
 モデル能力テーブル。値は `<|"ContextWindow" -> Integer, "Class" -> "Heavy-Cloud"|"Heavy-Local"|"Mid-Local"|"Light-Cloud"|"Light-Local", "DefaultMode" -> "Full"|"Summary"|"Index"|"Lazy", "Strengths" -> {String...}, "PreserveThinking" -> True|False, "Paid" -> True|False|>`。
-provider 名: `"claudecode"` (CLI・無課金), `"anthropic"` (API・課金), `"openai"` (API・課金), `"lmstudio"` (ローカル・無課金)。キーは Phase 28 で String から {provider, model} tuple に変更。
+provider 名: `"claudecode"` (CLI・無課金), `"anthropic"` (API・課金), `"openai"` (API・課金), `"lmstudio"` (ローカル・無課金)。キーは Phase 28 で String から {provider, model} tuple に変更。`"Paid"` フィールドも Phase 28 で追加。
 
 ### $ClaudeRoleDefaultModels
 型: Association, キー: Role 名
@@ -74,13 +74,12 @@ $ClaudeDirectiveRepository を空にして再読込を強制する。
 ClaudeFindDirectiveRoots[] で正規 root を解決する。存在しない場合は Failure["DirectiveRootNotFound"] を返す。
 
 ### ClaudeResolveDirectiveRoot[root] → String | Failure
-明示的な root ディレクトリ文字列を検証して返す。
+明示的な root ディレクトリ文字列を検証して返す。非ディレクトリは Failure["DirectiveRootNotFound"]、非文字列は Failure["DirectiveRootInvalid"]。
 
 ## インベントリ・マニフェスト
 
 ### ClaudeDirectiveFileInventory[root, opts] → {Association...} | Failure
-Claude Directives リポジトリの Phase 1.0 インベントリをファイルレコードのソート済みリストとして返す。各レコードのキー: Role, RelativePath, LogicalPath, AbsolutePath, ContentHash, ByteCount, LineCount, Name, Title, Description, FrontMatter, Paths, TokenEstimate, ModifiedTime。Role は "RootInstruction" | "Rule" | "Skill" | "Other"。
-→ {Association...} | Failure
+Claude Directives リポジトリの Phase 1.0 インベントリをファイルレコードのソート済みリストとして返す。root はディレクトリ文字列または Automatic。各レコードのキー: Role, RelativePath, LogicalPath, AbsolutePath, ContentHash, ByteCount, LineCount, Name, Title, Description, FrontMatter, Paths, TokenEstimate, ModifiedTime。Role は "RootInstruction" | "Rule" | "Skill" | "Other"。
 Options: "IncludeOther" -> True (非 rule/skill ファイルを含めるか)
 
 ### ClaudeDirectiveRepositoryInventory[root] → {Association...} | Failure
@@ -95,19 +94,19 @@ DirectiveRepositoryManifest Association を返す。キー: Kind, CanonicalForma
 ## rule 派生メタデータ・分類
 
 ### ClaudeDirectiveRuleDerivedMetadata[ruleRecord, opts] → Association
-rule インベントリレコードから Codex ハーネス用メタデータを導出する。返り値キー: Title, Summary, Description, Trigger, DescriptionSource ("derived-from-paths-and-heading" | "override" | "fallback"), Paths。
-Options: "RuleMetadataOverrides" -> `<||>` (rule 名をキーとする上書き Association)
+rule インベントリレコードから Codex ハーネス用メタデータを導出する。正規 rule frontmatter は description/summary/trigger を持たない前提で、rule の見出し (Title) と paths frontmatter から決定論的に導出する。返り値キー: Title, Summary, Description, Trigger, DescriptionSource ("derived-from-paths-and-heading" | "override" | "fallback"), Paths。引数不一致時は $Failed。
+Options: "RuleMetadataOverrides" -> `<||>` (rule 名 (Name) をキーとする上書き Association)
 
 ### ClaudeDirectiveClassifyRule[ruleRecord, opts] → Association
-rule インベントリレコードをハーネスマテリアライゼーション用に分類する。返り値キー: Scope ("always-on" | "task-specific"), SizeClass ("small" | "large"), CommandPolicy, InlineSummaryInAgentsMd, Reason。
-Options: "AlwaysOnRules" -> Automatic, "RuleLargeByteThreshold" -> Automatic, "RuleMetadataOverrides" -> `<||>`
+rule インベントリレコードをハーネスマテリアライゼーション用に分類する。返り値キー: Scope ("always-on" | "task-specific"), SizeClass ("small" | "large"), CommandPolicy, InlineSummaryInAgentsMd (候補値。最終的な inline 判定は ClaudeDirectiveHarnessPlan で AGENTS.md バイト予算に対し再評価), Reason。
+Options: "AlwaysOnRules" -> Automatic (Automatic 時は $ClaudeAlwaysOnRules を採用), "RuleLargeByteThreshold" -> Automatic (Automatic 時は $CodexRuleLargeByteThreshold を採用), "RuleMetadataOverrides" -> `<||>`
 
 ## バンドル・投影
 
 ### ClaudeResolveDirectiveBundle[opts] → Association
 task / role / model に応じた directive bundle を返す。
 → `<|"ClaudeMD"->..., "ActiveRules"->..., "ActiveSkills"->..., "ProjectionMode"->..., "TokenBudget"->..., "DirectiveMeta"->...|>`
-Options: "Role" -> None ("Plan"|"Draft"|"Verify"|"Commit"|"Explore"|"Reduce"|None), "Model" -> モデル名, "Mode" -> Automatic ("Full"|"Summary"|"Index"|"Lazy"|Automatic), "TaskHint" -> String, "TokenBudget" -> Automatic
+Options: "Role" -> None ("Plan"|"Draft"|"Verify"|"Commit"|"Explore"|"Reduce"|None), "Model" -> モデル名 (capability テーブル参照キー), "Mode" -> Automatic ("Full"|"Summary"|"Index"|"Lazy"|Automatic), "TaskHint" -> String, "TokenBudget" -> Automatic (Integer | Automatic), "MaxSkills" -> Automatic (Integer | Automatic; Automatic 時は $ClaudeRoleMaxSkills を採用)
 
 ### ClaudeProjectDirectives[bundle] → String
 ### ClaudeProjectDirectives[bundle, mode] → String
@@ -143,30 +142,31 @@ SKILL.md 先頭の YAML frontmatter を解析する。返り値: `<|"Frontmatter
 ## ハーネス計画・マテリアライゼーション
 
 ### ClaudeDirectiveHarnessPlan[bundle, target, opts] → Association | Failure
-ファイルを書かずにハーネスの dry-run 計画を返す。target は "Codex" または "ClaudeCLI"。"ClaudeCLI" 計画は verbatim コピー計画 (AGENTS.md・directive index なし)。
-返り値キー: Target, HarnessMaterializationMode, DirectiveRepositoryManifestHash, SourceVaultSnapshotId, AgentsMd, Index, GeneratedSkills, CommandPolicyRules, ProvenanceFiles, Warnings。
+ファイルを書かずにハーネスの dry-run 計画を返す。target は "Codex" または "ClaudeCLI"。"ClaudeCLI" 計画は verbatim コピー計画 (AGENTS.md・directive index なし) で iClaudeCLIHarnessPlan に委譲される。target がそれ以外は Failure["UnsupportedHarnessTarget"]。
+返り値キー (Codex): Target, HarnessMaterializationMode, DirectiveRepositoryManifestHash, SourceVaultSnapshotId, AgentsMd (TargetRelativePath / EstimatedByteCount / InlineRuleNames / OmittedRuleNames / HardMaxBytes), Index (TargetRelativePath / Entries), GeneratedSkills, CommandPolicyRules, ProvenanceFiles, Warnings。
+返り値キー (ClaudeCLI): Target, HarnessMaterializationMode, DirectiveRepositoryManifestHash, SourceVaultSnapshotId, DirectiveRoot, RootInstruction, AgentsMd (Missing), Index (Missing), GeneratedSkills (rule/skill 両方を Kind 付きで保持), CommandPolicyRules ({}), ProvenanceFiles, Warnings。
 Options: "HarnessMaterializationMode" -> Automatic, "AgentsMdTargetMaxBytes" -> 20000, "AgentsMdHardMaxBytes" -> 30000, "RuleLargeByteThreshold" -> Automatic, "AlwaysOnRules" -> Automatic, "RuleMetadataOverrides" -> `<||>`, "SourceVaultSnapshotId" -> Missing["NotRegistered"]
 
 ### ClaudeDirectiveHarnessProvenanceHeader[meta] → String
-生成された AGENTS.md の先頭に配置する HTML コメント形式のプロベナンスヘッダを返す。meta キー: DirectiveRepositoryManifestHash, SourceVaultSnapshotId, HarnessMaterializationMode。
+生成された AGENTS.md の先頭に配置する HTML コメント形式のプロベナンスヘッダを返す。meta キー: DirectiveRepositoryManifestHash (または ManifestHash), SourceVaultSnapshotId, HarnessMaterializationMode。
 
 ### ClaudeDirectiveMaterializeCodexHarness[bundle, targetDir, opts] → Association | Failure
-ClaudeDirectiveHarnessPlan を実行して Codex ハーネスを targetDir 以下にマテリアライズする。書き込み順: .agents/skills 以下の rule/skill SKILL.md → .agents/directive-index.json → AGENTS.md → プロベナンスファイル。正規 Claude Directives リポジトリは変更しない。
+ClaudeDirectiveHarnessPlan を実行して Codex ハーネスを targetDir 以下にマテリアライズする。書き込み順: .agents/skills 以下の rule/skill SKILL.md → .agents/directive-index.json → AGENTS.md → プロベナンスファイル。正規 Claude Directives リポジトリは変更しない。DryRun -> True ならファイルを書かず計画を返す。
 返り値キー: WrittenFiles, AgentsMd, Index, GeneratedSkills, ProvenanceFiles, Warnings, Plan。
 Options: ClaudeDirectiveHarnessPlan と同じオプション + "GenerateDirectiveIndex" -> True, "GenerateProvenance" -> True, "CommandPolicyMaterialization" -> Automatic, "DryRun" -> False, "FailOnAgentsMdOverflow" -> False
 
 ### ClaudeDirectiveMaterializeClaudeHarness[bundle, targetDir, opts] → Association | Failure
-正規 Claude Directives リポジトリから Claude CLI ハーネスを targetDir/.claude/ 以下に verbatim コピーでマテリアライズする (Phase 4)。書き込み対象: .claude/CLAUDE.md, .claude/rules/<name>.md, .claude/skills/<name>/SKILL.md, .claude/sourcevault-provenance.json。rule の skill 変換・AGENTS.md・directive index は生成しない。.claude/settings.json はこの関数では書かない (claudecode.wl が注入)。
+正規 Claude Directives リポジトリから Claude CLI ハーネスを targetDir/.claude/ 以下に verbatim コピーでマテリアライズする (Phase 4, $ClaudeCLIHarnessMode -> "Generated")。書き込み対象: .claude/CLAUDE.md, .claude/rules/<name>.md, .claude/skills/<name>/SKILL.md, .claude/sourcevault-provenance.json。rule の skill 変換・AGENTS.md・directive index は生成しない。.claude/settings.json はこの関数では書かない (claudecode.wl が read 権限を注入)。DryRun -> True ならファイルを書かず計画を返す。
 返り値キー: WrittenFiles, RootInstruction, GeneratedFiles, ProvenanceFiles, Warnings, Plan。
 Options: "HarnessMaterializationMode" -> Automatic, "SourceVaultSnapshotId" -> Missing["NotRegistered"], "DirectiveRepositoryManifestHash" -> Automatic, "GenerateProvenance" -> True, "DryRun" -> False
 
 ## マイグレーションゲート
 
 ### ClaudeDirectiveCompareCanonicalAndClaudeHarness[directiveRoot, claudeDir] → Association | Failure
-正規 Claude Directives リポジトリとレガシー .claude/ ハーネスを正規化論理パスで比較する。
-返り値キー: CanonicalEquivMap, LegacyEquivMap, FilesOnlyInCanonical, FilesOnlyInLegacy, FilesChanged, LegacyHarnessOnlyFiles, CanonicalDirExists, LegacyDirExists。
+正規 Claude Directives リポジトリとレガシー .claude/ ハーネスを正規化論理パス (CLAUDE.md, rules/<name>.md, skills/<name>/SKILL.md) で比較する。両側とも ClaudeDirectiveFileInventory["IncludeOther" -> True] を使う。
+返り値キー: CanonicalEquivMap, LegacyEquivMap, FilesOnlyInCanonical, FilesOnlyInLegacy, FilesChanged, LegacyHarnessOnlyFiles (settings.json 等。同等性判定から除外), CanonicalDirExists, LegacyDirExists。引数不一致時は $Failed。
 
 ### ClaudeDirectiveMigrationReport[directiveRoot, claudeDir] → Association | Failure
 マイグレーションゲート: レガシー .claude/ ハーネスが正規リポジトリと同等かを報告する。
 返り値キー: CanonicalRoot, LegacyClaudeDir, CanonicalHash, LegacyHarnessHash, Status, FilesOnlyInCanonical, FilesOnlyInLegacy, FilesChanged, LegacyHarnessOnlyFiles, RecommendedAction。
-Status: "Equivalent" | "Diverged" | "LegacyOnly" | "CanonicalOnly"。Claude CLI を Generated モードに切り替えるには Status "Equivalent" またはマニュアル承認が必要。ハーネス専用ファイル (settings.json 等) は Status に影響しない。
+Status: "Equivalent" | "Diverged" | "LegacyOnly" | "CanonicalOnly"。RecommendedAction: "CanSwitchClaudeToGenerated" (Equivalent 時) | "ManualReview"。ハッシュは CLAUDE.md / rules / skills の正規化 {LogicalPath, ContentHash} ペアのみで計算され、ハーネス専用ファイル (settings.json 等) は Status に影響しない。Claude CLI を Generated モードに切り替えるには Status "Equivalent" またはマニュアル承認が必要。

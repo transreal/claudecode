@@ -1,3 +1,5 @@
+---
+
 ## 設計思想と実装の概要
 
 ClaudeCode は以下の設計原則に基づいています。
@@ -14,7 +16,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **プロジェクト固有ディレクティブ**: ノートブックディレクトリごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。
 - **claudecode_directives 連携**: オプションの独立パッケージ [claudecode_directives](https://github.com/transreal/claudecode_directives) をロードすることで、`rules/` および `skills/` ディレクトリのデフォルトセットが自動的にインストールされます。ロード後は Claude Code CLI のコンテキストに rules/ の制約と skills/ の手順が自動的に注入され、Claude がスキルを呼び出せるようになります。claudecode.wl 本体はディレクティブの内容に非依存であり、claudecode_directives がその管理を担います。
 - **ディレクティブ投影レイヤー (ClaudeDirectives)**: rules/skills を含む正規ディレクティブ・リポジトリを読み込み、モデルの能力（コンテキスト長・課金有無）・ロール・タスクに応じて、投影モード（Full / Summary / Index / Lazy）と適用するスキル・ルールを in-memory で動的に選択します。さらに、単一の正規リポジトリから Claude CLI 用（`.claude/`）と Codex CLI 用（`AGENTS.md` / `.agents/`）のハーネスを生成・実体化する機能を備えます。ファイル形式は Claude Code 互換を維持し、claudecode.wl / NBAccess.wl への依存を持たない純 Wolfram Language 実装（Rule 11）として、claudecode.wl 側から optional に統合されます。
-- **スマートドキュメント管理**: ドキュメント生成・更新時のモード制御（新規作成・既存更新）、部分更新対象の指定、差分検出による効率的な更新処理を提供します。`ClaudeUpdateDocumentation` の `Baseline` オプションにより、差分の基準を「直近の更新バックアップ（`"LastDocUpdate"`）」と「GitHub コミット版（`"Github"`）」から選択でき、後者では `_info/design` の新規設計内容も加味した更新が行えます。ドキュメント更新チェーンの多重起動防止ガードにより、同一パッケージに対して複数の更新チェーンが同時起動することを防ぎます。チェーンが異常終了した場合も `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放されます。
+- **スマートドキュメント管理**: ドキュメント生成・更新時のモード制御（新規作成・既存更新）、部分更新対象の指定、差分検出による効率的な更新処理を提供します。`ClaudeUpdateDocumentation` の `Baseline` オプションにより、差分の基準を「直近の更新バックアップ（`"LastDocUpdate"`）」と「GitHub コミット版（`"Github"`）」から選択でき、後者では `_info/design` の新規設計内容も加味した更新が行えます。20 ファイル以上の一括更新時は、README を除くドキュメントを LLM へ並列投入し、ウィンドウステータスバーにリアルタイム進捗（「完了 N/M • K 並列実行中 • 経過 Ts」）を表示します。サイクル再開（resumption）機能により、API エラーで中断後に再実行しても同一サイクル内の更新済みファイルをスキップして効率的に継続できます。ドキュメント更新チェーンの多重起動防止ガードにより、同一パッケージに対して複数の更新チェーンが同時起動することを防ぎます。チェーンが異常終了した場合も `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放されます。
 - **分離原則検証**: NBAccess パッケージとの適切な分離を維持するため、コード内の分離原則違反を自動検出・修正する機能を備えています。
 - **パッケージキーワード自動注入**: 各パッケージが独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。
 - **自動実行安全ガード**: `ClaudeEval` の `AutoEvaluate -> True` で生成コードを自動実行する際、`NBAutoEvalProhibitedPatterns` に定義された禁止パターンに該当するコードの自動実行をブロックします。これにより、ファイル削除や危険なシステム操作などを含むコードが意図せず実行されることを防止します。
@@ -24,7 +26,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすると、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、危険な操作に対して承認フロー(`NeedsApproval`)を提供します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、`ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode 単独ロード時はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。
 - **ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすると、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。rate-limit 検出・自動待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断します。
 - **SourceVault 連携（PromptRouter ブリッジ）**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`（`HoldComplete`）の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず（rule 11）、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター（spec 5.3 / 24.3）にフォールバックします。SourceVault をロードすると、仕様書の審査・実装ワークフロー化 API（`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`）も利用可能になります。
-- **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG（有向非巡回グラフ）として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。`$LLMGraphMaxConcurrency` によりカテゴリ別の並列度を制御でき、DAG ジョブの作成・実行・キャンセル・再構築を行う `LLMGraphDAGCreate` / `LLMGraphDAGRebuild` 系の API も提供されます。
+- **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG（有向非巡回グラフ）として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。`$LLMGraphMaxConcurrency` によりカテゴリ別の並列度を制御でき、DAG ジョブの作成・実行・キャンセル・再構築を行う `LLMGraphDAGCreate` / `LLMGraphDAGRebuild` 系の API も提供されます。なお `$LLMGraphMaxConcurrency["cli"]` は並列ドキュメント更新（20+ ファイル時）の並列度制御にも使用されます。
 - **[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージする機能を提供します。
 
 内部的には、[NBAccess](https://github.com/transreal/NBAccess) パッケージにノートブックのセル操作・プライバシー管理・履歴 DB を委譲し、[GitHubREST](https://github.com/transreal/github) パッケージと連携して GitHub 上のパッケージ管理を行います。
@@ -114,8 +116,9 @@ $ClaudeWorkingDirectory = FileNameJoin[{$HomeDirectory, "Claude Working"}]
 (* パッケージキーワード自動注入マップ *)
 $ClaudePackageKeywordMap = <||>
 
-(* LLMGraph カテゴリ別並列度 (デフォルト値を変更する場合) *)
-$LLMGraphMaxConcurrency["cli"] = 4        (* CLI テキスト呼び出し *)
+(* LLMGraph カテゴリ別並列度 (デフォルト値を変更する場合)
+   ※ ClaudeUpdateDocumentation の並列ドキュメント更新（20+ ファイル時）の並列度制御にも使用される *)
+$LLMGraphMaxConcurrency["cli"] = 4        (* CLI テキスト呼び出し・並列ドキュメント更新 *)
 $LLMGraphMaxConcurrency["cli-vision"] = 1 (* CLI 画像付き呼び出し *)
 
 (* ドキュメント更新チェーンの stale 上限（秒）。
@@ -209,7 +212,7 @@ ClaudePrepareCommit["MyPackage"]
 | | `ClaudeRestorePackage` | バックアップからの復元 |
 | | `ClaudeConvertToPaclet` | Paclet 形式への変換 |
 | **ドキュメント** | `ClaudeCreateDocumentation` | ドキュメント一式の自動生成 |
-| | `ClaudeUpdateDocumentation` | 差分検出による自動更新・モード制御・Baseline 切替（直近更新／GitHub コミット版） |
+| | `ClaudeUpdateDocumentation` | 差分検出による自動更新・モード制御・Baseline 切替（直近更新／GitHub コミット版）・並列更新・サイクル再開（resumption） |
 | **バックアップ** | `ClaudeBackupDataset` | バックアップ履歴の管理・復元 |
 | | `ClaudeMigrateBackupHistory` | 生バックアップを差分形式に変換 |
 | **機密データ** | `Confidential` / `NonConfidential` | 変数の秘匿・解除 |
@@ -275,7 +278,7 @@ ClaudePrepareCommit["MyPackage"]
 | | `LLMGraphExecute` | LLMGraph ジョブの実行 |
 | | `LLMGraphExecuteStatus` | LLMGraph ジョブのステータス取得 |
 | | `LLMGraphExecuteCancel` | LLMGraph ジョブのキャンセル |
-| | `$LLMGraphMaxConcurrency` | カテゴリ別並列度の制御 |
+| | `$LLMGraphMaxConcurrency` | カテゴリ別並列度の制御（並列ドキュメント更新にも適用） |
 | **[実験的] ファイル処理** | `ClaudeProcessFile` | プライバシー分割並列処理 |
 | **分離検証** | `ClaudeCheckSeparation` | NBAccess 分離原則の違反検査 |
 | | `ClaudeFixSeparation` | 違反の自動修正 |
@@ -737,7 +740,7 @@ ClaudeQuery の応答中でも、「AI で画像を生成して」「フォト�
 (* 基本的な音声生成 *)
 ClaudeSpeech["こんにちは、世界"]
 
-(* オプション指定 *)```mathematica
+(* オプション指定 *)
 ClaudeSpeech["Hello, world!",
   "Model" -> "tts-1-hd",
   "Voice" -> "nova",
@@ -918,7 +921,7 @@ provider 名は以下のように分類されます。
 | `"claudecode"` | Claude Code CLI（Opus 等） | なし（サブスクリプション） |
 | `"anthropic"` | Anthropic API | あり |
 | `"openai"` | OpenAI API | あり |
-| `"lmstudio"` | ローカル LLM（LM Studio 等） | なし |
+| `"l| `"lmstudio"` | ローカル LLM（LM Studio 等） | なし |
 
 これにより、同じ Opus でも CLI 版（`"claudecode"`, 課金なし）と API 版（`"anthropic"`, 課金あり）を**別モデルとして両方登録**できます（`lm-studio` は `lmstudio` に provider 名が正規化されます）。
 
@@ -979,10 +982,6 @@ ClaudeSelectRulesForTask[repo, "Excel を UTF-8 で読み込む",
   "Role" -> "Draft", "MaxRules" -> 8, "MinScore" -> 1]
 ```
 
-- `ClaudeSelectSkillsForTask[repo, taskHint, opts]` — task hint に関連するスキルをスコアリングして上位を返します。`opts`: `"Role"`, `"MaxSkills"`（既定 5）, `"ModelStrengths"`。
-- `ClaudeSelectRulesForRole[repo, role]` — role ごとの always-on rules を返します（後方互換のため `Lookup[repo, "Rules", {}]` を返します）。
-- `ClaudeSelectRulesForTask[repo, taskHint, opts]` — `$ClaudeAlwaysOnRules` の rule は無条件で含めつつ、その他は frontmatter の keywords / paths と TaskHint の交差度でスコア化して上位を採用します。`opts`: `"Role"`, `"MaxRules"`（既定 8）, `"MinScore"`（既定 1）。
-
 #### Directive Bundle と投影テキストの生成
 
 ```mathematica
@@ -1030,81 +1029,50 @@ ClaudeProjectDirectives[bundle, "Summary"]
 
 #### リポジトリ・インベントリとマニフェスト
 
-正規ディレクティブ・リポジトリの内容を機械可読な形で列挙・要約する関数群です（Phase 1.0）。
-
 ```mathematica
-(* 正規ディレクティブ root を解決（Automatic は自動探索） *)
 root = ClaudeResolveDirectiveRoot[Automatic]
-
-(* ファイル単位のインベントリ（ソート済みリスト） *)
 inv = ClaudeDirectiveFileInventory[root]
-
-(* リポジトリ・マニフェスト（ハッシュ付き） *)
 manifest = ClaudeDirectiveRepositoryManifest[root]
-
-(* マニフェストハッシュ文字列のみ *)
 hash = ClaudeDirectiveRepositoryHash[root]
 ```
 
-- `ClaudeResolveDirectiveRoot[Automatic]` — `ClaudeFindDirectiveRoots` 経由で正規 root を解決します。存在しなければ `Failure["DirectiveRootNotFound"]` を返します。`ClaudeResolveDirectiveRoot[root]` は明示 root の検証を行います。
-- `ClaudeDirectiveFileInventory[root]` — 各ファイル記録のソート済みリストを返します。各記録は固定スキーマ（`Role`, `RelativePath`, `LogicalPath`, `AbsolutePath`, `ContentHash`, `ByteCount`, `LineCount`, `Name`, `Title`, `Description`, `FrontMatter`, `Paths`, `TokenEstimate`, `ModifiedTime`）を持ち、`Role` は `RootInstruction` / `Rule` / `Skill` / `Other` のいずれかです。オプション `"IncludeOther"` で rule/skill 以外のファイルを含めるか制御します。
-- `ClaudeDirectiveRepositoryInventory[root]` — `ClaudeDirectiveFileInventory[root]` の別名です。
-- `ClaudeDirectiveRepositoryManifest[root]` — `Kind`, `CanonicalFormat`, `Root`, `Files`（インベントリ）, `FilesCount`, `RulesCount`, `SkillsCount`, `ManifestHash`, `CreatedAt`, `Generator` を持つ Association を返します。`ManifestHash` はソート済みの `RelativePath` / `ContentHash` ペアのみに依存し、`ModifiedTime` や `TokenEstimate` の変化に対して安定です。
+- `ClaudeResolveDirectiveRoot[Automatic]` — `ClaudeFindDirectiveRoots` 経由で正規 root を解決します。存在しなければ `Failure["DirectiveRootNotFound"]` を返します。
+- `ClaudeDirectiveFileInventory[root]` — 各ファイル記録のソート済みリストを返します。各記録は固定スキーマ（`Role`, `RelativePath`, `LogicalPath`, `AbsolutePath`, `ContentHash`, `ByteCount`, `LineCount`, `Name`, `Title`, `Description`, `FrontMatter`, `Paths`, `TokenEstimate`, `ModifiedTime`）を持ち、`Role` は `RootInstruction` / `Rule` / `Skill` / `Other` のいずれかです。
+- `ClaudeDirectiveRepositoryManifest[root]` — `Kind`, `CanonicalFormat`, `Root`, `Files`, `FilesCount`, `RulesCount`, `SkillsCount`, `ManifestHash`, `CreatedAt`, `Generator` を持つ Association を返します。`ManifestHash` はソート済みの `RelativePath` / `ContentHash` ペアのみに依存し、`ModifiedTime` や `TokenEstimate` の変化に対して安定です。
 - `ClaudeDirectiveRepositoryHash[root]` — `ManifestHash` 文字列のみを返します。
 
 #### ルールの派生メタデータと分類
 
-正規ルールの frontmatter は説明文・トリガーを持たない設計のため、見出し（Title）と paths から決定論的に派生させます（Phase 1.1a）。
-
 ```mathematica
-(* rule 記録から Codex ハーネス用の派生メタデータを導出 *)
 ClaudeDirectiveRuleDerivedMetadata[ruleRecord]
-
-(* rule をハーネス実体化向けに分類 *)
 ClaudeDirectiveClassifyRule[ruleRecord]
 ```
 
 - `$CodexRuleLargeByteThreshold` — rule を `"large"` と分類するバイト境界（既定 8192）。
-- `ClaudeDirectiveRuleDerivedMetadata[ruleRecord]` — `Title`, `Summary`, `Description`, `Trigger`, `DescriptionSource`（`"derived-from-paths-and-heading"` / `"override"` / `"fallback"`）, `Paths` を返します。オプション `"RuleMetadataOverrides"` で rule Name をキーとした個別オーバーライドを供給できます。
-- `ClaudeDirectiveClassifyRule[ruleRecord]` — `Scope`（`"always-on"` / `"task-specific"`）, `SizeClass`（`"small"` / `"large"`）, `CommandPolicy`, `InlineSummaryInAgentsMd`, `Reason` を返します。オプション: `"AlwaysOnRules"`, `"RuleLargeByteThreshold"`, `"RuleMetadataOverrides"`。
+- `ClaudeDirectiveRuleDerivedMetadata[ruleRecord]` — `Title`, `Summary`, `Description`, `Trigger`, `DescriptionSource`, `Paths` を返します。
+- `ClaudeDirectiveClassifyRule[ruleRecord]` — `Scope`（`"always-on"` / `"task-specific"`）, `SizeClass`（`"small"` / `"large"`）, `CommandPolicy`, `InlineSummaryInAgentsMd`, `Reason` を返します。
 
 #### ハーネス実体化（Codex / Claude CLI）
 
-単一の正規ディレクティブ・リポジトリから、複数の CLI 用ハーネスを生成・実体化できます（Phase 1.1b）。**正規リポジトリ自体は決して変更されません。**
-
 ```mathematica
-(* ドライラン: ファイルを書かずに実体化計画を計算 *)
-plan = ClaudeDirectiveHarnessPlan[bundle, "Codex"]   (* "Codex" | "ClaudeCLI" *)
-
-(* Codex ハーネスを実体化 *)
+plan = ClaudeDirectiveHarnessPlan[bundle, "Codex"]
 ClaudeDirectiveMaterializeCodexHarness[bundle, targetDir]
-
-(* ドライランで計画のみ取得 *)
 ClaudeDirectiveMaterializeCodexHarness[bundle, targetDir, DryRun -> True]
-
-(* Claude CLI ハーネスを実体化（正規ファイルの逐語コピー） *)
 ClaudeDirectiveMaterializeClaudeHarness[bundle, targetDir]
 ```
 
-- `ClaudeDirectiveHarnessPlan[bundle, target]` — ファイルを書かずに実体化計画を返します。`target` は `"Codex"` または `"ClaudeCLI"`。計画には `Target`, `HarnessMaterializationMode`, `DirectiveRepositoryManifestHash`, `SourceVaultSnapshotId`, `AgentsMd`, `Index`, `GeneratedSkills`, `CommandPolicyRules`, `ProvenanceFiles`, `Warnings` が含まれます。
-- `ClaudeDirectiveHarnessProvenanceHeader[meta]` — 生成 AGENTS.md 先頭に置く HTML コメント形式の provenance ヘッダを返します。
-- `ClaudeDirectiveMaterializeCodexHarness[bundle, targetDir]` — `ClaudeDirectiveHarnessPlan` を実行し、`.agents/skills/<name>/SKILL.md`、`.agents/directive-index.json`、`AGENTS.md`、provenance ファイルをこの固定順で書き込みます。返り値は実体化レポート（`WrittenFiles`, `AgentsMd`, `Index`, `GeneratedSkills`, `ProvenanceFiles`, `Warnings`, `Plan`）。`DryRun -> True` では何も書かず計画を返します。
-- `ClaudeDirectiveMaterializeClaudeHarness[bundle, targetDir]` — 正規リポジトリから Claude CLI ハーネス（`$ClaudeCLIHarnessMode -> "Generated"`）を実体化します。`.claude/CLAUDE.md`、`.claude/rules/<name>.md`、`.claude/skills/<name>/SKILL.md` を正規ファイルの逐語コピーとして書き込みます。加えて `.claude/sourcevault-provenance.json` を書きます。`DryRun -> True` で計画のみ返します。
+- `ClaudeDirectiveHarnessPlan[bundle, target]` — ファイルを書かずに実体化計画を返します。`target` は `"Codex"` または `"ClaudeCLI"`。
+- `ClaudeDirectiveMaterializeCodexHarness[bundle, targetDir]` — `.agents/skills/<name>/SKILL.md`、`.agents/directive-index.json`、`AGENTS.md`、provenance ファイルをこの固定順で書き込みます。`DryRun -> True` では何も書かず計画を返します。
+- `ClaudeDirectiveMaterializeClaudeHarness[bundle, targetDir]` — 正規リポジトリから Claude CLI ハーネスを実体化します。`.claude/CLAUDE.md`、`.claude/rules/<name>.md`、`.claude/skills/<name>/SKILL.md` を正規ファイルの逐語コピーとして書き込みます。`DryRun -> True` で計画のみ返します。
 
 #### マイグレーション・ゲート
 
-正規ディレクティブ・リポジトリと、従来の `$ClaudeWorkingDirectory/.claude/` ハーネスとの差分を、正規化した論理パスで比較・診断します（Phase 2.5）。
-
 ```mathematica
-(* 正規リポジトリと従来 .claude/ ハーネスの生比較 *)
 ClaudeDirectiveCompareCanonicalAndClaudeHarness[directiveRoot, claudeDir]
-
-(* 移行ゲートのレポート *)
 report = ClaudeDirectiveMigrationReport[directiveRoot, claudeDir]
 ```
 
-- `ClaudeDirectiveCompareCanonicalAndClaudeHarness[directiveRoot, claudeDir]` — `CLAUDE.md` / `rules/<name>.md` / `skills/<name>/SKILL.md` を正規化論理パスで比較し、`CanonicalEquivMap`, `LegacyEquivMap`, `FilesOnlyInCanonical`, `FilesOnlyInLegacy`, `FilesChanged`, `LegacyHarnessOnlyFiles`, `CanonicalDirExists`, `LegacyDirExists` を返します。
-- `ClaudeDirectiveMigrationReport[directiveRoot, claudeDir]` — 従来 `.claude/` ハーネスが正規リポジトリと等価かを判定します。返り値の `Status` は `"Equivalent"` / `"Diverged"` / `"LegacyOnly"` / `"CanonicalOnly"`。Claude CLI を Generated モードに切り替えるには Status が `"Equivalent"` であるか、手動承認が必要です。
+- `ClaudeDirectiveMigrationReport[directiveRoot, claudeDir]` — 従来 `.claude/` ハーネスが正規リポジトリと等価かを判定します。返り値の `Status` は `"Equivalent"` / `"Diverged"` / `"LegacyOnly"` / `"CanonicalOnly"`。
 
 #### 公開 API 一覧（ClaudeDirectives）
 
@@ -1162,7 +1130,7 @@ ClaudeUpdatePackage 等の呼び出し時にも、指示文中の日本語表現
 
 ### ドキュメント生成・更新の高度制御
 
-`ClaudeUpdateDocumentation` は柔軟なモード制御、部分更新機能、そして差分の基準を切り替える `Baseline` オプションを提供します。
+`ClaudeUpdateDocumentation` は柔軟なモード制御、部分更新機能、差分の基準を切り替える `Baseline` オプション、並列更新、そしてサイクル再開（resumption）機能を提供します。
 
 ```mathematica
 (* 基本的なドキュメント更新（既存ファイルを更新） *)
@@ -1194,6 +1162,25 @@ ClaudeUpdateDocumentation["MyPackage", "全体的な改善",
 | `Demos` | `{}` | デモ動画・使用例 URL（README.md に反映） |
 | `Disclaimer` | `{}` | 免責事項（README.md に反映） |
 
+#### 並列ドキュメント更新（20 ファイル以上）
+
+更新対象ドキュメントが 20 ファイル以上の場合、README.md を除くドキュメントを LLM へ並列投入して処理します。並列度は `$LLMGraphMaxConcurrency["cli"]` でキャップされます（デフォルト 4）。
+
+処理中は、ウィンドウステータスバーに以下の形式でリアルタイム進捗が表示されます。
+
+```
+完了 N/M • K 並列実行中 • 経過 Ts
+```
+
+たとえば「完了 3/8 • 2 並列実行中 • 経過 45s」は、全 8 ファイルのうち 3 ファイルが完了し、現在 2 ファイルを並列処理中であることを示します。
+
+```mathematica
+(* 並列ドキュメント更新の並列度を変更する例 *)
+$LLMGraphMaxConcurrency["cli"] = 2  (* 同時2本に制限 *)
+```
+
+並列更新中に一部ファイルの更新が失敗した場合でも、失敗したファイルはスキップして残りのファイルの処理を継続します。全ファイルが失敗した場合は失敗として通知され、永久待機を防ぎます（`⛔ Doc update aborted (N failed)`）。
+
 #### ドキュメント更新チェーンの多重起動防止
 
 `ClaudeUpdateDocumentation` / `ClaudeCreateDocumentation` は非同期コールバック連鎖で進行します。同一パッケージに対して 2 本の連鎖が同時起動すると、同じ docs/ と履歴を同時更新してデータが破損する危険があります。これを防ぐため、タイムスタンプ方式の多重起動ガードが実装されています。
@@ -1215,6 +1202,37 @@ $ClaudeDocUpdateStaleSeconds = 3600  (* 1 時間に延長 *)
 |---|---|---|
 | `$ClaudeDocUpdateStaleSeconds` | `1800` | ドキュメント更新チェーンのガードの stale 上限（秒）。この秒数を超えたら異常終了とみなして再スケジュールを許可する。 |
 
+#### ドキュメント更新の再開（resumption）管理
+
+`ClaudeUpdateDocumentation` はサイクル再開（resumption）機能を備えており、API エラーや中断後に再実行した場合でも効率的に処理を継続できます。
+
+**サイクル鍵の仕組み**
+
+ソース内容 + 指示 + 対象ファイル集合から安定したサイクル鍵を作成します。ノートブック文脈は毎回変わるため除外され、鍵の安定性を保ちます。成功したファイルは進捗記録に保存されます。
+
+**再実行時の動作**
+
+同一サイクル（同じソース・指示・対象ファイル集合）で再実行した場合、更新済みファイルは自動的にスキップされます。
+
+| 表示メッセージ | 意味 |
+|---|---|
+| `✅ All documents already updated in this cycle.` | 全対象ファイルが既に更新済み（スキップ） |
+| `✅ Target documents already updated in this cycle.` | 指定ファイルが既に更新済み（スキップ） |
+| `⛔ Doc update aborted (N failed)` | N ファイルが失敗して更新を中断 |
+
+サイクルが完全に完了すると進捗ファイルがクリアされ、次回はソース変更で新サイクルが始まります。
+
+**中断時の動作**
+
+API エラー等で中断した場合、バックアップは作成せず進捗のみ保持します。成功済みのファイルは記録されており、再実行時にはそれらがスキップされて残りのファイルから処理が再開されます。
+
+```mathematica
+(* 更新途中で中断してしまった場合の再実行例 *)
+(* 同じ引数で再実行すると、成功済みファイルをスキップして続きから再開される *)
+ClaudeUpdateDocumentation["MyPackage", "更新指示",
+  Baseline -> "Github"]
+```
+
 #### Baseline オプション（差分基準の切り替え）
 
 `Baseline` オプションは、ドキュメント更新時に「何を基準にソース差分を取るか」を制御します。指定できる値は `"LastDocUpdate"`（既定）と `"Github"` の 2 種類で、これら以外の値を指定した場合は自動的に `"LastDocUpdate"` にフォールバックします。
@@ -1233,7 +1251,7 @@ ClaudeUpdateDocumentation["MyPackage", "更新指示",
 
 `$packageDirectory/GithubRepositories/<packageName>` に置かれた GitHub コミット版ソースを基準にソース差分を計算します。これにより、「最後にコミットした状態」から現在のローカルソースまでの全変更がドキュメントへ反映されます。`_documentupdate` バックアップが存在しない場合でも利用できる点が大きな利点です。
 
-さらにこのモードでは、ソース差分だけでは読み取りにくい設計意図を補うため、`_info/design` 配下の**新規設計内容**（`iComputeNewDesignContent` が抽出）が、`api.md` 以外のドキュメント（README を含む）のプロンプトに自動添付されます。コードの差分に加えて設計ノートの新しい記述も加味され、新しくなった部分の説明をより充実させることができます。
+さらにこのモードでは、ソース差分だけでは読み取りにくい設計意図を補うため、`_info/design` 配下の**新規設計内容**（`iComputeNewDesignContent` が抽出）が、`api.md` 以外のドキュメント（README を含む）のプロンプトに自動添付されます。
 
 ```mathematica
 (* GitHub コミット版を基準に、design 新規内容も加味して更新 *)
@@ -1344,45 +1362,26 @@ Thread オブジェクトには各ノードの PrivacySpec が保持されてお
 
 #### DAG ジョブ実行 API
 
-LLMGraph の実行をプログラマティックに制御するための低レベル API も提供されています。
-
 ```mathematica
-(* DAG ジョブの作成 *)
 job = LLMGraphDAGCreate[nodes, taskDescriptor]
-
-(* ジョブのステータス取得 *)
 LLMGraphDAGStatus[job]
-
-(* ジョブのキャンセル *)
 LLMGraphDAGCancel[job]
-
-(* ジョブの停止（処理中ノードを安全に停止） *)
 LLMGraphDAGStop[job]
-
-(* ジョブの再試行（失敗ノードを再スケジュール） *)
 LLMGraphDAGRetry[job]
-
-(* 指定ノードの handler を差し替えた新 DAG を構成・起動 *)
 LLMGraphDAGRebuild[job]
 LLMGraphDAGRebuild[job, nodeIds]
-
-(* LLMGraph ジョブの実行（高レベル） *)
 LLMGraphExecute[graphSpec]
-
-(* 実行中ジョブのステータス取得 *)
 LLMGraphExecuteStatus[jobId]
-
-(* 実行中ジョブのキャンセル *)
 LLMGraphExecuteCancel[jobId]
 ```
 
 #### LLMGraph 並列度の制御（$LLMGraphMaxConcurrency）
 
-`$LLMGraphMaxConcurrency` はカテゴリ別の最大並列実行数をグローバルに制御します。DAG の各ノードは抽象カテゴリに分類され、同一カテゴリのノードが同時に実行できる数を制限します。
+`$LLMGraphMaxConcurrency` はカテゴリ別の最大並列実行数をグローバルに制御します。DAG の各ノードは抽象カテゴリに分類され、同一カテゴリのノードが同時に実行できる数を制限します。**`"cli"` カテゴリは `ClaudeUpdateDocumentation` の並列ドキュメント更新（20+ ファイル時）の並列度制御にも使用されます。**
 
 ```mathematica
 (* カテゴリ別デフォルト値 *)
-$LLMGraphMaxConcurrency["cli"]        (* = 4 : Claude CLI テキスト単体呼び出し *)
+$LLMGraphMaxConcurrency["cli"]        (* = 4 : Claude CLI テキスト単体呼び出し・並列ドキュメント更新 *)
 $LLMGraphMaxConcurrency["cli-vision"] (* = 1 : Claude CLI 画像付き呼び出し *)
 
 (* グローバルデフォルトを変更する例 *)
@@ -1394,8 +1393,6 @@ $LLMGraphMaxConcurrency["cli"] = 2     (* CLI 呼び出しを同時2本に制限
 1. `taskDescriptor["maxConcurrency"][abstractCat]` — ジョブ固有のオーバーライド（最優先）
 2. `$LLMGraphMaxConcurrency[abstractCat]` — グローバルデフォルト
 3. `1` — フォールバック（設定なし）
-
-ジョブ作成時に `taskDescriptor` にカテゴリマップと並列度オーバーライドを指定することで、ジョブ単位での細かな制御も可能です。`taskDescriptor["categoryMap"]` には具体カテゴリ（例: `"cli"`）から抽象カテゴリへのマッピングを指定でき、複数の具体カテゴリを同一の抽象カテゴリとして扱って並列度を共有させることができます。
 
 ```mathematica
 (* taskDescriptor の例: カテゴリマッピングと並列度オーバーライドを指定 *)
@@ -1435,7 +1432,7 @@ job = LLMGraphDAGCreate[nodes, taskDesc]
 | `LLMGraphExecute[graphSpec]` | LLMGraph ジョブの実行 |
 | `LLMGraphExecuteStatus[jobId]` | LLMGraph ジョブのステータス取得 |
 | `LLMGraphExecuteCancel[jobId]` | LLMGraph ジョブのキャンセル |
-| `$LLMGraphMaxConcurrency` | カテゴリ別最大並列度の制御 |
+| `$LLMGraphMaxConcurrency` | カテゴリ別最大並列度の制御（並列ドキュメント更新にも適用） |
 
 ### [実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)
 
@@ -1571,45 +1568,23 @@ ClaudeApproveProposal[]
 #### 主な API
 
 ```mathematica
-(* ランタイムの起動 *)
 ClaudeStartRuntime[]
-
-(* ランタイム経由でコードを生成・実行 *)
 ClaudeEvalViaRuntime["タスク"]
-
-(* ランタイム経由でパッケージを更新 *)
 ClaudeUpdatePackageViaRuntime["MyPackage", "更新指示"]
-
-(* 承認待ち提案の承認 *)
 ClaudeApproveProposal[]
-
-(* スナップショット管理 *)
-ClaudeRuntimeSnapshot[]            (* 現在の状態をスナップショット保存 *)
-ClaudeRuntimeRestore["snapshotId"] (* スナップショットから復元 *)
-ClaudeRuntimeListSnapshots[]       (* スナップショット一覧を表示 *)
-ClaudeRuntimeRetry[]               (* 失敗したターンを再試行 *)
-
-(* アダプタの構築（カスタム統合用） *)
-ClaudeBuildRuntimeAdapter[opts]      (* ランタイムアダプタを構築 *)
-ClaudeBuildTransactionAdapter[opts]  (* トランザクションアダプタを構築 *)
-
-(* グローバル変数 *)
-$UseClaudeRuntime      (* True でランタイム有効、False で従来モード *)
-$ClaudeLastRuntimeId   (* 直前に使用したランタイムの ID *)
+ClaudeRuntimeSnapshot[]
+ClaudeRuntimeRestore["snapshotId"]
+ClaudeRuntimeListSnapshots[]
+ClaudeRuntimeRetry[]
+ClaudeBuildRuntimeAdapter[opts]
+ClaudeBuildTransactionAdapter[opts]
+$UseClaudeRuntime
+$ClaudeLastRuntimeId
 ```
 
 #### 後方互換性
 
 `ClaudeRuntime` をロードしない場合、`claudecode` は従来どおりの動作を完全に維持します。また、`ClaudeRuntime` をロード済みでも `$UseClaudeRuntime = False` を設定することで、ランタイムを介さない従来モードに随時切り替えられます。
-
-```mathematica
-(* ClaudeRuntime をロード済みでも従来モードに切り替え *)
-$UseClaudeRuntime = False
-ClaudeEval["タスク"]  (* 従来どおり ClaudeCode CLI を直接使用 *)
-
-(* ランタイムモードに戻す *)
-$UseClaudeRuntime = True
-```
 
 | 状態 | 動作 |
 |---|---|
@@ -1624,13 +1599,10 @@ $UseClaudeRuntime = True
 #### ロードと基本的な使い方
 
 ```mathematica
-(* ClaudeOrchestrator をロード（claudecode ロード後に実行） *)
 << ClaudeOrchestrator`
 
-(* ロード後は ClaudeEval がオーケストレーター管理下で非同期実行されます *)
 ClaudeEval["長時間かかる分析タスクを実行"]
 
-(* rate-limit 状態の確認 *)
 info = ClaudeRateLimitStatus[];
 If[AssociationQ[info],
   Print["復旧予定: ", info["ResetsAt"]],
@@ -1639,12 +1611,7 @@ If[AssociationQ[info],
 
 #### ClaudeEval の非同期化
 
-ClaudeOrchestrator をロードすると、`ClaudeEval` の動作が根本的に変わります。呼び出しはオーケストレーターのジョブキューに追加されて**即座に返り**、カーネルをブロックしません。以下の機能が自動的に有効になります。
-
-- **ノンブロッキング実行**: `ClaudeEval` が呼び出されるとジョブキューへの登録のみ行い、すぐに制御を返します。
-- **rate-limit 検出と自動待機**: `ClaudeRateLimitStatus[]` の `"ResetsAt"` フィールドが示す復旧予定時刻まで自動的に待機し、復旧後にタスクを再開します。
-- **ジョブキュー管理**: 複数の `ClaudeEval` 呼び出しをオーケストレーターが順次・並列に管理します。
-- **自動リトライスケジューリング**: 一時的な失敗（rate-limit・ネットワークエラー等）に対して自動リトライを行います。
+ClaudeOrchestrator をロードすると、`ClaudeEval` の動作が根本的に変わります。呼び出しはオーケストレーターのジョブキューに追加されて**即座に返り**、カーネルをブロックしません。
 
 ```mathematica
 (* 複数タスクを連続して投入 — オーケストレーターがキュー管理 *)
@@ -1666,11 +1633,6 @@ info = ClaudeRateLimitStatus[];
      "Message"       -> "You've hit your limit..."
    |> *)
 
-(* rate-limit でない場合は None が返る *)
-ClaudeRateLimitStatus[]
-(* → None *)
-
-(* 手動でクリアする場合 *)
 ClaudeRateLimitClear[]
 ```
 
@@ -1683,7 +1645,7 @@ ClaudeRateLimitClear[]
 
 ### SourceVault 連携（オプション）
 
-[SourceVault](https://github.com/transreal/SourceVault) は claudecode とは独立したオプションパッケージで、`ClaudeEval` のディスパッチ経路に **PromptRouter ブリッジ**（Order 2 ディスパッチ）を追加します。SourceVault が提供するソース管理機能と組み合わせて、タスク文字列を ReadOnly な許可済み呼び出しに変換し、安全な実行経路を確立します。また、`ClaudeSpec` と連携した仕様書・審査・実装ワークフローの API も提供します。
+[SourceVault](https://github.com/transreal/SourceVault) は claudecode とは独立したオプションパッケージで、`ClaudeEval` のディスパッチ経路に **PromptRouter ブリッジ**（Order 2 ディスパッチ）を追加します。
 
 #### 設計原則: hard dependency を持たない
 
@@ -1692,28 +1654,15 @@ claudecode.wl 本体は SourceVault に対して **hard dependency を持ちま�
 #### ロードと基本的な使い方
 
 ```mathematica
-(* SourceVault をロード（claudecode ロード後、任意のタイミング） *)
 << SourceVault`
 
-(* ロード後は ClaudeEval が PromptRouter 経由でディスパッチを試行します *)
 ClaudeEval["パッケージ MyPackage のエクスポート一覧を取得"]
 ```
-
-#### Order 2 ディスパッチの動作フロー
-
-1. **アクティブ判定**: `SourceVaultPromptRouterActiveQ[]` を確認。`False` なら即座にフォールバック。
-2. **提案取得**: `SourceVaultProposePromptRoute[task, optsList]` を呼び出し、`PromptRouteProposal` を受け取る。
-3. **形式検証**: `"Status"` が `"Proposed"` であり、`"ProposedExpression"` が単一要素の `HoldComplete[expr]` であることを確認。
-4. **頭部の許可リスト照合**: 頭部シンボルを `$iClaudeEvalProposalHeadAllowlist` と照合。
-5. **評価と返却**: 許可リストに含まれる場合のみ `ReleaseHold` で評価。許可リスト外なら `NotDispatched`。
 
 #### 制御フラグ
 
 ```mathematica
-(* PromptRouter 経路全体の有効/無効 *)
 $ClaudeEvalPromptRouterDispatch = Automatic
-
-(* 自然言語ルーターとの実行順序 *)
 $ClaudeEvalPromptRouterPreemptsNatural = True
 ```
 
@@ -1733,88 +1682,57 @@ $ClaudeEvalPromptRouterPreemptsNatural = True
 
 #### ChatGPT Codex モデルレジストリ
 
-SourceVault は PromptRouter ブリッジに加えて、LLM provider のモデルレジストリを一元管理します。ChatGPT Codex provider のモデル名もこの仕組みで管理されます。
-
 ```mathematica
-(* SourceVault をロード *)
 Needs["SourceVault`"]
-
-(* Codex のモデルカタログを取得してレジストリを更新 *)
 SourceVaultRefreshModelRegistry["Providers" -> {"chatgptcodex"}]
-
-(* Codex の選択可能なモデル一覧 *)
 SourceVaultListModels["chatgptcodex"]
-
-(* 用途（intent）に応じたモデル解決 *)
 ClaudeResolveModel["chatgptcodex", "code-heavy"]
 ```
 
-`SourceVaultRefreshModelRegistry` は Codex CLI の `codex debug models` コマンドを実行してモデルカタログ（JSON）を取得し、compiled モデルレジストリに登録します。
-
-- `SourceVaultListModels[provider]` — 指定 provider の選択可能な全モデル ID を列挙します。
-- `ClaudeResolveModel[provider, intent]` — 用途に応じた最適モデル 1 件を解決します。
-
 #### 仕様・審査ワークフロー（ClaudeSpec + SourceVault）
 
-SourceVault をロードすると、`ClaudeSpec` で生成した仕様書のバージョン管理・コンセンサス審査・実装ワークフロー化を行う API が追加で利用できます。仕様書の sv:// URI はノートブックにクリッカブルリンクとして書き込まれ、`ClaudeOpenSourceVaultURI` でワンクリック閲覧できます。
+SourceVault をロードすると、`ClaudeSpec` で生成した仕様書のバージョン管理・コンセンサス審査・実装ワークフロー化を行う API が追加で利用できます。
 
-##### ClaudeSpecStatus — spec/consensus 状態の確認
+##### ClaudeSpecStatus
 
 ```mathematica
-(* カレントノートブックのプロジェクトの状態を表示 *)
 ClaudeSpecStatus[]
-
-(* 特定プロジェクトを指定 *)
 ClaudeSpecStatus["my-project"]
 ```
 
-カレントノートブックのプロジェクト ID（TaggingRule `SourceVaultSpecProjectId`）に紐づく spec/review のバージョン数・最新 Verdict・最新 spec の sv:// URI・最終更新時刻・バックグラウンドの consensus ジョブ稼働状況を Dataset として返します。プロジェクト ID が未設定の場合は実行中の consensus ジョブ一覧を表示します。ワークフローエンジン（ClaudeOrchestrator 等）は不要で、SourceVault のみで動作します。
+カレントノートブックのプロジェクト ID に紐づく spec/review のバージョン数・最新 Verdict・最新 spec の sv:// URI・最終更新時刻・バックグラウンドの consensus ジョブ稼働状況を Dataset として返します。
 
-##### ClaudeSpecVersions — spec/review バージョン一覧
+##### ClaudeSpecVersions
 
 ```mathematica
-(* 全バージョンを Dataset で取得 *)
 ClaudeSpecVersions[]
 ClaudeSpecVersions["my-project"]
-
-(* ロールで絞り込む *)
 ClaudeSpecVersions["my-project", "spec"]
 ClaudeSpecVersions["my-project", "review"]
-ClaudeSpecVersions["my-project", "requirements"]
 ```
 
-各行に `Role`・`Round`・`Verdict`・`Seq`・`CreatedAtUTC`・`URI` が含まれます。バージョンは SourceVault のポインタチェーン（`orch/<project>/spec` および `orch/<project>/review`）から取得されます。URI 列の sv:// リンクを `ClaudeSpecText` に渡すとそのバージョンの本文を取得できます。
+各行に `Role`・`Round`・`Verdict`・`Seq`・`CreatedAtUTC`・`URI` が含まれます。
 
-##### ClaudeSpecText — spec/review 本文の取得
+##### ClaudeSpecText
 
 ```mathematica
-(* sv:// URI から仕様書・審査内容の本文を取得 *)
 text = ClaudeSpecText["sv://snapshot/Spec/abcdef1234567890"]
 ```
 
-`ClaudeSpecVersions` の URI 列の値をそのまま渡します。`sv://snapshot/Class/hex` 形式と `sv://snapshot/Class:hex` 形式、および生の `snapshot:Class:hex` ref の 3 形式すべてに対応しています。
-
-##### ClaudeOpenSourceVaultURI — sv:// URI を新規ノートブックで開く
+##### ClaudeOpenSourceVaultURI
 
 ```mathematica
-(* 仕様書・審査結果を新規ノートブックウィンドウで表示 *)
 nb = ClaudeOpenSourceVaultURI["sv://snapshot/Spec/abcdef1234567890"]
 ```
 
-spec/review/requirements の sv:// URI を受け取り、メタデータグリッドと本文（Text セル）を含む新規ノートブックウィンドウを開きます。審査（review）の場合は Findings セクションも表示されます。
+spec/review/requirements の sv:// URI を受け取り、メタデータグリッドと本文（Text セル）を含む新規ノートブックウィンドウを開きます。`NotebookObject` を返します。URI が解決できない場合は `$Failed` を返します。
 
-これは spec/consensus ワークフローがノートブックに書き込んだクリッカブルな sv:// リンクをクリックしたときの動作です。`NotebookObject` を返します。URI が解決できない場合は `$Failed` を返します。
-
-##### CreateImplementationWorkflow — 承認済み仕様からワークフローを実装
-
-`CreateImplementationWorkflow` は承認済み仕様（sv:// URI・スナップショット ref・生テキストのいずれか）を受け取り、`SourceVault_workflows/<name>/` 配下に `SVWorkflow_<Name>` パッケージとして実装します。実装は `$ClaudeModel`（実装者ロール）と `$ClaudeAdvisaryModel`（審査者ロール）の 2 モデルが協働する review-and-revise ループで進み、合意が得られるまでフィードバックを繰り返します。複雑な作業はサブ仕様（補助スペック）に分割して先に審査します。
+##### CreateImplementationWorkflow
 
 ```mathematica
-(* 承認済み仕様 URI からワークフローをバックグラウンド実装 *)
 jobId = CreateImplementationWorkflow["MyWorkflowName",
   "sv://snapshot/Spec/abcdef1234567890"]
 
-(* オプション指定 *)
 jobId = CreateImplementationWorkflow["MyWorkflowName", approvedSpecText,
   "Notes"          -> "追加の実装ノート",
   "ClaudeModel"    -> {"claudecode", "claude-opus-4-8"},
@@ -1826,73 +1744,50 @@ jobId = CreateImplementationWorkflow["MyWorkflowName", approvedSpecText,
 | オプション | デフォルト | 説明 |
 |---|---|---|
 | `"Notes"` | `""` | 実装時の追加指示 |
-| `"ClaudeModel"` | `$ClaudeModel` | 実装者ロールのモデル（`{provider, model}` タプル） |
-| `"AdvisaryModel"` | `$ClaudeAdvisaryModel` | 審査者（アドバイザリー）ロールのモデル |
+| `"ClaudeModel"` | `$ClaudeModel` | 実装者ロールのモデル |
+| `"AdvisaryModel"` | `$ClaudeAdvisaryModel` | 審査者ロールのモデル |
 | `"MaxRounds"` | `$iOrchConsensusMaxRounds` | 最大レビュー回数 |
 | `"Nb"` | （カレントノートブック） | 結果を書き込むノートブック |
 | `"Launch"` | `True` | 完了後にワークフローを起動するか |
 
-進捗は `WindowStatusArea` にリアルタイム表示（実行中モデル・フェーズ）されます。完了するとワークフローの起動関数がセッションと PromptRouter に登録され、ノートブックにサマリーが書き込まれます。バックグラウンドジョブ ID を返します。
-
 **`$ClaudeAdvisaryModel` の設定**
 
-`CreateImplementationWorkflow` の審査者ロールに使用するモデルは `$ClaudeAdvisaryModel` で制御します。`$ClaudeModel` と同じ `{provider, model}` タプル形式で指定します。デフォルトは `{"chatgptcodex", Automatic}`（Codex CLI の既定モデルを使用）です。
-
 ```mathematica
-(* 審査者を特定の Codex モデルに固定する場合 *)
 $ClaudeAdvisaryModel = {"chatgptcodex", "gpt-5.5"}
-
-(* 審査者も Claude Code にする場合 *)
 $ClaudeAdvisaryModel = {"claudecode", "claude-opus-4-8"}
 ```
 
-##### LaunchImplementationWorkflow — 生成ワークフローの起動
+##### LaunchImplementationWorkflow
 
 ```mathematica
-(* CreateImplementationWorkflow で生成したワークフローを（再）起動 *)
 result = LaunchImplementationWorkflow["MyWorkflowName", args]
 ```
 
-`SourceVaultLoadWorkflow[name]` でワークフローをロードし、`WorkflowInfo["Launch"]` の起動エントリを `args` で呼び出します。起動コンテキスト・エントリ・結果を含む Association を返します。`CreateImplementationWorkflow` 完了後に自動起動されない場合（`"Launch" -> False` 指定時）や、後から手動で再起動したい場合に使用します。
-
 ### ClaudeTestKit（テストフレームワーク）
 
-[ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) は claudecode および ClaudeRuntime の動作を自動テストするための独立パッケージです。claudecode のパッケージ更新・検証フローを自動化されたテストスイートで検証する用途に使用します。
+[ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) は claudecode および ClaudeRuntime の動作を自動テストするための独立パッケージです。
 
 ```mathematica
-(* ClaudeTestKit をロード *)
 << ClaudeTestKit`
 ```
 
-ClaudeTestKit は claudecode の内部 API と ClaudeRuntime の承認フロー・スナップショット機構と連携し、再現性のあるテストシナリオを構築できます。詳細は [ClaudeTestKit リポジトリ](https://github.com/transreal/ClaudeTestKit) を参照してください。
+詳細は [ClaudeTestKit リポジトリ](https://github.com/transreal/ClaudeTestKit) を参照してください。
 
 ### Git 連携機能
 
 `ClaudePrepareCommit` は前回の GitHub コミット以降の変更点をバックアップ履歴から収集し、コミットメッセージを自動生成して `GitHubRefreshAndCommit` 実行コマンドを出力します。
 
 ```mathematica
-(* 1引数版: コミットメッセージも自動生成 *)
 ClaudePrepareCommit["MyPackage"]
-
-(* 2引数版: subject を直接指定。本文は自動収集した変更点から構築。 *)
 ClaudePrepareCommit["MyPackage", "機能追加: 新しいAPI実装"]
-
-(* フォールバック付き *)
 ClaudePrepareCommit["MyPackage", Fallback -> True]
 ```
-
-Git連携では変更サマリーリストを "- " 付き72文字折り返しで整形し、複数のステップがある場合は簡潔な連結で機能的に十分な形式でコミットメッセージを構築します。
 
 ### Web 機能
 
 ```mathematica
-(* Web 検索（無料、Claude Code CLI 組み込み） *)
 ClaudeWebSearch["Wolfram Language 新機能"]
-
-(* Web ページ取得・要約（課金あり、Anthropic API 経由） *)
 ClaudeWebFetch["https://example.com/article"]
-
-(* 取得内容に対する指示 *)
 ClaudeWebFetch["https://example.com", "重要なポイントを3つ抽出して"]
 ```
 
@@ -1901,11 +1796,8 @@ ClaudeWebFetch["https://example.com", "重要なポイントを3つ抽出して"
 ### CLI コマンド実行
 
 ```mathematica
-(* Claude Code CLI スラッシュコマンドを実行 *)
 ClaudeCommand["/help"]
 ClaudeCommand["/permissions"]
-
-(* CLI サブコマンドを実行 *)
 ClaudeCommand["config list"]
 ClaudeCommand["--version"]
 ```
@@ -1913,7 +1805,6 @@ ClaudeCommand["--version"]
 ### 実行中タスクの状態監視
 
 ```mathematica
-(* 全実行中タスクのリアルタイム状態表示 *)
 ClaudeStatus[]
 ```
 

@@ -7948,6 +7948,14 @@ iIsAPIErrorResponse[response_String] :=
 
 (* \:5f93\:6765\:306e\:30d2\:30e5\:30fc\:30ea\:30b9\:30c6\:30a3\:30c3\:30af\:5224\:5b9a (stream-json \:4ee5\:5916\:3067\:4f7f\:7528) *)
 iIsAPIErrorResponseLegacy[response_String] :=
+  (* \:9577\:6587\:306e Markdown \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8 (\:884c\:982d\:306b # \:898b\:51fa\:3057\:3092\:542b\:3080) \:306f API \:30a8\:30e9\:30fc\:3067\:306f\:306a\:3044\:3002
+     api_mcp.md \:306e\:3088\:3046\:306b service / unavailable / 503 / temporarily \:7b49\:306e\:8a9e\:3092
+     \:672c\:6587\:306b\:6b63\:5f53\:306b\:542b\:3080 doc \:5fdc\:7b54\:3092\:8aa4\:3063\:3066 systemic \:30a8\:30e9\:30fc\:5224\:5b9a\:3057\:306a\:3044\:305f\:3081\:65e9\:671f\:9664\:5916\:3002
+     (\:5148\:982d\:306b LLM \:306e\:524d\:7f6e\:304d\:304c\:3042\:3063\:3066\:3082\:3001\:5f8c\:7d9a\:306b\:898b\:51fa\:3057\:304c\:3042\:308c\:3070 doc \:3068\:307f\:306a\:3059\:3002
+      \:524d\:7f6e\:304d\:306f iCleanDocResponse \:304c\:9664\:53bb\:3059\:308b\:3002) *)
+  If[StringLength[response] > 600 &&
+     StringContainsQ[response, RegularExpression["(?m)^#{1,3} "]],
+    False,
   StringStartsQ[response, "Error"] ||
   (* rate limit \:7b49\:306f\:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8\:3067\:306f\:77ed\:3044 (<600\:6587\:5b57)\:3002
      \:9577\:3044\:5fdc\:7b54\:3084 # \:3067\:59cb\:307e\:308b Markdown \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:8aa4\:691c\:77e5\:3092\:9632\:3050\:305f\:3081\:9664\:5916\:3002 *)
@@ -7972,7 +7980,7 @@ iIsAPIErrorResponseLegacy[response_String] :=
   (* \:77ed\:3059\:304e\:308b\:5fdc\:7b54 (\:6b63\:5e38\:306a\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3084\:30b3\:30fc\:30c9\:306b\:306f\:306a\:3089\:306a\:3044) *)
   (StringLength[response] < 100 &&
    StringContainsQ[response, "resets" | "limit" | "error" | "failed",
-     IgnoreCase -> True]);
+     IgnoreCase -> True])];
 
 iIsAPIErrorResponse[_] := True;  (* \:975e\:6587\:5b57\:5217\:306f\:5e38\:306b\:30a8\:30e9\:30fc\:6271\:3044 *)
 iIsAPIErrorResponseLegacy[_] := True;
@@ -17176,6 +17184,47 @@ iIsValidDocContent[response_String] :=
 
 iIsValidDocContent[_] := False;
 
+(* === \:5207\:308a\:8a70\:3081(truncation)\:691c\:51fa ===
+   \:5fdc\:7b54\:304c\:9014\:4e2d\:3067\:5207\:308c\:305f\:5834\:5408 (\:30b5\:30a4\:30ba 40% \:30ac\:30fc\:30c9\:3092\:901a\:904e\:3057\:3066\:3082\:7834\:640d) \:3092\:691c\:51fa\:3059\:308b\:3002
+   \:4fdd\:5b88\:7684\:306b\:78ba\:5b9f\:306a\:5146\:5019\:306e\:307f: (1) \:672a\:9589\:30b3\:30fc\:30c9\:30d5\:30a7\:30f3\:30b9 (``` \:304c\:5947\:6570)
+   (2) \:6587\:30fb\:69cb\:6587\:306e\:9014\:4e2d\:3067\:7d42\:7aef (\:8aad\:70b9\:30fb\:958b\:304d\:62ec\:5f27\:3067\:7d42\:308f\:308b)\:3002 *)
+iDocLooksTruncated[content_String] :=
+  Module[{trimmed = StringTrim[content]},
+    If[trimmed === "", Return[True]];
+    If[OddQ[StringCount[content, "```"]], Return[True]];
+    MemberQ[{",", "\:3001", "\:ff0c", "(", "\:ff08", "\:300c", "\:ff5b"}, StringTake[trimmed, -1]]
+  ];
+iDocLooksTruncated[_] := True;
+
+(* === \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:306e\:518d\:958b(resumption)\:7ba1\:7406 ===
+   \:30bd\:30fc\:30b9\:5185\:5bb9 + \:6307\:793a + \:5bfe\:8c61\:30d5\:30a1\:30a4\:30eb\:96c6\:5408\:304b\:3089\:30b5\:30a4\:30af\:30eb\:9375\:3092\:4f5c\:308a\:3001\:6210\:529f\:3057\:305f
+   \:30d5\:30a1\:30a4\:30eb\:3092\:8a18\:9332\:3002API \:30a8\:30e9\:30fc\:7b49\:3067\:4e2d\:65ad\:5f8c\:306b\:518d\:5b9f\:884c\:3057\:305f\:3068\:304d\:3001\:540c\:4e00\:30b5\:30a4\:30af\:30eb\:306a\:3089
+   \:66f4\:65b0\:6e08\:307f\:30d5\:30a1\:30a4\:30eb\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:3066\:6b8b\:308a\:304b\:3089\:518d\:958b\:3059\:308b (\:5b8c\:5168\:5b8c\:4e86\:6642\:306b\:30af\:30ea\:30a2)\:3002 *)
+If[!AssociationQ[$iDocCycle], $iDocCycle = <||>];   (* packageName -> cycleKey *)
+If[!StringQ[$iDocLastFailReason], $iDocLastFailReason = ""];  (* iSafeWriteDoc \:6700\:7d42\:5931\:6557\:7406\:7531(\:8a3a\:65ad\:7528) *)
+iDocCycleKey[srcFile_String, instruction_String, docs_List] :=
+  IntegerString[Hash[{Quiet@Check[Import[srcFile, "Text"], ""], instruction, Sort[docs]}], 36];
+iDocProgressPath[docsDir_String] := FileNameJoin[{docsDir, ".docupdate_progress.json"}];
+iDocProgressRead[docsDir_String] :=
+  Module[{p = iDocProgressPath[docsDir], j},
+    If[!FileExistsQ[p], Return[<||>]];
+    j = Quiet@Check[Developer`ReadRawJSONString[Import[p, "Text"]], <||>];
+    If[AssociationQ[j], j, <||>]];
+iDocProgressDone[docsDir_String, cycleKey_String] :=
+  Module[{j = iDocProgressRead[docsDir]},
+    If[Lookup[j, "Cycle", ""] === cycleKey,
+      Replace[Lookup[j, "Done", {}], Except[_List] -> {}], {}]];
+iDocProgressMark[docsDir_String, cycleKey_String, docFile_String] :=
+  Module[{j = iDocProgressRead[docsDir], done},
+    done = If[Lookup[j, "Cycle", ""] === cycleKey,
+      Replace[Lookup[j, "Done", {}], Except[_List] -> {}], {}];
+    done = DeleteDuplicates[Append[done, docFile]];
+    Quiet@Check[Export[iDocProgressPath[docsDir],
+      Developer`WriteRawJSONString[<|"Cycle" -> cycleKey, "Done" -> done|>],
+      "Text", CharacterEncoding -> "UTF-8"], Null]];
+iDocProgressClear[docsDir_String] :=
+  With[{p = iDocProgressPath[docsDir]}, If[FileExistsQ[p], Quiet@Check[DeleteFile[p], Null]]];
+
 (* \:5b89\:5168\:306a\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f8\:304d\:8fbc\:307f: \:691c\:8a3c \[RightArrow] \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7 \[RightArrow] \:66f8\:304d\:8fbc\:307f\:3002
    \:7121\:52b9\:306a\:5fdc\:7b54\:306e\:5834\:5408\:306f\:30d5\:30a1\:30a4\:30eb\:3092\:4e00\:5207\:5909\:66f4\:305b\:305a $Failed \:3092\:8fd4\:3059\:3002 *)
 iSafeWriteDoc[destPath_String, response_String] :=
@@ -17192,8 +17241,10 @@ iSafeWriteDoc[destPath_String, response_String] :=
 iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
   Module[{cleaned, existingContent, existingLen, newLen, docFileName,
           existingTitle, newTitle},
+    $iDocLastFailReason = "";   (* \:8a3a\:65ad\:7528: \:6210\:529f\:6642\:306f\:7a7a\:3001\:5931\:6557\:6642\:306b\:5177\:4f53\:7406\:7531\:3092\:8a18\:9332 *)
     (* \:57fa\:672c\:7684\:306a\:30b3\:30f3\:30c6\:30f3\:30c4\:691c\:8a3c *)
     If[!iIsValidDocContent[response],
+      $iDocLastFailReason = "\:7121\:52b9\:5fdc\:7b54(\:7a7a/\:6975\:5c0f/\:30a8\:30e9\:30fc\:6587)";
       Return[$Failed]];
     cleaned = iCleanDocResponse[response];
     docFileName = FileNameTake[destPath];
@@ -17205,6 +17256,8 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
         existingLen = StringLength[existingContent];
         newLen = StringLength[StringTrim[cleaned]];
         If[newLen < existingLen * 0.4,
+          $iDocLastFailReason = "\:30b5\:30a4\:30ba\:9000\:884c " <> ToString[existingLen] <> "\[RightArrow]" <>
+            ToString[newLen] <> "\:6587\:5b57(" <> ToString[Round[100. newLen / existingLen]] <> "%, \:95be\:5024 40%)";
           Print[iL["\:26a0 iSafeWriteDoc: \:30b5\:30a4\:30ba\:9000\:884c\:3092\:691c\:51fa (", "\:26a0 iSafeWriteDoc: Size regression detected ("] <> docFileName <> "): " <>
             ToString[existingLen] <> " \[RightArrow] " <> ToString[newLen] <>
             " \:6587\:5b57 (" <> ToString[Round[100. newLen / existingLen]] <> "%)\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
@@ -17212,12 +17265,25 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
         ]
       ]
     ];
+    (* === \:30ac\:30fc\:30c93: \:5207\:308a\:8a70\:3081(truncation)\:691c\:51fa === *)
+    (* \:5fdc\:7b54\:304c\:9014\:4e2d\:3067\:5207\:308c\:3066\:3044\:308b\:5834\:5408\:306f\:30b5\:30a4\:30ba 40% \:3092\:8d85\:3048\:3066\:3082\:62d2\:5426\:3059\:308b *)
+    If[iDocLooksTruncated[cleaned],
+      $iDocLastFailReason = "\:5207\:308a\:8a70\:3081(" <>
+        Which[
+          StringTrim[cleaned] === "", "\:7a7a",
+          OddQ[StringCount[cleaned, "```"]], "``` \:5947\:6570(\:30b3\:30fc\:30c9\:67f5\:672a\:9589)",
+          True, "\:672b\:5c3e=\"" <> StringTake[StringTrim[cleaned], -Min[12, StringLength[StringTrim[cleaned]]]] <> "\""] <> ")";
+      Print[iL["\:26a0 iSafeWriteDoc: \:5207\:308a\:8a70\:3081(\:672a\:5b8c\:4e86\:5fdc\:7b54)\:3092\:691c\:51fa (", "\:26a0 iSafeWriteDoc: Truncation detected ("] <> docFileName <>
+        ")\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
+      Return[$Failed]
+    ];
     (* === \:30ac\:30fc\:30c92: \:30bf\:30a4\:30c8\:30eb\:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af (README.md \:306e\:307f) === *)
     (* README.md \:306e\:5148\:982d # \:30bf\:30a4\:30c8\:30eb\:304c\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3068\:5b8c\:5168\:306b\:7570\:306a\:308b\:5834\:5408\:306f\:62d2\:5426 *)
     If[docFileName === "README.md",
       newTitle = iExtractDocTitle[cleaned];
       If[StringQ[newTitle] && StringLength[newTitle] > 0,
         If[!StringContainsQ[ToLowerCase[newTitle], ToLowerCase[packageName]],
+          $iDocLastFailReason = "\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408 \:671f\:5f85=\"" <> packageName <> "\" \:5b9f=\"" <> newTitle <> "\"";
           Print[iL["\:26a0 iSafeWriteDoc: \:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408\:3092\:691c\:51fa (README.md): ", "\:26a0 iSafeWriteDoc: Title mismatch detected (README.md): "] <>
             "\:671f\:5f85=\"" <> packageName <> "\", \:5b9f\:969b=\"" <> newTitle <>
             "\"\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
@@ -18392,7 +18458,7 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, sourceCode, docsDir, pkgDir, allDocs,
           prevBackup, prevSrcFile, diffText, autoInstruction,
-          baseline, designContext = "", repoSrc},
+          baseline, designContext = "", repoSrc, cycleKey, doneDocs, remainingDocs},
     iPrecisionConfidentialCheck[nb];
     pkgDir = Global`$packageDirectory;
     If[!StringQ[pkgDir] || pkgDir === "",
@@ -18487,6 +18553,19 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
       "コードの差分だけでなく、添付された design の新規内容も加味して、新しくなった部分の記述を充実させること。",
       "\:524d\:56de\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:4ee5\:964d\:306e\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:5909\:66f4\:3092\:53cd\:6620\:3057\:3066\:3001\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0\:3057\:3066\:304f\:3060\:3055\:3044\:3002" <>
       "\:8ffd\:52a0\:3055\:308c\:305f\:95a2\:6570\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:306e\:8aac\:660e\:3092\:8ffd\:52a0\:3057\:3001\:524a\:9664\:3055\:308c\:305f\:3082\:306e\:306e\:8aac\:660e\:3092\:524a\:9664\:3059\:308b\:3053\:3068\:3002"];
+    (* \:518d\:958b(resumption): \:524d\:56de\:4e2d\:65ad\:6642\:306b\:66f4\:65b0\:6e08\:307f\:306e\:30d5\:30a1\:30a4\:30eb\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:6b8b\:308a\:304b\:3089\:518d\:958b *)
+    cycleKey = iDocCycleKey[srcFile, autoInstruction, allDocs];
+    $iDocCycle[packageName] = cycleKey;
+    doneDocs = iDocProgressDone[docsDir, cycleKey];
+    remainingDocs = iEnsureReadmeLast[DeleteCases[allDocs, Alternatives @@ doneDocs]];
+    If[doneDocs =!= {} && remainingDocs === {},
+      nbPrint[nb, iL["\:2705 \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:65e2\:306b\:4eca\:56de\:306e\:66f4\:65b0\:30b5\:30a4\:30af\:30eb\:3067\:66f4\:65b0\:6e08\:307f\:3067\:3059\:3002",
+        "\:2705 All documents already updated in this cycle."]];
+      iDocProgressClear[docsDir]; Return[]];
+    If[doneDocs =!= {},
+      nbPrint[nb, "\:518d\:958b: " <> ToString[Length[doneDocs]] <> " \:4ef6\:306f\:66f4\:65b0\:6e08\:307f\:306e\:305f\:3081\:30b9\:30ad\:30c3\:30d7\:3001\:6b8b\:308a " <>
+        ToString[Length[remainingDocs]] <> " \:4ef6\:3092\:66f4\:65b0\:3057\:307e\:3059\:3002"];
+      allDocs = remainingDocs];
     (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
       "\[FilledRightTriangle] ClaudeUpdateDocumentation: " <> packageName <>
@@ -18499,8 +18578,12 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     If[StringQ[designContext] && designContext =!= "",
       nbPrint[nb, "design 新規内容: " <> ToString[
         Length[StringCases[designContext, "--- design/"]]] <> " 件を加味"]];
-    iUpdateDocNext[sourceCode, packageName, nb, docsDir, autoInstruction, allDocs, 1,
-      diffText, srcFile, <||>, "Update", {}, designContext]
+    (* README 以外が閾値以上なら LLM へ並列投入、未満は従来の逐次 *)
+    If[Length[Select[allDocs, # =!= "README.md" &]] >= $iDocParallelThreshold,
+      iUpdateDocsParallel[sourceCode, packageName, nb, docsDir, autoInstruction, allDocs,
+        diffText, srcFile, <||>, "Update", designContext],
+      iUpdateDocNext[sourceCode, packageName, nb, docsDir, autoInstruction, allDocs, 1,
+        diffText, srcFile, <||>, "Update", {}, designContext]]
   ]]);
 
 (* 2\:5f15\:6570\:7248: \:6307\:793a\:4ed8\:304d\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0 *)
@@ -18590,7 +18673,7 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     Module[{mode = Replace[OptionValue[ClaudeUpdateDocumentation, {opts}, Mode],
               Except["Create" | "Update"] -> "Update"],
             tf = OptionValue[ClaudeUpdateDocumentation, {opts}, TargetFiles],
-            vtf},
+            vtf, cycleKey, doneDocs, remainingDocs},
     (* TargetFiles \:30d0\:30ea\:30c7\:30fc\:30b7\:30e7\:30f3+\:6b63\:898f\:5316 *)
     vtf = iValidateTargetFiles[tf];
     If[vtf === $Failed, Return[$Failed]];
@@ -18611,6 +18694,20 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     If[Length[targetDocs] === 0,
       nbPrint[nb, "\:30a8\:30e9\:30fc: \:66f4\:65b0\:5bfe\:8c61\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002"];
       Return[$Failed]];
+    (* \:518d\:958b(resumption): \:524d\:56de\:4e2d\:65ad\:6642\:306b\:66f4\:65b0\:6e08\:307f\:306e\:30d5\:30a1\:30a4\:30eb\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:6b8b\:308a\:304b\:3089\:518d\:958b
+       (\:30b5\:30a4\:30af\:30eb\:9375\:306f\:5b89\:5b9a\:3057\:305f raw instruction \:3092\:4f7f\:3046; \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:6587\:8108\:306f\:6bce\:56de\:5909\:308f\:308b\:305f\:3081\:9664\:5916) *)
+    cycleKey = iDocCycleKey[srcFile, instruction, targetDocs];
+    $iDocCycle[packageName] = cycleKey;
+    doneDocs = iDocProgressDone[docsDir, cycleKey];
+    remainingDocs = iEnsureReadmeLast[DeleteCases[targetDocs, Alternatives @@ doneDocs]];
+    If[doneDocs =!= {} && remainingDocs === {},
+      nbPrint[nb, iL["\:2705 \:5bfe\:8c61\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:65e2\:306b\:4eca\:56de\:306e\:66f4\:65b0\:30b5\:30a4\:30af\:30eb\:3067\:66f4\:65b0\:6e08\:307f\:3067\:3059\:3002",
+        "\:2705 Target documents already updated in this cycle."]];
+      iDocProgressClear[docsDir]; Return[]];
+    If[doneDocs =!= {},
+      nbPrint[nb, "\:518d\:958b: " <> ToString[Length[doneDocs]] <> " \:4ef6\:306f\:66f4\:65b0\:6e08\:307f\:306e\:305f\:3081\:30b9\:30ad\:30c3\:30d7\:3001\:6b8b\:308a " <>
+        ToString[Length[remainingDocs]] <> " \:4ef6\:3092\:66f4\:65b0\:3057\:307e\:3059\:3002"];
+      targetDocs = remainingDocs];
     (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
       "\[FilledRightTriangle] ClaudeUpdateDocumentation: " <> packageName <>
@@ -18626,8 +18723,12 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       If[StringQ[designContext] && designContext =!= "",
         nbPrint[nb, "design 新規内容: " <> ToString[
           Length[StringCases[designContext, "--- design/"]]] <> " 件を加味"]];
-      iUpdateDocNext[sourceCode, packageName, nb, docsDir, enrichedInstruction, targetDocs, 1,
-        diffText, srcFile, <||>, mode, mf, designContext]]
+      (* README 以外が閾値以上 かつ 画像添付なし なら並列投入、それ以外は逐次 (画像経路は逐次のみ) *)
+      If[mf === {} && Length[Select[targetDocs, # =!= "README.md" &]] >= $iDocParallelThreshold,
+        iUpdateDocsParallel[sourceCode, packageName, nb, docsDir, enrichedInstruction, targetDocs,
+          diffText, srcFile, <||>, mode, designContext],
+        iUpdateDocNext[sourceCode, packageName, nb, docsDir, enrichedInstruction, targetDocs, 1,
+          diffText, srcFile, <||>, mode, mf, designContext]]]
     ] (* end Module mode *)
   ]]);
 
@@ -18704,6 +18805,189 @@ ClaudeUpdateDocumentation[packageName_String, items_List, opts:OptionsPattern[]]
     ClaudeUpdateDocumentation[packageName, StringJoin[Riffle[texts, "\n"]], opts]
   ]);
 
+(* 1 \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:5206\:306e LLM \:30d7\:30ed\:30f3\:30d7\:30c8\:3092\:69cb\:7bc9\:3059\:308b\:7d14\:95a2\:6570 (\:9006\:6b21/\:4e26\:5217\:4e21\:7d4c\:8def\:3067\:5171\:6709)\:3002
+   iUpdateDocNext \:306e\:30a4\:30f3\:30e9\:30a4\:30f3\:69cb\:7bc9\:3068\:540c\:3058\:5185\:5bb9\:3092\:8fd4\:3059\:3002README \:306f\:5144\:5f1f doc \:3092
+   \:30c7\:30a3\:30b9\:30af\:304b\:3089\:8aad\:3093\:3067\:69cb\:7bc9\:3059\:308b\:305f\:3081\:3001\:547c\:3076\:524d\:306b\:5144\:5f1f doc \:304c\:66f8\:304d\:8fbc\:307e\:308c\:3066\:3044\:308b\:5fc5\:8981\:304c\:3042\:308b\:3002
+   \:623b\:308a\:5024: <|"status"->"ok"|"auxmissing", "prompt", "docPath", "useName", "auxName"|> *)
+iBuildDocPrompt[sourceCode_String, packageName_String, docsDir_String, docFile_String,
+    instruction_String, diffText_String:"", mode_String:"Update", designContext_String:"",
+    splitCache_Association:<||>] :=
+  Module[{docPath, currentContent, fullPrompt, split, chunkedSource, narrowQ,
+          isReadme, isApi, promptParts, useInstruction,
+          srcResolved, useSource, useName, effectiveCache},
+    docPath = FileNameJoin[{docsDir, docFile}];
+    srcResolved = iResolveSourceForDoc[packageName, docFile, sourceCode];
+    If[TrueQ[srcResolved["isAux"]] && srcResolved["sourceCode"] === None,
+      Return[<|"status" -> "auxmissing", "auxName" -> srcResolved["auxName"], "docPath" -> docPath|>]];
+    useSource = srcResolved["sourceCode"];
+    useName = srcResolved["effectiveName"];
+    effectiveCache = If[TrueQ[srcResolved["isAux"]], <||>, splitCache];
+    currentContent = If[mode === "Create", "",
+      If[FileExistsQ[docPath], Import[docPath, "Text"], ""]];
+    isReadme = (docFile === "README.md");
+    isApi = (docFile === "api.md") || iIsAuxApiName[FileBaseName[docFile]];
+    narrowQ = iIsNarrowScopeInstruction[instruction];
+    useInstruction = If[isApi,
+      StringReplace[instruction,
+        RegularExpression["(?s)\n\n=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8.*$"] -> ""],
+      instruction];
+    promptParts = {
+      "You are an expert Wolfram Language / Mathematica documentation writer.\n",
+      "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n",
+      "You are updating the documentation for package \"" <> useName <> "\"\n\n",
+      iTaskOverviewBlock[
+        If[isApi, "Update " <> docFile <> " (LLM-optimized API reference): sync to current source while preserving curated prose",
+          "Update " <> docFile <> ": " <> useInstruction]]
+    };
+    If[isApi,
+      AppendTo[promptParts,
+        "CRITICAL: This is an LLM-optimized API reference. NOT for human reading.\n" <>
+        "An LLM reading ONLY this file must write correct code using the package.\n" <>
+        "UPDATE the CURRENT DOCUMENT below (do NOT regenerate from scratch, do NOT shrink it):\n" <>
+        "- PRESERVE all curated prose that is NOT derivable from source code: the overview (\:6982\:8981), " <>
+          "design notes, conventions, section narratives, and worked examples. These are hand-authored " <>
+          "and MUST survive.\n" <>
+        "- SYNC every function signature, option name, and default value to the CURRENT source code below; " <>
+          "fix any description that now contradicts the source.\n" <>
+        "- ADD any new public functions/options present in the source; REMOVE only entries that were " <>
+          "deleted from the source.\n" <>
+        "- If the CURRENT DOCUMENT is empty, generate it in full from the source.\n" <>
+        "- The result MUST be at least as complete as the CURRENT DOCUMENT.\n\n" <>
+        iLanguageInstruction["plain"] <> "\n" <>
+        "FORMAT RULES (token-efficient, high density):\n" <>
+        "- Minimize blank lines: only 1 before ## section headings.\n" <>
+        "- Do NOT use --- separators. Do NOT use bold labels like **\:5f15\:6570:**.\n" <>
+        "- Do NOT add usage examples for trivial functions.\n" <>
+        "- Only add examples for complex options or non-obvious patterns.\n" <>
+        "- FORMAT for simple functions: ### FuncName[args] \[RightArrow] ReturnType\\n\:8aac\:660e(1\:884c)\n" <>
+        "- FORMAT for option functions: ### FuncName[args, opts]\\n\:8aac\:660e\\n\[RightArrow] ReturnType\\nOptions: Opt1 -> Def1 (\:8aac\:660e), ...\n" <>
+        "- FORMAT for complex functions: add \:4f8b: FuncName[...] line\n" <>
+        "- FORMAT for variables: ### $Var\\n\:578b: Type, \:521d\:671f\:5024: val\\n\:8aac\:660e\n\n" <>
+        "List ALL public functions and ALL options. Completeness is critical.\n\n"],
+      AppendTo[promptParts,
+        "UPDATE INSTRUCTION:\n" <> useInstruction <> "\n\n"]];
+    If[!isApi && !isReadme &&
+       StringQ[diffText] && diffText =!= "" && diffText =!= "(\:5909\:66f4\:306a\:3057)",
+      AppendTo[promptParts,
+        "SOURCE CODE DIFF (since last documentation update):\n" <>
+        "Focus your updates on these changed parts.\n" <>
+        diffText <> "\n\n"]];
+    If[!isApi && StringQ[designContext] && designContext =!= "",
+      AppendTo[promptParts, designContext <> "\n\n"]];
+    (* api doc \:3082 CURRENT DOCUMENT \:3092\:542b\:3081\:308b (\:66f4\:65b0\:65b9\:5f0f: curated prose \:4fdd\:5168\:306e\:305f\:3081) *)
+    AppendTo[promptParts,
+      "CURRENT DOCUMENT (" <> docFile <> "):\n" <>
+      If[StringQ[currentContent] && currentContent =!= "",
+        currentContent, "(empty)"] <> "\n\n"];
+    If[isReadme,
+      If[narrowQ,
+        AppendTo[promptParts, "(Sibling documentation files omitted \[LongDash] narrow-scope update)\n"],
+        Module[{siblingDocs, siblingContent = ""},
+          siblingDocs = DeleteDuplicates @ Join[
+            FileNames["*.md", docsDir],
+            FileNames["*.md", docsDir, 2]];
+          siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
+          If[Length[siblingDocs] > 0,
+            siblingContent = "\n=== OTHER DOCUMENTATION FILES (use as source for README overview) ===\n" <>
+              StringJoin[
+                Module[{relPath, txt},
+                  relPath = StringReplace[#,
+                    docsDir <> $PathnameSeparator -> ""];
+                  txt = Quiet @ Check[Import[#, "Text"], ""];
+                  If[StringQ[txt],
+                    "--- " <> relPath <> " ---\n" <> StringTake[txt, UpTo[6000]] <> "\n\n",
+                    ""]] & /@ siblingDocs]];
+          AppendTo[promptParts, siblingContent]]
+      ];
+      AppendTo[promptParts,
+        iBuildGitHubLinksContext[] <>
+        iDocBuildRefSection[packageName] <>
+        iDocBuildAcknowledgmentsPrompt[packageName] <>
+        iDocBuildDisclaimerPrompt[packageName] <>
+        iDocBuildLicensePrompt[packageName]]
+    ];
+    If[!isReadme,
+      split = If[effectiveCache =!= <||>, effectiveCache, iSplitSource[useSource]];
+      chunkedSource = iBuildChunkedSource[split, docFile];
+      AppendTo[promptParts,
+        "PACKAGE SOURCE CODE (chunked for token efficiency):\n" <> chunkedSource <> "\n\n"];
+      AppendTo[promptParts,
+        iBuildGitHubLinksContext[] <>
+        "\nCRITICAL RULE: \:8b1d\:8f9e (Acknowledgments), \:514d\:8cac\:4e8b\:9805 (Disclaimer) and \:30e9\:30a4\:30bb\:30f3\:30b9 (License) sections MUST ONLY exist in README.md.\n" <>
+        "Do NOT add, create, or keep any \:8b1d\:8f9e, \:514d\:8cac\:4e8b\:9805 or \:30e9\:30a4\:30bb\:30f3\:30b9 section in this file.\n" <>
+        "If this file currently contains such sections, REMOVE them entirely.\n\n"]
+    ];
+    If[!isApi,
+      Module[{figPrompt = iDocBuildFiguresPrompt[packageName, docFile]},
+        If[StringQ[figPrompt] && figPrompt =!= "",
+          AppendTo[promptParts, figPrompt]]]];
+    AppendTo[promptParts,
+      "Output the COMPLETE updated document directly as your response text. "];
+    If[isApi,
+      AppendTo[promptParts,
+        iLanguageInstruction["plain"] <>
+        "CRITICAL: api.md is for LLM code generation, NOT for humans.\n" <>
+        "FORMAT RULES (token-efficient, high density):\n" <>
+        "- Minimize blank lines: only 1 before ## section headings.\n" <>
+        "- Do NOT use --- separators. Do NOT use bold labels like **\:5f15\:6570:**.\n" <>
+        "- Do NOT add usage examples for trivial functions.\n" <>
+        "- Only add examples for complex options or non-obvious patterns.\n" <>
+        "- Simple functions: ### FuncName[args] \[RightArrow] ReturnType\\n\:8aac\:660e(1\:884c)\n" <>
+        "- Option functions: ### FuncName[args, opts]\\n\:8aac\:660e\\n\[RightArrow] ReturnType\\nOptions: Opt1 -> Def1 (\:8aac\:660e), ...\n" <>
+        "- Variables: ### $Var\\n\:578b: Type, \:521d\:671f\:5024: val\\n\:8aac\:660e\n" <>
+        "- List ALL public functions and ALL options. Completeness is critical.\n"],
+      AppendTo[promptParts, iLanguageInstruction["polite"]]
+    ];
+    AppendTo[promptParts,
+      "Do NOT wrap in code fences. Do NOT include markers. Do NOT ask for file permissions.\n" <>
+      "Preserve the existing structure and content that is not affected by the update instruction.\n" <>
+      "Add or modify only the parts relevant to the instruction.\n"];
+    If[isReadme,
+      AppendTo[promptParts,
+        "CRITICAL: README.md is a HIGH-LEVEL OVERVIEW document updated LAST.\n" <>
+        If[!narrowQ,
+          "You have access to the OTHER DOCUMENTATION FILES above \[LongDash] they were just updated.\n" <>
+          "Use them to construct an accurate, comprehensive overview.\n" <>
+          "Do NOT include source code details. Summarize features from the documentation files.\n\n",
+          "This is a narrow-scope update. Focus only on the specific section mentioned in the instruction.\n\n"] <>
+        "MANDATORY STRUCTURE (in this order):\n" <>
+        "1. # \:30d1\:30c3\:30b1\:30fc\:30b8\:540d \[LongDash] \:8a2d\:8a08\:601d\:60f3\:3068\:5b9f\:88c5\:306e\:6982\:8981\n" <>
+        "2. ## \:8a73\:7d30\:8aac\:660e containing:\n" <>
+        "   - \:52d5\:4f5c\:74b0\:5883 (OS, Mathematica version, external tools)\n" <>
+        "   - \:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\n" <>
+        "   - \:30af\:30a4\:30c3\:30af\:30b9\:30bf\:30fc\:30c8 (minimal working example)\n" <>
+        "   - \:4e3b\:306a\:6a5f\:80fd (feature list with brief descriptions)\n" <>
+        "   - \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:4e00\:89a7 (links to setup.md, user_manual.md, api.md, examples/)\n" <>
+        "3. ## \:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2 \[LongDash] Demo URLs and usage examples go HERE (section name MUST be '\:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2')\n" <>
+        "4. ## \:8b1d\:8f9e (ONLY if Acknowledgments are provided \[LongDash] omit entirely if none)\n" <>
+        "5. ## \:514d\:8cac\:4e8b\:9805\n" <>
+        "6. ## \:30e9\:30a4\:30bb\:30f3\:30b9 (if present \[LongDash] MUST be last)\n\n" <>
+        "RULES:\n" <>
+        "- Do NOT copy detailed API descriptions from other docs. Keep it high-level.\n" <>
+        "- Do NOT append raw instruction text, prompt fragments, or update notes.\n" <>
+        "- Nothing should be added after \:30e9\:30a4\:30bb\:30f3\:30b9.\n" <>
+        "- Preserve the existing design philosophy narrative.\n" <>
+        "- Update feature lists and function counts to match the latest source.\n" <>
+        "- README.md is ONLY a concise overview. The COMPLETE, detailed content " <>
+          "(full usage, every feature and option) belongs in user_manual.md, NOT here. " <>
+          "Summarize briefly and link to user_manual.md instead of duplicating it.\n"]];
+    If[docFile === "user_manual.md",
+      AppendTo[promptParts,
+        "CRITICAL: user_manual.md is the COMPLETE, comprehensive user manual.\n" <>
+        "It must hold the FULL content: all features, every usage pattern, all options, " <>
+        "workflows, and worked examples. README.md only summarizes and links here \[LongDash] " <>
+        "so the exhaustive material belongs in THIS file.\n" <>
+        "When new functionality appears in the source diff or the design notes above, " <>
+        "document it thoroughly here (not merely as a one-line mention).\n"]];
+    If[!isApi,
+      AppendTo[promptParts,
+        "\n" <> iTaskDetailBlock[
+          "TASK REMINDER (update " <> docFile <> " now)",
+          useInstruction]]];
+    fullPrompt = StringJoin[promptParts];
+    <|"status" -> "ok", "prompt" -> fullPrompt, "docPath" -> docPath, "useName" -> useName|>
+  ];
+
 (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:9806\:6b21\:66f4\:65b0\:3059\:308b\:518d\:5e30\:95a2\:6570 (\:5dee\:5206\:5bfe\:5fdc\:7248\:30fb\:30c8\:30fc\:30af\:30f3\:7bc0\:7d04\:7248) *)
 iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     docsDir_String, instruction_String, targetDocs_List, idx_Integer,
@@ -18729,6 +19013,8 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         nbPrint[nb, iL["\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Backup: "] <> histDir]];
       (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:6c38\:7d9a\:5316 *)
       iSaveDocOptions[packageName];
+      (* \:30b5\:30a4\:30af\:30eb\:5b8c\:5168\:5b8c\:4e86 \[RightArrow] \:9032\:6357\:30d5\:30a1\:30a4\:30eb\:3092\:30af\:30ea\:30a2 (\:6b21\:56de\:306f\:30bd\:30fc\:30b9\:5909\:66f4\:3067\:65b0\:30b5\:30a4\:30af\:30eb) *)
+      iDocProgressClear[docsDir];
       nbPrint[nb, iL["\:2705 \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:304c\:5b8c\:4e86\:3057\:307e\:3057\:305f\:3002", "\:2705 Document update complete."]];
       Return[]];
     docFile = targetDocs[[idx]];
@@ -18784,7 +19070,16 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       AppendTo[promptParts,
         "CRITICAL: This is an LLM-optimized API reference. NOT for human reading.\n" <>
         "An LLM reading ONLY this file must write correct code using the package.\n" <>
-        "Generate ENTIRELY from the source code below. Do NOT reference any prior version.\n\n" <>
+        "UPDATE the CURRENT DOCUMENT below (do NOT regenerate from scratch, do NOT shrink it):\n" <>
+        "- PRESERVE all curated prose that is NOT derivable from source code: the overview (\:6982\:8981), " <>
+          "design notes, conventions, section narratives, and worked examples. These are hand-authored " <>
+          "and MUST survive.\n" <>
+        "- SYNC every function signature, option name, and default value to the CURRENT source code below; " <>
+          "fix any description that now contradicts the source.\n" <>
+        "- ADD any new public functions/options present in the source; REMOVE only entries that were " <>
+          "deleted from the source.\n" <>
+        "- If the CURRENT DOCUMENT is empty, generate it in full from the source.\n" <>
+        "- The result MUST be at least as complete as the CURRENT DOCUMENT.\n\n" <>
         iLanguageInstruction["plain"] <> "\n" <>
         "FORMAT RULES (token-efficient, high density):\n" <>
         "- Minimize blank lines: only 1 before ## section headings.\n" <>
@@ -18816,11 +19111,11 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     (* --- \:73fe\:5728\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8: api.md \:4ee5\:5916\:306b\:306e\:307f\:9001\:4fe1 ---
        api.md \:306f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306e\:307f\:304b\:3089\:751f\:6210\:3059\:308b\:3002\:904e\:53bb\:306e api.md \:3092\:53c2\:7167\:3059\:308b\:3068
        \:53e4\:3044\:60c5\:5831\:304c\:6b8b\:5b58\:3057\:305f\:308a\:3001LLM \:304c\:65e2\:5b58\:69cb\:9020\:3092\:4fdd\:6301\:3057\:3088\:3046\:3068\:3057\:3066\:4e0d\:5b8c\:5168\:306b\:306a\:308b *)
-    If[!isApi,
-      AppendTo[promptParts,
-        "CURRENT DOCUMENT (" <> docFile <> "):\n" <>
-        If[StringQ[currentContent] && currentContent =!= "",
-          currentContent, "(empty)"] <> "\n\n"]];
+    (* api doc \:3082 CURRENT DOCUMENT \:3092\:542b\:3081\:308b (\:66f4\:65b0\:65b9\:5f0f: curated prose \:4fdd\:5168\:306e\:305f\:3081) *)
+    AppendTo[promptParts,
+      "CURRENT DOCUMENT (" <> docFile <> "):\n" <>
+      If[StringQ[currentContent] && currentContent =!= "",
+        currentContent, "(empty)"] <> "\n\n"];
 
     (* --- README.md: \:5144\:5f1f\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304b\:3089\:751f\:6210\:ff08\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:4e0d\:8981\:ff09 --- *)
     If[isReadme,
@@ -18968,32 +19263,32 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
             md = mode, mf = docMediaFiles, dc = designContext},
         Function[response,
           Module[{writeResult},
-            (* 2026-06-22 (freeze fix): API 過負荷(HTTP 529)/利用制限といった
-               システム的失敗を検出したらチェーンを即中断する。残りファイルも
-               同じ理由で失敗し、各ファイル送り (tick 内の FE 書き込み +
-               StartProcess) を連射して "動的評価の放棄" フリーズや無駄な
-               リトライ待ちを招くため。中断理由は response (真因を分類済み) を
-               そのまま表示し、過負荷を「利用制限」と誤表示しない。
-               原因不明の単発空応答は systemic ではないので中断せず、その
-               ファイルだけスキップして次へ進める (下の通常失敗パス)。
-               iIsLimitError は 600 字未満を要求するため本物のドキュメント本文
-               (過負荷/制限の語を含んでも長文) は誤検知しない。 *)
-            If[StringQ[response] && iIsLimitError[response] &&
-               StringContainsQ[response,
-                 "overloaded" | "529" | "rate limit" | "usage limit" |
-                 "hit your limit" | "\:5229\:7528\:5236\:9650", IgnoreCase -> True],
+            (* fail-fast (2026-06-25 \:5f37\:5316): \:30b7\:30b9\:30c6\:30e0\:7684\:5931\:6557 (API \:30a8\:30e9\:30fc/\:5229\:7528\:5236\:9650/
+               \:30d7\:30ed\:30d0\:30a4\:30c0\:5185\:90e8\:30a8\:30e9\:30fc/\:7a7a\:5fdc\:7b54) \:3082\:3001\:54c1\:8cea\:5931\:6557 (\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c/
+               \:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408) \:3082\:3001\:691c\:51fa\:3057\:305f\:3089\:30c1\:30a7\:30fc\:30f3\:3092\:5373\:4e2d\:65ad\:3059\:308b\:3002\:4ee5\:524d\:306f
+               \:54c1\:8cea\:5931\:6557\:3092 skip \:3057\:3066\:6b21\:30d5\:30a1\:30a4\:30eb\:306b\:9032\:307f\:3001\:30a8\:30e9\:30fc\:304c\:51fa\:3066\:3082\:66f4\:65b0\:3092\:7d9a\:3051\:3066
+               \:3044\:305f\:3002\:6210\:529f\:3057\:305f\:30d5\:30a1\:30a4\:30eb\:306f\:9032\:6357\:8a18\:9332\:3055\:308c\:3001\:518d\:5b9f\:884c\:6642\:306b\:306f\:30b9\:30ad\:30c3\:30d7\:3055\:308c\:308b\:3002 *)
+            If[!StringQ[response] || iIsAPIErrorResponse[response],
               nbPrint[nb2, Style[
-                "\:26d4 [" <> ToString[i] <> "/" <> ToString[Length[tds]] <> "] " <>
-                  df <> " の更新を中断しました:\n" <> response,
+                "\:26d4 [" <> ToString[i] <> "/" <> ToString[Length[tds]] <> "] " <> df <>
+                  " \:306e\:66f4\:65b0\:3092\:4e2d\:65ad\:3057\:307e\:3057\:305f (API \:30a8\:30e9\:30fc/\:5229\:7528\:5236\:9650/\:5185\:90e8\:30a8\:30e9\:30fc)\:3002" <>
+                  "\:518d\:5b9f\:884c\:3059\:308b\:3068\:672a\:5b8c\:4e86\:5206\:304b\:3089\:518d\:958b\:3057\:307e\:3059\:3002\n" <>
+                  StringTake[ToString[response], UpTo[300]],
                 FontColor -> RGBColor[0.8, 0.2, 0.2]]];
               $iDocUpdateActive = KeyDrop[$iDocUpdateActive, pn];
               Return[Null]];
             writeResult = iSafeWriteDoc[dp, response, pn];
-            If[writeResult =!= $Failed,
-              nbPrint[nb2, "  \[Checkmark] " <> df <> " \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
-              nbPrint[nb2, "  \:2717 " <> df <> " \:306e\:66f4\:65b0\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408/\:30b5\:30a4\:30ba\:9000\:884c): " <>
-                StringTake[ToString[response], UpTo[200]]]
-            ];
+            If[writeResult === $Failed,
+              nbPrint[nb2, Style[
+                "\:26d4 [" <> ToString[i] <> "/" <> ToString[Length[tds]] <> "] " <> df <>
+                  " \:306e\:66f4\:65b0\:3092\:4e2d\:65ad (\:7121\:52b9/\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408)\:3002" <>
+                  "\:30d5\:30a1\:30a4\:30eb\:306f\:5909\:66f4\:3057\:3066\:3044\:307e\:305b\:3093\:3002\:518d\:5b9f\:884c\:3067\:518d\:958b\:3057\:307e\:3059\:3002",
+                FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+              $iDocUpdateActive = KeyDrop[$iDocUpdateActive, pn];
+              Return[Null]];
+            (* \:6210\:529f: \:9032\:6357\:8a18\:9332 \[RightArrow] \:6b21\:30d5\:30a1\:30a4\:30eb\:3078 *)
+            iDocProgressMark[dd, Lookup[$iDocCycle, pn, ""], df];
+            nbPrint[nb2, "  \[Checkmark] " <> df <> " \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"];
             iUpdateDocNext[sc, pn, nb2, dd, instr, tds, i + 1, dt, sf, sp, md, mf, dc]
           ]
         ]
@@ -19009,6 +19304,248 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       ]
     ];
     $ClaudeModel = savedModel;
+  ];
+
+(* ============================================================
+   \:4e26\:5217\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0 (20+ \:30d5\:30a1\:30a4\:30eb\:6642): README \:4ee5\:5916\:3092 LLM \:3078\:4e26\:5217\:6295\:5165\:3002
+   - rule 95 \:6e96\:62e0: \:72ec\:81ea ScheduledTask \:3092\:4f5c\:3089\:305a iClaudeQueryAsyncWithProgress (\:5171\:6709\:30dd\:30fc\:30ea\:30f3\:30b0) \:306b\:59d4\:8b72\:3002
+   - \:4e26\:5217\:5ea6\:30ad\:30e3\:30c3\:30d7: $LLMGraphMaxConcurrency["cli"]\:3002
+   - README \:306f\:5fc5\:305a\:6700\:5f8c (\:5168 doc \:66f8\:304d\:8fbc\:307f\:5f8c\:306b\:5144\:5f1f\:5185\:5bb9\:3092\:8aad\:3093\:3067\:751f\:6210)\:3002
+   - fail-fast: API \:30a8\:30e9\:30fc/\:54c1\:8cea\:5931\:6557\:3092\:691c\:51fa\:3057\:305f\:3089\:65b0\:898f\:6295\:5165\:3092\:6b62\:3081\:3001\:98db\:884c\:4e2d\:5b8c\:4e86\:5f8c\:306b\:4e2d\:65ad\:3002
+   - resumption: \:6210\:529f doc \:306f iDocProgressMark\:3002\:518d\:5b9f\:884c\:3067\:672a\:5b8c\:4e86\:5206\:304b\:3089\:518d\:958b\:3002
+   ============================================================ *)
+If[!AssociationQ[$iDocParallelJobs], $iDocParallelJobs = <||>];
+If[!IntegerQ[$iDocParallelThreshold], $iDocParallelThreshold = 5];   (* README 以外がこれ以上なら並列 *)
+
+iUpdateDocsParallel[sourceCode_String, packageName_String, nb_NotebookObject,
+    docsDir_String, instruction_String, targetDocs_List, diffText_String:"",
+    srcFile_String:"", splitCache_Association:<||>, mode_String:"Update",
+    designContext_String:""] :=
+  Module[{nonReadme, readme, jobId, maxConc},
+    If[iDocUpdateActiveQ[packageName],
+      nbPrint[nb, "\:26a0\:fe0f " <> packageName <> " \:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:304c\:65e2\:306b\:9032\:884c\:4e2d\:3067\:3059\:3002"];
+      Return[$Failed]];
+    $iDocUpdateActive[packageName] = AbsoluteTime[];
+    nonReadme = Select[targetDocs, # =!= "README.md" &];
+    readme    = Select[targetDocs, # === "README.md" &];
+    (* \:5b9f\:52b9\:4e26\:5217\:5ea6 = min(\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:5e0c\:671b\:5024, \:4e0b\:5c64 LLM \:30b8\:30e7\:30d6\:30b2\:30fc\:30c8)\:3002
+       iClaudeQueryAsyncWithProgress \:306f $ClaudeMaxConcurrentJobs \:3092\:8d85\:3048\:308b\:5206\:3092
+       SessionSubmit \:9045\:5ef6\:518d\:8a66\:884c\:3078\:9000\:907f\:3059\:308b\:305f\:3081\:3001\:30b2\:30fc\:30c8\:3092\:8d85\:3048\:308b cap \:306f
+       \:300c\:8d77\:52d5\:6e08\:307f\:3060\:304c\:5b9f\:884c\:3055\:308c\:3066\:3044\:306a\:3044\:300d\:30b8\:30e7\:30d6\:3092\:751f\:307f\:8abf\:6574\:3092\:4e71\:3059\:3002
+       \:30b2\:30fc\:30c8\:4ee5\:4e0b\:306b\:63c3\:3048\:308c\:3070\:6295\:5165\:5206\:306f\:5fc5\:305a\:5373\:8d77\:52d5\:3055\:308c\:308b\:3002\:3088\:308a\:9ad8\:3044\:4e26\:5217\:5ea6\:304c
+       \:5fc5\:8981\:306a\:3089 $ClaudeMaxConcurrentJobs \:3082\:4e0a\:3052\:308b (CLI \:30d7\:30ed\:30bb\:30b9\:8ca0\:8377\:306b\:6ce8\:610f)\:3002 *)
+    maxConc   = Max[1, Min[Lookup[$LLMGraphMaxConcurrency, "cli", 3],
+                           ClaudeCode`$ClaudeMaxConcurrentJobs]];
+    jobId = "docpar-" <> ToString[UnixTime[]] <> "-" <> ToString[RandomInteger[99999]];
+    $iDocParallelJobs[jobId] = <|
+      "package" -> packageName, "nb" -> nb, "docsDir" -> docsDir, "instruction" -> instruction,
+      "sourceCode" -> sourceCode, "diffText" -> diffText, "srcFile" -> srcFile,
+      "splitCache" -> splitCache, "mode" -> mode, "designContext" -> designContext,
+      "maxConc" -> maxConc, "pending" -> nonReadme, "launched" -> {}, "done" -> {},
+      "ok" -> {}, "failed" -> {}, "systemic" -> False, "readmeLaunched" -> False,
+      "gen" -> <||>, "retries" -> <||>, "maxRetries" -> 1, "readmeRetries" -> 0,
+      "readme" -> readme, "total" -> Length[nonReadme],
+      "startTime" -> AbsoluteTime[], "statusKey" -> "docpar-status-" <> jobId,
+      "cycleKey" -> Lookup[$iDocCycle, packageName, ""]|>;
+    nbPrint[nb, Style["\:4e26\:5217\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0: " <> ToString[Length[nonReadme]] <>
+      " \:4ef6\:3092\:6700\:5927 " <> ToString[maxConc] <> " \:4e26\:5217\:3067\:6295\:5165 (\:30b2\:30fc\:30c8 $ClaudeMaxConcurrentJobs=" <>
+      ToString[ClaudeCode`$ClaudeMaxConcurrentJobs] <> ", README \:306f\:6700\:5f8c, \:30e2\:30c7\:30eb: " <>
+      iDocModelLabel[] <> ")", Bold]];
+    (* \:30b9\:30c6\:30fc\:30bf\:30b9\:30d0\:30fc\:306b LLM \:547c\:3073\:51fa\:3057\:72b6\:6cc1\:3092\:96c6\:7d04\:8868\:793a (ClaudeEval \:540c\:69d8)\:3002
+       \:5171\:6709 polling tick \:306b\:76f8\:4e57\:308a (rule 95)\:3001\:30b8\:30e7\:30d6\:5b8c\:4e86\:3067\:81ea\:5df1\:89e3\:9664\:3002 *)
+    With[{jid = jobId, sk = "docpar-status-" <> jobId},
+      ClaudeRegisterPollingTick[sk, Function[iDocParallelStatusTick[jid, sk]],
+        "Caller" -> "DocUpdate", "Phase" -> "external"]];
+    iSafeSetWindowStatus[nb, iL["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:6e96\:5099\:4e2d... ", "Preparing doc update... "] <>
+      ToString[Length[nonReadme] + Length[readme]] <> iL[" \:4ef6", " files"]];
+    iDocParallelPump[jobId];
+    jobId
+  ];
+
+(* \:5171\:6709 polling tick \:304b\:3089\:547c\:3070\:308c\:308b\:30b9\:30c6\:30fc\:30bf\:30b9\:8868\:793a tick\:3002
+   \:30a6\:30a3\:30f3\:30c9\:30a6\:30b9\:30c6\:30fc\:30bf\:30b9\:30d0\:30fc\:306b\:300c\:5b8c\:4e86 N/M \[Bullet] K \:4e26\:5217\:5b9f\:884c\:4e2d \[Bullet] \:7d4c\:904e Ts\:300d\:3092\:30e9\:30a4\:30d6\:8868\:793a\:3002
+   \:30b8\:30e7\:30d6\:304c\:6d88\:3048\:305f\:3089 (\:5b8c\:4e86/\:4e2d\:65ad) \:30b9\:30c6\:30fc\:30bf\:30b9\:3092\:30af\:30ea\:30a2\:3057\:3066\:81ea\:5df1\:89e3\:9664\:3059\:308b\:3002 *)
+iDocParallelStatusTick[jobId_String, statusKey_String] :=
+  Module[{st = Lookup[$iDocParallelJobs, jobId, $Failed], doneN, grandTotal, inflight, elapsed},
+    If[!AssociationQ[st],
+      Quiet @ ClaudeUnregisterPollingTick[statusKey];
+      Return[]];
+    grandTotal = Lookup[st, "total", 0] + Length[Replace[Lookup[st, "readme", {}], Except[_List] -> {}]];
+    doneN      = Length[Replace[Lookup[st, "done", {}], Except[_List] -> {}]];
+    inflight   = Length[Replace[Lookup[st, "launched", {}], Except[_List] -> {}]];
+    elapsed    = Round[AbsoluteTime[] - Lookup[st, "startTime", AbsoluteTime[]]];
+    iSafeSetWindowStatus[Lookup[st, "nb", $Failed],
+      iL["Claude \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:4e2d ", "Generating docs "] <>
+      ToString[doneN] <> "/" <> ToString[grandTotal] <> " \[Bullet] " <>
+      ToString[inflight] <> iL[" \:4e26\:5217", " parallel"] <> " \[Bullet] " <>
+      ToString[elapsed] <> "s"];
+  ];
+
+(* (launched \ done) < maxConc \:306e\:9650\:308a\:8d77\:52d5\:3002\:5168 launched \:304c done \:304b\:3064 pending \:7a7a(or systemic)\:3067
+   \:5b8c\:4e86\:5224\:5b9a\:3002doc \:5358\:4f4d\:8010\:6027: \:54c1\:8cea\:5931\:6557\:306f\:5f53\:8a72 doc \:306e\:307f failed \:8a18\:9332\:3057\:4ed6\:306f\:7d99\:7d9a\:3001
+   systemic(API/\:5236\:9650/\:5185\:90e8\:30a8\:30e9\:30fc)\:306e\:307f\:65b0\:898f\:6295\:5165\:3092\:6b62\:3081\:308b\:3002 *)
+iDocParallelPump[jobId_String] :=
+  Module[{st = Lookup[$iDocParallelJobs, jobId, $Failed], doc, bp, savedModel, gNew},
+    If[!AssociationQ[st], Return[]];
+    If[!TrueQ[st["systemic"]],
+      savedModel = $ClaudeModel;
+      $ClaudeModel = iDocModelOverride[];
+      (* launched = \:300c\:73fe\:5728 in-flight\:300d\:96c6\:5408 (\:89e3\:6c7a/\:518d\:8a66\:884c\:3067\:9664\:53bb)\:3002 *)
+      While[Length[st["launched"]] < st["maxConc"] && Length[st["pending"]] > 0,
+        doc = First[st["pending"]];
+        st["pending"] = Rest[st["pending"]]; $iDocParallelJobs[jobId] = st;
+        bp = iBuildDocPrompt[st["sourceCode"], st["package"], st["docsDir"], doc,
+          st["instruction"], st["diffText"], st["mode"], st["designContext"], st["splitCache"]];
+        If[Lookup[bp, "status", "ok"] =!= "ok",
+          nbPrint[st["nb"], Style["\:26a0 " <> doc <> " \:3092\:30b9\:30ad\:30c3\:30d7 (\:88dc\:52a9\:30bd\:30fc\:30b9\:672a\:691c\:51fa)", FontColor -> RGBColor[0.8, 0.4, 0]]];
+          st["done"] = Append[st["done"], doc]; $iDocParallelJobs[jobId] = st; Continue[]];
+        (* \:4e16\:4ee3\:756a\:53f7: \:518d\:6295\:5165\:6bce\:306b\:30a4\:30f3\:30af\:30ea\:30e1\:30f3\:30c8\:3002\:65e7\:4e16\:4ee3\:306e\:4e8c\:91cd\:767a\:706b callback \:306f\:7121\:8996\:3055\:308c\:308b\:3002 *)
+        gNew = Lookup[st["gen"], doc, 0] + 1;
+        st["gen"] = Append[st["gen"], doc -> gNew];
+        st["launched"] = Append[st["launched"], doc]; $iDocParallelJobs[jobId] = st;
+        nbPrint[st["nb"], "\[HorizontalLine] " <> doc <> " \:3092\:4e26\:5217\:6295\:5165 (\:30d7\:30ed\:30f3\:30d7\:30c8 " <>
+          ToString[StringLength[bp["prompt"]]] <> " chars" <>
+          If[gNew > 1, ", \:518d\:8a66\:884c " <> ToString[gNew - 1], ""] <> ")"];
+        iClaudeQueryAsyncWithProgress[bp["prompt"],
+          With[{jid = jobId, d = doc, g = gNew, dpath = bp["docPath"], pn = st["package"]},
+            Function[response,
+              Module[{stx = Lookup[$iDocParallelJobs, jid, $Failed]},
+                (* \:51aa\:7b49+\:4e16\:4ee3: \:5b8c\:4e86\:6e08\:307f or \:65e7\:4e16\:4ee3(\:518d\:8a66\:884c\:3067\:7f6e\:63db\:6e08\:307f)\:306e\:4e8c\:91cd\:767a\:706b\:306f\:7121\:8996\:3002
+                   Return \:3092\:907f\:3051 if/else \:3067\:5305\:3080 (\:5165\:308c\:5b50 Module \:306e Return \:7f60\:56de\:907f, rule 103 #52)\:3002 *)
+                If[AssociationQ[stx] && !MemberQ[stx["done"], d] &&
+                   Lookup[stx["gen"], d, 0] === g,
+                  Which[
+                    !StringQ[response] || iIsAPIErrorResponse[response],
+                      iDocParallelReport[jid, d, g, "systemic",
+                        If[StringQ[response], StringTake[StringTrim[response], UpTo[120]], "(\:975e\:6587\:5b57\:5217)"]],
+                    iSafeWriteDoc[dpath, response, pn] === $Failed,
+                      iDocParallelReport[jid, d, g, "quality", $iDocLastFailReason],
+                    True,
+                      iDocParallelReport[jid, d, g, "ok", ""]]]]]],
+          st["nb"]];
+        st = Lookup[$iDocParallelJobs, jobId, st];
+      ];
+      $ClaudeModel = savedModel];
+    st = Lookup[$iDocParallelJobs, jobId, st];
+    If[AssociationQ[st] && st["launched"] === {} &&
+       (st["pending"] === {} || TrueQ[st["systemic"]]),
+      If[TrueQ[st["systemic"]] || st["failed"] =!= {},
+        iDocParallelFinalizeFailed[jobId],
+        iDocParallelFinishNonReadme[jobId]]];
+  ];
+
+(* doc \:5b8c\:4e86\:5831\:544a (\:51aa\:7b49+\:4e16\:4ee3)\:3002ok\[RightArrow]\:9032\:6357\:8a18\:9332\:3001
+   quality(\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c)\[RightArrow]\:6b8b\:308a\:518d\:8a66\:884c\:56de\:6570\:304c\:3042\:308c\:3070 pending \:3078\:623b\:3057\:81ea\:52d5\:518d\:8a66\:884c\:3001
+   \:7121\:3051\:308c\:3070\:5931\:6557\:78ba\:5b9a(\:4ed6\:306f\:7d99\:7d9a)\:3001systemic(API/\:5236\:9650/\:5185\:90e8)\[RightArrow]\:5931\:6557+\:65b0\:898f\:6295\:5165\:505c\:6b62\:3002 *)
+iDocParallelReport[jobId_String, doc_String, gen_Integer, outcome_String, detail_String:""] :=
+  Module[{st = Lookup[$iDocParallelJobs, jobId, $Failed], dtl, rc, maxR},
+    If[!AssociationQ[st] || MemberQ[st["done"], doc] ||
+       Lookup[st["gen"], doc, 0] =!= gen, Return[]];
+    st["launched"] = DeleteCases[st["launched"], doc];   (* \:3053\:306e\:4e16\:4ee3\:306f in-flight \:7d42\:4e86 *)
+    dtl = If[StringQ[detail] && detail =!= "", " [" <> detail <> "]", ""];
+    maxR = Lookup[st, "maxRetries", 1];
+    Switch[outcome,
+      "ok",
+        st["done"] = Append[st["done"], doc];
+        st["ok"] = Append[st["ok"], doc];
+        iDocProgressMark[st["docsDir"], st["cycleKey"], doc];
+        nbPrint[st["nb"], "  \[Checkmark] " <> doc <> " \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
+      "quality",
+        rc = Lookup[st["retries"], doc, 0];
+        If[rc < maxR,
+          (* \:81ea\:52d5\:518d\:8a66\:884c: done \:306b\:305b\:305a pending \:3078\:623b\:3059 *)
+          st["retries"] = Append[st["retries"], doc -> rc + 1];
+          st["pending"] = Append[st["pending"], doc];
+          nbPrint[st["nb"], Style["\:26a0 " <> doc <> " \:5931\:6557" <> dtl <> " \[RightArrow] \:81ea\:52d5\:518d\:8a66\:884c (" <>
+            ToString[rc + 1] <> "/" <> ToString[maxR] <> ")", FontColor -> RGBColor[0.8, 0.5, 0]]],
+          (* \:518d\:8a66\:884c\:4e0a\:9650\:5230\:9054: \:5931\:6557\:78ba\:5b9a *)
+          st["done"] = Append[st["done"], doc];
+          st["failed"] = Append[st["failed"], doc];
+          nbPrint[st["nb"], Style["\:26d4 " <> doc <> " \:5931\:6557" <> dtl <> " (\:518d\:8a66\:884c " <> ToString[maxR] <>
+            " \:56de\:5f8c)\:3002\:30d5\:30a1\:30a4\:30eb\:306f\:5909\:66f4\:305b\:305a\:30b9\:30ad\:30c3\:30d7\:3001\:518d\:5b9f\:884c\:3067\:518d\:8a66\:884c\:3002",
+            FontColor -> RGBColor[0.8, 0.2, 0.2]]]],
+      _,
+        st["done"] = Append[st["done"], doc];
+        st["failed"] = Append[st["failed"], doc]; st["systemic"] = True;
+        nbPrint[st["nb"], Style["\:26d4 " <> doc <> " \:5931\:6557 (API \:30a8\:30e9\:30fc/\:5229\:7528\:5236\:9650/\:5185\:90e8\:30a8\:30e9\:30fc)" <> dtl <> "\:3002\:65b0\:898f\:6295\:5165\:3092\:505c\:6b62\:3057\:307e\:3059\:3002",
+          FontColor -> RGBColor[0.8, 0.2, 0.2]]]];
+    $iDocParallelJobs[jobId] = st;
+    iDocParallelPump[jobId];
+  ];
+
+(* README \:4ee5\:5916\:5168\:6210\:529f \[RightArrow] README \:3092 1 \:672c\:5b9f\:884c (\:66f4\:65b0\:6e08\:307f\:5144\:5f1f\:3092\:8aad\:3080)\:3002\:4e8c\:91cd\:8d77\:52d5\:9632\:6b62\:3002 *)
+iDocParallelFinishNonReadme[jobId_String] :=
+  Module[{st = Lookup[$iDocParallelJobs, jobId, $Failed], bp, savedModel, rg},
+    If[!AssociationQ[st] || TrueQ[st["readmeLaunched"]], Return[]];
+    If[st["readme"] === {}, iDocParallelComplete[jobId]; Return[]];
+    st["readmeLaunched"] = True; $iDocParallelJobs[jobId] = st;
+    bp = iBuildDocPrompt[st["sourceCode"], st["package"], st["docsDir"], "README.md",
+      st["instruction"], st["diffText"], st["mode"], st["designContext"], st["splitCache"]];
+    If[Lookup[bp, "status", "ok"] =!= "ok", iDocParallelComplete[jobId]; Return[]];
+    rg = Lookup[st, "readmeRetries", 0];
+    nbPrint[st["nb"], "\[HorizontalLine] README.md \:3092\:66f4\:65b0\:4e2d... (\:6700\:5f8c, \:5168\:5144\:5f1f\:53c2\:7167" <>
+      If[rg > 0, ", \:518d\:8a66\:884c " <> ToString[rg], ""] <> ")"];
+    savedModel = $ClaudeModel; $ClaudeModel = iDocModelOverride[];
+    iClaudeQueryAsyncWithProgress[bp["prompt"],
+      With[{jid = jobId, rgg = rg, dpath = bp["docPath"], nb2 = st["nb"], pn = st["package"], dd = st["docsDir"], ck = st["cycleKey"]},
+        Function[response,
+          Module[{stx = Lookup[$iDocParallelJobs, jid, $Failed], maxR},
+            (* \:5b8c\:4e86/\:4e2d\:65ad or \:65e7\:4e16\:4ee3(\:518d\:8a66\:884c\:3067\:7f6e\:63db\:6e08\:307f)\:306e\:4e8c\:91cd\:767a\:706b\:306f\:7121\:8996 *)
+            If[!AssociationQ[stx] || Lookup[stx, "readmeRetries", 0] =!= rgg, Return[Null]];
+            maxR = Lookup[stx, "maxRetries", 1];
+            If[!StringQ[response] || iIsAPIErrorResponse[response],
+              nbPrint[nb2, Style["\:26d4 README.md \:5931\:6557 (API \:30a8\:30e9\:30fc/\:5236\:9650)\:3002\:518d\:5b9f\:884c\:3067 README \:304b\:3089\:518d\:958b\:3002", FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+              iDocParallelFinalizeFailed[jid]; Return[Null]];
+            If[iSafeWriteDoc[dpath, response, pn] === $Failed,
+              If[rgg < maxR,
+                (* \:54c1\:8cea\:5931\:6557: \:81ea\:52d5\:518d\:8a66\:884c *)
+                stx["readmeRetries"] = rgg + 1; stx["readmeLaunched"] = False;
+                $iDocParallelJobs[jid] = stx;
+                nbPrint[nb2, Style["\:26a0 README.md \:5931\:6557 [" <> $iDocLastFailReason <> "] \[RightArrow] \:81ea\:52d5\:518d\:8a66\:884c (" <>
+                  ToString[rgg + 1] <> "/" <> ToString[maxR] <> ")", FontColor -> RGBColor[0.8, 0.5, 0]]];
+                iDocParallelFinishNonReadme[jid],
+                nbPrint[nb2, Style["\:26d4 README.md \:5931\:6557 [" <> $iDocLastFailReason <> "] (\:518d\:8a66\:884c " <> ToString[maxR] <>
+                  " \:56de\:5f8c)\:3002\:518d\:5b9f\:884c\:3067 README \:304b\:3089\:518d\:958b\:3002", FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+                iDocParallelFinalizeFailed[jid]];
+              Return[Null]];
+            iDocProgressMark[dd, ck, "README.md"];
+            nbPrint[nb2, "  \[Checkmark] README.md \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"];
+            iDocParallelComplete[jid]]]],
+      st["nb"]];
+    $ClaudeModel = savedModel;
+  ];
+
+(* \:5168\:5b8c\:4e86: backup \[RightArrow] progress clear \[RightArrow] \:5b8c\:4e86\:8868\:793a *)
+iDocParallelComplete[jobId_String] :=
+  Module[{st = Lookup[$iDocParallelJobs, jobId, $Failed], histDir},
+    If[!AssociationQ[st], Return[]];
+    $iDocUpdateActive = KeyDrop[$iDocUpdateActive, st["package"]];
+    If[StringQ[st["srcFile"]] && st["srcFile"] =!= "",
+      histDir = iCreateDocUpdateBackup[st["package"], st["srcFile"], st["docsDir"], st["instruction"]];
+      nbPrint[st["nb"], iL["\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Backup: "] <> histDir]];
+    iSaveDocOptions[st["package"]];
+    iDocProgressClear[st["docsDir"]];
+    nbPrint[st["nb"], iL["\:2705 \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:304c\:5b8c\:4e86\:3057\:307e\:3057\:305f\:3002", "\:2705 Document update complete."]];
+    Quiet @ ClaudeUnregisterPollingTick[Lookup[st, "statusKey", ""]];
+    iSafeSetWindowStatus[st["nb"], iL["\:2705 \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:5b8c\:4e86", "\:2705 Document update complete"]];
+    $iDocParallelJobs = KeyDrop[$iDocParallelJobs, jobId];
+  ];
+
+(* \:4e2d\:65ad: backup \:305b\:305a\:9032\:6357\:4fdd\:6301 (\:6210\:529f doc \:306f\:8a18\:9332\:6e08\:307f\:3001\:518d\:5b9f\:884c\:3067\:5931\:6557\:5206\:3060\:3051\:518d\:958b)\:3001\:672a\:5b8c\:4e86\:3092\:5831\:544a *)
+iDocParallelFinalizeFailed[jobId_String] :=
+  Module[{st = Lookup[$iDocParallelJobs, jobId, $Failed], okN, failedList},
+    If[!AssociationQ[st], Return[]];
+    $iDocUpdateActive = KeyDrop[$iDocUpdateActive, st["package"]];
+    okN = Length[Replace[st["ok"], Except[_List] -> {}]];
+    failedList = DeleteDuplicates[Replace[st["failed"], Except[_List] -> {}]];
+    nbPrint[st["nb"], Style["\:26d4 \:4e26\:5217\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:3092\:4e2d\:65ad\:3057\:307e\:3057\:305f\:3002\:6210\:529f " <> ToString[okN] <>
+      " \:4ef6\:306f\:4fdd\:5b58\:30fb\:8a18\:9332\:6e08\:307f\:3002\:5931\:6557 " <> ToString[Length[failedList]] <> " \:4ef6: " <>
+      StringRiffle[failedList, ", "] <> "\:3002\:518d\:5b9f\:884c\:3067\:672a\:5b8c\:4e86\:5206\:304b\:3089\:518d\:958b\:3057\:307e\:3059\:3002",
+      FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+    Quiet @ ClaudeUnregisterPollingTick[Lookup[st, "statusKey", ""]];
+    iSafeSetWindowStatus[st["nb"], iL["\:26d4 \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:4e2d\:65ad (\:5931\:6557 " <> ToString[Length[failedList]] <> " \:4ef6)",
+      "\:26d4 Doc update aborted (" <> ToString[Length[failedList]] <> " failed)"]];
+    $iDocParallelJobs = KeyDrop[$iDocParallelJobs, jobId];
   ];
 
 

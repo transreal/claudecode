@@ -52,7 +52,7 @@ AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImag
 
 **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすることで、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、内部状態を保持した複数ターンにわたる対話を可能にします。危険な操作(内部変数の直接書き換え等)に対しては自動的に承認フロー(`NeedsApproval`)を介挿し、意図しない破壊的操作を防止します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、以降の `ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode を単独でロードした場合はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。
 
-**ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすることで、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。複数タスクのジョブキュー管理・レート制限の自動検出と待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断するため、高頻度タスクでの利用に適しています。claudecode 本体の動作には影響せず、インストールされていない環境でも全機能をそのまま利用できます。
+**ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすることで、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。複数タスクのジョブキュー管理・レート制限の自動検出と待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断するため、高頻度タスクでの利用に適しています。`ClaudeRateLimitClear[]` でレート制限情報を手動クリアできます。claudecode 本体の動作には影響せず、インストールされていない環境でも全機能をそのまま利用できます。
 
 **ClaudeTestKit 統合**: オプションの独立パッケージ [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) は、ClaudeRuntime を利用したコード生成の品質を自動テスト・回帰テストで検証するためのフレームワークです。通常の ClaudeEval/ClaudeQuery 使用には不要であり、ClaudeTestKit がインストールされていない環境でも claudecode の全機能は影響を受けません。
 
@@ -327,6 +327,8 @@ ShowClaudePalette[]
 | `$ChatgptCodexModel` | `Automatic` | Codex のモデル名。`Automatic` は config.toml の model キーを省略し Codex CLI 既定モデルを使用。具体的なモデル名は SourceVault のモデルレジストリから選択する。パレットで "Automatic" を選択すると自動的に `Automatic` に変換される |
 | `$ChatgptWorkingDirectory` | `Automatic` | Codex 実行のベース作業ディレクトリ。`Automatic` は `$TemporaryDirectory` 配下の `claudecode-chatgpt-codex` を使用 |
 | `$ChatgptCodexApprovalPolicy` | `"never"` | Codex の承認ポリシー。`"never"` は非対話で実行 |
+| `$ClaudeEvalPromptRouterDispatch` | `Automatic` | PromptRouter ブリッジの制御。`Automatic`: PromptRouter を試行し `NotDispatched` なら自然言語ルーターへ、`False`: 常に自然言語ルーターのみ（SourceVault ロード時のみ有効） |
+| `$ClaudeEvalPromptRouterPreemptsNatural` | `True` | `True`: PromptRouter が自然言語ルーターより先に走る、`False`: 自然言語ルーターを先に試し未マッチのときのみ PromptRouter を試す |
 
 ### 主な機能
 
@@ -402,6 +404,8 @@ ShowClaudePalette[]
 - `ClaudeListDirectives[]` — 全ディレクティブ一覧
 - `ClaudeDirectiveBackupDataset[]` — ディレクティブ更新履歴を Review/Pull/Delete ボタン付き Grid で表示（ローカル最新版スナップショット付き）
 - `ClaudeSyncDirectives[dir]` — 外部ディレクトリから Claude Directives へファイルを同期
+- `ClaudeInitProject[]` — NotebookDirectory 内に `.claude-project/` を作成してプロジェクト固有のディレクティブを初期化（CLAUDE.local.md / rules/ / skills/ が生成され、メインのディレクティブと自動マージされる）
+- `ClaudePromoteProjectDirectives[]` — プロジェクト固有ディレクティブをグローバルに昇格（`DryRun -> True` でプレビュー可能）
 
 **ディレクティブ投影レイヤー（ClaudeDirectives・claudecode_directives ロード時）**
 - 正規ディレクティブ・リポジトリ（`.claude/CLAUDE.md` / `rules/` / `skills/`）を読み込み、モデル能力・ロール・タスクに応じて投影モード（Full / Summary / Index / Lazy）と適用スキル・ルールを動的選択
@@ -423,10 +427,14 @@ ShowClaudePalette[]
 - `NotebookLLMGraphSubSteps[nb, nodeID]` — ClaudeUpdatePackage 内部ステップ履歴を Dataset で取得
 - `NotebookLLMGraphSummary[nb]` — 全ノードの Status / L2 統計を Dataset で表示
 - `NotebookLLMGraphErrors[nb]` — L2 エラーのある L1 ノード一覧
+- `NotebookLLMGraphFetchL2[nb, nodeID]` — L2 グラフ（コードブロック単位）の取得
+- `NotebookLLMGraphPlotL2[nb, nodeID]` — L2 グラフの可視化
+- `NotebookLLMGraphUpdateL2Status[nb, l1ID, l2ID, status, msg]` — L2 ステータスの手動更新
+- `NotebookLLMGraphInvalidateDownstream[nb, nodeID]` — 下流ノードのみを無効化（ノード自体は再実行しない）
 - `NotebookLLMGraphRerun[nb, nodeID]` — L1 ノードの再実行（下流自動無効化）
 - `NotebookLLMGraphExtractThread[nb, nodeID]` — 祖先チェーンを Thread オブジェクトとして抽出
 - `NotebookLLMGraphApplyThread[thread, newTarget]` — Thread を別ファイルに適用（`DryRun -> True` で実行計画確認）
-- `LLMGraphDAGCreate` / `LLMGraphExecute` / `LLMGraphDAGRebuild` 系 — DAG ジョブの作成・実行・キャンセル・再構築を行う低レベル API
+- `LLMGraphDAGCreate` / `LLMGraphExecute` / `LLMGraphExecuteStatus` / `LLMGraphExecuteCancel` / `LLMGraphDAGRebuild` 系 — DAG ジョブの作成・実行・ステータス取得・キャンセル・再構築を行う低レベル API
 
 **[実験的] ClaudeProcessFile — プライバシー分割ファイル処理**
 - `ClaudeProcessFile[prompt, srcPath, dstPath]` — .nb ファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージ。非同期実行（stateKey を返す）
@@ -486,25 +494,52 @@ ClaudeEval["タスクの説明"]   (* 再び CLI 経由 *)
 
 `ShowClaudePalette[]` を実行すると、以下のような操作パレットが表示されます。
 
-![パレット画面](palette.png)
+![パレット画面](img_20260323_185321_1.png)
 
-パレットには主要な操作がボタンとして配置されています。
+パレットは複数のセクションに分かれています。
 
-| ボタン / 入力欄 | 機能 |
-|----------------|------|
-| タスク入力欄 | ClaudeEval に渡す自然言語タスクを入力 |
-| **Eval** | 入力欄のテキストで ClaudeEval を実行 |
-| **Continue** | ContinueEval を実行（エラー修正・続きの依頼） |
-| **Status** | ClaudeStatus[] でリアルタイム状態を表示 |
-| **History** | ClaudeShowHistory[] で会話履歴を表示 |
-| **Compact** | ClaudeCompactHistory[] で履歴を圧縮 |
-| **Session** | セッション一覧（ClaudeListSessions[]）を表示 |
-| **Attach** | ファイルをセッションに添付（ClaudeAttach） |
-| **Update Pkg** | パッケージ名と指示を入力して ClaudeUpdatePackage を実行 |
-| **Backup** | ClaudeBackupDataset[] でバックアップ履歴を表示 |
-| **M:** | provider 別のモデル候補を選択（ChatGPTCodex 選択時は SourceVault レジストリから取得） |
+#### 機密セル セクション
 
-パレットからの操作は、選択中のノートブックに対して実行されます。タスク入力欄に自然言語で指示を入力し、**Eval** ボタンを押すだけで ClaudeEval が起動します。実行中の状態は **Status** ボタンでリアルタイムに確認できます。
+| ボタン | 機能 |
+|--------|------|
+| **△ 機密マーク** | 選択中のセルを機密セルとしてマーク（プロンプトから自動除外） |
+| **⊗ 機密解除** | 機密マークを解除 |
+| **▷ スキャン** | ノートブック全体をスキャンして機密変数参照セルを自動マーク（`ScanConfidentialCells[]`） |
+
+#### サービス起動/停止トグル（拡張ポイント）
+
+機密セルセクションの直下に、**外部パッケージが登録したサービスの起動/停止トグル**が表示されます（例: SourceVault が MCP サーバーのトグルを登録）。登録が 1 つもなければ何も表示されません。登録 API: `ClaudeRegisterPaletteServiceControl[spec]` / `ClaudeUnregisterPaletteServiceControl[id]`（`$ClaudePaletteServiceControls` で管理）。
+
+#### Claude セクション
+
+| ボタン | 機能 |
+|--------|------|
+| **▷ ClaudeQuery** | コンテキストをもとに `ClaudeQuery` を実行（同期テキスト応答） |
+| **► ClaudeEval** | コンテキストをもとに `ClaudeEval` を実行（非同期コード生成・実行） |
+| **▷ 選択→Query** | 選択中のセル内容で `ClaudeQuery` を実行 |
+| **▷ 選択→Eval** | 選択中のセル内容で `ClaudeEval` を実行 |
+| **◆ 仕様生成** | ノートブックコンテキストから `ClaudeSpec` を実行して仕様書を生成 |
+| **■ 実行停止** | 実行中の全タスクを停止（`ClaudeAbort[]`） |
+
+#### 設定セクション
+
+パレット下部でモデル・エフォート・課金 API の設定をノートブックごとに保存できます（TaggingRules に永続化）。
+
+| 設定項目 | 選択肢 | 説明 |
+|----------|--------|------|
+| **モデル** | Opus / Sonnet / Default | 使用モデルを切り替え |
+| **エフォート** | Low / Medium / High / Max | Think トリガー強度（Low: 思考なし、Max: ultrathink） |
+| **課金API** | 禁止 / 許可 | `Fallback -> True/False` を制御 |
+| **M:** | モデル候補リスト | provider 別のモデルを選択（ChatGPTCodex 選択時は SourceVault レジストリから取得） |
+
+#### セッション セクション
+
+| ボタン | 機能 |
+|--------|------|
+| **■ 履歴表示** | `ClaudeShowHistory[]` で会話履歴を表示 |
+| **□ セッション一覧** | `ClaudeListSessions[]` で全セッション一覧を表示 |
+
+パレット最下部には機密セル数と機密依存セル数がリアルタイムで表示されます（例: `機密: 0, 依存: 0`）。パレットの表示言語は `$Language` 設定に連動します。
 
 ### LM Studio 対応
 
@@ -545,6 +580,17 @@ ClaudeQuery["最新の Mathematica のリリースノートを調べて"]
 ```
 
 MCP サーバー ID は `mcp.json` に登録済みの ID を文字列リストで指定します。`$ClaudeModel` を LM Studio に設定した状態で `$ClaudeLMStudioIntegrations` を有効にすることで、プライバシーを重視しながら外部ツール呼び出し機能を統合した運用が可能です。
+
+#### LM Studio 認証設定（Require Authentication）
+
+LM Studio の **Server Settings** で **Require Authentication** を有効にした場合は、API キーを `SystemCredential` に登録します。キー名は `"lmstudio-<URL>"` の形式です。
+
+```mathematica
+(* LM Studio の API キーを登録（キー名は接続先 URL を含む形式） *)
+SystemCredential["lmstudio-http://127.0.0.1:1234"] = "your-lm-studio-api-key";
+```
+
+登録後は `ClaudeEval` 等の呼び出し時に自動取得されます。Require Authentication が Off の場合は登録不要です（ダミーキーにフォールバック）。
 
 ### ChatGPT Codex 対応
 

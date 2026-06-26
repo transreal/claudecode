@@ -703,6 +703,38 @@ Button[label,
 
 ---
 
+## H. Wolfram ライセンス枠（プロセス / subkernel）は有限プール。spawn する非同期 worker はこれを尊重する
+
+### 背景
+
+非同期・headless 実行のために独立カーネル (`wolframscript` / `MathKernel` プロセス) や subkernel (`LaunchKernels`) を spawn するとき、Wolfram ライセンスの**有限な同時起動枠**を超えると、新規カーネルは起動直後に unregistered で即死する。**health は緑のまま** status 文字列が `Running` で固着し、「動いているはずなのに結果が来ない」フリーズ・wedge の原因になる。これは「2 ライセンス＝2席」のような単純な話ではない。
+
+### 実測値（strixhalo128, 2026-06-26）
+
+| プロパティ | 値 | 意味 |
+|---|---|---|
+| `$LicenseType` | `Professional` | |
+| `$MaxLicenseProcesses` | **4** | 独立カーネルプロセス同時上限 (FE master / 独立 `wolframscript`・`MathKernel` / サービスカーネル 各 1) |
+| `$MaxLicenseSubprocesses` | **16** | `LaunchKernels` 由来の並列 subkernel 上限。プロセス枠とは**別カウント** |
+
+測定時 `$LicenseProcesses` は **4/4 で飽和**していた。原因は対話 FE ではなく、MCP ゲートウェイ共有カーネル + SourceVault サービスカーネル + FE + 評価カーネルの**積み上がり**。
+
+### 必須ルール
+
+- **席は「数」を実測する。宣言値で判断しない。** カーネルを spawn する前に `$LicenseProcesses` / `$MaxLicenseProcesses` / `$MaxLicenseSubprocesses` を見て空きを確認し、無ければ spawn せず defer / 記録する。「2台それぞれに席がある」と仮定しない。
+- **独立プロセスより subkernel を優先する。** 独立 `wolframscript` プロセスはプロセス枠 4 を消費する。`LaunchKernels` の subkernel は subprocess 枠 16（潤沢）を使う。headless 非同期実行は subkernel 寄せが正解。`$ClaudeParallelKernelCount` で subkernel 数を調整できる。
+- **プロセス枠と subprocess 枠を会計上分けて扱う。** 両者は別カウント。`SubkernelAsync` と `WolframScriptProcess` を同じ「席」として数えない。
+- **silent death を Running 固着にしない。** spawn した job の生存は heartbeat / pid alive で判定し、一定時間 heartbeat の無い `Running` は terminal failure (`BackendDiedSilently` 相当) に落とす。`SourceVaultMCPRunningQ` を `State` 文字列単独から `PidAlive` AND に直した修正と同原則。
+- **2 つの FE を別 PC で開いても WolframScript は起動できる**（枠 4 のうち 2 本しか使わない）。「2 FE で headless 不可」は誤り。逼迫の原因は積み上がったカーネルであって FE の数ではない。
+
+### 未確認事項
+
+`$MaxLicenseProcesses = 4` が **PC ごと (activation 単位) か、両 PC 共有 (account global) か**は未確定。standalone Professional activation なら通常マシンごと。複数 PC でカーネル spawn を設計するときは、各 PC で `$MaxLicenseProcesses` を実測して per-machine か共有かを確認する。
+
+詳細は memory `wolfram-license-limits`、関連: `skills/sourcevault-service-mcp-lifecycle`（席枯渇でサービスカーネル即死 / health 緑のまま）。
+
+---
+
 ## デバッグのチェックリスト
 
 非同期処理が「最初は応答するがすぐフリーズする」「動的評価の放棄ダイアログが出る」場合:
@@ -715,3 +747,4 @@ Button[label,
 6. **`$ClaudeModel` がリスト形式 (LMStudio) のとき、CLI 経路の bat に流していないか** → 節 E のモデル振り分けパターンを実装する。
 7. **hook が `EvaluationNotebook[]` 経由で TaggingRule / SelectionMove を取って空が返ってくる** → 節 F 違反。Memory Registry Fallback を導入する。
 8. **`SystemOpen` 等の desktop 操作を承認後に呼んでいるのに「エラーも出ず何も起きない」** → 節 G。`SessionSubmit` / `ScheduledTask` / 共有 tick の中で呼んでいる。`Button` 本体 (`Method -> "Queued"` = メイン評価) で直接実行するよう分離する。
+9. **spawn したカーネル / WolframScript job が「起動したはずなのに結果が来ない」「Running のまま固着」** → 節 H。ライセンス枠 (プロセス 4 / subkernel 16) が飽和して新規カーネルが即死している可能性。`$LicenseProcesses` / `$MaxLicenseProcesses` を実測し、独立プロセスより subkernel を優先、生存は pid / heartbeat で判定する。

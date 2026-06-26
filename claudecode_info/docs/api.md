@@ -59,8 +59,8 @@ Claude Code に Read 許可する追加ディレクトリリスト。iPrepareCla
 LLMGraphDAG スナップショットの保存ディレクトリ。
 
 ### $ClaudeDocModel
-型: {String, String} | String, 初期値: $iModelSonnet (最新 Sonnet)
-ドキュメント生成・更新時に使用するモデル。"" で $ClaudeModel と同じモデルを使用。StringMatchQ[$ClaudeDocModel, "claude-sonnet-*"] なら自動更新される。
+型: {String, String} | String, 初期値: {"claudecode", "claude-sonnet-4-6"}
+ドキュメント生成・更新時に使用するモデル。"" で $ClaudeModel と同じモデルを使用。StringMatchQ[$ClaudeDocModel, "claude-sonnet-*"] なら自動的にタプル形式の最新 Sonnet に更新される。
 
 ### $ClaudeDocRetryDelay
 型: Number, 初期値: 60
@@ -73,6 +73,10 @@ LLMGraphDAG スナップショットの保存ディレクトリ。
 ### $ClaudeDocMaxChunkChars
 型: Integer, 初期値: 60000
 プロンプト中ソースの最大文字数。
+
+### $ClaudeDocUpdateStaleSeconds
+型: Number, 初期値: 1800
+ClaudeUpdateDocumentation の非同期ドキュメント更新チェーンのストール検出秒数。このタイムアウトを超えたロックは自動解放される。
 
 ### $ClaudeEvalMaxDepth
 型: Integer, 初期値: 5
@@ -248,6 +252,26 @@ Codex ハーネスモード。
 型: String
 Claude CLI ハーネスモード (Phase 4)。
 
+### $ClaudeCloudSendPreflightLog
+型: List, 初期値: {}
+クラウド送信プリフライト監査ログのインメモリバッファ。ClaudeCloudSendPreflightLogClear でクリア。
+
+### $ClaudeCloudSendPreflightLogMaxLength
+型: Integer
+$ClaudeCloudSendPreflightLog の最大エントリ数。超過時は古いエントリを削除。
+
+### $ClaudeCloudSendPreflightContextResolver
+型: Function | None
+プリフライト判定時のコンテキスト解決フック。外部パッケージが登録する。
+
+### $ClaudeCloudSendRoutePolicy
+型: Association | String
+クラウド送信のルーティングポリシー設定。
+
+### $ClaudeCloudSendPreflightLogFile
+型: String
+プリフライト監査ログの永続化ファイルパス。
+
 ## LLM クエリ関数
 
 ### ClaudeQuery[task, opts]
@@ -294,6 +318,10 @@ LLM 応答テキストからすべてのコードブロックを抽出する。
 サイレント (非表示) ノートブックオブジェクトを確保して返す。バックグラウンド処理用。
 → NotebookObject
 
+### ClaudeDebug[opts]
+Claude Code セッション・ランタイム状態のデバッグ情報を出力する。
+→ Null
+
 ## ClaudeEval / コード生成
 
 ### ClaudeEval[task, opts]
@@ -319,6 +347,14 @@ Options: ClaudeEval と同じ
 ### ClaudeSpec[{task, image, ...}]
 画像付きで仕様を生成する。
 → Null (セルに出力)
+
+### ClaudeReview[packageName, opts]
+パッケージのコードレビューを LLM で実行してノートブックセルに出力する。
+→ Null
+
+### ClaudeReviewChunked[packageName, opts]
+大規模パッケージをチャンク分割してレビューする。$ClaudeDocMaxChunkChars を超えるソースに使用する。
+→ Null
 
 ### ClaudeSpecStatus[]
 現在のノートブックのプロジェクト (TaggingRule SourceVaultSpecProjectId) の仕様/合意形成ドラフティングステータスを表示する。ノートブックプロジェクトがない場合は実行中のバックグラウンド合意形成ジョブを一覧表示する。
@@ -476,7 +512,7 @@ ClaudeWebFetch のエイリアス。ClaudeQuery / ClaudeEval 内部から使用�
 Options: References -> {} (URL/書籍リスト。README.md 参照文献セクションに追加), Demos -> {} (デモ URL リスト。README.md に反映), Disclaimer -> {} (免責事項テキストリスト。README.md のみ), License -> "" (ライセンス文字列。空で GitHubREST`$GitHubLicenseHolder 非空なら MIT 自動挿入), Acknowledgments -> {} (謝辞テキストリスト。README.md のみ), Model -> $ClaudeDocModel, Keywords -> Automatic, Title -> Automatic
 
 ### ClaudeUpdateDocumentation[packageName, instruction, opts]
-既存ドキュメントを instruction に従って部分更新する。
+既存ドキュメントを instruction に従って部分更新する。非同期連鎖で進行するため $ClaudeDocUpdateStaleSeconds 超のロックは自動解放される。
 → True | $Failed
 Options: ClaudeCreateDocumentation と同じ
 
@@ -510,6 +546,50 @@ Options: Mode -> "rule" | "skill" | "md"
 ### ClaudeShowAccessConfig[]
 現在のアクセス設定 (アクセス可能ディレクトリ、権限等) を表示する。
 → Null
+
+## クラウド送信プリフライト
+
+LLM へのクラウド送信前に何が送られるかを監査・制御するシステム。外部パッケージ (SourceVault 等) が $ClaudeCloudSendPreflightContextResolver にフックを登録して使用する。
+
+### ClaudeCloudSendPreflightDecision[context]
+コンテキスト context に対するクラウド送信プリフライト判定を返す。ルーティングポリシーとコンテキスト解決結果に基づいて送信可否を決定しログに記録する。
+→ Association (decision, route, reason)
+
+### ClaudeCloudSendPreflightError[context, msg]
+プリフライト処理中のエラーを記録してエラー Association を返す。
+→ Association
+
+### ClaudeCloudSendPreflightFailure[context, reason]
+プリフライト失敗 (送信禁止) を記録して失敗 Association を返す。
+→ Association
+
+### ClaudeCloudSendPreflightGuardDryRun[context]
+ドライランモードでプリフライト判定をシミュレートする。実際の送信は行わない。
+→ Association
+
+### ClaudeCloudSendPreflightAudit[]
+現在の $ClaudeCloudSendPreflightLog から監査サマリーを生成して返す。
+→ Dataset
+
+### ClaudeCloudSendPreflightLog[]
+$ClaudeCloudSendPreflightLog の全エントリを Dataset として返す。
+→ Dataset
+
+### ClaudeCloudSendPreflightLogClear[]
+$ClaudeCloudSendPreflightLog をクリアする。
+→ Null
+
+### ClaudeCloudSendPreflightLogSummary[]
+プリフライトログのサマリー (件数、ルート分布、失敗数) を返す。
+→ Association
+
+### ClaudeCloudSendPreflightFailureCell[context, reason]
+プリフライト失敗をノートブックセルとして表示する。
+→ Null
+
+### ClaudeCloudSendPreflightLogDataset[]
+永続化ログファイル ($ClaudeCloudSendPreflightLogFile) から全エントリを Dataset として読み込む。
+→ Dataset
 
 ## パッケージ操作補助
 
@@ -607,6 +687,32 @@ LLMGraph のサマリー情報を返す。
 
 ### NotebookLLMGraphApplyThread[nb, thread]
 スレッドをノートブックに適用する。
+→ Null
+
+以下は Phase R-6 で外部パッケージ (ClaudeStateGraph 等) からの参照用に Public 化された LLMGraph 内部ヘルパー:
+
+### iLLMGraphGetCached[nb]
+LLMGraph キャッシュから nb のグラフを取得する。
+→ Association | Missing
+
+### iSaveNotebookLLMGraph[nb, graph]
+LLMGraph を $iLLMGraphCache に保存する。
+→ Null
+
+### iNewLLMNode[opts]
+新規 LLMGraph ノード Association を生成する。
+→ Association
+
+### iNewNotebookLLMGraph[nb]
+新規 LLMGraph Association を生成して nb に関連付ける。
+→ Association
+
+### iLLMGraphMergeTwoGraphs[g1, g2]
+2 つの LLMGraph をマージする。
+→ Association
+
+### iLLMGraphFlush[nb]
+nb の LLMGraph キャッシュをフラッシュする。
 → Null
 
 ## LLMGraphDAG
