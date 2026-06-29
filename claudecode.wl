@@ -1014,8 +1014,12 @@ ClaudeDetach::usage =
   "ClaudeDetach[path] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:304b\:3089\:30d5\:30a1\:30a4\:30eb\:3092\:30c7\:30bf\:30c3\:30c1\:3059\:308b\:3002\n" <>
   "ClaudeDetach[session, path] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:304b\:3089\:30c7\:30bf\:30c3\:30c1\:3059\:308b\:3002";
 ClaudeRateLimitStatus::usage =
-  "ClaudeRateLimitStatus[] \:306f\:6700\:5f8c\:306b\:691c\:51fa\:3055\:308c\:305f Claude CLI \:306e rate-limit \:60c5\:5831\:3092\n" <>
+  "ClaudeRateLimitStatus[] \:306f\:73fe\:5728\:306e provider ($ClaudeModel) \:306e rate-limit \:60c5\:5831\:3092\n" <>
   "Association \:3067\:8fd4\:3059\:3002rate-limit \:306b\:306a\:3063\:3066\:3044\:306a\:3051\:308c\:3070 None\:3002\n" <>
+  "ClaudeRateLimitStatus[\"claudecode\"|\"anthropic\"|...] \:306f\:6307\:5b9a provider \:306e\:60c5\:5831\:3002\n" <>
+  "ClaudeRateLimitStatus[All] \:306f active \:306a\:5168 provider \:3092 <|provider -> info|> \:3067\:8fd4\:3059\n" <>
+  "(active \:304c\:7121\:3051\:308c\:3070 None)\:3002rate-limit \:72b6\:614b\:306f provider \:3054\:3068\:306b\:5206\:96e2\:3055\:308c\:3066\:3044\:308b\:305f\:3081\:3001\n" <>
+  "claudecode CLI \:304c\:5236\:9650\:4e2d\:3067\:3082\:5225 provider \:306b\:5207\:308a\:66ff\:3048\:308c\:3070 ClaudeEval \:306f\:5b9f\:884c\:3055\:308c\:308b\:3002\n" <>
   "\n" <>
   "\:8fd4\:308a\:5024\:306e\:30ad\:30fc:\n" <>
   "  \"Detected\"      -> DateObject[...]       (\:691c\:51fa\:6642\:523b)\n" <>
@@ -1037,7 +1041,8 @@ ClaudeRateLimitStatus::usage =
   "    Print[\"rate-limit \:3067\:306f\:306a\:3044\"]]";
 
 ClaudeRateLimitClear::usage =
-  "ClaudeRateLimitClear[] \:306f \:5185\:90e8\:306b\:4fdd\:6301\:3055\:308c\:305f rate-limit \:60c5\:5831\:3092\:624b\:52d5\:3067\:30af\:30ea\:30a2\:3059\:308b\:3002\n" <>
+  "ClaudeRateLimitClear[] \:306f \:5185\:90e8\:306b\:4fdd\:6301\:3055\:308c\:305f\:5168 provider \:306e rate-limit \:60c5\:5831\:3092\:624b\:52d5\:3067\:30af\:30ea\:30a2\:3059\:308b\:3002\n" <>
+  "ClaudeRateLimitClear[\"claudecode\"|...] \:306f\:6307\:5b9a provider \:306e\:307f\:30af\:30ea\:30a2\:3059\:308b\:3002\n" <>
   "\:8aa4\:691c\:51fa\:3084 status=allowed \:306e\:9032\:6357\:901a\:77e5\:306b\:3088\:308a\:30d6\:30ed\:30c3\:30af\:304c\:304b\:304b\:3063\:3066\:3057\:307e\:3063\:305f\:969b\:306b\n" <>
   "\:4f7f\:7528\:3059\:308b\:3002\:547c\:3073\:51fa\:3057\:5f8c\:306b ClaudeRateLimitStatus[] \:306f None \:3092\:8fd4\:3059\:3002";
 ClaudeAttachments::usage =
@@ -7365,12 +7370,62 @@ iExtractRateLimitInfo[text_String] :=
 iExtractRateLimitInfo[_] := None;
 
 (* v2026-04-20 T06: \:6700\:5f8c\:306b\:691c\:51fa\:3057\:305f rate-limit \:60c5\:5831\:3092\:4fdd\:6301\:3002
-   Orchestrator \:304c ClaudeRateLimitStatus[] \:3067\:53c2\:7167\:53ef\:80fd\:3002 *)
+   Orchestrator \:304c ClaudeRateLimitStatus[] \:3067\:53c2\:7167\:53ef\:80fd\:3002
+   v2026-06-29: rate-limit \:72b6\:614b\:3092 provider \:3054\:3068\:306b\:5206\:96e2\:3002
+   claudecode CLI \:304c\:5236\:9650\:4e2d\:3067\:3082\:3001\:5225 provider (anthropic / lmstudio /
+   \:30b3\:30c7\:30c3\:30af\:30b9\:7b49) \:306b\:5207\:308a\:66ff\:3048\:308c\:3070 ClaudeEval \:3092\:5b9f\:884c\:3067\:304d\:308b\:3088\:3046\:306b\:3059\:308b\:3002
+   $iRateLimitInfoByProvider: <|provider(\:5c0f\:6587\:5b57) -> info_Association, ...|>
+   $iLastRateLimitInfo: \:5f8c\:65b9\:4e92\:63db\:7528\:306e\:300c\:6700\:5f8c\:306b\:8a18\:9332\:3057\:305f\:60c5\:5831\:300d\:3002 *)
+If[!ValueQ[$iRateLimitInfoByProvider] ||
+    !AssociationQ[$iRateLimitInfoByProvider],
+  $iRateLimitInfoByProvider = <||>];
 If[!ValueQ[$iLastRateLimitInfo], $iLastRateLimitInfo = None];
 
+(* \:73fe\:5728\:307e\:305f\:306f\:6307\:5b9a\:306e\:30e2\:30c7\:30eb\:6307\:5b9a\:304b\:3089 rate-limit \:3092\:7d10\:4ed8\:3051\:308b
+   provider \:30ad\:30fc (\:5c0f\:6587\:5b57) \:3092\:8fd4\:3059\:3002\:6587\:5b57\:5217\:4e92\:63db / Automatic /
+   \:7a7a\:306f claudecode CLI \:3068\:307f\:306a\:3059\:3002 *)
+iRateLimitProviderKey[modelSpec_] :=
+  Module[{spec},
+    spec = Quiet @ Check[iResolveDefaultModelSpec[modelSpec], modelSpec];
+    If[ListQ[spec] && Length[spec] >= 1 && StringQ[spec[[1]]],
+      ToLowerCase[spec[[1]]],
+      "claudecode"]];
+iRateLimitProviderKey[] := iRateLimitProviderKey[Automatic];
+
+(* rate-limit \:60c5\:5831\:304c\:307e\:3060\:6709\:52b9 (\:5236\:9650\:4e2d) \:304b\:3092\:5224\:5b9a\:3002
+   Status="allowed" \:307e\:305f\:306f ResetsAt \:304c\:904e\:53bb\:306a\:3089 False\:3002
+   ResetsAt \:304c\:306a\:3044 (result/legacy) \:5834\:5408\:306f\:6709\:52b9\:6271\:3044 (True)\:3002 *)
+iRateLimitInfoActiveQ[info_Association] :=
+  Module[{statusLC, resetsDate, resetsAbs},
+    statusLC = ToLowerCase[ToString[Lookup[info, "Status", ""]]];
+    If[statusLC === "allowed", Return[False, Module]];
+    resetsDate = Lookup[info, "ResetsAt", None];
+    If[Head[resetsDate] === DateObject,
+      resetsAbs = Quiet @ Check[AbsoluteTime[resetsDate], None];
+      If[NumericQ[resetsAbs] && resetsAbs < AbsoluteTime[],
+        Return[False, Module]]];
+    True];
+iRateLimitInfoActiveQ[_] := False;
+
+(* info \:306e Source \:304b\:3089 provider \:30ad\:30fc\:3092\:63a8\:5b9a\:3002rate_limit_event / result \:306f
+   claudecode CLI \:56fa\:6709\:306e stream-json \:30a4\:30d9\:30f3\:30c8\:306a\:306e\:3067 "claudecode" \:306b\:78ba\:5b9a\:3002
+   \:305d\:308c\:4ee5\:5916 (legacy \:7b49 \:8ab2\:91d1 API \:306e\:751f\:30a8\:30e9\:30fc) \:306f\:73fe\:5728\:306e provider \:3092\:4f7f\:3046\:3002 *)
+iRateLimitInfoProviderKey[info_Association] :=
+  Module[{src = ToLowerCase[ToString[Lookup[info, "Source", ""]]]},
+    If[MemberQ[{"rate_limit_event", "result"}, src],
+      "claudecode",
+      iRateLimitProviderKey[]]];
+iRateLimitInfoProviderKey[_] := iRateLimitProviderKey[];
+
 iRecordRateLimitInfo[info_Association] :=
-  ($iLastRateLimitInfo = info);
+  iRecordRateLimitInfo[info, iRateLimitInfoProviderKey[info]];
+iRecordRateLimitInfo[info_Association, provider_String] :=
+  Module[{key = ToLowerCase[provider]},
+    $iRateLimitInfoByProvider[key] = info;
+    $iLastRateLimitInfo = info;
+    info];
 iRecordRateLimitInfo[_] := Null;
+iRecordRateLimitInfo[_, _] := Null;
 
 (* v2026-04-20 T05: Claude CLI \:306e stream-json (JSONL) \:304c raw \:306e\:307e\:307e
    \:6e21\:3055\:308c\:305f\:5834\:5408\:3001\:6700\:7d42 "type":"result" \:30a4\:30d9\:30f3\:30c8\:306e "result" \:30d5\:30a3\:30fc\:30eb\:30c9\:3092
@@ -7432,31 +7487,46 @@ iExtractStreamJsonResultText[x_] := x;
    DateObject \:540c\:58eb\:306e < \:6bd4\:8f03\:306f TimeZone \:304c\:7570\:306a\:308b\:3068 False \:306b\:306a\:308b\:3053\:3068\:304c\:3042\:308a\:3001
    $iLastRateLimitInfo \:304c\:6c38\:4e45\:306b\:30af\:30ea\:30a2\:3055\:308c\:305a\:3001T12 \:30ac\:30fc\:30c9\:304c\:6c38\:9060\:306b\:7d9a\:304f\:554f\:984c\:3092
    \:5f15\:304d\:8d77\:3053\:3059\:3002AbsoluteTime \:3067\:6bd4\:8f03\:3059\:308c\:3070 TimeZone \:306b\:5de6\:53f3\:3055\:308c\:306a\:3044\:3002 *)
-ClaudeRateLimitStatus[] :=
-  Module[{info = $iLastRateLimitInfo, resetsDate,
-          resetsAbs, nowAbs, statusLC},
+(* v2026-06-29: \:5f15\:6570\:7121\:3057\:306f\:73fe\:5728\:306e provider ($ClaudeModel) \:306e\:72b6\:614b\:3002 *)
+ClaudeRateLimitStatus[] := ClaudeRateLimitStatus[iRateLimitProviderKey[]];
+
+(* \:6307\:5b9a provider \:306e rate-limit \:60c5\:5831\:3002allowed / \:5fa9\:65e7\:6e08\:307f\:306f\:81ea\:52d5\:30af\:30ea\:30a2\:3057
+   None \:3092\:8fd4\:3059\:3002 *)
+ClaudeRateLimitStatus[provider_String] :=
+  Module[{key = ToLowerCase[provider], info},
+    info = Lookup[$iRateLimitInfoByProvider, key, None];
     If[!AssociationQ[info], Return[None]];
-    (* Phase 30.3 fix (2026-04-22): Status="allowed" \:306f\:307e\:3060\:4f7f\:3048\:308b\:72b6\:614b\:306a\:306e\:3067
-       \:65e2\:5b58\:30ec\:30b3\:30fc\:30c9\:304c\:3042\:3063\:3066\:3082\:30af\:30ea\:30a2\:3057\:3066 None \:3092\:8fd4\:3059\:3002
-       iExtractRateLimitInfo \:5074\:3067\:3082 allowed \:3092\:30b9\:30ad\:30c3\:30d7\:3059\:308b\:304c\:3001
-       \:30a2\:30c3\:30d7\:30c7\:30fc\:30c8\:524d\:306b\:8a18\:9332\:3055\:308c\:305f\:65e7\:30ec\:30b3\:30fc\:30c9\:304c\:6b8b\:308b\:5834\:5408\:306e\:9632\:5fa1\:3002 *)
-    statusLC = ToLowerCase[ToString[Lookup[info, "Status", ""]]];
-    If[statusLC === "allowed",
-      $iLastRateLimitInfo = None;
+    (* Phase 30.3 fix (2026-04-22): Status="allowed" \:307e\:305f\:306f ResetsAt \:904e\:53bb\:306f
+       \:65e2\:5b58\:30ec\:30b3\:30fc\:30c9\:3092\:30af\:30ea\:30a2\:3057\:3066 None \:3092\:8fd4\:3059\:3002 *)
+    If[!iRateLimitInfoActiveQ[info],
+      $iRateLimitInfoByProvider = KeyDrop[$iRateLimitInfoByProvider, key];
+      If[$iLastRateLimitInfo === info, $iLastRateLimitInfo = None];
       Return[None]];
-    resetsDate = Lookup[info, "ResetsAt", None];
-    If[Head[resetsDate] === DateObject,
-      resetsAbs = Quiet @ Check[AbsoluteTime[resetsDate], None];
-      nowAbs = AbsoluteTime[];
-      If[NumericQ[resetsAbs] && resetsAbs < nowAbs,
-        (* \:5fa9\:65e7\:6e08\:307f: \:81ea\:52d5\:30af\:30ea\:30a2\:3057\:3066 None \:3092\:8fd4\:3059 *)
-        $iLastRateLimitInfo = None;
-        Return[None]]];
     info];
 
-(* Phase 30.3 (2026-04-22): \:624b\:52d5\:30af\:30ea\:30a2 API *)
+(* \:5168 provider \:306e active \:306a rate-limit \:60c5\:5831\:3092 <|provider -> info|> \:3067\:8fd4\:3059
+   (active \:304c\:7121\:3051\:308c\:3070 None)\:3002UI / \:8a3a\:65ad\:7528\:3002 *)
+ClaudeRateLimitStatus[All] :=
+  Module[{active},
+    active = Association @ KeyValueMap[
+      Function[{k, v}, If[iRateLimitInfoActiveQ[v], k -> v, Nothing]],
+      $iRateLimitInfoByProvider];
+    $iRateLimitInfoByProvider = active;
+    If[$iLastRateLimitInfo =!= None &&
+       !MemberQ[Values[active], $iLastRateLimitInfo],
+      $iLastRateLimitInfo = None];
+    If[active === <||>, None, active]];
+
+(* Phase 30.3 (2026-04-22): \:624b\:52d5\:30af\:30ea\:30a2 API\:3002
+   v2026-06-29: \:5f15\:6570\:7121\:3057\:306f\:5168 provider\:3001provider \:6307\:5b9a\:306f\:305d\:306e provider \:306e\:307f\:3002 *)
 ClaudeRateLimitClear[] :=
-  ($iLastRateLimitInfo = None; None);
+  ($iRateLimitInfoByProvider = <||>; $iLastRateLimitInfo = None; None);
+ClaudeRateLimitClear[provider_String] :=
+  Module[{key = ToLowerCase[provider], info},
+    info = Lookup[$iRateLimitInfoByProvider, key, None];
+    $iRateLimitInfoByProvider = KeyDrop[$iRateLimitInfoByProvider, key];
+    If[$iLastRateLimitInfo === info, $iLastRateLimitInfo = None];
+    None];
 
 iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
   Module[{lines, i, line, trimmed, textBuf = {}, content,
@@ -13882,18 +13952,25 @@ iClaudeEvalTryDispatch[_, _] := $iClaudeEvalNotDispatched;
    \:30b9\:30ad\:30c3\:30d7\:3057\:3066\:77ed\:3044 Failure \:30e1\:30c3\:30bb\:30fc\:30b8\:3067\:5373\:5ea7\:306b\:623b\:308b\:3002
    \:3053\:308c\:306b\:3088\:308a\:3001rate-limit \:4e2d\:306b\:8907\:6570\:56de ClaudeEval \:3092\:547c\:3093\:3067\:3082
    stream-json \:30ce\:30a4\:30ba\:306f\:51fa\:305a\:3001\:30ea\:30c8\:30e9\:30a4\:30b3\:30b9\:30c8\:3082\:304b\:304b\:3089\:306a\:3044\:3002 *)
-iClaudeEvalRateLimitGuard[] :=
-  Module[{rli, resetsDate, waitMin, msg},
-    rli = Quiet @ Check[ClaudeRateLimitStatus[], None];
+(* v2026-06-29: \:5236\:9650\:5224\:5b9a\:306f\:5b9f\:884c\:5bfe\:8c61 provider \:3054\:3068\:3002\:5f15\:6570\:306f Model \:30aa\:30d7\:30b7\:30e7\:30f3
+   (\:7121\:6307\:5b9a\:306a\:3089 $ClaudeModel) \:3002claudecode \:304c\:5236\:9650\:4e2d\:3067\:3082\:5225 provider \:306b
+   \:5207\:308a\:66ff\:3048\:3066\:3044\:308c\:3070\:30ac\:30fc\:30c9\:306f\:767a\:706b\:3057\:306a\:3044\:3002 *)
+iClaudeEvalRateLimitGuard[modelSpec_:Automatic] :=
+  Module[{provider, rli, resetsDate, waitMin, msg},
+    provider = iRateLimitProviderKey[modelSpec];
+    rli = Quiet @ Check[ClaudeRateLimitStatus[provider], None];
     If[!AssociationQ[rli], Return[False, Module]];
     resetsDate = Lookup[rli, "ResetsAt", None];
     If[Head[resetsDate] =!= DateObject, Return[False, Module]];
     If[Quiet @ Check[resetsDate <= Now, True], Return[False, Module]];
-    (* \:307e\:3060 rate-limit \:4e2d: \:30e1\:30c3\:30bb\:30fc\:30b8\:8868\:793a *)
+    (* \:307e\:3060 rate-limit \:4e2d: matched info \:3092 $iLastRateLimitInfo \:306b\:53cd\:6620\:3057\:3001
+       \:547c\:3073\:51fa\:3057\:5074\:306e Failure \:69cb\:7bc9\:304c\:6b63\:3057\:3044 provider \:306e\:60c5\:5831\:3092\:8aad\:3081\:308b\:3088\:3046\:306b\:3059\:308b\:3002 *)
+    $iLastRateLimitInfo = rli;
     waitMin = Quiet @ Check[
       QuantityMagnitude[
         UnitConvert[resetsDate - Now, "Minutes"]], None];
-    msg = "[ClaudeEval] Rate limit active\:3002Resets at " <>
+    msg = "[ClaudeEval] Rate limit active (provider=" <> provider <>
+      ")\:3002Resets at " <>
       DateString[resetsDate,
         {"Year", "-", "Month", "-", "Day", " ",
          "Hour24", ":", "Minute"}] <>
@@ -13902,7 +13979,6 @@ iClaudeEvalRateLimitGuard[] :=
       "CLI \:547c\:3073\:51fa\:3057\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3059\:3002";
     Print[Style[msg, RGBColor[0.85, 0.3, 0.1], Bold]];
     True];
-iClaudeEvalRateLimitGuard[_] := False;
 
 (* \[HorizontalLine]\[HorizontalLine] Phase 28 (2026-05-12): \:8ab2\:91d1 API \:30e2\:30c7\:30eb\:30ac\:30fc\:30c9 \[HorizontalLine]\[HorizontalLine]
    $ClaudeModel \:307e\:305f\:306f Model \:30aa\:30d7\:30b7\:30e7\:30f3\:304c {provider, model} \:5f62\:5f0f\:3067 provider \:304c
@@ -13989,7 +14065,7 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, single
           "Specify a local LLM (lmstudio etc.) via Model, or remove the Model option."]];
       Return[$Failed]];
     (* v2026-04-20 T09: rate-limit \:30ac\:30fc\:30c9\:3002\:307e\:3060\:5fa9\:65e7\:3057\:3066\:3044\:306a\:3044\:306a\:3089\:5373\:5ea7\:306b\:623b\:308b\:3002 *)
-    If[TrueQ[iClaudeEvalRateLimitGuard[]],
+    If[TrueQ[iClaudeEvalRateLimitGuard[OptionValue[Model]]],
       Return[Failure["RateLimitActive",
         <|"ResetsAt" -> Lookup[$iLastRateLimitInfo, "ResetsAt", None],
           "RateLimitType" ->
@@ -14070,7 +14146,7 @@ ClaudeEval[items_List, opts:OptionsPattern[]] := Module[{dispatchResult, paidGua
     paidGuard = iClaudePaidModelGuard[OptionValue[Model]];
     If[StringQ[paidGuard], Return[paidGuard]];
     (* v2026-04-20 T09: rate-limit \:4e8b\:524d\:30ac\:30fc\:30c9 *)
-    If[TrueQ[iClaudeEvalRateLimitGuard[]],
+    If[TrueQ[iClaudeEvalRateLimitGuard[OptionValue[Model]]],
       Return[Failure["RateLimitActive",
         <|"ResetsAt" -> Lookup[$iLastRateLimitInfo, "ResetsAt", None],
           "Message" -> "CLI call skipped: rate limit active."|>]]];
@@ -14115,7 +14191,7 @@ ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := Module[{p
     paidGuard = iClaudePaidModelGuard[OptionValue[ClaudeEval, {opts}, Model]];
     If[StringQ[paidGuard], Return[paidGuard]];
     (* v2026-04-20 T09: rate-limit \:4e8b\:524d\:30ac\:30fc\:30c9 *)
-    If[TrueQ[iClaudeEvalRateLimitGuard[]],
+    If[TrueQ[iClaudeEvalRateLimitGuard[OptionValue[ClaudeEval, {opts}, Model]]],
       Return[Failure["RateLimitActive",
         <|"ResetsAt" -> Lookup[$iLastRateLimitInfo, "ResetsAt", None],
           "Message" -> "CLI call skipped: rate limit active."|>]]];
@@ -14151,7 +14227,7 @@ ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := Module[{pa
     paidGuard = iClaudePaidModelGuard[OptionValue[ClaudeEval, {opts}, Model]];
     If[StringQ[paidGuard], Return[paidGuard]];
     (* v2026-04-20 T09: rate-limit \:4e8b\:524d\:30ac\:30fc\:30c9 *)
-    If[TrueQ[iClaudeEvalRateLimitGuard[]],
+    If[TrueQ[iClaudeEvalRateLimitGuard[OptionValue[ClaudeEval, {opts}, Model]]],
       Return[Failure["RateLimitActive",
         <|"ResetsAt" -> Lookup[$iLastRateLimitInfo, "ResetsAt", None],
           "Message" -> "CLI call skipped: rate limit active."|>]]];
@@ -18084,9 +18160,10 @@ iAuxApiDefaultInjectQ[___] := True;
    $ClaudePackageAuxKeywordMap (補助 api_<aux>.md 単位、2026-06-12 追加)。 *)
 (* \:30bf\:30b9\:30af\:6587\:304b\:3089\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:691c\:51fa\:3057\:3001\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3068\:3057\:3066\:8fd4\:3059 *)
 iPackageDocsContext[task_String] :=
-  Module[{pkgDir, wlFiles, pacletDirs, allNames, mentioned, ctx = ""},
+  Module[{pkgDir, wlFiles, pacletDirs, allNames, mentioned, ctx = "", wfDocs = ""},
     pkgDir = Global`$packageDirectory;
-    If[!StringQ[pkgDir] || !DirectoryQ[pkgDir], Return[""]];
+    If[!StringQ[pkgDir] || !DirectoryQ[pkgDir],
+      Return[Quiet @ Check[iSVWFDocsForTask[task], ""]]];
     (* $packageDirectory \:5185\:306e\:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:53ce\:96c6 *)
     wlFiles = FileNames["*.wl", pkgDir];
     allNames = FileBaseName /@ wlFiles;
@@ -18127,7 +18204,12 @@ iPackageDocsContext[task_String] :=
              StringContainsQ[task, #, IgnoreCase -> True] &],
           AppendTo[mentioned, kv[[1]]]],
         {kv, Normal[$ClaudePackageAuxKeywordMap]}]];
-    If[Length[mentioned] === 0, Return[""]];
+    (* \:30ef\:30fc\:30af\:30d5\:30ed\:30fc api.md \:6ce8\:5165\:7528\:30c6\:30ad\:30b9\:30c8\:3092\:5148\:306b\:6c42\:3081\:308b\:3002\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:30d7\:30ed\:30f3\:30d7\:30c8\:306f
+       \:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:542b\:307e\:306a\:3044\:305f\:3081\:3001mentioned \:304c\:7a7a\:3067\:3082\:3053\:308c\:304c\:3042\:308c\:3070\:6ce8\:5165\:3059\:308b
+       (\:65e7\:30b3\:30fc\:30c9\:306f mentioned==={} \:3067\:5373 Return[""] \:3057\:3066\:304a\:308a\:3001\:30ef\:30fc\:30af\:30d5\:30ed\:30fc api.md \:304c\:843d\:3061\:3066\:3044\:305f)\:3002 *)
+    wfDocs = Quiet @ Check[iSVWFDocsForTask[task], ""];
+    If[!StringQ[wfDocs], wfDocs = ""];
+    If[Length[mentioned] === 0, Return[wfDocs]];
     (* \:5404\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306b\:542b\:3081\:308b
        api.md \:3068\:88dc\:52a9 api_*.md \:3092\:6700\:512a\:5148\:3067\:5b8c\:5168\:306b\:8aad\:307f\:8fbc\:3080\:ff08\:30c8\:30fc\:30af\:30f3\:7bc0\:7d04\:306e\:305f\:3081\:4ed6\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:6982\:8981\:306e\:307f\:ff09 *)
     Do[
@@ -18200,8 +18282,172 @@ iPackageDocsContext[task_String] :=
          StringQ[ctx] && StringLength[ctx] > bdg,
         ctx = StringTake[ctx, bdg] <>
           "\n...[package docs truncated to fit the model context]\n"]];
+    (* (C) \:30bf\:30b9\:30af\:6587\:304c\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:540d\:3092\:542b\:3080\:5834\:5408\:3001\:305d\:306e api.md
+       (\:7121\:3051\:308c\:3070 example.md) \:3092\:6ce8\:5165\:3057\:3001LLM \:304c\:6b63\:3057\:3044\:30ed\:30fc\:30c9+\:8d77\:52d5\:30b3\:30fc\:30c9\:3092
+       \:751f\:6210\:3067\:304d\:308b\:3088\:3046\:306b\:3059\:308b\:3002budget cap \:5f8c\:306b\:8ffd\:52a0\:3057\:78ba\:5b9f\:306b\:6b8b\:3059
+       (wfDocs \:306f\:51b2\:982d\:3067\:7b97\:51fa\:6e08\:307f)\:3002 *)
+    ctx = ctx <> wfDocs;
     ctx
   ];
+
+(* ============================================================
+   \:30ef\:30fc\:30af\:30d5\:30ed\:30fc API \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8 (docs/api.md) \:306e\:751f\:6210\:3068\:6ce8\:5165\:3002
+   \:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:306f SourceVaultLoadWorkflow[slug] \:3067\:30ed\:30fc\:30c9\:3057\:3001
+   <Context><Launch>[...] \:306e\:5f62\:3067\:547c\:3076\:3002\:30d7\:30ed\:30f3\:30d7\:30c8\:304c\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:540d\:3092
+   \:542b\:3080\:3068\:304d\:3001\:305d\:306e api.md (\:7121\:3051\:308c\:3070 example.md) \:3092\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306b\:6ce8\:5165\:3057\:3001
+   LLM \:304c\:6b63\:3057\:3044\:30ed\:30fc\:30c9+\:8d77\:52d5\:30b3\:30fc\:30c9\:3092\:751f\:6210\:3067\:304d\:308b\:3088\:3046\:306b\:3059\:308b\:3002\:3053\:308c\:306b\:3088\:308a
+   \:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:540d\:3092 PromptRoute \:3068\:3057\:3066\:767b\:9332\:3059\:308b\:5fc5\:8981\:304c\:306a\:304f\:306a\:308b
+   (\:30d7\:30ed\:30f3\:30d7\:30c8\:4e00\:89a7\:306e\:6c5a\:67d3\:3082\:89e3\:6d88)\:3002
+   ============================================================ *)
+
+(* \:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:30d5\:30a9\:30eb\:30c0\:5185\:306e docs \:30c7\:30a3\:30ec\:30af\:30c8\:30ea (<...>_info/docs) \:3092\:8fd4\:3059 *)
+iSVWFInfoDocsDir[folder_String] :=
+  Module[{infos},
+    If[!StringQ[folder] || !DirectoryQ[folder], Return[$Failed]];
+    infos = FileNames["*_info", folder];
+    If[infos === {}, Return[$Failed]];
+    FileNameJoin[{First[infos], "docs"}]];
+iSVWFInfoDocsDir[_] := $Failed;
+
+(* \:6ce8\:5165\:5019\:88dc\:30d5\:30a1\:30a4\:30eb: api.md (\:512a\:5148) \:307e\:305f\:306f examples/example.md (fallback) *)
+iSVWFDocFile[folder_String] :=
+  Module[{docsDir, api, ex},
+    docsDir = iSVWFInfoDocsDir[folder];
+    If[docsDir === $Failed, Return[Missing["NoDocsDir"]]];
+    api = FileNameJoin[{docsDir, "api.md"}];
+    If[FileExistsQ[api], Return[api]];
+    ex = FileNameJoin[{docsDir, "examples", "example.md"}];
+    If[FileExistsQ[ex], Return[ex]];
+    Missing["NoDoc"]];
+iSVWFDocFile[_] := Missing["NoDoc"];
+
+(* slug / \:8868\:793a\:540d\:304b\:3089\:30ad\:30fc\:30ef\:30fc\:30c9\:3092\:5c0e\:51fa\:3002\:65e5\:4ed8\:63a5\:982d\:8f9e yyyymmdd- \:3092\:9664\:3044\:305f\:540d\:3082\:542b\:3081\:308b
+   (\:30b9\:30e9\:30c3\:30b0 "20260622-\:682a\:4fa1\:63a8\:79fb\:30ef\:30fc\:30af\:30d5\:30ed\:30fc2" \[RightArrow] "\:682a\:4fa1\:63a8\:79fb\:30ef\:30fc\:30af\:30d5\:30ed\:30fc2" \:3082\:30de\:30c3\:30c1) *)
+iSVWFDocKeywords[slug_String, name_String] :=
+  DeleteDuplicates @ Select[
+    Flatten[{slug,
+      StringReplace[slug, RegularExpression["^\\d{6,8}[-_]?"] -> ""],
+      If[StringQ[name] && name =!= "", name, Nothing]}],
+    StringQ[#] && StringLength[StringTrim[#]] >= 2 &];
+
+(* manifest.json \:306e Name \:3092\:8aad\:3080 (\:7121\:3051\:308c\:3070 slug)\:3002UTF-8 byte \:7d4c\:7531\:3067\:5b89\:5168\:306b *)
+iSVWFManifestAssoc[folder_String] :=
+  Module[{mf, b},
+    mf = FileNameJoin[{folder, "manifest.json"}];
+    If[!FileExistsQ[mf], Return[<||>]];
+    b = Quiet @ Check[ReadByteArray[mf], $Failed];
+    If[!ByteArrayQ[b], Return[<||>]];
+    Quiet @ Check[
+      Developer`ReadRawJSONString[ByteArrayToString[b, "UTF-8"]], <||>]];
+iSVWFManifestName[folder_String, slug_String] :=
+  With[{j = iSVWFManifestAssoc[folder]},
+    If[AssociationQ[j], Lookup[j, "Name", slug], slug]];
+
+(* \:30ef\:30fc\:30af\:30d5\:30ed\:30fc docs \:5019\:88dc (slug / \:30ad\:30fc\:30ef\:30fc\:30c9 / docFile) \:306e\:30ad\:30e3\:30c3\:30b7\:30e5\:3002
+   iPackageDocsContext \:306f\:5168 ClaudeEval \:30d7\:30ed\:30f3\:30d7\:30c8\:69cb\:7bc9 (DAG \:30ce\:30fc\:30c9\:542b\:3080) \:3067\:547c\:3070\:308c\:308b\:305f\:3081\:3001
+   \:6bce\:56de SourceVaultWorkflows[] (Dropbox \:4e0a\:306e\:30d5\:30a9\:30eb\:30c0+manifest \:8d70\:67fb) \:3092\:8d70\:3089\:305b\:308b\:3068
+   \:30d7\:30ed\:30f3\:30d7\:30c8\:69cb\:7bc9\:304c\:9045\:304f\:306a\:308a\:3001runtime/orchestrator \:7d4c\:8def\:3067 queryProvider \:304c
+   \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8/\:5931\:6557\:3057\:5f97\:308b\:3002TTL \:30ad\:30e3\:30c3\:30b7\:30e5\:3067\:8d70\:67fb\:56de\:6570\:3092\:6291\:3048\:308b\:3002 *)
+If[!AssociationQ[$iSVWFDocsCache],
+  $iSVWFDocsCache = <|"Time" -> 0, "Items" -> {}|>];
+If[!NumericQ[$iSVWFDocsCacheTTL], $iSVWFDocsCacheTTL = 120];
+
+iSVWFDocsCandidates[] :=
+  Module[{now = AbsoluteTime[], wfs, items},
+    If[AssociationQ[$iSVWFDocsCache] &&
+       NumericQ[Lookup[$iSVWFDocsCache, "Time", 0]] &&
+       now - Lookup[$iSVWFDocsCache, "Time", 0] < $iSVWFDocsCacheTTL,
+      Return[Lookup[$iSVWFDocsCache, "Items", {}]]];
+    wfs = Quiet @ Check[
+      If[Length[DownValues[SourceVault`SourceVaultWorkflows]] > 0,
+        TimeConstrained[SourceVault`SourceVaultWorkflows[], 8, {}], {}], {}];
+    If[!ListQ[wfs], wfs = {}];
+    items = Quiet @ Check[
+      Reap[
+        Do[
+          Module[{slug = Lookup[wf, "Slug", ""], folder = Lookup[wf, "Path", ""],
+                  stage = Lookup[wf, "Stage", ""], docFile},
+            If[StringQ[slug] && slug =!= "" && StringQ[folder] &&
+               DirectoryQ[folder] && stage =!= "archive",
+              docFile = iSVWFDocFile[folder];
+              If[StringQ[docFile],
+                Sow[<|"Slug" -> slug, "DocFile" -> docFile,
+                  "Keywords" -> iSVWFDocKeywords[slug,
+                    iSVWFManifestName[folder, slug]]|>]]]],
+          {wf, wfs}]][[2]], {}];
+    items = If[ListQ[items] && Length[items] > 0 && ListQ[First[items]],
+      First[items], {}];
+    (* \:7a7a\:7d50\:679c (\:30b9\:30ad\:30e3\:30f3\:5931\:6557/\:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:7b49) \:306f\:30ad\:30e3\:30c3\:30b7\:30e5\:3057\:306a\:3044
+       (Time \:3092\:9032\:3081\:305a\:6b21\:56de\:518d\:8a66\:884c)\:3002\:6210\:679c\:304c\:3042\:308b\:6642\:306e\:307f session \:30ad\:30e3\:30c3\:30b7\:30e5\:3002 *)
+    If[items =!= {},
+      $iSVWFDocsCache = <|"Time" -> now, "Items" -> items|>];
+    items];
+
+(* \:30ad\:30e3\:30c3\:30b7\:30e5\:3092\:660e\:793a\:7684\:306b\:7121\:52b9\:5316 (\:65b0\:898f\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:5b9f\:88c5\:5f8c\:7b49) *)
+iSVWFDocsInvalidateCache[] := ($iSVWFDocsCache = <|"Time" -> 0, "Items" -> {}|>);
+
+(* \:30bf\:30b9\:30af\:6587\:306b\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:540d\:304c\:542b\:307e\:308c\:308c\:3070 api.md/example.md \:3092\:6ce8\:5165 *)
+iSVWFDocsForTask[task_String] :=
+  Module[{out = ""},
+    If[StringTrim[task] === "", Return[""]];
+    Do[
+      Module[{slug = Lookup[c, "Slug", ""], kws = Lookup[c, "Keywords", {}],
+              docFile = Lookup[c, "DocFile", ""], content},
+        If[ListQ[kws] && AnyTrue[kws, StringContainsQ[task, #, IgnoreCase -> True] &] &&
+           StringQ[docFile] && FileExistsQ[docFile],
+          content = Quiet @ Check[Import[docFile, "Text"], ""];
+          If[StringQ[content] && StringLength[content] > 0,
+            out = out <>
+              "=== SourceVault Workflow API: " <> slug <> " ===\n" <>
+              "(\:300c" <> slug <> "\:300d\:306f SourceVault \:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:3067\:3059\:3002" <>
+              "\:5fc5\:305a SourceVault`SourceVaultLoadWorkflow[\"" <> slug <>
+              "\"] \:3067\:30ed\:30fc\:30c9\:3057\:3001\:4e0b\:8a18 API \:306e Launch \:95a2\:6570\:3092\:547c\:3076\:30b3\:30fc\:30c9\:3092\:751f\:6210\:3059\:308b\:3053\:3068\:3002\n" <>
+              "\:91cd\:8981: ClaudeOrchestrator`Workflow` \:7cfb (ClaudeWorkflowList / ClaudeRunWorkflow \:7b49) \:306f\:7121\:95a2\:4fc2\:3067\:3001\:4f7f\:308f\:306a\:3044\:3053\:3068\:3002" <>
+              "Names[...] \:7b49\:3067\:95a2\:6570\:3092\:63a2\:7d22\:305b\:305a\:3001\:4e0b\:8a18 API \:3092\:305d\:306e\:307e\:307e\:4f7f\:3046\:3053\:3068\:3002" <>
+              "\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:540d\:3092\:6587\:5b57\:5217\:30d7\:30ed\:30f3\:30d7\:30c8\:306e\:307e\:307e\:8fd4\:3055\:306a\:3044\:3053\:3068\:3002)\n\n" <>
+              content <> "\n\n"]]],
+      {c, iSVWFDocsCandidates[]}];
+    out];
+iSVWFDocsForTask[_] := "";
+
+(* docs/api.md \:3092 manifest + example.md \:304b\:3089\:5408\:6210\:3057\:3066\:66f8\:304d\:51fa\:3059\:3002
+   \:5b9f\:88c5\:5b8c\:4e86\:6642 (iSpecImplRegisterLaunch) \:306b\:547c\:3070\:308c\:308b\:3002UTF-8 (BOM \:306a\:3057) \:3067\:66f8\:304f\:3002 *)
+iSVWFWriteApiDoc[slug_String, display_String] :=
+  Module[{folder, docsDir, j, name, ctx, launch, desc, exFile, exMd, api, body},
+    folder = Quiet @ Check[SourceVault`SourceVaultWorkflowFolder[slug], Missing[]];
+    If[!StringQ[folder] || !DirectoryQ[folder], Return[$Failed]];
+    docsDir = iSVWFInfoDocsDir[folder];
+    If[docsDir === $Failed, Return[$Failed]];
+    j = iSVWFManifestAssoc[folder];
+    If[!AssociationQ[j], j = <||>];
+    name = Lookup[j, "Name",
+      If[StringQ[display] && display =!= "", display, slug]];
+    ctx = Lookup[j, "Context",
+      Quiet @ Check[SourceVault`SourceVaultWorkflowContext[slug], ""]];
+    launch = Lookup[j, "Launch", "Run"];
+    desc = Lookup[j, "Description", ""];
+    exFile = FileNameJoin[{docsDir, "examples", "example.md"}];
+    exMd = If[FileExistsQ[exFile], Quiet @ Check[Import[exFile, "Text"], ""], ""];
+    body = "# Workflow API: " <> ToString[name] <> "\n\n" <>
+      "Slug: `" <> slug <> "`\n\n" <>
+      "## \:547c\:3073\:51fa\:3057\:65b9\:6cd5\n\n" <>
+      "\:3053\:306e\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:306f\:30ed\:30fc\:30c9\:3057\:3066\:304b\:3089 Launch \:95a2\:6570\:3092\:547c\:3076:\n\n" <>
+      "```wl\n" <>
+      "Needs[\"SourceVault`\"]; SourceVault`SourceVaultLoadWorkflow[\"" <> slug <> "\"]\n" <>
+      ToString[ctx] <> ToString[launch] <> "[...]\n" <>
+      "```\n\n" <>
+      If[StringQ[desc] && desc =!= "", "## \:6982\:8981\n\n" <> desc <> "\n\n", ""] <>
+      If[StringQ[exMd] && exMd =!= "", "## \:4f7f\:7528\:4f8b\n\n" <> exMd <> "\n", ""];
+    If[!DirectoryQ[docsDir],
+      Quiet @ CreateDirectory[docsDir, CreateIntermediateDirectories -> True]];
+    api = FileNameJoin[{docsDir, "api.md"}];
+    Quiet @ Check[
+      With[{strm = OpenWrite[api, BinaryFormat -> True]},
+        BinaryWrite[strm, StringToByteArray[body, "UTF-8"]]; Close[strm]],
+      Return[$Failed]];
+    api];
+iSVWFWriteApiDoc[___] := $Failed;
+
 iEnsureReadmeLast[docs_List] :=
   Module[{withoutReadme, hasReadme},
     hasReadme = MemberQ[docs, "README.md"];
@@ -21489,6 +21735,25 @@ iClaudePaletteButton[label_String, color_, action_] :=
     Method -> "Queued"
   ];
 
+(* 2 \:5217\:914d\:7f6e\:7528: \:5e45 54 \:306e\:30dc\:30bf\:30f3\:3092\:6a2a\:306b 2 \:3064\:4e26\:3079\:308b (documentation \:30d1\:30ec\:30c3\:30c8\:3068\:540c\:69d8) *)
+SetAttributes[iClaudePaletteButton2, HoldRest];
+iClaudePaletteButton2[label_String, color_, action_] :=
+  Button[
+    Style[label, Bold, 8, White],
+    CompoundExpression[action,
+      With[{inb = InputNotebook[]},
+        If[Head[inb] === NotebookObject,
+          SetSelectedNotebook[inb]]]],
+    Appearance -> "Frameless",
+    Background -> color,
+    ImageSize -> {54, 18},
+    FrameMargins -> {{1, 1}, {1, 1}},
+    Method -> "Queued"
+  ];
+
+iClaudePaletteButtonRow[b1_, b2_] :=
+  Grid[{{b1, b2}}, Spacings -> 0.1, ItemSize -> {Automatic, Automatic}];
+
 (* \:9078\:629e\:4e2d\:306e\:30bb\:30eb\:3092\:53d6\:5f97\:ff08\:30d1\:30ec\:30c3\:30c8\:304b\:3089\:306e\:547c\:3073\:51fa\:3057\:306b\:5bfe\:5fdc\:ff09 *)
 (* \:30bb\:30eb\:30d6\:30e9\:30b1\:30c3\:30c8\:9078\:629e \[RightArrow] SelectedCells
    \:30ab\:30fc\:30bd\:30eb\:304c\:30bb\:30eb\:5185 \[RightArrow] EvaluationCell / SelectedNotebook \:306e\:30bb\:30eb *)
@@ -22582,7 +22847,7 @@ iSpecImplStatusMsg[prog_Association] := Module[{phase, model, si, ns, rnd, msg},
 iSpecImplStatusMsg[_] := "[spec-impl] running...";
 
 (* register the generated workflow's launch (session registry + promptrouter) *)
-iSpecImplRegisterLaunch[slug_String, displayName_String] := Module[{ctx, info, launch, route},
+iSpecImplRegisterLaunch[slug_String, displayName_String] := Module[{ctx, info, launch, apiDoc},
   ctx = SourceVault`SourceVaultWorkflowContext[slug];
   (* read the generated workflow's metadata (load on demand) *)
   Quiet @ Check[SourceVault`SourceVaultLoadWorkflow[slug], Null];
@@ -22592,19 +22857,15 @@ iSpecImplRegisterLaunch[slug_String, displayName_String] := Module[{ctx, info, l
   $iSpecImplLaunchers[slug] = <|
     "Slug" -> slug, "Display" -> displayName, "Context" -> ctx,
     "Launch" -> launch, "RegisteredAt" -> AbsoluteTime[]|>;
-  (* (2) promptrouter discovery route (launch is approval-gated for prompts) *)
-  route = <|
-    "Type" -> "PromptRoute", "RouteId" -> "impl-" <> slug,
-    "RouteVersion" -> 1, "SchemaVersion" -> 1,
-    "Matcher" -> <|"Kind" -> "DeterministicPattern",
-      "KeywordsAny" -> DeleteDuplicates[Select[{slug, displayName,
-        slug <> " workflow", displayName <> " \:5b9f\:884c"}, StringQ[#] && # =!= "" &]]|>,
-    "Target" -> <|"Kind" -> "Workflow", "WorkflowSlug" -> slug, "LaunchFunction" -> launch|>,
-    "Privacy" -> <|"PrivacyLevel" -> 0.0|>, "Source" -> "UserDefined"|>;
-  Quiet @ Check[
-    If[Length[DownValues[SourceVault`SourceVaultRegisterPromptRoute]] > 0,
-      SourceVault`SourceVaultRegisterPromptRoute[route, "DryRun" -> False]], Null];
-  <|"Slug" -> slug, "Context" -> ctx, "Launch" -> launch|>];
+  (* (2) \:30ef\:30fc\:30af\:30d5\:30ed\:30fc API \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8 (docs/api.md) \:3092\:751f\:6210\:3059\:308b\:3002
+     \:30d7\:30ed\:30f3\:30d7\:30c8\:304c\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:540d\:3092\:542b\:3080\:3068 iPackageDocsContext \:304c api.md \:3092
+     \:6ce8\:5165\:3057\:3001LLM \:304c SourceVaultLoadWorkflow + Launch \:306e\:30b3\:30fc\:30c9\:3092\:751f\:6210\:3067\:304d\:308b\:3002
+     \:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:540d\:3092 PromptRoute \:3068\:3057\:3066\:767b\:9332\:3059\:308b\:3068\:30d7\:30ed\:30f3\:30d7\:30c8\:4e00\:89a7\:3092
+     \:6c5a\:3059\:305f\:3081\:3001route \:767b\:9332\:306f\:884c\:308f\:306a\:3044 (\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:306f\:30d7\:30ed\:30f3\:30d7\:30c8\:3067\:306f\:306a\:3044)\:3002 *)
+  apiDoc = Quiet @ Check[iSVWFWriteApiDoc[slug, displayName], $Failed];
+  (* \:65b0\:898f api.md \:3092\:5373\:6642\:306b docs \:6ce8\:5165\:5bfe\:8c61\:306b\:3059\:308b\:305f\:3081\:30ad\:30e3\:30c3\:30b7\:30e5\:7121\:52b9\:5316 *)
+  Quiet @ Check[iSVWFDocsInvalidateCache[], Null];
+  <|"Slug" -> slug, "Context" -> ctx, "Launch" -> launch, "ApiDoc" -> apiDoc|>];
 
 (* clickable launch button + summary boxes for the write-back cell *)
 iSpecImplSummaryBoxes[slug_String, res_Association] := With[
@@ -23715,18 +23976,20 @@ ShowClaudePalette[] := (
       iClaudePaletteButton["\[SixPointedStar] Chat Cell",
         RGBColor[0.3, 0.43, 0.7],
         iInsertChatCell[]],
-      iClaudePaletteButton["\[FilledRightTriangle] ClaudeEval",
-        RGBColor[0.2, 0.55, 0.35],
-        iInsertClaudeEvalTemplate[]],
-      iClaudePaletteButton[iL["\[RightTriangleBar] \:9078\:629e\[RightArrow]Eval", "\[RightTriangleBar] Sel\[RightArrow]Eval"],
-        RGBColor[0.15, 0.45, 0.30],
-        iRunClaudeEvalFromCells[]],
-      iClaudePaletteButton[iL["\[FilledDiamond] \:4ed5\:69d8\:751f\:6210", "\[FilledDiamond] Spec"],
-        RGBColor[0.35, 0.3, 0.7],
-        iRunClaudeSpecFromCells[]],
-      iClaudePaletteButton[iL["\[FilledDiamond] \:4ed5\:69d8\:5b9f\:88c5", "\[FilledDiamond] Impl"],
-        RGBColor[0.3, 0.35, 0.6],
-        iRunSpecImplFromCells[]],
+      iClaudePaletteButtonRow[
+        iClaudePaletteButton2[iL["\[FilledRightTriangle] Eval", "\[FilledRightTriangle] Eval"],
+          RGBColor[0.2, 0.55, 0.35],
+          iInsertClaudeEvalTemplate[]],
+        iClaudePaletteButton2[iL["\[RightTriangleBar] \:9078\:629eEval", "\[RightTriangleBar] SelEval"],
+          RGBColor[0.15, 0.45, 0.30],
+          iRunClaudeEvalFromCells[]]],
+      iClaudePaletteButtonRow[
+        iClaudePaletteButton2[iL["\[FilledDiamond] \:4ed5\:69d8\:751f\:6210", "\[FilledDiamond] Spec"],
+          RGBColor[0.35, 0.3, 0.7],
+          iRunClaudeSpecFromCells[]],
+        iClaudePaletteButton2[iL["\[FilledDiamond] \:4ed5\:69d8\:5b9f\:88c5", "\[FilledDiamond] Impl"],
+          RGBColor[0.3, 0.35, 0.6],
+          iRunSpecImplFromCells[]]],
       iClaudePaletteButton[iL["\[FilledSquare] \:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:4e00\:89a7", "\[FilledSquare] Workflows"],
         RGBColor[0.3, 0.45, 0.5],
         iShowWorkflowPanel[]],
@@ -23804,27 +24067,6 @@ ShowClaudePalette[] := (
                  "Refresh LMStudio loaded-model list"]],
             Nothing]
         }], SynchronousUpdating -> False],
-      (* \[HorizontalLine] routing model policy (power-aware light routing) \[HorizontalLine] *)
-      Dynamic[
-        Button[
-          Style[iRoutingPaletteLabel[], Bold, 9, White],
-          (iCycleRoutingPolicy[];
-           With[{inb = InputNotebook[]},
-             If[Head[inb] === NotebookObject, SetSelectedNotebook[inb]]]),
-          Appearance -> "Frameless",
-          Background -> iRoutingPaletteColor[],
-          ImageSize -> {110, 18},
-          FrameMargins -> {{4, 4}, {1, 1}},
-          Method -> "Queued"],
-        TrackedSymbols :> {ClaudeCode`$ClaudeRoutingModelPolicy, $iACPowerCache},
-        SynchronousUpdating -> False],
-      (* package-neutral service start/stop toggles (e.g. SourceVault MCP), placed right
-         below the routing button. Empty when no external package has registered a control
-         (rule 11: claudecode owns no package-specific logic). The label follows live RunningQ;
-         re-run ShowClaudePalette[] after a new registration to add a button. *)
-      Dynamic[iClaudePaletteServiceSection[],
-        TrackedSymbols :> {$ClaudePaletteServiceControls, $iPaletteServiceToggleCounter},
-        UpdateInterval -> 15, SynchronousUpdating -> False],
       Dynamic[
         Button[
           Style[iL["\:30a8\:30d5\:30a9\:30fc\:30c8: ", "Effort: "] <>
@@ -23856,18 +24098,41 @@ ShowClaudePalette[] := (
           ($iPaletteUpdateApiMd = !TrueQ[$iPaletteUpdateApiMd];
            iSavePaletteSettings[InputNotebook[]]),
           Appearance -> "Frameless"], SynchronousUpdating -> False],
+      (* \[HorizontalLine] routing model policy (power-aware light routing) \[HorizontalLine]
+         api.md \:30dc\:30bf\:30f3\:306e\:4e0b\:306b\:79fb\:52d5 (2026-06-29) *)
+      Dynamic[
+        Button[
+          Style[iRoutingPaletteLabel[], Bold, 9, White],
+          (iCycleRoutingPolicy[];
+           With[{inb = InputNotebook[]},
+             If[Head[inb] === NotebookObject, SetSelectedNotebook[inb]]]),
+          Appearance -> "Frameless",
+          Background -> iRoutingPaletteColor[],
+          ImageSize -> {110, 18},
+          FrameMargins -> {{4, 4}, {1, 1}},
+          Method -> "Queued"],
+        TrackedSymbols :> {ClaudeCode`$ClaudeRoutingModelPolicy, $iACPowerCache},
+        SynchronousUpdating -> False],
+      (* package-neutral service start/stop toggles (e.g. SourceVault MCP), placed right
+         below the routing button. Empty when no external package has registered a control
+         (rule 11: claudecode owns no package-specific logic). The label follows live RunningQ;
+         re-run ShowClaudePalette[] after a new registration to add a button. *)
+      Dynamic[iClaudePaletteServiceSection[],
+        TrackedSymbols :> {$ClaudePaletteServiceControls, $iPaletteServiceToggleCounter},
+        UpdateInterval -> 15, SynchronousUpdating -> False],
       Spacer[2],
 
       (* \[HorizontalLine]\[HorizontalLine] \:30d7\:30ed\:30bb\:30b9 \[HorizontalLine]\[HorizontalLine] *)
       Style[iL[" \:30d7\:30ed\:30bb\:30b9", " Processes"], Bold, 8, GrayLevel[0.3]],
-      iClaudePaletteButton[iL["\[FilledSmallSquare] \:30d7\:30ed\:30bb\:30b9\:8868\:793a", "\[FilledSmallSquare] Processes"],
-        RGBColor[0.4, 0.45, 0.55],
-        With[{nb = InputNotebook[]},
-          NBAccess`NBInsertAndEvaluateInput[nb,
-            RowBox[{"ClaudeProcessList", "[", "]"}]]]],
-      iClaudePaletteButton[iL["\[FilledSquare] \:5168\:30d7\:30ed\:30bb\:30b9\:505c\:6b62", "\[FilledSquare] Stop All"],
-        RGBColor[0.7, 0.15, 0.15],
-        If[ChoiceDialog[
+      iClaudePaletteButtonRow[
+        iClaudePaletteButton2[iL["\[FilledSmallSquare] \:4e00\:89a7", "\[FilledSmallSquare] List"],
+          RGBColor[0.4, 0.45, 0.55],
+          With[{nb = InputNotebook[]},
+            NBAccess`NBInsertAndEvaluateInput[nb,
+              RowBox[{"ClaudeProcessList", "[", "]"}]]]],
+        iClaudePaletteButton2[iL["\[FilledSquare] \:5168\:505c\:6b62", "\[FilledSquare] Stop All"],
+          RGBColor[0.7, 0.15, 0.15],
+          If[ChoiceDialog[
             Column[{
               Style[iL["\:26d4 \:5168\:30d7\:30ed\:30bb\:30b9\:3092\:505c\:6b62\:3057\:307e\:3059\:304b\:ff1f",
                        "\:26d4 Stop all processes?"], Bold, 14, RGBColor[0.7, 0.15, 0.15]],
@@ -23880,21 +24145,22 @@ ShowClaudePalette[] := (
             {iL["\:505c\:6b62\:3059\:308b", "Stop All"] -> True,
              iL["\:30ad\:30e3\:30f3\:30bb\:30eb", "Cancel"] -> False},
             WindowTitle -> iL["\:5168\:30d7\:30ed\:30bb\:30b9\:505c\:6b62\:306e\:78ba\:8a8d", "Confirm: Stop All Processes"]],
-          ClaudeCode`ClaudeAbort[]]],
+          ClaudeCode`ClaudeAbort[]]]],
       Spacer[2],
 
       (* \[HorizontalLine]\[HorizontalLine] \:30bb\:30c3\:30b7\:30e7\:30f3 \[HorizontalLine]\[HorizontalLine] *)
       Style[iL[" \:30bb\:30c3\:30b7\:30e7\:30f3", " Sessions"], Bold, 8, GrayLevel[0.3]],
-      iClaudePaletteButton[iL["\[FilledSmallSquare] \:5c65\:6b74\:8868\:793a", "\[FilledSmallSquare] History"],
-        RGBColor[0.45, 0.45, 0.55],
-        With[{nb = InputNotebook[]},
-          NBAccess`NBInsertAndEvaluateInput[nb,
-            RowBox[{"ClaudeShowHistory", "[", "]"}]]]],
-      iClaudePaletteButton[iL["\[EmptySquare] \:30bb\:30c3\:30b7\:30e7\:30f3\:4e00\:89a7", "\[EmptySquare] Sessions"],
-        RGBColor[0.5, 0.45, 0.5],
-        With[{nb = InputNotebook[]},
-          NBAccess`NBInsertAndEvaluateInput[nb,
-            RowBox[{"ClaudeListSessions", "[", "]"}]]]],
+      iClaudePaletteButtonRow[
+        iClaudePaletteButton2[iL["\[EmptySquare] \:4e00\:89a7", "\[EmptySquare] Sessions"],
+          RGBColor[0.5, 0.45, 0.5],
+          With[{nb = InputNotebook[]},
+            NBAccess`NBInsertAndEvaluateInput[nb,
+              RowBox[{"ClaudeListSessions", "[", "]"}]]]],
+        iClaudePaletteButton2[iL["\[FilledSmallSquare] \:5c65\:6b74", "\[FilledSmallSquare] History"],
+          RGBColor[0.45, 0.45, 0.55],
+          With[{nb = InputNotebook[]},
+            NBAccess`NBInsertAndEvaluateInput[nb,
+              RowBox[{"ClaudeShowHistory", "[", "]"}]]]]],
       Spacer[8],
       Button[
         Style[iL["\[Times] \:5168\:5c65\:6b74\:524a\:9664", "\[Times] Clear All"], Bold, 9, White],

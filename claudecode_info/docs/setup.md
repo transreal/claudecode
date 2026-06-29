@@ -135,7 +135,7 @@ ClaudeRuntime を使用する場合は、別途ロードしてください：
 ClaudeShowAccessConfig[]
 
 (* モデル設定（必要に応じて変更） *)
-$ClaudeModel = "claude-opus-4-6"
+$ClaudeModel = {"claudecode", "claude-opus-4-8"}
 
 (* タイムアウト設定 *)
 $ClaudeTimeout = 1200
@@ -202,11 +202,13 @@ Claude Code が利用できない場合のバックアップとして、他の L
 ```mathematica
 (* フォールバックモデルの設定例 *)
 $ClaudeFallbackModels = {
-  {"anthropic", "claude-opus-4-6"},
-  {"openai", "gpt-4"},
-  {"lmstudio", "local-model", "http://127.0.0.1:1234"}
+  {"chatgptcodex", "gpt-5.5"},
+  {"anthropic", "claude-opus-4-8"},
+  {"openai", "gpt-5.5"}
 }
 ```
+
+`chatgptcodex` はサブスクリプション CLI のため課金 API 禁止設定でも使用できます。`anthropic` / `openai` はメーター制 API のため、課金 API を明示的に許可したノートブックでのみ動作します。
 
 ### 6. ドキュメント生成設定
 
@@ -214,7 +216,7 @@ claudecode はパッケージのドキュメント一式（README.md / api.md / 
 
 ```mathematica
 (* ドキュメント生成用モデル *)
-$ClaudeDocModel = "claude-sonnet-4-20250514"
+$ClaudeDocModel = "claude-sonnet-4-6"
 
 (* リトライ設定 *)
 $ClaudeDocMaxRetries = 3
@@ -251,6 +253,19 @@ $LLMGraphMaxConcurrency["cli-vision"] = 1  (* CLI 画像付き呼び出し *)
 1. `taskDescriptor["maxConcurrency"][abstractCat]`（ジョブ固有のオーバーライド）
 2. `$LLMGraphMaxConcurrency[abstractCat]`（グローバルデフォルト）
 3. `1`（フォールバック）
+
+### 8. UI フォントの設定（オプション）
+
+`$ClaudeStandardFont` は `ClaudeEval` が生成する出力コード（Grid / Column / Style / Button 等）で統一的に使用される標準フォント名です。プロンプトに埋め込まれ、生成コードの FontFamily 指定を強制します。デフォルトは `"Yu Gothic UI"` です。
+
+```mathematica
+(* UI フォントの確認・変更 *)
+$ClaudeStandardFont          (* 現在の設定を確認 *)
+
+$ClaudeStandardFont = "Meiryo UI"   (* 変更例 *)
+```
+
+日本語環境で生成コードのフォントが崩れる場合にこの変数を設定してください。パッケージロード後いつでも変更でき、次回以降の `ClaudeEval` 生成コードに反映されます。
 
 ## 動作確認
 
@@ -347,12 +362,41 @@ $ClaudeModel = {"chatgptcodex", Automatic}
 ClaudeEval["1 から 100 までの和を求めてください"]
 
 (* provider を Claude Code に戻す *)
-$ClaudeModel = {"claudecode", "claude-opus-4-7"}
+$ClaudeModel = {"claudecode", "claude-opus-4-8"}
 ```
 
 `$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定すると、`ClaudeEval` / `ClaudeQuery` が Codex CLI 経由で実行されます。`Automatic` は Codex CLI の既定モデルを使用します。具体的なモデルを指定する場合は `$ChatgptCodexModel` を設定するか、パレットの `M:` ボタンで選択します（「ChatGPT Codex のモデル管理」を参照）。
 
 Codex provider は Claude CLI と同じ非同期実行経路（バックグラウンドでの CLI 起動と結果ポーリング）で動作するため、実行中にカーネルがブロックされることはありません。
+
+### 8. 仕様実装ワークフローの動作確認（オプション）
+
+`CreateImplementationWorkflow` を使うと、承認済み設計仕様を SourceVault 管理下の codified ワークフローパッケージとして自動実装できます：
+
+```mathematica
+(* 承認済み仕様テキストまたは sv:// URI から実装ワークフローを生成 *)
+jobId = CreateImplementationWorkflow["myWorkflow",
+  "ユーザー入力を受け取り、Wolfram Alpha で検索して結果を返す関数を実装する"]
+
+(* 実行状態を確認（フェーズ・モデル・ラウンド数を Dataset で表示） *)
+ClaudeImplStatus[]
+
+(* ライブ監視パネルをノートブックセルに表示 *)
+ClaudeImplMonitor[]
+
+(* 生成されたワークフローを起動 *)
+LaunchImplementationWorkflow["myWorkflow", {}]
+```
+
+`CreateImplementationWorkflow` は `$ClaudeModel`（実装担当）と `$ClaudeAdvisaryModel`（検証担当）が協調して仕様を実装し、実装完了後にワークフローの起動関数をセッションおよび promptrouter に自動登録します。進捗はウィンドウステータスバーにライブ表示されます。
+
+```mathematica
+(* 仕様バージョン管理の確認 *)
+ClaudeSpecStatus[]                        (* 現在のノートブックプロジェクトの仕様状況 *)
+ClaudeSpecVersions[]                      (* 記録された仕様・レビューバージョン一覧 *)
+ClaudeSpecText["sv://snapshot/..."]       (* 特定バージョンの仕様テキストを取得 *)
+ClaudeOpenSourceVaultURI["sv://..."]      (* sv:// URI の内容を新しいノートブックで開く *)
+```
 
 ## 後方互換性について
 
@@ -433,6 +477,8 @@ ClaudeResolveModel["chatgptcodex", "code-heavy"]
 claudecode のパレットで provider を `ChatGPTCodex` に切り替えると、`M:` ボタンのモデル候補はこの SourceVault レジストリから取得されます。SourceVault をロードしていない場合や、レジストリ更新前は、最小限のフォールバック候補（`Automatic`）のみが表示されます。
 
 `Automatic` を選ぶと Codex CLI の既定モデルが使われます（`config.toml` の `model` キーを省略）。具体的なモデルを選ぶと、そのモデル名が Codex 実行時の設定に反映されます。
+
+パレットの `M:` ボタンで表示される Claude 系モデル（claudecode / anthropic provider）の候補バージョンは、SourceVault のモデルレジストリ（`ClaudeResolveModel`）から動的に解決されます。SourceVault がロードされている場合、パレットを開くたびに最新の登録モデルが候補として反映されます。
 
 #### アドバイザリーモデルの設定（仕様レビュー・実装ワークフロー用）
 
@@ -760,6 +806,81 @@ API エラーや利用制限による中断：
 
 `ClaudeUpdateDocumentation` による各ドキュメント更新提案を実行すると、新しい保存バージョンが自動的に作成され、続く更新ターン（auto-save turn）が開始されます。マルチステップのドキュメント更新ワークフローを実行した場合でも、各ステップの追記がまとめて 1 つのバージョンとして完全に保存されます。
 
+### 仕様実装ワークフロー（CreateImplementationWorkflow）
+
+`CreateImplementationWorkflow` は、承認済み設計仕様から SourceVault 管理下の codified ワークフローパッケージ（`SVWorkflow_<Name>`）を自動的に実装する機能です。実装担当（`$ClaudeModel`）と検証担当（`$ClaudeAdvisaryModel`）が協調してコードを生成・検証し、合意に達するまでラウンドを繰り返します。
+
+```mathematica
+(* 承認済み仕様から実装ワークフローを生成 *)
+jobId = CreateImplementationWorkflow["workflowName", approvedSpec]
+
+(* approvedSpec は sv:// URI、スナップショット ref、または仕様テキスト *)
+jobId = CreateImplementationWorkflow["myProcessor",
+  "sv://snapshot/Spec/abc123def456"]
+
+(* Notes オプションで補足指示を渡す *)
+jobId = CreateImplementationWorkflow["myProcessor",
+  specText, "Notes" -> "既存の SourceVault API を活用すること"]
+
+(* モデルをジョブ単位でオーバーライドする場合 *)
+jobId = CreateImplementationWorkflow["myProcessor", specText,
+  "ClaudeModel"    -> {"claudecode", "claude-opus-4-8"},
+  "AdvisaryModel"  -> {"chatgptcodex", "gpt-5.5"},
+  "MaxRounds"      -> 5]
+```
+
+実装が完了すると、生成されたワークフローの起動関数がセッションと promptrouter に自動登録されます。進捗はウィンドウステータスバーにリアルタイム表示されます（実行モデル・フェーズ・ラウンド数）。
+
+```mathematica
+(* 生成されたワークフローを起動 *)
+LaunchImplementationWorkflow["workflowName", args]
+```
+
+`LaunchImplementationWorkflow` は `SourceVault`SourceVaultLoadWorkflow[name]` でワークフローをロードし、`WorkflowInfo["Launch"]` エントリを `args` で呼び出します。起動コンテキスト・エントリ・結果を含む Association を返します。
+
+#### 仕様実装ワークフローの状態確認
+
+```mathematica
+(* 現在のノートブックに関する実行状態を Dataset で表示 *)
+ClaudeImplStatus[]
+
+(* 特定ワークフローの状態を確認 *)
+ClaudeImplStatus["workflowName"]
+
+(* ライブ監視パネルをセルに表示（約 2 秒ごとに自動更新） *)
+ClaudeImplMonitor[]
+```
+
+`ClaudeImplStatus[]` は現在のフェーズ・実行中モデル・ステージ・ラウンド・メッセージ、および SourceVault のアーティファクト/検証チェーン数と最新の合意結果を表示します。ワークフローの実行中は同じ状態がウィンドウステータスバーにも自動表示されます。
+
+#### 仕様バージョン管理
+
+仕様・レビューの各バージョンは SourceVault に記録されます。次の関数でバージョンを参照・管理できます：
+
+```mathematica
+(* 現在のノートブックプロジェクトの仕様状況を確認 *)
+ClaudeSpecStatus[]
+
+(* 特定プロジェクトの仕様状況 *)
+ClaudeSpecStatus["projectName"]
+
+(* 記録された全バージョンの一覧（Dataset: Role/Round/Verdict/URI 等） *)
+ClaudeSpecVersions[]
+ClaudeSpecVersions["projectName"]
+
+(* 仕様ロールでフィルタ *)
+ClaudeSpecVersions["projectName", "spec"]     (* 仕様バージョンのみ *)
+ClaudeSpecVersions["projectName", "review"]   (* レビューバージョンのみ *)
+
+(* sv:// URI から仕様テキストを取得 *)
+ClaudeSpecText["sv://snapshot/Spec/abc123"]
+
+(* sv:// URI の内容を新しいノートブックで開く *)
+ClaudeOpenSourceVaultURI["sv://snapshot/Spec/abc123"]
+```
+
+`ClaudeOpenSourceVaultURI` は sv:// スナップショット URI を解決し、メタデータグリッドと本文（レビューの場合は Findings も含む）を新規ノートブックウィンドウに表示します。仕様・コンセンサスフローがノートブックに書き込む sv:// リンクをクリックしたときのアクションとしても機能します。
+
 ### api.md 自動更新の設定
 
 パッケージ更新時の api.md 自動更新を制御できます：
@@ -880,7 +1001,7 @@ ClaudeCheckSeparation["claudecode"]
 ClaudeFixSeparation["claudecode"]
 
 (* テストモデルの設定 *)
-$ClaudeTestModel = "claude-sonnet-4-20250514"
+$ClaudeTestModel = "claude-sonnet-4-6"
 ```
 
 ## 次のステップ
@@ -909,3 +1030,12 @@ ShowClaudePalette[]
 ?$ClaudeLastRuntimeId
 ?$ClaudeDocUpdateStaleSeconds
 ?$ClaudeAdvisaryModel
+?$ClaudeStandardFont
+?CreateImplementationWorkflow
+?LaunchImplementationWorkflow
+?ClaudeImplStatus
+?ClaudeImplMonitor
+?ClaudeSpecStatus
+?ClaudeSpecVersions
+?ClaudeSpecText
+?ClaudeOpenSourceVaultURI

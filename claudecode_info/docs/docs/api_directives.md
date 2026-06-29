@@ -14,7 +14,7 @@ GitHub: https://github.com/transreal/claudecode_directives
 ### $ClaudeModelCapabilities
 型: Association, キー: {provider, model} tuple
 モデル能力テーブル。値は `<|"ContextWindow" -> Integer, "Class" -> "Heavy-Cloud"|"Heavy-Local"|"Mid-Local"|"Light-Cloud"|"Light-Local", "DefaultMode" -> "Full"|"Summary"|"Index"|"Lazy", "Strengths" -> {String...}, "PreserveThinking" -> True|False, "Paid" -> True|False|>`。
-provider 名: `"claudecode"` (CLI・無課金), `"anthropic"` (API・課金), `"openai"` (API・課金), `"lmstudio"` (ローカル・無課金)。キーは Phase 28 で String から {provider, model} tuple に変更。`"Paid"` フィールドも Phase 28 で追加。
+provider 名: `"claudecode"` (CLI・無課金), `"anthropic"` (API・課金), `"openai"` (API・課金), `"lmstudio"` (ローカル・無課金)。キーは Phase 28 で String から {provider, model} tuple に変更。`"Paid"` フィールドも Phase 28 で追加。Anthropic CLI Opus (`"claudecode"` provider, Paid=False) と Anthropic API Opus (`"anthropic"` provider, Paid=True) を別モデルとして両方登録。
 
 ### $ClaudeRoleDefaultModels
 型: Association, キー: Role 名
@@ -47,7 +47,7 @@ ClaudeDirectiveClassifyRule が rule を "large" と分類するバイト数境�
 ## モデル能力
 
 ### ClaudeRegisterModelCapability[name, spec] → Null
-$ClaudeModelCapabilities にモデル能力を追加・更新する。name は {provider, model} tuple または String (後方互換)。
+$ClaudeModelCapabilities にモデル能力を追加・更新する。name は {provider, model} tuple または String (後方互換)。tuple キー主・String キー互換の両方を accept する。
 
 ### ClaudeResolveModelCapability[modelName] → Association
 モデル名から能力 Association を返す。未登録の場合は保守的な既定値 (ContextWindow 32000, DefaultMode "Summary") を返す。
@@ -144,7 +144,7 @@ SKILL.md 先頭の YAML frontmatter を解析する。返り値: `<|"Frontmatter
 ### ClaudeDirectiveHarnessPlan[bundle, target, opts] → Association | Failure
 ファイルを書かずにハーネスの dry-run 計画を返す。target は "Codex" または "ClaudeCLI"。"ClaudeCLI" 計画は verbatim コピー計画 (AGENTS.md・directive index なし) で iClaudeCLIHarnessPlan に委譲される。target がそれ以外は Failure["UnsupportedHarnessTarget"]。
 返り値キー (Codex): Target, HarnessMaterializationMode, DirectiveRepositoryManifestHash, SourceVaultSnapshotId, AgentsMd (TargetRelativePath / EstimatedByteCount / InlineRuleNames / OmittedRuleNames / HardMaxBytes), Index (TargetRelativePath / Entries), GeneratedSkills, CommandPolicyRules, ProvenanceFiles, Warnings。
-返り値キー (ClaudeCLI): Target, HarnessMaterializationMode, DirectiveRepositoryManifestHash, SourceVaultSnapshotId, DirectiveRoot, RootInstruction, AgentsMd (Missing), Index (Missing), GeneratedSkills (rule/skill 両方を Kind 付きで保持), CommandPolicyRules ({}), ProvenanceFiles, Warnings。
+返り値キー (ClaudeCLI): Target, HarnessMaterializationMode, DirectiveRepositoryManifestHash, SourceVaultSnapshotId, DirectiveRoot, RootInstruction, AgentsMd (Missing["NotApplicable"]), Index (Missing["NotApplicable"]), GeneratedSkills (rule/skill 両方を Kind ("rule"|"skill") 付きで保持), CommandPolicyRules ({}), ProvenanceFiles ({".claude/sourcevault-provenance.json"}), Warnings。
 Options: "HarnessMaterializationMode" -> Automatic, "AgentsMdTargetMaxBytes" -> 20000, "AgentsMdHardMaxBytes" -> 30000, "RuleLargeByteThreshold" -> Automatic, "AlwaysOnRules" -> Automatic, "RuleMetadataOverrides" -> `<||>`, "SourceVaultSnapshotId" -> Missing["NotRegistered"]
 
 ### ClaudeDirectiveHarnessProvenanceHeader[meta] → String

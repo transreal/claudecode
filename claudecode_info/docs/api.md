@@ -715,6 +715,14 @@ LLMGraph を $iLLMGraphCache に保存する。
 nb の LLMGraph キャッシュをフラッシュする。
 → Null
 
+### $iLLMGraphCache
+型: Association
+LLMGraph のインメモリキャッシュ。ノートブックオブジェクトをキーとして LLMGraph Association を保持する。外部パッケージ (ClaudeStateGraph 等) から直接参照する場合は iLLMGraphGetCached / iSaveNotebookLLMGraph 経由を推奨。
+
+### $iLLMGraphCacheNB
+型: Association
+LLMGraph キャッシュのノートブック参照インデックス。
+
 ## LLMGraphDAG
 
 ### LLMGraphDAGCreate[tasks, opts]

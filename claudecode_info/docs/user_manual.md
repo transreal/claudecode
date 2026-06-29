@@ -25,7 +25,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **Windows エンコーディング安全な API 通信（マルチモーダル対応）**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス（`Fallback -> True`）では Anthropic API のマルチモーダル `content` 配列を構築して送信します。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換（ShiftJIS 等）による日本語文字化けが発生しません。
 - **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすると、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、危険な操作に対して承認フロー(`NeedsApproval`)を提供します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、`ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode 単独ロード時はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。
 - **ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすると、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。rate-limit 検出・自動待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断します。
-- **SourceVault 連携（PromptRouter ブリッジ）**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`（`HoldComplete`）の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず（rule 11）、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター（spec 5.3 / 24.3）にフォールバックします。SourceVault をロードすると、仕様書の審査・実装ワークフロー化 API（`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`）も利用可能になります。
+- **SourceVault 連携（PromptRouter ブリッジ）**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`（`HoldComplete`）の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず（rule 11）、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター（spec 5.3 / 24.3）にフォールバックします。SourceVault をロードすると、仕様書の審査・実装ワークフロー化 API（`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`）も利用可能になります。`CreateImplementationWorkflow` が完了すると、生成されたワークフローの起動関数がスラッグ・表示名をキーワードとして PromptRouter に自動登録されるため、以降は `ClaudeEval` でスラッグ名を呼び出すだけでワークフローを起動できます。
 - **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG（有向非巡回グラフ）として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。`$LLMGraphMaxConcurrency` によりカテゴリ別の並列度を制御でき、DAG ジョブの作成・実行・キャンセル・再構築を行う `LLMGraphDAGCreate` / `LLMGraphDAGRebuild` 系の API も提供されます。なお `$LLMGraphMaxConcurrency["cli"]` は並列ドキュメント更新（20+ ファイル時）の並列度制御にも使用されます。
 - **[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージする機能を提供します。
 
@@ -295,7 +295,7 @@ ClaudePrepareCommit["MyPackage"]
 ShowClaudePalette[]
 ```
 
-![ClaudeCode パレット](img_20260323_185321_1.png)
+![ソースコードの現在の状態に合わせて更新。そのとき、$Languageが日本語ではないときは英語に切り替わることを追加。また、添付しているパレットの図を挿入してパレットの使い方も説明も追加。](img_20260323_185321_1.png)
 
 パレットは上から以下のセクションに分かれています。
 
@@ -331,10 +331,7 @@ ShowClaudePalette[]
 | ボタン | 説明 |
 |---|---|
 | **▷ ClaudeQuery** | 選択中のセル内容またはノートブックコンテキストをもとに `ClaudeQuery` を実行します。同期的にテキスト応答を返します。 |
-| **► ClaudeEval** | 選択中のセル内容またはノートブックコンテキストをもとに `ClaudeEval` を実行します。コードを非同期で生成・実行します。 |
 | **▷ 選択→Query** | 現在選択中のセルの内容を取得して `ClaudeQuery` に渡します。 |
-| **▷ 選択→Eval** | 現在選択中のセルの内容を取得して `ClaudeEval` に渡します。 |
-| **◆ 仕様生成** | 選択中のセル内容またはノートブックコンテキストから `ClaudeSpec` を実行し、仕様書を生成します。 |
 | **■ 実行停止** | 実行中の全 Claude タスクを停止します（`ClaudeAbort[]` に相当）。 |
 
 #### 設定セクション
@@ -346,13 +343,6 @@ ShowClaudePalette[]
 | **モデル** | Opus / Sonnet / Default | 使用するモデルを切り替えます。Opus は `$iModelOpus`、Sonnet は `$iModelSonnet`、Default は `$ClaudeModel` のデフォルト（空文字列）に対応します。 |
 | **エフォート** | Low / Medium / High / Max | Think トリガーの強度を設定します。Low は思考なし、Medium は `think hard`、High は `think harder`、Max は `ultrathink` に対応します。 |
 | **課金API** | 禁止 / 許可 | `Fallback -> True/False` を制御します。「禁止」では Claude Code CLI のみ使用し、「許可」では CLI 利用不可時に Anthropic API 等へフォールバックします。 |
-
-#### セッション セクション
-
-| ボタン | 説明 |
-|---|---|
-| **■ 履歴表示** | デフォルトセッションの会話履歴を表示します（`ClaudeShowHistory[]` に相当）。 |
-| **□ セッション一覧** | ノートブック内の全セッション一覧を表示します（`ClaudeListSessions[]` に相当）。 |
 
 #### ステータス表示
 
@@ -921,7 +911,7 @@ provider 名は以下のように分類されます。
 | `"claudecode"` | Claude Code CLI（Opus 等） | なし（サブスクリプション） |
 | `"anthropic"` | Anthropic API | あり |
 | `"openai"` | OpenAI API | あり |
-| `"l| `"lmstudio"` | ローカル LLM（LM Studio 等） | なし |
+| `"lmstudio"` | ローカル LLM（LM Studio 等） | なし |
 
 これにより、同じ Opus でも CLI 版（`"claudecode"`, 課金なし）と API 版（`"anthropic"`, 課金あり）を**別モデルとして両方登録**できます（`lm-studio` は `lmstudio` に provider 名が正規化されます）。
 
@@ -1024,7 +1014,7 @@ ClaudeProjectDirectives[bundle, "Summary"]
 | `$ClaudeDirectiveRepository` | 読み込み済みリポジトリのキャッシュ Association（`Root`, `ClaudeMD`, `Rules`, `Skills`, `LoadedAt`） |
 | `ClaudeFindDirectiveRoots[]` | `.claude` / Claude Directives ディレクトリの候補を探索し、実在するもののリストを返す |
 | `ClaudeLoadDirectiveRepository[]` / `[root]` | 自動探索またはディレクトリ指定で読み込み（結果は `$ClaudeDirectiveRepository` にキャッシュ） |
-| `ClaudeInvalidateDirectiveCache[]` | キャッシュを空にして再読込を強制 |
+| `ClaudeInvalidateDirectiveCache[]` | キャッシュを空にして再読込を強制（新規ワークフロー実装後等に使用） |
 | `ClaudeDirectivesParseFrontmatter[text]` | SKILL.md 先頭の YAML frontmatter を解析（`<|"Frontmatter"->..., "Body"->...|>` を返す） |
 
 #### リポジトリ・インベントリとマニフェスト
@@ -1749,6 +1739,8 @@ jobId = CreateImplementationWorkflow["MyWorkflowName", approvedSpecText,
 | `"MaxRounds"` | `$iOrchConsensusMaxRounds` | 最大レビュー回数 |
 | `"Nb"` | （カレントノートブック） | 結果を書き込むノートブック |
 | `"Launch"` | `True` | 完了後にワークフローを起動するか |
+
+ワークフロー完了後、生成されたワークフローの起動関数はスラッグと表示名をキーワードとして SourceVault の PromptRouter に自動登録されます。これにより、以降は `ClaudeEval["ワークフロー名"]` の形式でワークフローをディスパッチできます。
 
 **`$ClaudeAdvisaryModel` の設定**
 

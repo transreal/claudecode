@@ -236,12 +236,13 @@ Claude Code が利用制限に達した場合の代替モデルを設定しま�
 
 ```mathematica
 $ClaudeFallbackModels = {
-  {"anthropic", "claude-opus-4-6"},
+  {"chatgptcodex", "gpt-5.5"},
+  {"anthropic", "claude-opus-4-8"},
   {"lmstudio", "openai/gpt-oss-20b", "http://127.0.0.1:1234"}
 }
 ```
 
-> 設定は自動的に NBAccess に同期されます（`iSyncFallbackModelsToNBAccess`）。
+> 設定は自動的に NBAccess に同期されます（`iSyncFallbackModelsToNBAccess`）。先頭の `chatgptcodex` は ChatGPT Codex CLI 経由のサブスクリプション利用（追加課金なし）、次に Anthropic API、最後にローカル LM Studio の順でフォールバックします。
 
 ```mathematica
 ClaudeEval["複雑な計算をして", Fallback -> True]
