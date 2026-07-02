@@ -4724,6 +4724,29 @@ If[! ValueQ[ClaudeCode`$ClaudeExternalizeProposals],
 If[! AssociationQ[ClaudeCode`$ClaudeExternalizableHeads],
   ClaudeCode`$ClaudeExternalizableHeads = <||>];
 
+(* NB 境界 hook (function_contract_wiring spec v0.3 §7.3、rule 11 の弱結合)。
+   claudecode が所有し、SourceVault_wiring.wl がロード時に登録する。
+   未登録 (None) なら従来経路のまま。逆順ロード (claudecode が後) 対応で、
+   SourceVault 側が既にあればここで接続する (両側 handshake、Inc γ と同型)。 *)
+ClaudeCode`$ClaudeCellInputProvider::usage =
+  "$ClaudeCellInputProvider は NB 初段 hook (既定 None)。SourceVault ロード時に " <>
+  "SourceVaultCellInput (選択セル/直前セル -> typed PortBindingRef 列) が弱結合登録される。";
+ClaudeCode`$ClaudeCellOutputProvider::usage =
+  "$ClaudeCellOutputProvider は NB 最終段 hook (既定 None)。SourceVault ロード時に " <>
+  "SourceVaultCellOutput (URI envelope/実行結果 -> MediaKind 別セル書き出し) が弱結合登録される。";
+If[!ValueQ[ClaudeCode`$ClaudeCellInputProvider],
+  ClaudeCode`$ClaudeCellInputProvider = None];
+If[!ValueQ[ClaudeCode`$ClaudeCellOutputProvider],
+  ClaudeCode`$ClaudeCellOutputProvider = None];
+If[ClaudeCode`$ClaudeCellInputProvider === None &&
+   Names["SourceVault`SourceVaultCellInput"] =!= {},
+  ClaudeCode`$ClaudeCellInputProvider =
+    Symbol["SourceVault`SourceVaultCellInput"]];
+If[ClaudeCode`$ClaudeCellOutputProvider === None &&
+   Names["SourceVault`SourceVaultCellOutput"] =!= {},
+  ClaudeCode`$ClaudeCellOutputProvider =
+    Symbol["SourceVault`SourceVaultCellOutput"]];
+
 (* 既定の externalizable head を「不足分だけ」補充する。
    旧実装は If[! AssociationQ] でのみ初期化していたため、パッケージが既に
    ロード済みの状態でソフトリロードしても新規 head が反映されなかった
@@ -13599,8 +13622,28 @@ iClaudeEvalNaturalAct[action_String, task_String, optsList_List] :=
             "Refresh" -> "Never",
             "FallbackToCloud" -> "Deny"],
           $Failed];
-        If[result === $Failed, Return[$iClaudeEvalNotDispatched]];
-        result,
+        (* 2026-06-30 freeze fix (A): when the deterministic schedule lookup
+           FAILS, do NOT escalate an unambiguous schedule prompt to the
+           FE-coupled LLM runtime. The runtime's async completion callback
+           writes cells / auto-evaluates from a preemptive poll-tick and can
+           deadlock the front end ("\:5fdc\:7b54\:306a\:3057"), which is the repeat-run freeze
+           the user reported. Return a fast deterministic notice and record a
+           freeze-log breadcrumb instead. A prompt matched only on the broad
+           word "\:30bf\:30b9\:30af" (task) keeps the legacy LLM fallback so genuine
+           coding tasks are not captured here. *)
+        Which[
+          result =!= $Failed, result,
+          ! StringContainsQ[task, "\:30bf\:30b9\:30af"],
+            iClaudeFreezeLog["schedule-noescalate",
+              StringTake[task, UpTo[40]]];
+            Failure["ScheduleUnavailable", <|
+              "MessageTemplate" ->
+                "Schedule data could not be retrieved (cache missing or " <>
+                "calendar source unset). Run SourceVaultUpcomingSchedule[" <>
+                "\"Refresh\" -> \"Auto\"] once to populate the cache, then retry.",
+              "Prompt" -> task|>],
+          True, $iClaudeEvalNotDispatched
+        ],
       "refresh_summary",
         scope = iClaudeEvalExtractScope[task];
         If[verbose,

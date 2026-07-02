@@ -66,6 +66,7 @@
 - `notebook-llmgraph-update-pattern` — 外部パッケージから NotebookLLMGraph にノードを追加する際の正しいキャッシュ更新 + Flush パターン
 - `wolfram-syntax-pitfalls` — `Module` 閉じ位置誤りや `Quiet` のエラー隠蔽など、LLM ベースの大規模 .wl 編集で頻発する構文上の罠と診断手順
 - `ui-output-font-customization` — ClaudeEval/SourceVault の表・リスト出力フォント (`$ClaudeStandardFont`/`iSVStandardFont`) を設定追従させる実装パターンと「フォントが効かない」切り分け (罠 #56–#58: ClearAll 順序 / Button ラベル内関数の未評価 / Hyperlink フォント上書き)
+- `dynamic-panel-render-cost` — DynamicModule/Dynamic ベースの一覧パネル (SourceVault ワークフロー一覧・保存プロンプト一覧) が「一瞬フリーズ→$Aborted」で中身が出ない事故の診断と修正。DynamicModule body / Dynamic[...] 描画の評価は FE 予算で外部 Abort される (通常評価/Queued ボタンは abort されない)。鉄則: (1) 重いデータは公開関数の通常評価で先算出し焼き込み (ExpressionCell は構築時に評価)・再取得は SessionSubmit、(2) **Grid 描画 Dynamic の中で行ごとに全件走査関数を呼ばない** (実際の真因: per-row `SourceVaultAutoTriggerStatusCell` が重い `ListData`+`NextFire` 地平線スキャンで 18 秒)、不要フィールド計算を外す/registry を短 TTL キャッシュ、(3) **headless で再現しないなら FE だけがロードする副パッケージ (autotrigger 等) の差分を疑う**。診断レシピ (RowsResult/PanelHead/NumTasks) 付き
 - `maildb-operations` — メール操作。正準は **SourceVault mail サブシステム** (`SourceVault_maildb.wl`: `SourceVaultMailFetchNew` / `MailView` / `SearchMailSnapshots` / `InferMailDerivedBatch` / `RegisterMailAccount`)。旧 `maildb.wl` は `maildb_legacy.wl` に改名され参照専用 (showMails/searchFromMails/mailEnsureLoaded は legacy)。privacy>0.5 はローカル LLM。
 - `system-open` — SystemOpen によるファイル・フォルダ・ノートブックの開き方
 - `runtime-orchestrator-boundary` — ClaudeRuntime と ClaudeOrchestrator の責務境界、特に並列化の許容範囲（Workflow Migration プロジェクト）

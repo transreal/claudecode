@@ -842,6 +842,14 @@ high priority モードを seconds 秒間有効にする。$ClaudePriorityModeUn
 high priority モードを終了する。
 → Null
 
+### $ClaudeCellInputProvider
+型: None (既定) | Function
+NB 初段 hook (function_contract_wiring spec v0.3 §7.3、rule 11 の弱結合)。SourceVault ロード時に `SourceVaultCellInput` (選択セル/直前セル → typed PortBindingRef 列。cell UUID + content hash + privacy 付き) が自動登録される。未登録なら従来経路。
+
+### $ClaudeCellOutputProvider
+型: None (既定) | Function
+NB 最終段 hook。SourceVault ロード時に `SourceVaultCellOutput` (URI envelope / wiring 実行結果 → MediaKind 別セル書き出し) が自動登録される。
+
 ## ポーリング・スケジューリング
 
 ### ClaudeRegisterPollingTick[key, func, interval]
