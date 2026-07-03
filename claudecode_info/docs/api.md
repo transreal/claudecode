@@ -21,6 +21,10 @@ ClaudeQuery / ClaudeEval 等のタイムアウト秒数。
 型: Boolean, 初期値: False
 True で履歴コンパクション等の詳細ログを Messages に出力する。
 
+### $ClaudeTestModel
+型: {String, String} | String, 初期値: $ClaudeModel
+ClaudeCheckSeparation / ClaudeFixSeparation などの分離検証で使用するモデル。未設定なら $ClaudeModel と同じ値に初期化される。
+
 ### $ClaudeStandardFont
 型: String, 初期値: "Yu Gothic UI"
 ClaudeEval が生成する出力コード (Grid/Column/Style/Button 等) で統一的に使用するフォント名。プロンプトに埋め込まれ FontFamily 指定を強制する。
@@ -941,6 +945,10 @@ LLM 出力テキストから不要なヘッダー・末尾空白等を除去す�
 ### stripANSI[text]
 テキストから ANSI エスケープシーケンスを除去する。CLI 出力のクリーンアップに使用する。
 → String
+
+### $iMediaMaxImageSize
+型: Integer | {Integer, Integer}
+画像処理時の最大サイズ上限。外部パッケージからの参照用に Public 化されている。
 
 ## オプション一覧
 

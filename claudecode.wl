@@ -3078,6 +3078,103 @@ iInjectSettingsPermissions[settingsFile_String, dirs_List] :=
   ];
 
 (* ------------------------------------------------------------------
+   v2026-07-03: 生成プロジェクトディレクトリの trust 注入。
+   ~/.claude.json の projects に trust 記録が無い環境 (例: home の
+   エントリが hasTrustDialogAccepted:false のまま) では、CLI が
+   .claude/settings.json の permissions.allow を無視して
+   "Ignoring N permissions.allow entries. Set `hasTrustDialogAccepted`
+   ..." 警告を stream-json の前に出力し、注入した Read 許可も
+   効かなくなる。生成した tempDir に限定して hasTrustDialogAccepted
+   を書き込み、これを回避する。
+   スコープ制限 (重要): 書き込むのは「今回生成した tempDir のエントリ」
+   のみ。home や既存フォルダの trust 状態は読み取るだけで一切変更しない
+   (無関係のフォルダへ trust を波及させない)。掃除も
+   $ClaudeWorkingDirectory 直下の claude_project_* かつ実体消滅済みの
+   エントリに限定する。
+   $ClaudeProjectTrustInjection:
+     Automatic (既定) = tempDir の祖先に trust 済みエントリが無い
+                        (= 警告が出る) 環境でのみ書き込む
+     True             = 常に書き込む
+     False            = 無効
+   ------------------------------------------------------------------ *)
+If[!ValueQ[$ClaudeProjectTrustInjection],
+  $ClaudeProjectTrustInjection = Automatic];
+
+iClaudeCliConfigPath[] := FileNameJoin[{$HomeDirectory, ".claude.json"}];
+
+(* パス比較用の正規化: 区切りを / に統一・末尾 / 除去・Windows は小文字化。
+   ~/.claude.json の projects キーは "C:/..." と "C:\\..." が混在しうる *)
+iTrustNormalizePath[p_String] :=
+  Module[{s = StringReplace[p, "\\" -> "/"]},
+    s = StringReplace[s, RegularExpression["/+$"] -> ""];
+    If[$OperatingSystem === "Windows", ToLowerCase[s], s]];
+
+(* projects の中に dir 自身またはその祖先の trust 済みエントリがあるか *)
+iTrustedAncestorQ[projects_Association, dir_String] :=
+  Module[{nd = iTrustNormalizePath[dir]},
+    AnyTrue[Keys[projects],
+      Function[k,
+        Module[{nk = iTrustNormalizePath[k], ent = projects[k]},
+          AssociationQ[ent] &&
+          (nk === nd || StringStartsQ[nd, nk <> "/"]) &&
+          TrueQ[Lookup[ent, "hasTrustDialogAccepted", False]]]]]];
+
+iEnsureClaudeProjectTrust[tempDir_String] :=
+  Module[{cfg = iClaudeCliConfigPath[], raw, json, projects, need,
+          workRoot, staleKeys, tmpFile, outStr, strm, reparsed},
+    If[$ClaudeProjectTrustInjection === False, Return[Null]];
+    (* CLI 未初期化の環境では新規作成しない (CLI 側の初期化に任せる) *)
+    If[!FileExistsQ[cfg], Return[Null]];
+    raw = Quiet @ Check[
+      Import[cfg, "Text", CharacterEncoding -> "UTF-8"], $Failed];
+    If[!StringQ[raw] || StringTrim[raw] === "", Return[Null]];
+    json = Quiet @ Check[Developer`ReadRawJSONString[raw], $Failed];
+    (* パースできない/壊れているファイルには触らない *)
+    If[!AssociationQ[json], Return[Null]];
+    projects = Lookup[json, "projects", <||>];
+    If[!AssociationQ[projects], projects = <||>];
+    need = $ClaudeProjectTrustInjection === True ||
+      !iTrustedAncestorQ[projects, tempDir];
+    If[!need, Return[Null]];
+    (* 実体が消滅した旧 claude_project_* エントリの掃除
+       (自パッケージが生成した dir のみ対象、肥大化防止) *)
+    If[StringQ[$ClaudeWorkingDirectory] && $ClaudeWorkingDirectory =!= "",
+      workRoot = iTrustNormalizePath[$ClaudeWorkingDirectory];
+      staleKeys = Select[Keys[projects],
+        Function[k,
+          StringQ[k] &&
+          StringStartsQ[iTrustNormalizePath[k], workRoot <> "/"] &&
+          StringContainsQ[k, "claude_project_"] &&
+          !DirectoryQ[k]]];
+      projects = KeyDrop[projects, staleKeys]];
+    projects[tempDir] = <|
+      If[AssociationQ[Lookup[projects, tempDir, None]],
+        projects[tempDir], <||>],
+      "hasTrustDialogAccepted" -> True,
+      "hasCompletedProjectOnboarding" -> True|>;
+    json["projects"] = projects;
+    (* 一時ファイルへ書き出し→再パース検証→上書き (設定破損防止) *)
+    tmpFile = cfg <> ".wlwrite.tmp";
+    Quiet @ Check[
+      (outStr = ExportString[json, "RawJSON"];
+       If[!StringQ[outStr] || StringTrim[outStr] === "",
+         Return[Null, Module]];
+       strm = OpenWrite[tmpFile, BinaryFormat -> True];
+       BinaryWrite[strm, ExportString[
+         outStr, "Text", CharacterEncoding -> "UTF-8"]];
+       Close[strm];
+       reparsed = Quiet @ Check[
+         Developer`ReadRawJSONString[
+           Import[tmpFile, "Text", CharacterEncoding -> "UTF-8"]],
+         $Failed];
+       If[AssociationQ[reparsed] && KeyExistsQ[reparsed, "projects"],
+         CopyFile[tmpFile, cfg, OverwriteTarget -> True]];
+       If[FileExistsQ[tmpFile], DeleteFile[tmpFile]]),
+      $Failed];
+    Null];
+iEnsureClaudeProjectTrust[___] := Null;
+
+(* ------------------------------------------------------------------
    Phase 4 (2026-05-26): Claude CLI Generated harness.
    When $ClaudeCLIHarnessMode is "Generated" the .claude/ tree is
    materialized from the canonical Claude Directives repository instead
@@ -3154,6 +3251,10 @@ iPrepareClaudeProjectDirectoryGenerated[] := Module[
         "Generator" -> "iPrepareClaudeProjectDirectoryGenerated"|>],
     $Failed];
 
+  (* 生成 dir を ~/.claude.json で trust 済みにする (未 trust 環境で
+     permissions.allow 無視+警告行混入を防ぐ)。失敗しても非致命。 *)
+  Quiet @ Check[iEnsureClaudeProjectTrust[tempDir], Null];
+
   tempDir];
 
 iPrepareClaudeProjectDirectoryGenerated[___] := $Failed;
@@ -3225,6 +3326,10 @@ iPrepareClaudeProjectDirectory[] := Module[
   (* \:30a2\:30af\:30bb\:30b9\:53ef\:80fd\:30c7\:30a3\:30ec\:30af\:30c8\:30ea + \:4e00\:6642\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:81ea\:4f53\:306e Read \:8a31\:53ef\:3092 settings.json \:306b\:6ce8\:5165 *)
   accessDirs = DeleteDuplicates[Append[iCollectAccessibleDirs[], tempDir]];
   iInjectSettingsPermissions[dst, accessDirs];
+
+  (* 生成 dir を ~/.claude.json で trust 済みにする (未 trust 環境で
+     permissions.allow 無視+警告行混入を防ぐ)。失敗しても非致命。 *)
+  Quiet @ Check[iEnsureClaudeProjectTrust[tempDir], Null];
 
   tempDir
 ];
@@ -7457,13 +7562,25 @@ iRecordRateLimitInfo[_, _] := Null;
    stream-json \:3067\:306a\:3044\:5834\:5408\:306f\:65e2\:5b58\:306e text \:3092\:305d\:306e\:307e\:307e\:8fd4\:3059\:3002
    v2026-04-20 T06: rate-limit \:60c5\:5831\:3092 $iLastRateLimitInfo \:306b\:4fdd\:6301\:3057\:3001
    ResetsAt \:3092\:5229\:7528\:3057\:3066\:5fa9\:65e7\:307e\:3067\:306e\:6642\:9593\:3092\:8868\:793a\:3059\:308b\:3002 *)
+(* v2026-07-03: stream-json (JSONL) 判定の頑健化。
+   従来は「先頭行が {"type": で始まる」ことを要求していたが、
+   未 trust ディレクトリで CLI を実行した環境では
+   "Ignoring N permissions.allow entries..." のような警告行が
+   stream-json の前に 1 行出力され、先頭ガードが破れて生 JSONL が
+   そのまま下流 (ノートブック書き込み) へ流れる。
+   行頭が {"type": の行が 2 行以上あれば stream-json とみなし、
+   警告等の前置き行を許容する (要求強度は従来と同じ 2 行)。 *)
+iStreamJsonLikeQ[text_String] :=
+  Length[StringPosition[
+    "\n" <> StringReplace[text, "\r\n" -> "\n"],
+    "\n{\"type\":", 2]] >= 2;
+iStreamJsonLikeQ[_] := False;
+
 iExtractStreamJsonResultText[text_String] :=
-  Module[{trimmed = StringTrim[text], lines, resultLine, parsed,
+  Module[{lines, resultLine, parsed,
           resultText, isError = False, apiErr = None,
           rliInfo, resetsStr = "", resetsDate, nowDate, dur},
-    If[!(StringStartsQ[trimmed, "{\"type\":"] &&
-         StringContainsQ[text, "\n{\"type\":"]),
-      Return[text]];
+    If[!iStreamJsonLikeQ[text], Return[text]];
     lines = StringSplit[text, "\n"];
     (* "type":"result" \:3092\:542b\:3080\:6700\:7d42\:884c\:3092\:63a2\:3059 *)
     resultLine = SelectFirst[Reverse[lines],
@@ -8014,8 +8131,10 @@ iClassifyEmptyResponseMessage[oFile_String] :=
 iIsAPIErrorResponse[response_String] :=
   Module[{trimmed = StringTrim[response], isStreamJson, isErr,
           rliInfo},
-    isStreamJson = StringStartsQ[trimmed, "{\"type\":"] &&
-      StringContainsQ[response, "\n{\"type\":"];
+    (* v2026-07-03: 警告行 (未 trust ディレクトリの "Ignoring N
+       permissions.allow entries...") が前置きされても stream-json と
+       認識できるよう iStreamJsonLikeQ に統一 *)
+    isStreamJson = iStreamJsonLikeQ[response];
     isErr = Which[
       (* v2026-04-20 T05: stream-json (JSONL) \:5185\:90e8\:306e\:30a8\:30e9\:30fc\:691c\:77e5\:3002
          \:5f93\:6765\:306f\:300cstream-json \:306a\:3089\:5e38\:306b\:6b63\:5e38\:300d\:3068\:3057\:3066\:3044\:305f\:304c\:3001
@@ -19570,7 +19689,10 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
             If[writeResult === $Failed,
               nbPrint[nb2, Style[
                 "\:26d4 [" <> ToString[i] <> "/" <> ToString[Length[tds]] <> "] " <> df <>
-                  " \:306e\:66f4\:65b0\:3092\:4e2d\:65ad (\:7121\:52b9/\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408)\:3002" <>
+                  " \:306e\:66f4\:65b0\:3092\:4e2d\:65ad" <>
+                  If[StringQ[$iDocLastFailReason] && $iDocLastFailReason =!= "",
+                    " [" <> $iDocLastFailReason <> "]",
+                    " (\:7121\:52b9/\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408)"] <> "\:3002" <>
                   "\:30d5\:30a1\:30a4\:30eb\:306f\:5909\:66f4\:3057\:3066\:3044\:307e\:305b\:3093\:3002\:518d\:5b9f\:884c\:3067\:518d\:958b\:3057\:307e\:3059\:3002",
                 FontColor -> RGBColor[0.8, 0.2, 0.2]]];
               $iDocUpdateActive = KeyDrop[$iDocUpdateActive, pn];
