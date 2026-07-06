@@ -14,11 +14,11 @@ GitHub: https://github.com/transreal/claudecode_directives
 ### $ClaudeModelCapabilities
 型: Association, キー: {provider, model} tuple
 モデル能力テーブル。値は `<|"ContextWindow" -> Integer, "Class" -> "Heavy-Cloud"|"Heavy-Local"|"Mid-Local"|"Light-Cloud"|"Light-Local", "DefaultMode" -> "Full"|"Summary"|"Index"|"Lazy", "Strengths" -> {String...}, "PreserveThinking" -> True|False, "Paid" -> True|False|>`。
-provider 名: `"claudecode"` (CLI・無課金), `"anthropic"` (API・課金), `"openai"` (API・課金), `"lmstudio"` (ローカル・無課金)。キーは Phase 28 で String から {provider, model} tuple に変更。`"Paid"` フィールドも Phase 28 で追加。Anthropic CLI Opus (`"claudecode"` provider, Paid=False) と Anthropic API Opus (`"anthropic"` provider, Paid=True) を別モデルとして両方登録。
+provider 名: `"claudecode"` (CLI・無課金), `"anthropic"` (API・課金), `"openai"` (API・課金), `"lmstudio"` (ローカル・無課金)。キーは Phase 28 で String から {provider, model} tuple に変更。`"Paid"` フィールドも Phase 28 で追加。Anthropic CLI Opus (`"claudecode"` provider, Paid=False) と Anthropic API Opus (`"anthropic"` provider, Paid=True) を別モデルとして両方登録。lm-studio は provider 名 `"lmstudio"` に正規化。
 
 ### $ClaudeRoleDefaultModels
 型: Association, キー: Role 名
-Role -> {provider, model} tuple のマッピング。ClaudeOrchestrator が worker spawn 時に参照する想定。
+Role -> {provider, model} tuple のマッピング。ClaudeOrchestrator が worker spawn 時に参照する想定。値も Phase 28 で {provider, model} tuple に変更。
 
 ### $ClaudeSkillRolePolicy
 型: Association, キー: Role 名
@@ -79,8 +79,8 @@ ClaudeFindDirectiveRoots[] で正規 root を解決する。存在しない場�
 ## インベントリ・マニフェスト
 
 ### ClaudeDirectiveFileInventory[root, opts] → {Association...} | Failure
-Claude Directives リポジトリの Phase 1.0 インベントリをファイルレコードのソート済みリストとして返す。root はディレクトリ文字列または Automatic。各レコードのキー: Role, RelativePath, LogicalPath, AbsolutePath, ContentHash, ByteCount, LineCount, Name, Title, Description, FrontMatter, Paths, TokenEstimate, ModifiedTime。Role は "RootInstruction" | "Rule" | "Skill" | "Other"。
-Options: "IncludeOther" -> True (非 rule/skill ファイルを含めるか)
+Claude Directives リポジトリの Phase 1.0 インベントリをファイルレコードのソート済みリストとして返す。root はディレクトリ文字列または Automatic。各レコードのキー: Role, RelativePath, LogicalPath, AbsolutePath, ContentHash, ByteCount, LineCount, Name, Title, Description, FrontMatter, Paths, TokenEstimate, ModifiedTime。Role は "RootInstruction" | "Rule" | "Skill" | "Other"。ContentHash は "sha256-<lowerhex>" 形式。
+Options: "IncludeOther" -> True (非 rule/skill トップレベル *.md ファイルを含めるか)
 
 ### ClaudeDirectiveRepositoryInventory[root] → {Association...} | Failure
 ClaudeDirectiveFileInventory[root] のエイリアス。
@@ -106,7 +106,7 @@ Options: "AlwaysOnRules" -> Automatic (Automatic 時は $ClaudeAlwaysOnRules を
 ### ClaudeResolveDirectiveBundle[opts] → Association
 task / role / model に応じた directive bundle を返す。
 → `<|"ClaudeMD"->..., "ActiveRules"->..., "ActiveSkills"->..., "ProjectionMode"->..., "TokenBudget"->..., "DirectiveMeta"->...|>`
-Options: "Role" -> None ("Plan"|"Draft"|"Verify"|"Commit"|"Explore"|"Reduce"|None), "Model" -> モデル名 (capability テーブル参照キー), "Mode" -> Automatic ("Full"|"Summary"|"Index"|"Lazy"|Automatic), "TaskHint" -> String, "TokenBudget" -> Automatic (Integer | Automatic), "MaxSkills" -> Automatic (Integer | Automatic; Automatic 時は $ClaudeRoleMaxSkills を採用)
+Options: "Role" -> None ("Plan"|"Draft"|"Verify"|"Commit"|"Explore"|"Reduce"|None), "Model" -> モデル名 (capability テーブル参照キー), "Mode" -> Automatic ("Full"|"Summary"|"Index"|"Lazy"|Automatic; Automatic 時は $ClaudeRoleDefaultMode を採用), "TaskHint" -> String, "TokenBudget" -> Automatic (Integer | Automatic), "MaxSkills" -> Automatic (Integer | Automatic; Automatic 時は $ClaudeRoleMaxSkills を採用)
 
 ### ClaudeProjectDirectives[bundle] → String
 ### ClaudeProjectDirectives[bundle, mode] → String
@@ -120,7 +120,7 @@ task hint に関連する skill をスコアリングして並べ替えて返す
 Options: "Role" -> Role 名, "MaxSkills" -> 5, "ModelStrengths" -> {} (skill フィルタに使用)
 
 ### ClaudeSelectRulesForRole[repo, role] → {Association...}
-role ごとの always-on rules を選別する。後方互換のため Lookup[repo, "Rules", {}] を返す。TaskHint ベースの絞り込みには ClaudeSelectRulesForTask を使う。
+role ごとの always-on rules を選別する。Phase 35 stage1 以降、後方互換のため Lookup[repo, "Rules", {}] を返す。TaskHint ベースの絞り込みには ClaudeSelectRulesForTask を使う。
 
 ### ClaudeSelectRulesForTask[repo, taskHint, opts] → {Association...}
 task hint に関連する rules を選別して返す (Phase 35 stage1 追加)。$ClaudeAlwaysOnRules に列挙された rule は無条件で含める。それ以外は frontmatter の keywords/paths と TaskHint の交差度でスコア化して上位を採用する。

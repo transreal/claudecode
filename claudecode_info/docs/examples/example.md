@@ -244,6 +244,14 @@ $ClaudeFallbackModels = {
 
 > 設定は自動的に NBAccess に同期されます（`iSyncFallbackModelsToNBAccess`）。先頭の `chatgptcodex` は ChatGPT Codex CLI 経由のサブスクリプション利用（追加課金なし）、次に Anthropic API、最後にローカル LM Studio の順でフォールバックします。
 
+フォールバック要素の `"provider"` には次のプロバイダを指定できます。
+
+- `chatgptcodex`: ChatGPT Codex CLI 経由（サブスクリプション、追加課金なし）
+- `anthropic`: Anthropic API 直接（課金）
+- `openai`: OpenAI API（課金）
+- `zai`: z.ai の GLM シリーズ（課金 API）。例: `{"zai", "glm-5.2"}`
+- `lmstudio`: ローカル LLM（課金なし）。例: `{"lmstudio", "gpt-oss-20b", "http://127.0.0.1:1234"}`
+
 ```mathematica
 ClaudeEval["複雑な計算をして", Fallback -> True]
 ```
@@ -818,6 +826,21 @@ ClaudeUpdateDocumentation["myUtils", Baseline -> "Github"]
 
 > コミット版からのソース差分と `_info`/`design` の新規内容の両方を加味し、追加された関数・オプションの説明を追加し、削除されたものの説明を削除したうえで、設計意図に沿った記述に改善します。前回コミット以降の累積変更をまとめてドキュメントに反映したい場合に有効です。
 
+### 補助 API ドキュメントの鮮度判定（内容ハッシュ基準）
+
+補助 API ドキュメント（`api_<aux>.md`）を更新対象に含めるかどうかは、対応する補助ソース（`<pkg>_<aux>.wl`）の**内容ハッシュ**を基準に判定されます。ファイルの更新日時（mtime）は Dropbox 同期・複数 PC・git 操作などによって内容と無関係に変動するため、mtime 比較だけでは未変更の補助ドキュメントまで再生成してしまう問題がありました。内容ハッシュ基準の判定はこの揺れを吸収します。
+
+```mathematica
+ClaudeUpdateDocumentation["myUtils"]
+```
+
+> - 補助ソースの内容ハッシュは、doc 生成成功時に docsDir 内のサイドカーファイル `.aux_source_hashes.json` に記録されます。
+> - 次回以降は、記録済みハッシュと現ソースの内容ハッシュを比較し、**内容が実際に変わったときだけ**その補助 API ドキュメントを再生成します。
+> - 改行コードの差（CRLF / LF）だけの揺れは `\r` を除去して無視されます。
+> - ハッシュが未記録の場合（移行措置）は従来どおり mtime 比較で判定しつつ、未変更（doc の方が新しい）であれば現ハッシュを基準として記録し、以後は内容ハッシュ基準に寄せていきます。内容ハッシュが読めない場合のみ mtime にフォールバックします。
+
+これにより、多数の補助ドキュメントを持つパッケージでも、Dropbox 上での mtime のブレによる不要な再生成を避け、実際に変更された補助 API のみが更新されます。
+
 ### 並列ドキュメント更新
 
 更新対象が多数（目安として 20 ファイル以上）になる場合、README 以外のドキュメントを LLM へ並列投入し、更新全体の所要時間を短縮します。
@@ -1077,3 +1100,40 @@ LaunchImplementationWorkflow["MyFeature", <|"param1" -> "value1"|>]
 ```
 
 > ワークフロー（`SourceVaultLoadWorkflow["MyFeature"]`）をロードし、その起動エントリ（`WorkflowInfo["Launch"]`）を指定の引数で呼び出します。起動コンテキスト、エントリ、結果を含む Association が返されます。
+
+---
+
+## 28. Claude CLI 用 MCP サーバの登録（ClaudeRegisterCLIMCPServer / $ClaudeCLIMCPServers）
+
+外部パッケージ（例: SourceVault MCP）が、ヘッドレスな claude CLI 実行（`queryProvider` / `ClaudeQueryBg`）に MCP サーバを配線するための仕組みです。`claudecode.wl` 側は特定のパッケージに依存せず（パレットのサービストグルと同方針）、各パッケージが自身のロード時に自分自身を登録します。
+
+### MCP サーバの登録
+
+```mathematica
+ClaudeRegisterCLIMCPServer["sourcevault", <|
+  "ConfigFn" -> Function[<|"Url" -> "http://127.0.0.1:8787/mcp"|>],
+  "AllowedTools" -> {"search", "fetch"},
+  "PromptDirective" -> "利用可能なときは SourceVault MCP を優先的に使うこと"
+|>]
+```
+
+`spec` の各キーの意味:
+
+- **`"ConfigFn"`**: サーバが到達可能なときは `<|"Url" -> ..., ("Headers" -> <|...|>)|>` を、停止中は `None` を返す 0 引数関数。稼働時のみ設定を返すことで、サーバの起動状態をライブに反映します。
+- **`"AllowedTools"`**: 事前許可するツール名のリスト。`--allowedTools` に `mcp__<id>__<tool>` の形で追加されます。`--print` モードは対話的にツールを承認できないため、使用するツールは必ず事前許可しておく必要があります。
+- **`"PromptDirective"`**: サーバ稼働中にクエリプロンプトへ注入される「MCP 優先」ポリシー文（`String` または 0 引数 `Function`）。
+
+> 同じ id で再登録すると上書きされます。登録済みサーバは `$ClaudeCLIMCPServers`（`<|id -> spec|>`）に保持され、稼働中（`ConfigFn` が `Url` を返す）のもののみ read-only ツールが許可されます。
+
+### 登録の解除
+
+登録は id をキーとして管理されるため、パッケージ側で必要に応じて上書き・更新できます。
+
+```mathematica
+(* 現在登録されている CLI MCP サーバの一覧を確認 *)
+Keys[$ClaudeCLIMCPServers]
+```
+
+> `claudecode` はどのパッケージも直接参照しないため、新しいパッケージも既存の claudecode システムを変更せずに MCP サーバを配線できます。
+
+Section 22 に「補助 API ドキュメントの鮮度判定（内容ハッシュ基準）」の小節を追加しました。今回のソース差分は内部関数（`iAuxSourceHash` / `.aux_source_hashes.json` サイドカー / mtime フォールバックなど）だけで、公開シンボルやオプションの増減はなかったため、その挙動改善（Dropbox の mtime 揺れ対策）のみをユーザー視点で反映し、他の節は変更していません。

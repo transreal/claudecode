@@ -220,6 +220,7 @@ Quiet[Scan[
    "$ClaudePackageAuxKeywordMap",
    "$ClaudePaletteServiceControls",
    "ClaudeRegisterPaletteServiceControl","ClaudeUnregisterPaletteServiceControl",
+   "$ClaudeCLIMCPServers","ClaudeRegisterCLIMCPServer",
    "$LLMGraphMaxConcurrency","$LLMGraphAutoStopThreshold",
    "$LLMGraphDAGStallSeconds","$LLMGraphDAGMaxJobSeconds",
    "Fallback", "AutoPrivate", "AutoEvaluate", "StartTime", "Timeout",
@@ -324,6 +325,19 @@ ClaudeRegisterPaletteServiceControl::usage =
 
 ClaudeUnregisterPaletteServiceControl::usage =
   "ClaudeUnregisterPaletteServiceControl[id] removes the palette service toggle with that Id.";
+
+$ClaudeCLIMCPServers::usage =
+  "$ClaudeCLIMCPServers is the registry (<|id -> spec|>) of MCP servers wired into headless " <>
+  "claude CLI runs (queryProvider / ClaudeQueryBg). External packages (e.g. SourceVault MCP) " <>
+  "register themselves via ClaudeRegisterCLIMCPServer; claudecode stays package-neutral.";
+
+ClaudeRegisterCLIMCPServer::usage =
+  "ClaudeRegisterCLIMCPServer[id, spec] registers an MCP server for headless claude CLI runs. " <>
+  "spec keys: \"ConfigFn\" -> Function[] returning <|\"Url\"->..., (\"Headers\"-><|...|>)|> when the " <>
+  "server is reachable or None when stopped; \"AllowedTools\" -> {tool name...} (added to " <>
+  "--allowedTools as mcp__<id>__<tool>; --print mode cannot approve interactively so tools must be " <>
+  "pre-allowed); \"PromptDirective\" -> String | Function[] (an MCP-first policy text injected into " <>
+  "query prompts while the server is running). Re-registering the same id replaces it.";
 
 $ClaudePackageAuxKeywordMap::usage =
   "$ClaudePackageAuxKeywordMap は補助 api_<aux>.md の注入条件を登録する Association。\n" <>
@@ -662,7 +676,7 @@ If[Quiet[DownValues[NBAccess`NBSetNotebookPaidAPIAllowed]] === {},
 
 (* Phase 28 (2026-05-12): \:30d1\:30ec\:30c3\:30c8\:30c7\:30b6\:30a4\:30f3\:3092 Provider + Model \:306e 2 \:30dc\:30bf\:30f3\:306b\:62e1\:5f35\:3002
    \:65e7 $iPaletteModel ("opus"/"sonnet"/"default") \:3068\:306f\:72ec\:7acb\:3057\:3066\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:3092\:7ba1\:7406\:3059\:308b\:3002 *)
-$iPaletteProvider  = "claudecode";    (* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "lmstudio" *)
+$iPaletteProvider  = "claudecode";    (* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "lmstudio" *)
 
 (* claudecode/anthropic palette default model: the minor version is owned by
    SourceVault's model-registry. The palette resolves it via
@@ -677,7 +691,7 @@ $iPaletteModelName = $iPaletteDefaultClaudeModel; (* \:73fe\:30d7\:30ed\:30d0\:3
 (* Provider \:5faa\:74b0\:9806\:5e8f\:3002Phase 5 (2026-05-26): chatgptcodex \:3092
    claudecode \:306e\:6b21\:306b\:8ffd\:52a0\:3002\:3069\:3061\:3089\:3082\:30b5\:30d6\:30b9\:30af\:30ea\:30d7\:30b7\:30e7\:30f3\:7d4c\:7531\:306e
    CLI \:306a\:306e\:3067\:8ab2\:91d1 API \:7981\:6b62\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3067\:3082\:5229\:7528\:53ef\:80fd\:3002 *)
-$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "lmstudio"};
+$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "lmstudio"};
 
 (* \:5404 Provider \:306e\:5019\:88dc\:30e2\:30c7\:30eb\:4e00\:89a7 (Phase 28) \:3002
    \:30af\:30ea\:30c3\:30af\:3067\:3053\:306e\:5217\:3092\:5faa\:74b0\:9078\:629e\:3059\:308b\:3002 *)
@@ -689,6 +703,11 @@ $iPaletteModelsByProvider = <|
   "chatgptcodex" -> {"Automatic"},
   "anthropic"    -> {"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"},
   "openai"       -> {"gpt-5.5", "gpt-5.5-pro", "gpt-5-mini", "gpt-5-nano"},
+  (* z.ai (GLM \:30b7\:30ea\:30fc\:30ba)\:3002\:5019\:88dc\:306f\:3053\:3053\:3067\:5faa\:74b0\:3055\:308c\:308b\:3002id \:306f
+     NBAccess`NBListProviderModels["zai"] \:306e\:30e9\:30a4\:30d6\:4e00\:89a7\:306b\:5408\:308f\:305b\:3066\:3042\:308b\:3002
+     \:65b0\:30e2\:30c7\:30eb\:8ffd\:52a0\:6642\:306f\:3053\:306e\:30ea\:30b9\:30c8\:306b id \:3092\:8db3\:3059\:3002 *)
+  "zai"          -> {"glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo",
+                     "glm-4.7", "glm-4.6", "glm-4.5-air", "glm-4.5"},
   "lmstudio"     -> {"qwen3.6-27b", "qwen3.5-27b", "qwen3-coder-30b", "gpt-oss-120b"}
 |>;
 
@@ -797,6 +816,7 @@ iPaletteProviderLabel[p_String] :=
     "chatgptcodex", "ChatGPTCodex",
     "anthropic",    "Anthropic",
     "openai",       "OpenAI",
+    "zai",          "Z.AI",
     "lmstudio",     "LMStudio",
     _, p];
 iPaletteProviderLabel[_] := "ClaudeCode";
@@ -2435,7 +2455,7 @@ iCloudSendRouteLabel[provider_, url_:Automatic] :=
         "ClaudeCodeCLI",
       prov === "anthropic",
         "CloudLLM",
-      prov === "openai",
+      prov === "openai" || prov === "zai",
         If[localURLQ, "LocalOpenAICompatible", "CloudLLM"],
       MemberQ[{"lmstudio", "ollama", "llamacpp", "localai", "local",
                "koboldcpp", "textgenwebui"}, prov],
@@ -2467,14 +2487,14 @@ iCloudSendPreflightDecision[
     routePolicy = Lookup[$ClaudeCloudSendRoutePolicy,
       route, "Local"];
 
-    If[!MemberQ[{"anthropic", "openai"}, prov],
+    If[!MemberQ[{"anthropic", "openai", "zai"}, prov],
       decision = <|"Decision" -> "Permit",
         "Reason" -> "ProviderNotExternalCloud",
         "Provider" -> prov,
         "Route" -> route, "RoutePolicy" -> routePolicy|>;
       Return[iCloudSendPreflightRecordLog[decision]]];
 
-    If[prov === "openai" && StringQ[url] &&
+    If[(prov === "openai" || prov === "zai") && StringQ[url] &&
         !iCloudExternalURLQ[url],
       decision = <|"Decision" -> "Permit",
         "Reason" -> "LocalOpenAICompatibleURL",
@@ -6076,17 +6096,104 @@ iSubmitParallelExecution[heldExpr_, accessSpec_Association, effectiveTimeout_] :
 
 iSubmitParallelExecution[___] := None;
 
+(* ============================================================
+   package-neutral CLI MCP wiring (2026-07-04)
+   headless claude CLI (--print) は対話承認できないため、MCP サーバは
+   --mcp-config + --allowedTools の明示指定でのみ使える。外部パッケージ
+   (例: SourceVault MCP) が ClaudeRegisterCLIMCPServer で自己登録し、
+   claudecode は特定パッケージを参照しない (palette service toggle と同方針)。
+   ConfigFn はサーバ稼働時のみ <|"Url"->..., ("Headers"->...)|> を返し、
+   停止中は None (CLI は MCP なしで従来どおり動く)。
+   ============================================================ *)
+If[!AssociationQ[$ClaudeCLIMCPServers], $ClaudeCLIMCPServers = <||>];
+
+ClaudeRegisterCLIMCPServer[id_String, spec_Association] :=
+  ($ClaudeCLIMCPServers[id] = spec; id);
+
+(* 稼働中サーバの解決スナップショット。ConfigFn は /health プローブ等を含み得るので
+   TimeConstrained で保護し、短 TTL でキャッシュ (1 クエリで bat 構築と prompt 構築の
+   両方から呼ばれるため)。 *)
+$iCLIMCPConfigCache = <|"At" -> 0, "Value" -> {}|>;
+iCLIMCPServerConfigs[] := Module[{now = AbsoluteTime[], out = {}},
+  If[AssociationQ[$iCLIMCPConfigCache] &&
+     now - Lookup[$iCLIMCPConfigCache, "At", 0] < 15,
+    Return[$iCLIMCPConfigCache["Value"]]];
+  If[AssociationQ[$ClaudeCLIMCPServers],
+    Do[
+      Module[{spec = $ClaudeCLIMCPServers[id], cfg, fn},
+        fn = If[AssociationQ[spec], Lookup[spec, "ConfigFn", None], None];
+        cfg = If[fn === None, None,
+          Quiet @ Check[TimeConstrained[fn[], 3, None], None]];
+        If[AssociationQ[cfg] && StringQ[Lookup[cfg, "Url", None]],
+          AppendTo[out, <|
+            "Id" -> id,
+            "Url" -> cfg["Url"],
+            "Headers" -> With[{h = Lookup[cfg, "Headers", <||>]},
+              If[AssociationQ[h], h, <||>]],
+            "AllowedTools" -> Replace[Lookup[spec, "AllowedTools", {}],
+              Except[_List] -> {}],
+            "PromptDirective" -> Lookup[spec, "PromptDirective", None]|>]]],
+      {id, Keys[$ClaudeCLIMCPServers]}]];
+  $iCLIMCPConfigCache = <|"At" -> now, "Value" -> out|>;
+  out];
+
+(* --mcp-config フラグ: 稼働中サーバを JSON に書き出す。サーバなしなら ""。
+   --strict-mcp-config で user/project スコープの他 MCP 設定と混ざらないように
+   する (headless 実行の決定論性維持)。JSON は ExportByteArray の UTF-8 bytes を
+   そのまま書く (rules/30: ExportString["RawJSON"] の再エンコード禁止)。 *)
+iCLIMCPConfigFlags[] := Module[{cfgs, servers, file, ba, ok},
+  cfgs = iCLIMCPServerConfigs[];
+  If[!ListQ[cfgs] || cfgs === {}, Return[""]];
+  servers = Association @ Map[
+    Function[c, c["Id"] -> <|
+      "type" -> "http", "url" -> c["Url"],
+      Sequence @@ If[AssociationQ[c["Headers"]] && Length[c["Headers"]] > 0,
+        {"headers" -> c["Headers"]}, {}]|>],
+    cfgs];
+  file = FileNameJoin[{$ClaudeWorkingDirectory, "claude_cli_mcp_config.json"}];
+  ba = Quiet @ Check[
+    ExportByteArray[<|"mcpServers" -> servers|>, "RawJSON"], $Failed];
+  If[Head[ba] =!= ByteArray, Return[""]];
+  ok = Quiet @ Check[
+    Module[{strm = OpenWrite[file, BinaryFormat -> True]},
+      If[!MatchQ[strm, _OutputStream], $Failed,
+        BinaryWrite[strm, ba]; Close[strm]; True]], $Failed];
+  If[ok =!= True, Return[""]];
+  " --mcp-config \"" <> file <> "\" --strict-mcp-config"];
+
+(* MCP-first policy: 稼働中サーバの PromptDirective を結合して prompt へ注入する。
+   「このシステムに関する情報はまず MCP 経由で解決し、見つからなければ次の方策へ」
+   という解決順序の方針文はサーバ登録側 (SourceVault 等) が供給する。 *)
+iCLIMCPPromptContext[] := Module[{cfgs = iCLIMCPServerConfigs[], txts},
+  txts = Select[
+    Map[Function[c, With[{d = c["PromptDirective"]},
+      Which[
+        StringQ[d], d,
+        Head[d] === Function, With[{r = Quiet @ Check[d[], ""]},
+          If[StringQ[r], r, ""]],
+        True, ""]]], cfgs],
+    StringQ[#] && StringTrim[#] =!= "" &];
+  If[txts === {}, "",
+    "\n=== INFORMATION RESOLUTION POLICY (MCP-first) ===\n" <>
+    StringRiffle[txts, "\n"] <> "\n\n"]];
+
 (* --print \:30e2\:30fc\:30c9\:3067\:306f\:30c4\:30fc\:30eb\:4f7f\:7528\:8a31\:53ef\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:5fdc\:7b54\:3067\:304d\:306a\:3044\:305f\:3081
    Read \:30c4\:30fc\:30eb\:3068 Glob\:ff08\:30d5\:30a1\:30a4\:30eb\:30ea\:30b9\:30c8\:ff09\:3092\:5e38\:306b\:8a31\:53ef\:3059\:308b\:3002
    $iAllowReadTool \:304c True \:306e\:5834\:5408\:306f Grep \:3082\:8ffd\:52a0\:3057\:3001\:5185\:5bb9\:691c\:7d22\:3092\:8a31\:53ef\:3059\:308b\:3002
    $iAllowWebSearch \:304c True \:306e\:5834\:5408\:306f WebSearch \:3082\:8ffd\:52a0\:3057\:3001Claude Code \:306e Web \:691c\:7d22\:3092\:8a31\:53ef\:3059\:308b\:3002
-   Glob \:306f\:30d5\:30a1\:30a4\:30eb\:30ab\:30bf\:30ed\:30b0\:53d6\:5f97\:306e\:307f\:3067\:4f4e\:30ea\:30b9\:30af\:306a\:305f\:3081\:5e38\:306b\:6709\:52b9\:3068\:3059\:308b\:3002 *)
+   Glob \:306f\:30d5\:30a1\:30a4\:30eb\:30ab\:30bf\:30ed\:30b0\:53d6\:5f97\:306e\:307f\:3067\:4f4e\:30ea\:30b9\:30af\:306a\:305f\:3081\:5e38\:306b\:6709\:52b9\:3068\:3059\:308b\:3002
+   \:767b\:9332\:6e08\:307f CLI MCP \:30b5\:30fc\:30d0 (\:7a3c\:50cd\:4e2d\:306e\:307f) \:306e read-only tool \:3082\:8a31\:53ef\:3059\:308b\:3002 *)
 iCLIPermissionFlags[excludeRead_:False] :=
-  Module[{tools = {"Glob"}},
+  Module[{tools = {"Glob"}, mcpTools},
     (* .nb \:30d5\:30a1\:30a4\:30eb\:30bf\:30b9\:30af\:4ee5\:5916\:3067\:306f Read \:3092\:8a31\:53ef *)
     If[!TrueQ[excludeRead], AppendTo[tools, "Read"]];
     If[TrueQ[$iAllowReadTool], AppendTo[tools, "Grep"]];
     If[TrueQ[$iAllowWebSearch], AppendTo[tools, "WebSearch"]];
+    mcpTools = Flatten @ Map[
+      Function[c, Map[Function[t, "mcp__" <> c["Id"] <> "__" <> t],
+        c["AllowedTools"]]],
+      iCLIMCPServerConfigs[]];
+    tools = Join[tools, mcpTools];
     " --allowedTools \"" <> StringRiffle[tools, ","] <> "\""];
 
 iMakeBat[promptFile_String, outFile_String, imageDirs_List:{},
@@ -6137,6 +6244,7 @@ iMakeBat[promptFile_String, outFile_String, imageDirs_List:{},
            True, ""] <>  (* B-\[Beta] fix3: $ClaudeModel=Automatic \:6642\:306b\:6587\:5b57\:5217\:9023\:7d50\:30a8\:30e9\:30fc\:3067 bat \:304c\:58ca\:308c\:3066\:3044\:305f *)
          If[$iPaletteEffort =!= "medium", " --effort " <> $iPaletteEffort, ""] <>
          permFlags <>
+         iCLIMCPConfigFlags[] <>
          addDirFlags <>
          " < \"" <> promptFile <> "\" > \"" <> outFile <> "\" 2>&1" <>
          "\r\n";
@@ -6211,6 +6319,7 @@ iMakeBatStreamJson[promptFile_String, outFile_String, imageDirs_List:{},
            True, ""] <>  (* B-\[Beta] fix3: $ClaudeModel=Automatic \:6642\:306b\:6587\:5b57\:5217\:9023\:7d50\:30a8\:30e9\:30fc\:3067 bat \:304c\:58ca\:308c\:3066\:3044\:305f *)
          If[$iPaletteEffort =!= "medium", " --effort " <> $iPaletteEffort, ""] <>
          permFlags <>
+         iCLIMCPConfigFlags[] <>
          addDirFlags <>
          " < \"" <> promptFile <> "\" > \"" <> outFile <> "\" 2>&1" <>
          "\r\n";
@@ -6408,6 +6517,7 @@ iMakeBatVerbose[promptFile_String, outFile_String, logFile_String] :=
            True, ""] <>  (* B-\[Beta] fix3: $ClaudeModel=Automatic \:6642\:306b\:6587\:5b57\:5217\:9023\:7d50\:30a8\:30e9\:30fc\:3067 bat \:304c\:58ca\:308c\:3066\:3044\:305f *)
          If[$iPaletteEffort =!= "medium", " --effort " <> $iPaletteEffort, ""] <>
          permFlags <>
+         iCLIMCPConfigFlags[] <>
          addDirFlags <>
          " < \"" <> promptFile <>
          "\" > \"" <> outFile <> "\" 2> \"" <> logFile <> "\"" <>
@@ -6446,6 +6556,22 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
     excludeRead_:False, excludeDirs_List:{}] :=
   Module[{ts, outFile, promptFile, batFile, proc, startTime, progTag, norm,
           useFallback = TrueQ[$currentUseFallback], useJob},
+    (* 2026-07-03 provider routing fix: この classic 経路は claude CLI の bat を
+       組み立てるため、$ClaudeModel が {provider, model} tuple でも provider 部を
+       無視して Claude で実行していた ($ClaudeDocModel = {"chatgptcodex","Automatic"}
+       がサイレントに Claude に行き session limit を消費するバグ)。
+       chatgptcodex tuple は codex 非同期 bridge へ、その他の非 claudecode tuple
+       (anthropic/openai/lmstudio) は API fallback 経路へ転送する。
+       claudecode tuple と素の String モデルは従来どおり claude CLI。 *)
+    If[ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 2 &&
+       StringQ[$ClaudeModel[[1]]] &&
+       ToLowerCase[$ClaudeModel[[1]]] =!= "claudecode",
+      If[TrueQ[iCodexProviderQ[$ClaudeModel[[1]]]],
+        iCodexQueryAsyncBridge[prompt, callback, nb],
+        iStartFallbackAsync[
+          iNormalizePrompt[iInjectAttachments[prompt]]["text"],
+          nb, callback, {$ClaudeModel}, 1, jobId, Automatic, {}]];
+      Return[Null]];
     (* 2026-06-12 (freeze fix 2): 並行 LLM ジョブ数ゲート。
        上限到達中はプロセス起動前に 5 秒後の再試行へ退避する。
        (ドキュメント更新チェーン等は呼び出し元エントリが
@@ -8136,16 +8262,30 @@ iIsAPIErrorResponse[response_String] :=
        認識できるよう iStreamJsonLikeQ に統一 *)
     isStreamJson = iStreamJsonLikeQ[response];
     isErr = Which[
-      (* v2026-04-20 T05: stream-json (JSONL) \:5185\:90e8\:306e\:30a8\:30e9\:30fc\:691c\:77e5\:3002
-         \:5f93\:6765\:306f\:300cstream-json \:306a\:3089\:5e38\:306b\:6b63\:5e38\:300d\:3068\:3057\:3066\:3044\:305f\:304c\:3001
-         rate-limit (429) \:3084 is_error:true \:3092\:542b\:3080\:5834\:5408\:3082
-         stream-json \:3068\:3057\:3066\:4f1d\:9001\:3055\:308c\:308b\:305f\:3081\:3001\:5185\:90e8\:3092\:691c\:67fb\:3059\:308b\:3002 *)
+      (* v2026-07-04: stream-json は最終 "type":"result" イベントで成否を判定する。
+         "is_error":true は途中の tool_result (CLI 内でのツール拒否・ツール失敗、
+         例: 許可外の Bash git 実行が拒否された場合) にも現れ、その場合でも
+         セッション最終応答は成功していることが多い。従来の全文 StringContainsQ
+         検査では、ツールが 1 回でも拒否されると正常応答全体を Failed に誤分類し、
+         queryProvider ノード失敗 → 下流カスケード失敗を引き起こしていた。
+         result 行が無い/パース不能な場合のみ従来の全文検査 (v2026-04-20 T05) へ
+         フォールバックする (途中クラッシュや生 rate-limit ストリームを拾うため)。 *)
       isStreamJson,
-        StringContainsQ[response, "\"is_error\":true"] ||
-        StringContainsQ[response, "\"api_error_status\":4" | "\"api_error_status\":5"] ||
-        StringContainsQ[response, "\"error\":\"rate_limit\"" |
-                                  "\"error\":\"overloaded\"" |
-                                  "\"error\":\"api_error\""],
+        Module[{resultLine, parsed},
+          resultLine = SelectFirst[Reverse[StringSplit[response, "\n"]],
+            StringContainsQ[#, "\"type\":\"result\""] &, None];
+          parsed = If[StringQ[resultLine],
+            Quiet @ Check[Developer`ReadRawJSONString[resultLine], None],
+            None];
+          If[AssociationQ[parsed],
+            TrueQ[Lookup[parsed, "is_error", False]] ||
+              Module[{apiErr = Lookup[parsed, "api_error_status", None]},
+                IntegerQ[apiErr] && apiErr >= 400],
+            StringContainsQ[response, "\"is_error\":true"] ||
+            StringContainsQ[response, "\"api_error_status\":4" | "\"api_error_status\":5"] ||
+            StringContainsQ[response, "\"error\":\"rate_limit\"" |
+                                      "\"error\":\"overloaded\"" |
+                                      "\"error\":\"api_error\""]]],
       (* Anthropic API \:306e\:751f JSON \:30a8\:30e9\:30fc\:5fdc\:7b54: {"type":"error",...} \:5358\:767a *)
       StringStartsQ[trimmed, "{\"type\":\"error\""],
         True,
@@ -8869,6 +9009,14 @@ ClaudeWebFetch[url_String, instruction_String] :=
     iDoWebSearch[prompt]
   ];
 
+(* ============================================================
+   z.ai (GLM \:30b7\:30ea\:30fc\:30ba) \:306f OpenAI \:4e92\:63db\:306e\:30af\:30e9\:30a6\:30c9 provider\:3002
+   \:65e2\:5b58\:306e OpenAI \:7d4c\:8def (iQueryOpenAIAPI / iPrepareAnthropicPS1 \:306e openai \:5f62\:5f0f) \:3092
+   \:305d\:306e\:307e\:307e\:6d41\:7528\:3057\:3001base URL \:3060\:3051\:5dee\:3057\:66ff\:3048\:308b\:3002API \:30ad\:30fc\:306f
+   NBGetAPIKey["zai"] (SystemCredential ZAI_API_KEY) \:7d4c\:7531\:3067\:53d6\:5f97\:3059\:308b\:3002
+   ============================================================ *)
+$iZAIChatCompletionsURL = "https://api.z.ai/api/paas/v4/chat/completions";
+
 iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
     customURL_String:"https://api.openai.com/v1/chat/completions"] :=
   Module[{url, body, resp, bodyStr, json, choices, msg, preflight},
@@ -9571,6 +9719,13 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
         If[customURL =!= "",
           iQueryOpenAIAPI[apiKey, model, prompt, customURL],
           iQueryOpenAIAPI[apiKey, model, prompt]],
+      "zai",
+        (* z.ai (GLM) \:306f OpenAI \:4e92\:63db\:3002customURL \:6307\:5b9a\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:512a\:5148\:3057\:3001
+           \:306a\:3051\:308c\:3070 z.ai \:306e\:65e2\:5b9a\:30a8\:30f3\:30c9\:30dd\:30a4\:30f3\:30c8\:3092\:4f7f\:3046 *)
+        iQueryOpenAIAPI[apiKey, model, prompt,
+          If[customURL =!= "",
+            iEnsureChatCompletionsPath[customURL],
+            $iZAIChatCompletionsURL]],
       _,
         iL["Error: \:672a\:5bfe\:5fdc\:30d7\:30ed\:30d0\:30a4\:30c0: ", "Error: Unsupported provider: "] <> provider]
   ];
@@ -9826,6 +9981,70 @@ iReadAnthropicResult[outFile_String, errFile_String] :=
   ];
 
 (* ============================================================
+   chatgptcodex 非同期 bridge (2026-07-03)
+   $ClaudeModel / $ClaudeDocModel が {"chatgptcodex", model} tuple のとき
+   iClaudeQueryAsyncWithProgress (claude CLI 専用経路) から転送される。
+   iLaunchCodexExecAsync (StartProcess, rules/95 D) で codex exec を
+   非同期起動し、iStartFallbackAsync の $fbTask と同型の ScheduledTask で
+   answer file を poll して callback[text] を呼ぶ。
+   - 起動失敗/タイムアウトは "Error: ..." 文字列を callback へ渡す
+     (呼び出し側の iIsAPIErrorResponse fail-fast がそのまま機能する)。
+   - callback が thunk リストを返す契約 (fallback 経路と同じ) にも対応。
+   - model が "Automatic" 以外なら $ChatgptCodexModel を Block して伝搬。
+   ============================================================ *)
+iCodexQueryAsyncBridge[prompt_, callback_, nb_NotebookObject] :=
+  Module[{norm, textPrompt, model, run, ts, rto, startTime, label},
+    norm = iNormalizePrompt[iInjectAttachments[prompt]];
+    textPrompt = norm["text"];
+    model = If[ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 2,
+      ToString[$ClaudeModel[[2]]], "Automatic"];
+    label = "chatgptcodex/" <> model;
+    run = If[StringQ[model] && model =!= "" && model =!= "Automatic",
+      Block[{$ChatgptCodexModel = model}, iLaunchCodexExecAsync[textPrompt]],
+      iLaunchCodexExecAsync[textPrompt]];
+    If[! AssociationQ[run] || ! MatchQ[Lookup[run, "proc"], _ProcessObject],
+      Module[{emsg, queue},
+        emsg = "Error: codex exec could not be started (" <> label <> ")." <>
+          If[FailureQ[run],
+            " " <> ToString[Quiet @ Check[run["Message"], ""]], ""];
+        queue = callback[emsg];
+        If[ListQ[queue], Scan[Function[thk, Quiet[thk[]]], queue]]];
+      Return[Null]];
+    rto = Replace[Lookup[run, "timeout", Automatic],
+      Except[_Integer?Positive] -> 1800];
+    startTime = AbsoluteTime[];
+    ts = ToString[UnixTime[]] <> "cx" <> ToString[RandomInteger[99999]];
+    iSafeSetWindowStatus[nb, label <> " querying... 0s"];
+    With[{gSym = Symbol["ClaudeCode`Private`$cxTask" <> ts]},
+      gSym = CreateScheduledTask[
+        With[{p = run["proc"], oFile = run["outFile"], eFile = run["errFile"],
+              cb = callback, pNb = nb, t0 = startTime, sym = gSym,
+              to = rto, lbl = label},
+          Module[{status, elapsed, text, queue},
+            elapsed = Round[AbsoluteTime[] - t0, 1];
+            iSafeSetWindowStatus[pNb,
+              lbl <> " querying... " <> ToString[elapsed] <> "s"];
+            status = ProcessStatus[p];
+            If[status === "Finished" || elapsed > to,
+              Quiet[StopScheduledTask[sym]];
+              Quiet[RemoveScheduledTask[sym]];
+              iSafeSetWindowStatus[pNb, ""];
+              If[status =!= "Finished",
+                Quiet[KillProcess[p]];
+                text = "Error: " <> lbl <> " timeout (" <> ToString[to] <> "s)",
+                (* answer file (--output-last-message) を読む。
+                   無ければ errFile から "Error: ..." が返り fail-fast に乗る *)
+                text = iReadAnthropicResult[oFile, eFile];
+                If[StringQ[text], text = StringTrim[text]]];
+              queue = cb[text];
+              If[ListQ[queue], Scan[Function[thk, Quiet[thk[]]], queue]]]
+          ]],
+        1];
+      StartScheduledTask[gSym]];
+    Null
+  ];
+
+(* ============================================================
    LM Studio MCP (/api/v1/chat) \:7528\:306e\:975e\:540c\:671f PS1 (2026-04-24 \:8ffd\:52a0)
    - body \:5168\:4f53\:3092 Mathematica \:5074\:3067\:69cb\:7bc9\:3057 body.json \:306b\:4fdd\:5b58
    - PS1 \:306f\:5358\:7d14\:306b POST \:3057\:3066\:3001 output[].message.content \:3092\:7d50\:5408
@@ -10034,6 +10253,10 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
         "https://api.openai.com/v1/chat/completions",
       ToLowerCase[provider] === "openai" && customURL =!= "",
         iEnsureChatCompletionsPath[customURL],
+      ToLowerCase[provider] === "zai" && customURL === "",
+        $iZAIChatCompletionsURL,
+      ToLowerCase[provider] === "zai" && customURL =!= "",
+        iEnsureChatCompletionsPath[customURL],
       customURL =!= "",
         customURL,
       True,
@@ -10077,6 +10300,7 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
           ToLowerCase[provider] === "anthropic" && customURL === "",
             "https://api.anthropic.com/v1/messages",
           customURL =!= "", customURL,
+          ToLowerCase[provider] === "zai", $iZAIChatCompletionsURL,
           True, "https://api.openai.com/v1/chat/completions"],
         provider,
         resolvedTimeout, mediaFiles]
@@ -10390,9 +10614,10 @@ iClaudeEnumFallback[] :=
       tasks]
   ];
 
-(* "Orchestrator": wolframscript ドライバ (spec-review / spec-impl) *)
+(* "Orchestrator": wolframscript ドライバ (spec-review / spec-impl) +
+   External executor 経由の生成ワークフロー非同期実行 (SourceVaultRunWorkflowAsync) *)
 iClaudeEnumOrchestrator[] :=
-  Module[{cons, impl, consRows, implRows},
+  Module[{cons, impl, consRows, implRows, extRows},
     cons = If[AssociationQ[$iOrchConsensusJobs], $iOrchConsensusJobs, <||>];
     consRows = Map[Function[jid,
       Module[{job = cons[jid], ticks, proc},
@@ -10423,7 +10648,27 @@ iClaudeEnumOrchestrator[] :=
           "Pausable" -> False, "Paused" -> False,
           "Subtype" -> "specimpl", "Key" -> "", "Task" -> None, "Process" -> proc, "Kernel" -> None|>]],
       Keys[impl]];
-    Join[consRows, implRows]
+    (* SourceVaultRunWorkflowAsync で走らせた External ジョブ (実行中ワークフロー名 + 経過)。
+       SourceVault ロード時のみ。列挙は読み取り専用・TimeConstrained で FE を守る。 *)
+    extRows = If[Length[Names["SourceVault`SourceVaultRunWorkflowAsyncJobs"]] > 0,
+      Module[{jobs = Quiet @ Check[
+          TimeConstrained[SourceVault`SourceVaultRunWorkflowAsyncJobs[], 0.5, {}], {}]},
+        If[! ListQ[jobs], jobs = {}];
+        Map[Function[j,
+          <|"Type" -> "Orchestrator", "Id" -> "svasync:" <> ToString @ Lookup[j, "JobID", "?"],
+            "JobId" -> ToString @ Lookup[j, "JobID", ""],
+            "Label" -> iL["\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:5b9f\:884c", "Workflow run"] <> ": " <>
+              ToString @ Lookup[j, "Slug", "?"],
+            "Status" -> iL["\:7a3c\:50cd (\:5916\:90e8\:30b8\:30e7\:30d6)", "running (external job)"],
+            "Elapsed" -> Lookup[j, "Elapsed", Missing[]],
+            "Detail" -> "form: " <> ToString @ Lookup[j, "Form", "run"] <>
+              " | job: " <> ToString @ Lookup[j, "JobID", "?"],
+            "Pausable" -> False, "Paused" -> False,
+            "Subtype" -> "svasync", "Key" -> ToString @ Lookup[j, "WorkflowId", ""],
+            "Task" -> None, "Process" -> None, "Kernel" -> None|>],
+          jobs]],
+      {}];
+    Join[consRows, implRows, extRows]
   ];
 
 (* "Kernel": 並列サブカーネル *)
@@ -10515,6 +10760,10 @@ iClaudeTaskKill[task_Association] :=
     "Orchestrator", Switch[Lookup[task, "Subtype", ""],
       "consensus", iClaudeKillOrchConsensusJob[Lookup[task, "JobId", ""]],
       "specimpl",  iClaudeKillSpecImplJob[Lookup[task, "JobId", ""]],
+      "svasync",   With[{wid = Lookup[task, "Key", ""]},
+        If[StringQ[wid] && wid =!= "" &&
+           Length[Names["ClaudeOrchestrator`Workflow`ClaudeCancelWorkflow"]] > 0,
+          Quiet @ Check[Symbol["ClaudeOrchestrator`Workflow`ClaudeCancelWorkflow"][wid], Null]]],
       _, Null],
     "Kernel", With[{ker = Lookup[task, "Kernel", None]},
       If[ker =!= None, Quiet @ Check[CloseKernels[ker], Null]]],
@@ -10622,10 +10871,13 @@ iClaudeProcessListPanel[types_List, refresh_ : (Null &)] :=
       Style["(" <> ToString[Length[tasks]] <> ")", 11, GrayLevel[0.5]],
       Spacer[12],
       Tooltip[
+        (* Preemptive: FE 側で即座に tick++ し、Dynamic の同期再評価を確実に起こす
+           (Queued だとカーネル側評価となり DynamicModule ローカル tick の伝播が
+           取りこぼされ「更新が効かない」事象が出ていた) *)
         Button[Style[iL["\:21bb \:66f4\:65b0", "\:21bb Refresh"], 9, White],
           refresh[],
           Appearance -> "Frameless", Background -> RGBColor[0.35, 0.5, 0.65],
-          ImageSize -> {64, 18}, FrameMargins -> {{4, 4}, {1, 1}}, Method -> "Queued"],
+          ImageSize -> {64, 18}, FrameMargins -> {{4, 4}, {1, 1}}, Method -> "Preemptive"],
         iL["\:4e00\:89a7\:3092\:6700\:65b0\:5316", "Refresh the list"]]}];
     If[Length[tasks] === 0,
       Return[Column[{header,
@@ -10663,9 +10915,11 @@ ClaudeProcessList[] := ClaudeProcessList[All];
    FE が直接管理し、非同期でも確実に再描画されるためローカル tick に変更。 *)
 ClaudeProcessList[typesArg_] :=
   DynamicModule[{tp = iClaudeNormalizeTaskTypes[typesArg], tick = 0},
-    Dynamic[iClaudeProcessListPanel[tp, ((tick++) &)],
-      TrackedSymbols :> {tick},
-      SynchronousUpdating -> False]];
+    (* tick を明示依存にし、SynchronousUpdating -> False を外す。手動更新のみ
+       (UpdateInterval 無し) なので同期再評価でも FE フリーズ再発の心配は無く、
+       「更新」ボタン (Preemptive tick++) で確実に再描画される。 *)
+    Dynamic[tick; iClaudeProcessListPanel[tp, ((tick++) &)],
+      TrackedSymbols :> {tick}]];
 
 (* ============================================================
    ClaudeAbort: \:5b9f\:884c\:4e2d\:306e\:5168 Claude \:30bf\:30b9\:30af\:3092\:505c\:6b62
@@ -11257,6 +11511,8 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
         modelSpec[[3]],
       providerLower === "openai",
         "https://api.openai.com/v1/chat/completions",
+      providerLower === "zai",
+        $iZAIChatCompletionsURL,
       providerLower === "anthropic",
         "https://api.anthropic.com/v1/messages",
       True,
@@ -11282,8 +11538,8 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
         AssociationQ[capEntry] && KeyExistsQ[capEntry, "Paid"],
           TrueQ[capEntry["Paid"]],
         True,
-          (* \:672a\:767b\:9332: provider \:540d\:3067 fallback *)
-          MemberQ[{"anthropic", "openai"}, providerLower]
+          (* \:672a\:767b\:9332: provider \:540d\:3067 fallback (zai=z.ai \:3082\:8ab2\:91d1 API) *)
+          MemberQ[{"anthropic", "openai", "zai"}, providerLower]
       ];
       If[isPaid,
         Module[{targetNb, nbAllowed},
@@ -11337,13 +11593,15 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
     (* \[HorizontalLine]\[HorizontalLine] \:30a8\:30f3\:30c9\:30dd\:30a4\:30f3\:30c8 URL (provider \:5225) \[HorizontalLine]\[HorizontalLine] *)
     url = Which[
       ListQ[modelSpec] && Length[modelSpec] >= 3 && StringQ[modelSpec[[3]]] && modelSpec[[3]] =!= "",
-        If[providerLower === "openai" || providerLower === "lmstudio",
+        If[providerLower === "openai" || providerLower === "zai" || providerLower === "lmstudio",
           iEnsureChatCompletionsPath[modelSpec[[3]]],
           modelSpec[[3]]],
       providerLower === "anthropic",
         "https://api.anthropic.com/v1/messages",
       providerLower === "openai",
         "https://api.openai.com/v1/chat/completions",
+      providerLower === "zai",
+        $iZAIChatCompletionsURL,
       providerLower === "lmstudio",
         "http://localhost:1234/v1/chat/completions",
       True,
@@ -11354,7 +11612,7 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
        OpenAI / LM Studio \:306f iQueryOpenAIAPI \:3092\:6d41\:7528\:3067\:304d\:308b (\:65e2\:5b58\:3001\:540c\:671f\:578b)\:3002
        Anthropic \:306f\:4ee5\:524d\:901a\:308a URLRead \:7d4c\:7531\:3067 ByteArray \:9001\:53d7\:4fe1\:3002 *)
     Which[
-      providerLower === "openai" || providerLower === "lmstudio",
+      providerLower === "openai" || providerLower === "zai" || providerLower === "lmstudio",
         Return @ iQueryOpenAIAPI[apiKey, model, prompt, url],
       providerLower === "anthropic",
         Null,  (* \:4ee5\:4e0b\:306e Anthropic \:8def\:7d50\:3092\:7d9a\:884c *)
@@ -11944,6 +12202,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
         "=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:73fe\:5728\:306e\:72b6\:614b ===\n" <> notebookCtx, ""] <>
       iNotebookDefinedSymbolsContext[nb] <>
       iFileAccessContext[If[StringQ[prompt], prompt, ""]] <>
+      iCLIMCPPromptContext[] <>
       iPackageDocsContext[If[StringQ[prompt], prompt, ""]] <>
       iAutoPrivatePrompt[autoPrivate] <>
       iTaskDetailBlock["\:8cea\:554f", iExpandSymbolRefs[prompt]];
@@ -13008,6 +13267,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
         "=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:73fe\:5728\:306e\:72b6\:614b ===\n" <> notebookCtx, ""] <>
       iNotebookDefinedSymbolsContext[nb] <>
       iFileAccessContext[task] <>
+      iCLIMCPPromptContext[] <>
       iPackageDocsContext[task] <>
       If[$iClaudeEvalCurrentDepth > 1,
         "=== ClaudeEval Recursion Depth: " <> ToString[$iClaudeEvalCurrentDepth] <>
@@ -13023,6 +13283,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
         "=== \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:73fe\:5728\:306e\:72b6\:614b ===\n" <> notebookCtx, ""] <>
       iNotebookDefinedSymbolsContext[nb] <>
       iFileAccessContext[task] <>
+      iCLIMCPPromptContext[] <>
       iPackageDocsContext[task] <>
       If[$iClaudeEvalCurrentDepth > 1,
         "=== ClaudeEval Recursion Depth: " <> ToString[$iClaudeEvalCurrentDepth] <>
@@ -16201,20 +16462,71 @@ iScanAuxPackages[packageName_String] :=
   ];
 iScanAuxPackages[___] := {};
 
-(* \:88dc\:52a9 api_*.md \:3092\:66f4\:65b0\:5bfe\:8c61\:306b\:5165\:308c\:308b\:3079\:304d\:304b\:5224\:5b9a\:3002
-     - \:88dc\:52a9\:30bd\:30fc\:30b9 <pkg>_<aux>.wl \:304c\:898b\:3064\:304b\:3089\:306a\:3044 \[RightArrow] False (\:5bfe\:8c61\:5916)
-     - \:88dc\:52a9 api \:30d5\:30a1\:30a4\:30eb\:304c\:5b58\:5728\:3057\:306a\:3044 \[RightArrow] True (\:65b0\:898f\:4f5c\:6210\:5fc5\:8981)
-     - \:4e21\:65b9\:5b58\:5728 \[RightArrow] \:30bd\:30fc\:30b9 mtime > api.md mtime \:306a\:3089 True *)
+(* === 補助 api ドキュメントの内容ハッシュ基準の鮮度判定 (Dropbox の mtime 揺れ対策) ===
+   mtime は Dropbox 同期 / 複数PC / git 操作で内容と無関係に変わり、未変更モジュールまで
+   再生成してしまう。補助ソースの内容ハッシュを docsDir 内サイドカーに記録し、内容が実際に
+   変わったときだけ再生成する。改行(CRLF/LF)差だけの揺れは \r 除去で無視する。 *)
+iAuxHashPath[docsDir_String] := FileNameJoin[{docsDir, ".aux_source_hashes.json"}];
+
+iAuxSourceHash[srcFile_String] :=
+  Module[{txt = Quiet @ Check[Import[srcFile, "Text"], $Failed]},
+    If[!StringQ[txt], Return[$Failed]];
+    IntegerString[Hash[StringDelete[txt, "\r"]], 36]];
+iAuxSourceHash[___] := $Failed;
+
+iAuxHashRead[docsDir_String] :=
+  Module[{p = iAuxHashPath[docsDir], j},
+    If[!FileExistsQ[p], Return[<||>]];
+    j = Quiet @ Check[Developer`ReadRawJSONString[Import[p, "Text"]], <||>];
+    If[AssociationQ[j], j, <||>]];
+
+iAuxHashSet[docsDir_String, auxName_String, hash_String] :=
+  Module[{j = iAuxHashRead[docsDir]},
+    j[auxName] = hash;
+    Quiet @ Check[
+      Export[iAuxHashPath[docsDir], Developer`WriteRawJSONString[j],
+        "Text", CharacterEncoding -> "UTF-8"], Null]];
+
+(* docFile が補助 api なら、対応ソースの現内容ハッシュを基準として記録する。
+   doc 生成成功時に呼び、以後の鮮度判定を content 基準にする。 *)
+iRecordAuxHash[docsDir_String, packageName_String, docFile_String] :=
+  Module[{auxName, srcFile, h},
+    auxName = iExtractAuxNameFromApiDoc[FileNameTake[docFile]];
+    If[auxName === None, Return[]];
+    srcFile = iFindAuxPackageSource[packageName, auxName];
+    If[srcFile === $Failed, Return[]];
+    h = iAuxSourceHash[srcFile];
+    If[StringQ[h], iAuxHashSet[docsDir, auxName, h]]];
+
+iAuxMtimeFreshQ[auxSrcFile_String, auxDocFile_String] :=
+  Quiet @ Check[
+    AbsoluteTime @ FileDate[auxSrcFile, "Modification"] >
+    AbsoluteTime @ FileDate[auxDocFile, "Modification"],
+    False];
+
+(* 補助 api_*.md を更新対象に入れるべきか判定 (内容ハッシュ基準)。
+     - 補助ソース <pkg>_<aux>.wl が見つからない → False (対象外)
+     - 補助 api ファイルが存在しない → True (新規作成必要)
+     - 記録済みハッシュと現ソース内容ハッシュが異なる → True (内容が実際に変わった)
+     - 一致 → False (内容不変。mtime が動いていても再生成しない)
+   移行措置: ハッシュ未記録なら従来の mtime 比較で判定しつつ、未変更(doc が新しい)なら
+   現ハッシュを基準に記録し、以後は content 基準へ寄せる。内容ハッシュが読めない場合のみ
+   mtime にフォールバックする。 *)
 iIsAuxApiFresh[packageName_String, auxName_String, docsDir_String] :=
-  Module[{auxSrcFile, auxDocFile},
+  Module[{auxSrcFile, auxDocFile, curHash, storedHash, mtimeFresh},
     auxSrcFile = iFindAuxPackageSource[packageName, auxName];
     If[auxSrcFile === $Failed, Return[False]];
     auxDocFile = FileNameJoin[{docsDir, "api_" <> auxName <> ".md"}];
     If[!FileExistsQ[auxDocFile], Return[True]];
-    Quiet @ Check[
-      AbsoluteTime @ FileDate[auxSrcFile, "Modification"] >
-      AbsoluteTime @ FileDate[auxDocFile, "Modification"],
-      False]
+    curHash = iAuxSourceHash[auxSrcFile];
+    If[!StringQ[curHash],
+      Return[iAuxMtimeFreshQ[auxSrcFile, auxDocFile]]];
+    storedHash = Lookup[iAuxHashRead[docsDir], auxName, None];
+    If[storedHash === None,
+      mtimeFresh = iAuxMtimeFreshQ[auxSrcFile, auxDocFile];
+      If[!mtimeFresh, iAuxHashSet[docsDir, auxName, curHash]];
+      Return[mtimeFresh]];
+    storedHash =!= curHash
   ];
 iIsAuxApiFresh[___] := False;
 
@@ -17382,9 +17694,15 @@ $iDocQueue := {
    2. LLM \:304c\:4ed8\:3051\:308b\:524d\:7f6e\:304d\:30c6\:30ad\:30b9\:30c8\:ff08\:300c\:4ee5\:4e0b\:304c setup.md \:306e\:5185\:5bb9\:3067\:3059\:300d\:7b49\:ff09\:3092\:9664\:53bb *)
 iCleanDocResponse[response_String] :=
   Module[{s = response, pos},
-    (* \:30b3\:30fc\:30c9\:30d5\:30a7\:30f3\:30b9\:306e\:9664\:53bb *)
-    s = StringReplace[s, RegularExpression["^```(?:markdown|md)?\\s*\n"] -> ""];
-    s = StringReplace[s, RegularExpression["\n```\\s*$"] -> ""];
+    (* コードフェンス除去: 全体が ```markdown ... ``` で囲まれた場合のみ両端を外す。
+       先頭ラッパーを剥がして実際に変化したときだけ末尾フェンスも剥がす。先頭が # で
+       始まる通常 doc で、本文が正当なコードブロック (例: 末尾の MIT ライセンスを ``` で
+       囲む) で終わる場合に、その閉じ ``` を誤除去して ``` を奇数化し、iDocLooksTruncated
+       の切り詰め誤検知を起こすのを防ぐ。 *)
+    With[{stripped = StringReplace[s, RegularExpression["^```(?:markdown|md)?\\s*\n"] -> ""]},
+      s = If[stripped =!= s,
+        StringReplace[stripped, RegularExpression["\n```\\s*$"] -> ""],
+        stripped]];
     (* \:524d\:7f6e\:304d\:9664\:53bb: \:6700\:521d\:306e # \:307e\:305f\:306f --- \:306e\:524d\:306e\:30c6\:30ad\:30b9\:30c8\:3092\:524a\:9664 *)
     If[!StringStartsQ[StringTrim[s], "#" | "---"],
       pos = StringPosition[s, RegularExpression["(?m)^(#|---)"], 1];
@@ -17642,7 +17960,12 @@ iDocModelLabel[] :=
   With[{m = iDocModelOverride[]},
     Which[
       StringQ[m], m,
-      ListQ[m] && Length[m] >= 2 && StringQ[Last[m]], Last[m],
+      ListQ[m] && Length[m] >= 2 && StringQ[Last[m]],
+        (* 非 claudecode provider は "provider/model" 表示。
+           "モデル: Automatic" だけでは provider が判別できなかったため。 *)
+        If[StringQ[First[m]] && ToLowerCase[First[m]] =!= "claudecode",
+          First[m] <> "/" <> Last[m],
+          Last[m]],
       True, ToString[m, InputForm]]];
 
 (* \:66f4\:65b0\:6307\:793a\:304c\:72ed\:3044\:30b9\:30b3\:30fc\:30d7\:ff08\:30e9\:30a4\:30bb\:30f3\:30b9\:30fb\:514d\:8cac\:30fb\:8b1d\:8f9e\:306e\:307f\:ff09\:304b\:3092\:5224\:5b9a *)
@@ -18341,7 +18664,11 @@ iPackageDocsContext[task_String] :=
       kwMap = {
         "github" -> {"GitHub", "PR", "\:30d7\:30eb\:30ea\:30af\:30a8\:30b9\:30c8", "\:30ea\:30dd\:30b8\:30c8\:30ea",
           "\:30b3\:30df\:30c3\:30c8", "\:30d6\:30e9\:30f3\:30c1", "commit", "push", "pull request",
-          "repository", "branch", "merge", "\:30de\:30fc\:30b8"},
+          "repository", "branch", "merge", "\:30de\:30fc\:30b8",
+          (* 更新履歴系: 「6/20以降に追加された機能は?」のような質問で
+             GitHubCommitLog (コミット履歴取得・承認不要) を発見させる *)
+          "git", "変更履歴", "更新履歴", "コミット履歴", "changelog",
+          "追加された機能", "追加した機能"},
         "NBAccess" -> {"NBAccess", "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30bb\:30eb", "\:6a5f\:5bc6\:30bb\:30eb",
           "Confidential", "TaggingRules", "CellEpilog"}
       };
@@ -19699,6 +20026,7 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
               Return[Null]];
             (* \:6210\:529f: \:9032\:6357\:8a18\:9332 \[RightArrow] \:6b21\:30d5\:30a1\:30a4\:30eb\:3078 *)
             iDocProgressMark[dd, Lookup[$iDocCycle, pn, ""], df];
+            iRecordAuxHash[dd, pn, df];
             nbPrint[nb2, "  \[Checkmark] " <> df <> " \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"];
             iUpdateDocNext[sc, pn, nb2, dd, instr, tds, i + 1, dt, sf, sp, md, mf, dc]
           ]
@@ -19860,6 +20188,7 @@ iDocParallelReport[jobId_String, doc_String, gen_Integer, outcome_String, detail
         st["done"] = Append[st["done"], doc];
         st["ok"] = Append[st["ok"], doc];
         iDocProgressMark[st["docsDir"], st["cycleKey"], doc];
+        iRecordAuxHash[st["docsDir"], st["package"], doc];
         nbPrint[st["nb"], "  \[Checkmark] " <> doc <> " \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
       "quality",
         rc = Lookup[st["retries"], doc, 0];
@@ -23245,6 +23574,17 @@ iSpecImplWriteBack[jid_, job_, res_] := Module[{nb = job["Nb"], slug = job["Slug
       "   verify: " <> ToString @ Lookup[res, "VerifyModel", "?"];
     NBAccess`NBWriteCell[nb, Cell[header, "Text", Sequence @@ $specCellOpts,
       CellTags -> {"sourcevault-impl-link"}]];
+    (* L2 fail-closed: the run STOPPED because the implementer could not verify a
+       required project/external API against ground truth and refused to invent one.
+       Surface a prominent warning with the exact unresolved API(s). *)
+    If[Lookup[res, "FinalStatus", ""] === "Blocked",
+      NBAccess`NBWriteCell[nb, Cell[
+        iL["\:26a0 \:5b9f\:88c5\:3092\:505c\:6b62\:3057\:307e\:3057\:305f\:ff08fail-closed\:ff09: \:5fc5\:8981\:306a API \:3092\:5b9f\:7269\:3067\:78ba\:8a8d\:3067\:304d\:305a\:3001\:63a8\:6e2c\:3067\:5b9f\:88c5\:305b\:305a\:306b\:505c\:6b62\:3057\:307e\:3057\:305f\:3002",
+           "\:26a0 Implementation STOPPED (fail-closed): a required API could not be verified against ground truth, so nothing was generated on a guessed API."] <>
+        "\n" <> ToString @ Lookup[res, "BlockReason", ""],
+        "Text", Sequence @@ $specCellOpts,
+        Background -> RGBColor[1., 0.94, 0.85], FontWeight -> Bold,
+        CellTags -> {"sourcevault-impl-blocked"}]]];
     NBAccess`NBWriteCell[nb, Cell[BoxData @ iSpecImplSummaryBoxes[slug, res],
       "Output", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-impl-summary"}]];
     (* implementation & review process (plan/artifact/verify chains, URI links)
@@ -27456,7 +27796,9 @@ iICollectChunkResult[runState_Association, timeout_: Automatic] :=
             Quiet @ DeleteFile[Lookup[runState, "batFile", ""]];
             Quiet @ DeleteFile[Lookup[runState, "promptFile", ""]]];
           If[FileExistsQ[outFile],
-            raw    = Quiet @ Import[outFile, "Text"];
+            (* \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:306f\:5404 PS1 / CLI \:304c UTF-8 \:3067\:66f8\:304f\:305f\:3081\:660e\:793a\:7684\:306b UTF-8 \:3067\:8aad\:3080\:3002
+               \:30ab\:30fc\:30cd\:30eb\:306e $CharacterEncoding \:304c ShiftJIS \:7b49\:306e\:74b0\:5883\:3067\:306e\:65e5\:672c\:8a9e\:6587\:5b57\:5316\:3051\:3092\:9632\:3050\:3002 *)
+            raw    = Quiet @ Import[outFile, "Text", CharacterEncoding -> "UTF-8"];
             Quiet @ DeleteFile[outFile];
             result = If[StringQ[raw], cleanOutput[stripANSI[raw]], ""];
             If[iIsAPIErrorResponse[result],
@@ -30627,7 +30969,8 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
        iPackageDocsContext \:306f task \:6587\:5b57\:5217\:306b\:542b\:307e\:308c\:308b\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:30fb\:30ad\:30fc\:30ef\:30fc\:30c9\:3092
        \:691c\:51fa\:3057\:3066\:5bfe\:5fdc\:3059\:308b api.md \:3092\:5b8c\:5168\:6ce8\:5165\:3059\:308b\:3002\:65e7 Single \:30d1\:30b9\:3067\:6a5f\:80fd\:3057\:3066\:3044\:305f
        \:300capi.md \:30d5\:30a1\:30fc\:30b9\:30c8\:539f\:5247\:300d\:3092 adapter \:7d4c\:8def\:3067\:3082\:6709\:52b9\:306b\:3059\:308b\:3002 *)
-    Module[{taskStr2, origTask2, fileCtx, pkgDocs, pkgGuard, symCtx, nbObj},
+    Module[{taskStr2, origTask2, fileCtx, pkgDocs, pkgGuard, symCtx, nbObj,
+            mcpCtx},
       taskStr2 = If[AssociationQ[input],
         ToString[Lookup[input, "OriginalTask",
           Lookup[input, "Hint", ToString[input]]]],
@@ -30642,6 +30985,7 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
       
       (* Quiet \@ Check \:3067\:4fdd\:8b77 \[LongDash] \:5404\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:95a2\:6570\:306e\:5931\:6557\:3067 prompt \:69cb\:7bc9\:304c\:5d29\:308c\:306a\:3044\:3088\:3046\:306b *)
       fileCtx  = Quiet @ Check[iFileAccessContext[taskStr2], ""];
+      mcpCtx   = Quiet @ Check[iCLIMCPPromptContext[], ""];
       pkgDocs  = Quiet @ Check[iPackageDocsContext[taskStr2], ""];
       pkgGuard = Quiet @ Check[iPackageUseGuard[taskStr2], ""];
       symCtx   = If[Head[nbObj] === NotebookObject && nbCtxMode =!= "None",
@@ -30660,6 +31004,7 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
 
       If[StringQ[symCtx]   && symCtx   =!= "", AppendTo[parts, symCtx]];
       If[StringQ[fileCtx]  && fileCtx  =!= "", AppendTo[parts, fileCtx]];
+      If[StringQ[mcpCtx]   && mcpCtx   =!= "", AppendTo[parts, mcpCtx]];
       If[StringQ[pkgDocs]  && pkgDocs  =!= "", AppendTo[parts, pkgDocs]];
       If[StringQ[pkgGuard] && pkgGuard =!= "", AppendTo[parts, pkgGuard]]];
     
@@ -31497,7 +31842,11 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
     If[ListQ[modelSpec] && Length[modelSpec] >= 2 && StringQ[modelSpec[[1]]],
       Module[{provLC = ToLowerCase[modelSpec[[1]]]},
         Which[
-          provLC === "lmstudio" || iCodexProviderQ[modelSpec[[1]]],
+          (* zai (z.ai/GLM) \:3082 QueryProviderAsync \:306b\:5c02\:7528\:5206\:5c90\:3092\:6301\:3064\:305f\:3081\:5f37\:5236 sync \:3057\:306a\:3044\:3002
+             \:540c\:671f URLRead \:3060\:3068 glm \:63a8\:8ad6\:30e2\:30c7\:30eb\:306e\:9577\:6642\:9593\:5fdc\:7b54\:4e2d\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057
+             FE \:304c\:30d5\:30ea\:30fc\:30ba\:3059\:308b\:305f\:3081\:3001StartProcess \:7d4c\:8def\:306e async \:306b\:4e57\:305b\:308b\:3002 *)
+          provLC === "lmstudio" || provLC === "zai" ||
+              iCodexProviderQ[modelSpec[[1]]],
             syncProv = False,
           provLC === "claudecode",
             Null,  (* \:547c\:3073\:51fa\:3057\:5143\:306e SyncProvider \:3092\:305d\:306e\:307e\:307e\:5c0a\:91cd (\:5f37\:5236\:3057\:306a\:3044) *)
@@ -31746,9 +32095,64 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
               Return[codexRun]
             ]
           ];
-          
+
+          (* \[HorizontalLine]\[HorizontalLine] z.ai (GLM, OpenAI \:4e92\:63db\:30af\:30e9\:30a6\:30c9) \:5206\:5c90 \[HorizontalLine]\[HorizontalLine]
+             iPrepareAnthropicPS1 \:306e openai \:5f62\:5f0f PS1 \:3092 StartProcess \:3067\:975e\:540c\:671f\:8d77\:52d5\:3059\:308b\:3002
+             \:540c\:671f URLRead (iQueryViaAPI) \:3060\:3068 glm \:63a8\:8ad6\:30e2\:30c7\:30eb\:306e\:9577\:6642\:9593\:5fdc\:7b54\:4e2d\:306b
+             \:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057 FE \:304c\:30d5\:30ea\:30fc\:30ba\:3059\:308b\:305f\:3081\:3001async \:7d4c\:8def\:3078\:9003\:3059\:3002
+             PS1 \:306f .NET UTF8Encoding \:3067\:9001\:53d7\:4fe1\:3057\:3001choices[0].message.content \:3092
+             \:62bd\:51fa\:3057\:3066 outFile \:306b UTF-8 \:3067\:66f8\:304f\:306e\:3067\:6587\:5b57\:5316\:3051\:3082\:9632\:3052\:308b\:3002
+             lmstudio \:5206\:5c90\:3068\:540c\:69d8\:306b\:6210\:529f\:6642\:306f\:65e9\:671f Return\:3001\:5931\:6557\:6642\:306f $Failed \:3092 Return\:3002 *)
+          If[ListQ[modelSpec] && Length[modelSpec] >= 2 &&
+             StringQ[modelSpec[[1]]] &&
+             ToLowerCase[modelSpec[[1]]] === "zai",
+            Module[{zaiModel, customURL3, url3, label3, apiKey3, prepared3,
+                    proc3, rto3},
+              zaiModel = modelSpec[[2]];
+              customURL3 = If[Length[modelSpec] >= 3 && StringQ[modelSpec[[3]]] &&
+                              modelSpec[[3]] =!= "", modelSpec[[3]], ""];
+              url3 = If[customURL3 =!= "",
+                iEnsureChatCompletionsPath[customURL3], $iZAIChatCompletionsURL];
+              label3 = "zai/" <> zaiModel;
+              rto3 = Replace[timeoutOpt, Automatic -> $iFallbackTimeout];
+
+              Quiet[CurrentValue[nb, WindowStatusArea] =
+                label3 <> " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s",
+                                    " querying... 0s"]];
+
+              apiKey3 = Quiet[NBAccess`NBGetAPIKey["zai",
+                PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
+              If[!StringQ[apiKey3] || apiKey3 === "",
+                Print["  [RT-Async] ERROR: z.ai API key unavailable"];
+                Return[$Failed]];
+
+              prepared3 = iPrepareAnthropicPS1[apiKey3, zaiModel, prompt,
+                url3, "zai", rto3];
+              If[prepared3 === $Failed,
+                Print["  [RT-Async] ERROR: iPrepareAnthropicPS1 (zai) returned $Failed"];
+                Return[$Failed]];
+
+              proc3 = StartProcess[{
+                prepared3["psExe"], "-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", prepared3["ps1File"],
+                prepared3["promptFile"], prepared3["outFile"], prepared3["errFile"],
+                prepared3["apiKey"], prepared3["url"], prepared3["model"]}];
+
+              Return[<|
+                "proc"         -> proc3,
+                "outFile"      -> prepared3["outFile"],
+                "errFile"      -> prepared3["errFile"],
+                "tmpDir"       -> prepared3["tmpDir"],
+                "ps1File"      -> prepared3["ps1File"],
+                "promptFile"   -> prepared3["promptFile"],
+                "startTime"    -> AbsoluteTime[],
+                "timeout"      -> rto3,
+                "providerKind" -> "zai"|>]
+            ]
+          ];
+
           (* \[HorizontalLine]\[HorizontalLine] \:4ee5\:4e0b\:306f\:6539\:9020\:524d\:30b3\:30fc\:30c9\:3092\:5b8c\:5168\:6e29\:5b58 (Claude CLI \:7d4c\:8def) \[HorizontalLine]\[HorizontalLine] *)
-          
+
           (* WindowStatusArea: \:975e\:540c\:671f\:30d7\:30ed\:30bb\:30b9\:8d77\:52d5 *)
           Quiet[CurrentValue[nb, WindowStatusArea] =
             iL["Claude \:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s",

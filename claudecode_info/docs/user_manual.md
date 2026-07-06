@@ -9,23 +9,23 @@ ClaudeCode は以下の設計原則に基づいています。
 - **安全なパッケージ管理**: パッケージの更新はバックアップ・差分マージ・安全性検証・再ロードを自動で行います。排他ロック機構により、同一パッケージへの並列更新を防止します。更新後は自動生成された検証テストが実行され、意図した変更が正しくコードに反映されているか確認します。2026-06-10 の改善により、LLM レスポンスを「連続した行のかたまり（セグメント）」単位でマージするようになり、マージ精度が大幅に向上しました。`Pkg\`X` / `Pkg\`Private\`iX` のような完全修飾定義も正しく認識されます。
 - **差分ベースバックアップ**: バックアップは SequenceAlignment ベースの差分形式（.cz / .cdiff / .unchanged）で保存され、ストレージ消費を大幅に削減します。既存の生バックアップは `ClaudeMigrateBackupHistory` で差分形式に変換できます。
 - **機密データ保護**: `Confidential[]` による秘匿変数システムと、プライバシー考慮型モデルルーティングにより、機密データの安全な取り扱いを実現します。アクセスレベルに基づいて、クラウドモデルとローカルモデルを自動的に使い分けます。
-- **多段フォールバック**: Claude Code CLI が利用不可の場合、アクセスレベルに応じたフォールバックモデルに自動切替します。Anthropic API、OpenAI API、LM Studio 等のローカルモデルを順次試行します。
+- **多段フォールバック**: Claude Code CLI が利用不可の場合、アクセスレベルに応じたフォールバックモデルに自動切替します。Anthropic API、OpenAI API、z.ai（GLM シリーズ）、LM Studio 等のローカルモデルを順次試行します。
 - **セッション管理**: 会話履歴をノートブックの TaggingRules に永続化し、差分圧縮と自動コンパクションによりストレージを効率的に利用します。
 - **多言語対応**: `$Language` 設定に基づいてプロンプトの言語指示を動的に生成します。`$Language` が `"Japanese"` の場合は日本語で応答するよう指示し、それ以外の場合は英語に切り替わります。
 - **AI 生成機能**: OpenAI Images API による画像生成（`ClaudeImageGenerate`）と OpenAI TTS API による音声生成（`ClaudeSpeech`）を統合しています。
 - **プロジェクト固有ディレクティブ**: ノートブックディレクトリごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。
 - **claudecode_directives 連携**: オプションの独立パッケージ [claudecode_directives](https://github.com/transreal/claudecode_directives) をロードすることで、`rules/` および `skills/` ディレクトリのデフォルトセットが自動的にインストールされます。ロード後は Claude Code CLI のコンテキストに rules/ の制約と skills/ の手順が自動的に注入され、Claude がスキルを呼び出せるようになります。claudecode.wl 本体はディレクティブの内容に非依存であり、claudecode_directives がその管理を担います。
 - **ディレクティブ投影レイヤー (ClaudeDirectives)**: rules/skills を含む正規ディレクティブ・リポジトリを読み込み、モデルの能力（コンテキスト長・課金有無）・ロール・タスクに応じて、投影モード（Full / Summary / Index / Lazy）と適用するスキル・ルールを in-memory で動的に選択します。さらに、単一の正規リポジトリから Claude CLI 用（`.claude/`）と Codex CLI 用（`AGENTS.md` / `.agents/`）のハーネスを生成・実体化する機能を備えます。ファイル形式は Claude Code 互換を維持し、claudecode.wl / NBAccess.wl への依存を持たない純 Wolfram Language 実装（Rule 11）として、claudecode.wl 側から optional に統合されます。
-- **スマートドキュメント管理**: ドキュメント生成・更新時のモード制御（新規作成・既存更新）、部分更新対象の指定、差分検出による効率的な更新処理を提供します。`ClaudeUpdateDocumentation` の `Baseline` オプションにより、差分の基準を「直近の更新バックアップ（`"LastDocUpdate"`）」と「GitHub コミット版（`"Github"`）」から選択でき、後者では `_info/design` の新規設計内容も加味した更新が行えます。20 ファイル以上の一括更新時は、README を除くドキュメントを LLM へ並列投入し、ウィンドウステータスバーにリアルタイム進捗（「完了 N/M • K 並列実行中 • 経過 Ts」）を表示します。サイクル再開（resumption）機能により、API エラーで中断後に再実行しても同一サイクル内の更新済みファイルをスキップして効率的に継続できます。ドキュメント更新チェーンの多重起動防止ガードにより、同一パッケージに対して複数の更新チェーンが同時起動することを防ぎます。チェーンが異常終了した場合も `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放されます。
+- **スマートドキュメント管理**: ドキュメント生成・更新時のモード制御（新規作成・既存更新）、部分更新対象の指定、差分検出による効率的な更新処理を提供します。`ClaudeUpdateDocumentation` の `Baseline` オプションにより、差分の基準を「直近の更新バックアップ（`"LastDocUpdate"`）」と「GitHub コミット版（`"Github"`）」から選択でき、後者では `_info/design` の新規設計内容も加味した更新が行えます。20 ファイル以上の一括更新時は、README を除くドキュメントを LLM へ並列投入し、ウィンドウステータスバーにリアルタイム進捗（「完了 N/M • K 並列実行中 • 経過 Ts」）を表示します。サイクル再開（resumption）機能により、API エラーで中断後に再実行しても同一サイクル内の更新済みファイルをスキップして効率的に継続できます。ドキュメント更新チェーンの多重起動防止ガードにより、同一パッケージに対して複数の更新チェーンが同時起動することを防ぎます。チェーンが異常終了した場合も `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放されます。補助 API ドキュメント（`api_<aux>.md`）の再生成要否判定は、更新日時（mtime）比較からコンテンツハッシュ比較へ段階的に移行しており、Dropbox 同期や複数 PC 環境による mtime の揺れだけでは不要な再生成が発生しないようになっています。
 - **分離原則検証**: NBAccess パッケージとの適切な分離を維持するため、コード内の分離原則違反を自動検出・修正する機能を備えています。
-- **パッケージキーワード自動注入**: 各パッケージが独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。
+- **パッケージキーワード自動注入**: 各パッケージが独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。パッケージ単位（`$ClaudePackageKeywordMap`）に加え、補助ドキュメント単位（`$ClaudePackageAuxKeywordMap`）でも注入条件を制御できます。
 - **自動実行安全ガード**: `ClaudeEval` の `AutoEvaluate -> True` で生成コードを自動実行する際、`NBAutoEvalProhibitedPatterns` に定義された禁止パターンに該当するコードの自動実行をブロックします。これにより、ファイル削除や危険なシステム操作などを含むコードが意図せず実行されることを防止します。
 - **共有ポーリングタスク**: 複数の非同期ジョブが実行中の場合、すべてのジョブが単一の共有ポーリングタスクを利用します。旧実装のようにジョブごとに個別の `ScheduledTask` を作成しないため、多数のジョブを並列実行した際のオーバーヘッドが大幅に削減されます。`iEnsureSharedPollingTask` により共有タスクのライフサイクルが管理され、パッケージリロード時には旧タスクが自動的に停止されます。
 - **非同期スケジューリング規約の自動注入**: `ClaudeUpdatePackage` のプロンプトに、非同期タスクのスケジューリング規約（claudecode/NBAccess 公開 API の使用義務・例外条件・根拠）を自動注入します。LLM が生成するパッケージコードが正しい非同期パターンに従うよう誘導します。
 - **Windows エンコーディング安全な API 通信（マルチモーダル対応）**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス（`Fallback -> True`）では Anthropic API のマルチモーダル `content` 配列を構築して送信します。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換（ShiftJIS 等）による日本語文字化けが発生しません。
 - **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすると、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、危険な操作に対して承認フロー(`NeedsApproval`)を提供します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、`ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode 単独ロード時はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。
 - **ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすると、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。rate-limit 検出・自動待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断します。
-- **SourceVault 連携（PromptRouter ブリッジ）**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`（`HoldComplete`）の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず（rule 11）、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター（spec 5.3 / 24.3）にフォールバックします。SourceVault をロードすると、仕様書の審査・実装ワークフロー化 API（`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`）も利用可能になります。`CreateImplementationWorkflow` が完了すると、生成されたワークフローの起動関数がスラッグ・表示名をキーワードとして PromptRouter に自動登録されるため、以降は `ClaudeEval` でスラッグ名を呼び出すだけでワークフローを起動できます。
+- **SourceVault 連携（PromptRouter ブリッジ）**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`（`HoldComplete`）の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず（rule 11）、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター（spec 5.3 / 24.3）にフォールバックします。SourceVault をロードすると、仕様書の審査・実装ワークフロー化 API（`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`・`ClaudeImplStatus`・`ClaudeImplMonitor`）も利用可能になります。`CreateImplementationWorkflow` が完了すると、生成されたワークフローの起動関数がスラッグ・表示名をキーワードとして PromptRouter に自動登録されるため、以降は `ClaudeEval` でスラッグ名を呼び出すだけでワークフローを起動できます。
 - **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG（有向非巡回グラフ）として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。`$LLMGraphMaxConcurrency` によりカテゴリ別の並列度を制御でき、DAG ジョブの作成・実行・キャンセル・再構築を行う `LLMGraphDAGCreate` / `LLMGraphDAGRebuild` 系の API も提供されます。なお `$LLMGraphMaxConcurrency["cli"]` は並列ドキュメント更新（20+ ファイル時）の並列度制御にも使用されます。
 - **[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージする機能を提供します。
 
@@ -146,6 +146,10 @@ $ClaudeEvalPromptRouterPreemptsNatural = True
    後方互換として "chatgptcodex" のようなベア文字列も受け入れる
    例: $ClaudeAdvisaryModel = {"chatgptcodex", "gpt-5.5"} *)
 $ClaudeAdvisaryModel = {"chatgptcodex", Automatic}
+
+(* パレットのプロバイダ循環順序 *)
+(* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "lmstudio" *)
+$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "lmstudio"}
 ```
 
 ### パッケージキーワード自動注入システム
@@ -162,6 +166,22 @@ ClaudeQuery["メールデータベースの操作方法を教えて"]
 ```
 
 このシステムにより、各パッケージが自身のロード時にキーワードを登録することで、claudecode.wl はパッケージ非依存を保ちつつ、必要な API ドキュメントを自動的に提供できます。
+
+#### 補助 API ドキュメントのキーワード制御（$ClaudePackageAuxKeywordMap）
+
+パッケージによっては `api.md` 本体とは別に、機能単位の補助 API ドキュメント（`api_<aux>.md`、例: `api_eagle.md`）を持つ場合があります。`$ClaudePackageAuxKeywordMap` は、これら補助ドキュメントの注入条件をパッケージ単位よりも細かい粒度（補助ドキュメント単位）で登録するための Association です。
+
+```mathematica
+(* 形式: $ClaudePackageAuxKeywordMap[パッケージ名] = <|補助名 -> {キーワード...}|> *)
+(* 補助名は api_<補助名>.md のファイル名部分に対応する *)
+$ClaudePackageAuxKeywordMap["SourceVault"] = <|"eagle" -> {"Eagle", "Exif"}|>
+```
+
+- 補助名（`api_eagle.md` なら `"eagle"`）が登録されている場合、**その補助名またはキーワードがタスク文に含まれるときのみ** `api_eagle.md` がコンテキストに注入されます。
+- 未登録の補助 API は従来どおり常に注入されます（後方互換）。
+- 登録済みだがキーワードが一致しない補助 API は注入対象から除外されます。これにより、パッケージが多数の補助ドキュメントを持つ場合でも、無関係なタスクでコンテキストが不必要に肥大化することを防ぎます。
+
+`$ClaudePackageKeywordMap` がパッケージ単位の注入条件を制御するのに対し、`$ClaudePackageAuxKeywordMap` は同一パッケージ内の個々の補助ドキュメントごとに注入条件を制御します。両者は補完的に併用できます。
 
 ### クイックスタート
 
@@ -219,7 +239,7 @@ ClaudePrepareCommit["MyPackage"]
 | | `MarkConfidential` / `UnmarkConfidential` | セルの秘匿マーク |
 | | `ScanConfidentialCells` | 依存セルの自動検出・マーク |
 | **プライバシー** | `$ClaudePrivateModel` | ローカルモデル設定 |
-| | `AutoPrivate` オプション | 機密データ自動ルーティング |
+| | `AutoPrivate -> True` | 機密データ自動ルーティング |
 | | `PrivacySpec` オプション | アクセスレベル明示指定 |
 | **セッション** | `CreateClaudeSession` | 名前付きセッション作成 |
 | | `ClaudeShowHistory` | 履歴表示 |
@@ -241,6 +261,11 @@ ClaudePrepareCommit["MyPackage"]
 | | `ClaudeSpeech` | OpenAI TTS API で音声生成 |
 | **Web** | `ClaudeWebSearch` | Web 検索（Claude Code 組み込み） |
 | | `ClaudeWebFetch` | URL 内容取得・要約（Anthropic API） |
+| **パレット統合** | `ClaudeRegisterPaletteServiceControl` | パレットのサービストグルを登録 |
+| | `ClaudeUnregisterPaletteServiceControl` | パレットのサービストグルを登録解除 |
+| | `$ClaudePaletteServiceControls` | 登録済みサービストグルのリスト |
+| **CLI MCP 統合** | `ClaudeRegisterCLIMCPServer` | ヘッドレス CLI 実行用 MCP サーバーを登録 |
+| | `$ClaudeCLIMCPServers` | 登録済み CLI MCP サーバーのレジストリ |
 | **ClaudeRuntime** | `ClaudeStartRuntime` | ランタイムの起動 |
 | | `ClaudeEvalViaRuntime` | ランタイム経由での評価 |
 | | `ClaudeUpdatePackageViaRuntime` | ランタイム経由でのパッケージ更新 |
@@ -262,6 +287,8 @@ ClaudePrepareCommit["MyPackage"]
 | | `ClaudeOpenSourceVaultURI` | sv:// URI を新規ノートブックで開く |
 | | `CreateImplementationWorkflow` | 承認済み仕様からワークフローを実装 |
 | | `LaunchImplementationWorkflow` | 生成ワークフローの起動 |
+| | `ClaudeImplStatus` | spec-impl ワークフロー実行状況の確認 |
+| | `ClaudeImplMonitor` | 実行状況の自動更新パネル |
 | **[実験的] LLMGraph** | `NotebookLLMGraphPlot` | DAG 可視化 |
 | | `NotebookLLMGraphNodes` | 全ノード取得 |
 | | `NotebookLLMGraphSummary` | Status/L2 統計 Dataset |
@@ -285,6 +312,7 @@ ClaudePrepareCommit["MyPackage"]
 | **Git 連携** | `ClaudePrepareCommit` | 変更履歴収集・コミット準備 |
 | **ユーティリティ** | `ShowClaudePalette` | 操作パレット表示 |
 | | `ClaudeStatus` | 実行中タスクの状態表示 |
+| | `ClaudeProcessList` | 実行中タスクのインタラクティブ一覧（一時停止/再開・停止操作付き） |
 | | `ClaudeCommand` | CLI スラッシュコマンド実行 |
 
 ### 操作パレット
@@ -338,11 +366,27 @@ ShowClaudePalette[]
 
 パレット下部の設定エリアでは、以下のパラメータをノートブックごとに保存・変更できます。設定はノートブックの TaggingRules に永続化されます。
 
-| 設定項目 | 選択肢 | 説明 |
+| 設定項目 | 説明 |
+|---|---|
+| **P:** | プロバイダを切り替えます。クリックするたびに `claudecode → chatgptcodex → anthropic → openai → zai → lmstudio` の順で循環します。選択中のプロバイダ名がボタンラベルに表示されます。各プロバイダの特性は下表を参照してください。 |
+| **M:** | 選択中のプロバイダ内でモデルを切り替えます。クリックするたびに対応するモデル一覧を循環します。短縮名（例: Opus 4.8、Sonnet 4.6）で表示されます。`Automatic` は Codex CLI の既定モデルを使用します（chatgptcodex プロバイダの場合）。SourceVault のモデルレジストリがロードされている場合は、そこからモデル一覧が取得されます。 |
+| **エフォート** | Low / Medium / High / Max — Think トリガーの強度を設定します。Low は思考なし、Medium は `think hard`、High は `think harder`、Max は `ultrathink` に対応します。 |
+| **課金API** | 禁止 / 許可 — `Fallback -> True/False` を制御します。「禁止」では Claude Code CLI または Codex CLI（課金なし扱い）のみ使用し、「許可」では CLI 利用不可時に Anthropic API・z.ai API 等へフォールバックします。 |
+
+**プロバイダ一覧**
+
+| プロバイダ | 説明 | 課金 |
 |---|---|---|
-| **モデル** | Opus / Sonnet / Default | 使用するモデルを切り替えます。Opus は `$iModelOpus`、Sonnet は `$iModelSonnet`、Default は `$ClaudeModel` のデフォルト（空文字列）に対応します。 |
-| **エフォート** | Low / Medium / High / Max | Think トリガーの強度を設定します。Low は思考なし、Medium は `think hard`、High は `think harder`、Max は `ultrathink` に対応します。 |
-| **課金API** | 禁止 / 許可 | `Fallback -> True/False` を制御します。「禁止」では Claude Code CLI のみ使用し、「許可」では CLI 利用不可時に Anthropic API 等へフォールバックします。 |
+| `claudecode` | Claude Code CLI（Anthropic、Pro/Max サブスクリプション） | なし |
+| `chatgptcodex` | ChatGPT Codex CLI（OpenAI、サブスクリプション） | なし |
+| `anthropic` | Anthropic API（直接） | あり |
+| `openai` | OpenAI API（直接） | あり |
+| `zai` | z.ai API（GLM シリーズ） | あり |
+| `lmstudio` | LM Studio（ローカル LLM） | なし |
+
+**z.ai プロバイダ**
+
+`zai` は z.ai が提供する GLM シリーズモデルへのアクセスを提供します。OpenAI 互換 API 形式を採用しており、内部的には既存の OpenAI API 経路（base URL のみ z.ai エンドポイントに差し替え）を利用します。利用可能なモデルは glm-5.2、glm-5.1、glm-5、glm-5-turbo、glm-4.7、glm-4.6、glm-4.5-air、glm-4.5 等です。API キーは NBAccess の SystemCredential 管理機能で登録します。課金 API のため、パレットの「課金API: 許可」設定が必要です。
 
 #### ステータス表示
 
@@ -351,6 +395,53 @@ ShowClaudePalette[]
 #### 言語切り替え
 
 パレットの表示言語は `$Language` 設定に連動します。`$Language` が `"Japanese"` の場合は日本語で表示され、それ以外の場合（英語環境など）は英語に切り替わります。たとえば英語環境では「機密マーク」は "Mark Confidential"、「実行停止」は "Abort" のように表示されます。
+
+### CLI MCP サーバー登録システム
+
+`ClaudeRegisterCLIMCPServer` は、ヘッドレスの claude CLI 実行（`ClaudeQueryBg` / `queryProvider`）に MCP サーバーを組み込むための登録 API です。パレットのサービストグル（`ClaudeRegisterPaletteServiceControl`）が UI 側の登録窓口であるのに対し、こちらは **CLI ヘッドレス実行側**の登録窓口です。claudecode.wl はいずれのパッケージにも依存せず、汎用の登録窓口のみを提供します。
+
+#### 動作の概要
+
+登録された MCP サーバーが稼働中の場合、`ClaudeQueryBg` 等のヘッドレス CLI 実行時に以下が自動的に行われます。
+
+1. `ConfigFn` を呼び出してサーバーの URL と認証ヘッダーを取得します（サーバー停止時は `None` を返すため自動的にスキップ）。
+2. `AllowedTools` に列挙されたツールを `--allowedTools mcp__<id>__<tool>` 形式で claude CLI に渡します（`--print` モードの非対話実行では事前許可が必要）。
+3. `PromptDirective` に設定された MCP 優先ポリシーテキストをクエリプロンプトに自動注入します。
+
+#### 登録 API
+
+```mathematica
+(* MCP サーバーを登録する *)
+ClaudeRegisterCLIMCPServer["my-mcp", <|
+  "ConfigFn"       -> Function[
+    (* サーバー稼働中のみ Association を返し、停止時は None を返す *)
+    If[iServerRunning[],
+      <|"Url" -> "http://localhost:8080/mcp",
+        "Headers" -> <|"Authorization" -> "Bearer " <> iGetToken[]|>|>,
+      None]],
+  "AllowedTools"   -> {"search", "read_file", "write_file"},
+  "PromptDirective" -> "利用可能な MCP ツールを優先的に使用してください。"
+|>]
+
+(* 登録解除 *)
+(* ClaudeRegisterCLIMCPServer に同じ id で再登録すると置換される *)
+```
+
+#### spec キー一覧
+
+| キー | 説明 |
+|---|---|
+| `"ConfigFn"` | 引数なし Function。サーバー稼働中は `<\|"Url" -> ..., ("Headers" -> <\|...\|>)\|>` を返し、停止中は `None` を返す。`/health` プローブ等を含むことができる。 |
+| `"AllowedTools"` | ツール名のリスト。`--allowedTools mcp__<id>__<tool>` として CLI に渡される。`--print` モードはインタラクティブに承認できないため、使用するツールをすべて列挙すること。 |
+| `"PromptDirective"` | `String` または引数なし Function。サーバー稼働中にクエリプロンプトへ自動注入される MCP 優先ポリシーテキスト。 |
+
+#### レジストリ変数
+
+| 変数 | 説明 |
+|---|---|
+| `$ClaudeCLIMCPServers` | 登録済み CLI MCP サーバーのレジストリ（`<\|id -> spec\|>` 形式）。外部パッケージ（SourceVault MCP 等）が自身のロード時に登録する。claudecode はパッケージ非依存を保つ。 |
+
+> SourceVault をロードすると、SourceVault MCP サーバーがパレットトグル（`ClaudeRegisterPaletteServiceControl`）と CLI MCP 登録（`ClaudeRegisterCLIMCPServer`）の両方を自動的に行います。これにより、SourceVault MCP はパレットから起動/停止でき、かつ `ClaudeQueryBg` 等のヘッドレス CLI 実行でも MCP ツールが利用できるようになります。
 
 ### プライバシー考慮型モデルルーティング
 
@@ -439,7 +530,7 @@ ClaudeEval["1 から 100 までの和を求めてください"]
 $ClaudeModel = {"claudecode", "claude-opus-4-7"}
 ```
 
-Codex provider は Claude CLI と同じ非同期実行経路で動作します。Codex 実行ごとに一時的な作業ディレクトリと `CODEX_HOME` を作成し、`codex exec` をバックグラウンドで起動して結果をポーリングするため、実行中にカーネルがブロックされることはありません。
+Codex provider は Claude CLI と同じ非同期実行経路で動作します。内部的には専用の非同期ブリッジ（`iLaunchCodexExecAsync`）を経由しており、Codex 実行ごとに一時的な作業ディレクトリと`CODEX_HOME` を作成し、`codex exec` をバックグラウンドで起動して `--output-last-message` で指定した出力ファイルをポーリングするため、実行中にカーネルがブロックされることはありません。起動失敗・タイムアウト時はコールバックに `"Error: ..."` 文字列が渡され、エラーセルが書き出されます。
 
 Claude Code CLI も Codex CLI もサブスクリプション契約に基づく CLI であり、メーター制 API（`anthropic` / `openai` provider）とは課金体系が異なります。claudecode の課金 API ガードは `chatgptcodex` provider を無課金扱いとするため、課金 API を許可しない設定でも Codex 経由のコード生成が利用できます。
 
@@ -909,8 +1000,10 @@ provider 名は以下のように分類されます。
 | provider | 種別 | 課金 |
 |---|---|---|
 | `"claudecode"` | Claude Code CLI（Opus 等） | なし（サブスクリプション） |
+| `"chatgptcodex"` | ChatGPT Codex CLI | なし（サブスクリプション） |
 | `"anthropic"` | Anthropic API | あり |
 | `"openai"` | OpenAI API | あり |
+| `"zai"` | z.ai API（GLM シリーズ） | あり |
 | `"lmstudio"` | ローカル LLM（LM Studio 等） | なし |
 
 これにより、同じ Opus でも CLI 版（`"claudecode"`, 課金なし）と API 版（`"anthropic"`, 課金あり）を**別モデルとして両方登録**できます（`lm-studio` は `lmstudio` に provider 名が正規化されます）。
@@ -940,7 +1033,7 @@ ClaudeResolveModelContextWindow["claude-opus-4-6"]
 
 | モード | 説明 |
 |---|---|
-| `"Full"` | ディレクティブ全文を投影（大きいコンテキストのモデル向け） |
+| `"Full"` | ディレクティブ全文を投影(大きいコンテキストのモデル向け) |
 | `"Summary"` | 要約を投影 |
 | `"Index"` | 索引（見出し・概要）のみ投影 |
 | `"Lazy"` | 必要時のみ参照する遅延投影 |
@@ -1013,9 +1106,9 @@ ClaudeProjectDirectives[bundle, "Summary"]
 |---|---|
 | `$ClaudeDirectiveRepository` | 読み込み済みリポジトリのキャッシュ Association（`Root`, `ClaudeMD`, `Rules`, `Skills`, `LoadedAt`） |
 | `ClaudeFindDirectiveRoots[]` | `.claude` / Claude Directives ディレクトリの候補を探索し、実在するもののリストを返す |
-| `ClaudeLoadDirectiveRepository[]` / `[root]` | 自動探索またはディレクトリ指定で読み込み（結果は `$ClaudeDirectiveRepository` にキャッシュ） |
-| `ClaudeInvalidateDirectiveCache[]` | キャッシュを空にして再読込を強制（新規ワークフロー実装後等に使用） |
-| `ClaudeDirectivesParseFrontmatter[text]` | SKILL.md 先頭の YAML frontmatter を解析（`<|"Frontmatter"->..., "Body"->...|>` を返す） |
+| `ClaudeLoadDirectiveRepository[]` / `[root]` | 自動探索またはディレクトリ指定で読み込み(結果は `$ClaudeDirectiveRepository` にキャッシュ) |
+| `ClaudeInvalidateDirectiveCache[]` | キャッシュを空にして再読込を強制(新規ワークフロー実装後等に使用) |
+| `ClaudeDirectivesParseFrontmatter[text]` | SKILL.md 先頭の YAML frontmatter を解析(`<|"Frontmatter"->..., "Body"->...|>` を返す) |
 
 #### リポジトリ・インベントリとマニフェスト
 
@@ -1027,7 +1120,7 @@ hash = ClaudeDirectiveRepositoryHash[root]
 ```
 
 - `ClaudeResolveDirectiveRoot[Automatic]` — `ClaudeFindDirectiveRoots` 経由で正規 root を解決します。存在しなければ `Failure["DirectiveRootNotFound"]` を返します。
-- `ClaudeDirectiveFileInventory[root]` — 各ファイル記録のソート済みリストを返します。各記録は固定スキーマ（`Role`, `RelativePath`, `LogicalPath`, `AbsolutePath`, `ContentHash`, `ByteCount`, `LineCount`, `Name`, `Title`, `Description`, `FrontMatter`, `Paths`, `TokenEstimate`, `ModifiedTime`）を持ち、`Role` は `RootInstruction` / `Rule` / `Skill` / `Other` のいずれかです。
+- `ClaudeDirectiveFileInventory[root]` — 各ファイル記録のソート済みリストを返します。各記録は固定スキーマ(`Role`, `RelativePath`, `LogicalPath`, `AbsolutePath`, `ContentHash`, `ByteCount`, `LineCount`, `Name`, `Title`, `Description`, `FrontMatter`, `Paths`, `TokenEstimate`, `ModifiedTime`)を持ち、`Role` は `RootInstruction` / `Rule` / `Skill` / `Other` のいずれかです。
 - `ClaudeDirectiveRepositoryManifest[root]` — `Kind`, `CanonicalFormat`, `Root`, `Files`, `FilesCount`, `RulesCount`, `SkillsCount`, `ManifestHash`, `CreatedAt`, `Generator` を持つ Association を返します。`ManifestHash` はソート済みの `RelativePath` / `ContentHash` ペアのみに依存し、`ModifiedTime` や `TokenEstimate` の変化に対して安定です。
 - `ClaudeDirectiveRepositoryHash[root]` — `ManifestHash` 文字列のみを返します。
 
@@ -1038,9 +1131,9 @@ ClaudeDirectiveRuleDerivedMetadata[ruleRecord]
 ClaudeDirectiveClassifyRule[ruleRecord]
 ```
 
-- `$CodexRuleLargeByteThreshold` — rule を `"large"` と分類するバイト境界（既定 8192）。
+- `$CodexRuleLargeByteThreshold` — rule を `"large"` と分類するバイト境界(既定 8192)。
 - `ClaudeDirectiveRuleDerivedMetadata[ruleRecord]` — `Title`, `Summary`, `Description`, `Trigger`, `DescriptionSource`, `Paths` を返します。
-- `ClaudeDirectiveClassifyRule[ruleRecord]` — `Scope`（`"always-on"` / `"task-specific"`）, `SizeClass`（`"small"` / `"large"`）, `CommandPolicy`, `InlineSummaryInAgentsMd`, `Reason` を返します。
+- `ClaudeDirectiveClassifyRule[ruleRecord]` — `Scope`(`"always-on"` / `"task-specific"`), `SizeClass`(`"small"` / `"large"`), `CommandPolicy`, `InlineSummaryInAgentsMd`, `Reason` を返します。
 
 #### ハーネス実体化（Codex / Claude CLI）
 
@@ -1075,7 +1168,7 @@ report = ClaudeDirectiveMigrationReport[directiveRoot, claudeDir]
 | `$ClaudeRoleDefaultMode` | Role → 既定投影モード |
 | `$ClaudeRoleMaxSkills` | Role → 既定スキル上限 |
 | `$ClaudeAlwaysOnRules` | 常時注入される rule 名リスト |
-| `$CodexRuleLargeByteThreshold` | large 判定バイト境界（既定 8192） |
+| `$CodexRuleLargeByteThreshold` | large 判定バイト境界(既定 8192) |
 | `$ClaudeDirectiveRepository` | 読み込み済みリポジトリのキャッシュ |
 | `ClaudeRegisterModelCapability` | モデル能力の追加・更新 |
 | `ClaudeResolveModelCapability` | モデル名 → 能力 Association |
@@ -1091,7 +1184,7 @@ report = ClaudeDirectiveMigrationReport[directiveRoot, claudeDir]
 | `ClaudeSelectSkillsForTask` | task hint 別のスキル選別 |
 | `ClaudeSelectRulesForRole` | role 別の always-on rules |
 | `ClaudeSelectRulesForTask` | task hint 別の rules 選別 |
-| `ClaudeBuildDirectivePromptForRole` | ロール付き投影テキスト（統合エントリ） |
+| `ClaudeBuildDirectivePromptForRole` | ロール付き投影テキスト(統合エントリ) |
 | `ClaudeBuildDirectivePromptForSingle` | 単一エージェント用投影テキスト |
 | `ClaudeResolveDirectiveRoot` | 正規 root の解決 |
 | `ClaudeDirectiveFileInventory` / `ClaudeDirectiveRepositoryInventory` | ファイル単位インベントリ |
@@ -1099,7 +1192,7 @@ report = ClaudeDirectiveMigrationReport[directiveRoot, claudeDir]
 | `ClaudeDirectiveRepositoryHash` | ManifestHash 文字列 |
 | `ClaudeDirectiveRuleDerivedMetadata` | rule 派生メタデータ |
 | `ClaudeDirectiveClassifyRule` | rule の分類 |
-| `ClaudeDirectiveHarnessPlan` | ハーネス実体化計画（dry-run） |
+| `ClaudeDirectiveHarnessPlan` | ハーネス実体化計画(dry-run) |
 | `ClaudeDirectiveHarnessProvenanceHeader` | AGENTS.md provenance ヘッダ |
 | `ClaudeDirectiveMaterializeCodexHarness` | Codex ハーネスの実体化 |
 | `ClaudeDirectiveMaterializeClaudeHarness` | Claude CLI ハーネスの実体化 |
@@ -1112,49 +1205,49 @@ report = ClaudeDirectiveMigrationReport[directiveRoot, claudeDir]
 
 | 日本語表現 | 変換先 | 思考レベル |
 |---|---|---|
-| 死ぬ気で考えろ、本気出せ、全力で、徹底的に | `ultrathink` | 最大（32K トークン） |
-| よく考えて、じっくり、慎重に、がんばれ、丁寧に | `think hard` | 中程度（10K トークン） |
-| 考えてみて、少し考えて | `think` | 基本（4K トークン） |
+| 死ぬ気で考えろ、本気出せ、全力で、徹底的に | `ultrathink` | 最大(32K トークン) |
+| よく考えて、じっくり、慎重に、がんばれ、丁寧に | `think hard` | 中程度(10K トークン) |
+| 考えてみて、少し考えて | `think` | 基本(4K トークン) |
 
 ClaudeUpdatePackage 等の呼び出し時にも、指示文中の日本語表現が自動的にトリガーワードに変換されます。
 
 ### ドキュメント生成・更新の高度制御
 
-`ClaudeUpdateDocumentation` は柔軟なモード制御、部分更新機能、差分の基準を切り替える `Baseline` オプション、並列更新、そしてサイクル再開（resumption）機能を提供します。
+`ClaudeUpdateDocumentation` は柔軟なモード制御、部分更新機能、差分の基準を切り替える `Baseline` オプション、並列更新、そしてサイクル再開(resumption)機能を提供します。
 
 ```mathematica
-(* 基本的なドキュメント更新（既存ファイルを更新） *)
+(* 基本的なドキュメント更新(既存ファイルを更新) *)
 ClaudeUpdateDocumentation["MyPackage", "新機能の説明を追加"]
 
-(* 新規作成モード（既存内容を無視して新規作成） *)
+(* 新規作成モード(既存内容を無視して新規作成) *)
 ClaudeUpdateDocumentation["MyPackage", "setup.mdを作成",
   TargetFiles -> {"setup.md"}, Mode -> "Create"]
 
-(* 特定ファイルのみ更新（.md 拡張子あり） *)
+(* 特定ファイルのみ更新(.md 拡張子あり) *)
 ClaudeUpdateDocumentation["MyPackage", "API仕様を更新",
   TargetFiles -> {"api.md"}]
 
-(* 拡張子なしでも自動補完されます（"api" → "api.md"） *)
+(* 拡張子なしでも自動補完されます("api" → "api.md") *)
 ClaudeUpdateDocumentation["MyPackage", "API仕様を更新",
   TargetFiles -> {"api"}]
 
-(* 複数ファイルを同時更新（拡張子あり・なし混在も可） *)
+(* 複数ファイルを同時更新(拡張子あり・なし混在も可) *)
 ClaudeUpdateDocumentation["MyPackage", "全体的な改善",
   TargetFiles -> {"api", "user_manual", "README"}]
 ```
 
 | オプション | デフォルト | 説明 |
 |---|---|---|
-| `Mode` | `"Update"` | `"Update"`: 既存を更新、`"Create"`: 新規作成（既存内容無視） |
-| `Baseline` | `"LastDocUpdate"` | 差分の基準。`"LastDocUpdate"`: 直近の `_documentupdate` バックアップ（従来動作）、`"Github"`: GitHub コミット版ソース＋`_info/design` 新規内容 |
+| `Mode` | `"Update"` | `"Update"`: 既存を更新、`"Create"`: 新規作成(既存内容無視) |
+| `Baseline` | `"LastDocUpdate"` | 差分の基準。`"LastDocUpdate"`: 直近の `_documentupdate` バックアップ(従来動作)、`"Github"`: GitHub コミット版ソース＋`_info/design` 新規内容 |
 | `TargetFiles` | `Automatic` | 更新対象ファイルのリスト。`Automatic` で全ドキュメントを対象。許可されるファイル名は下記参照。 |
-| `References` | `{}` | 参考文献リスト（README.md に反映） |
-| `Demos` | `{}` | デモ動画・使用例 URL（README.md に反映） |
-| `Disclaimer` | `{}` | 免責事項（README.md に反映） |
+| `References` | `{}` | 参考文献リスト(README.md に反映) |
+| `Demos` | `{}` | デモ動画・使用例 URL(README.md に反映) |
+| `Disclaimer` | `{}` | 免責事項(README.md に反映) |
 
-#### 並列ドキュメント更新（20 ファイル以上）
+#### 並列ドキュメント更新(20 ファイル以上)
 
-更新対象ドキュメントが 20 ファイル以上の場合、README.md を除くドキュメントを LLM へ並列投入して処理します。並列度は `$LLMGraphMaxConcurrency["cli"]` でキャップされます（デフォルト 4）。
+更新対象ドキュメントが 20 ファイル以上の場合、README.md を除くドキュメントを LLM へ並列投入して処理します。並列度は `$LLMGraphMaxConcurrency["cli"]` でキャップされます(デフォルト 4)。
 
 処理中は、ウィンドウステータスバーに以下の形式でリアルタイム進捗が表示されます。
 
@@ -1169,7 +1262,7 @@ ClaudeUpdateDocumentation["MyPackage", "全体的な改善",
 $LLMGraphMaxConcurrency["cli"] = 2  (* 同時2本に制限 *)
 ```
 
-並列更新中に一部ファイルの更新が失敗した場合でも、失敗したファイルはスキップして残りのファイルの処理を継続します。全ファイルが失敗した場合は失敗として通知され、永久待機を防ぎます（`⛔ Doc update aborted (N failed)`）。
+並列更新中に一部ファイルの更新が失敗した場合でも、失敗したファイルはスキップして残りのファイルの処理を継続します。全ファイルが失敗した場合は失敗として通知され、永久待機を防ぎます(`⛔ Doc update aborted (N failed)`)。
 
 #### ドキュメント更新チェーンの多重起動防止
 
@@ -1181,7 +1274,7 @@ $LLMGraphMaxConcurrency["cli"] = 2  (* 同時2本に制限 *)
 "MyPackage" のドキュメント更新が既に進行中です。完了を待ってから再実行してください。
 ```
 
-チェーンが異常終了してガードが解放されなかった場合（フリーズ・カーネル再起動等）でも、`$ClaudeDocUpdateStaleSeconds`（デフォルト 1800 秒）を超えると自動的に解放されます。
+チェーンが異常終了してガードが解放されなかった場合(フリーズ・カーネル再起動等)でも、`$ClaudeDocUpdateStaleSeconds`(デフォルト 1800 秒)を超えると自動的に解放されます。
 
 ```mathematica
 (* stale 上限の変更例 *)
@@ -1190,11 +1283,11 @@ $ClaudeDocUpdateStaleSeconds = 3600  (* 1 時間に延長 *)
 
 | 変数 | デフォルト | 説明 |
 |---|---|---|
-| `$ClaudeDocUpdateStaleSeconds` | `1800` | ドキュメント更新チェーンのガードの stale 上限（秒）。この秒数を超えたら異常終了とみなして再スケジュールを許可する。 |
+| `$ClaudeDocUpdateStaleSeconds` | `1800` | ドキュメント更新チェーンのガードの stale 上限(秒)。この秒数を超えたら異常終了とみなして再スケジュールを許可する。 |
 
-#### ドキュメント更新の再開（resumption）管理
+#### ドキュメント更新の再開(resumption)管理
 
-`ClaudeUpdateDocumentation` はサイクル再開（resumption）機能を備えており、API エラーや中断後に再実行した場合でも効率的に処理を継続できます。
+`ClaudeUpdateDocumentation` はサイクル再開(resumption)機能を備えており、API エラーや中断後に再実行した場合でも効率的に処理を継続できます。
 
 **サイクル鍵の仕組み**
 
@@ -1202,12 +1295,12 @@ $ClaudeDocUpdateStaleSeconds = 3600  (* 1 時間に延長 *)
 
 **再実行時の動作**
 
-同一サイクル（同じソース・指示・対象ファイル集合）で再実行した場合、更新済みファイルは自動的にスキップされます。
+同一サイクル(同じソース・指示・対象ファイル集合)で再実行した場合、更新済みファイルは自動的にスキップされます。
 
 | 表示メッセージ | 意味 |
 |---|---|
-| `✅ All documents already updated in this cycle.` | 全対象ファイルが既に更新済み（スキップ） |
-| `✅ Target documents already updated in this cycle.` | 指定ファイルが既に更新済み（スキップ） |
+| `✅ All documents already updated in this cycle.` | 全対象ファイルが既に更新済み(スキップ) |
+| `✅ Target documents already updated in this cycle.` | 指定ファイルが既に更新済み(スキップ) |
 | `⛔ Doc update aborted (N failed)` | N ファイルが失敗して更新を中断 |
 
 サイクルが完全に完了すると進捗ファイルがクリアされ、次回はソース変更で新サイクルが始まります。
@@ -1223,11 +1316,11 @@ ClaudeUpdateDocumentation["MyPackage", "更新指示",
   Baseline -> "Github"]
 ```
 
-#### Baseline オプション（差分基準の切り替え）
+#### Baseline オプション(差分基準の切り替え)
 
-`Baseline` オプションは、ドキュメント更新時に「何を基準にソース差分を取るか」を制御します。指定できる値は `"LastDocUpdate"`（既定）と `"Github"` の 2 種類で、これら以外の値を指定した場合は自動的に `"LastDocUpdate"` にフォールバックします。
+`Baseline` オプションは、ドキュメント更新時に「何を基準にソース差分を取るか」を制御します。指定できる値は `"LastDocUpdate"`(既定)と `"Github"` の 2 種類で、これら以外の値を指定した場合は自動的に `"LastDocUpdate"` にフォールバックします。
 
-**`Baseline -> "LastDocUpdate"`（デフォルト・従来動作）**
+**`Baseline -> "LastDocUpdate"`(デフォルト・従来動作)**
 
 直近の `_documentupdate` バックアップを基準にソース差分を計算します。前回のドキュメント更新以降に変更されたコードだけを抽出してプロンプトに添付するため、効率的かつ焦点を絞った更新が行えます。前回バックアップが見つからない場合はエラーになり、`Baseline -> "Github"` の使用、または先に `ClaudeCreateDocumentation` を実行することが促されます。
 
@@ -1237,11 +1330,11 @@ ClaudeUpdateDocumentation["MyPackage", "更新指示",
   Baseline -> "LastDocUpdate"]
 ```
 
-**`Baseline -> "Github"`（GitHub コミット版基準）**
+**`Baseline -> "Github"`(GitHub コミット版基準)**
 
 `$packageDirectory/GithubRepositories/<packageName>` に置かれた GitHub コミット版ソースを基準にソース差分を計算します。これにより、「最後にコミットした状態」から現在のローカルソースまでの全変更がドキュメントへ反映されます。`_documentupdate` バックアップが存在しない場合でも利用できる点が大きな利点です。
 
-さらにこのモードでは、ソース差分だけでは読み取りにくい設計意図を補うため、`_info/design` 配下の**新規設計内容**（`iComputeNewDesignContent` が抽出）が、`api.md` 以外のドキュメント（README を含む）のプロンプトに自動添付されます。
+さらにこのモードでは、ソース差分だけでは読み取りにくい設計意図を補うため、`_info/design` 配下の**新規設計内容**(`iComputeNewDesignContent` が抽出)が、`api.md` 以外のドキュメント(README を含む)のプロンプトに自動添付されます。
 
 ```mathematica
 (* GitHub コミット版を基準に、design 新規内容も加味して更新 *)
@@ -1253,6 +1346,23 @@ ClaudeUpdateDocumentation["MyPackage", "コミット以降の変更を反映",
 ```
 
 このとき自動的に付与される指示は概ね「前回のドキュメント更新以降のソースコード変更を反映してドキュメントを更新し、追加された関数・オプションの説明を追加し、削除されたものの説明を削除し、コードの差分だけでなく添付された design の新規内容も加味して新しくなった部分の記述を充実させる」という内容です。
+
+#### 補助 API ドキュメントの鮮度判定（コンテンツハッシュ基準）
+
+パッケージによっては `api.md` 本体とは別に、機能単位の補助 API ドキュメント（`api_<aux>.md`）を持つ場合があります（前述の「補助 API ドキュメントのキーワード制御」セクションを参照）。ドキュメント更新時、これら補助ドキュメントを再生成対象に含めるべきかどうかの判定は、当初は補助ソース（`<pkg>_<aux>.wl` 等）と補助ドキュメントの更新日時（mtime）だけを比較する方式でした。
+
+しかし、mtime は Dropbox 同期・複数 PC 環境・git 操作などによって、ソースの内容が変わっていなくても変化してしまうことがあります。このため、実際には変更されていない補助モジュールまで不要に再生成されてしまう問題がありました。
+
+この問題に対応するため、補助ドキュメントの鮮度判定はコンテンツハッシュ基準へ段階的に移行しています。
+
+- 補助ソースの現在の内容ハッシュを、ドキュメントディレクトリ内のサイドカーファイル `.aux_source_hashes.json` に記録します。
+- 以後の更新判定では、記録済みハッシュと現在のソース内容ハッシュを比較します。一致していれば、mtime が変化していても再生成対象に含めません。記録済みハッシュと異なる場合のみ、内容が実際に変わったとみなして再生成対象に含めます。
+- ハッシュがまだ記録されていない場合(移行期)は、従来どおり mtime 比較にフォールバックします。このとき「変更なし」と判定されれば、その時点のハッシュを記録し、以後はハッシュ基準の判定に寄せていきます。
+- 改行コード(CRLF / LF)の差だけによる揺れは、比較前に `\r` を除去することで無視されます。
+- 補助 API ドキュメントファイルがまだ存在しない場合は、従来どおり新規作成が必要と判定されます。補助ソース(`<pkg>_<aux>.wl` 等)自体が見つからない場合は、判定の対象外として扱われます。
+- ドキュメント生成が成功するたびに、対応する補助ソースの内容ハッシュが記録され、以後の鮮度判定の基準として更新されます。
+
+この改善は内部実装(ドキュメント生成・更新処理)の一部であり、ユーザーが直接呼び出す新しい公開関数やオプションはありません。`ClaudeGenerateDocumentation` / `ClaudeUpdateDocumentation` を通常どおり実行するだけで、自動的により安定した鮮度判定が適用されます。
 
 #### TargetFiles の許可リストと拡張子自動補完
 
@@ -1266,7 +1376,7 @@ ClaudeUpdateDocumentation["MyPackage", "コミット以降の変更を反映",
 | `"user_manual.md"` | `"user_manual"` | ユーザーマニュアル |
 | `"example.md"` | `"example"` | 使用例集 |
 
-拡張子（`.md`）を省略した形式（例: `"api"`, `"user_manual"`）を指定すると、自動的に `.md` が補完されます。許可リスト外のファイル名を指定した場合は `ClaudeUpdateDocumentation::badtarget` メッセージが表示され、処理は中断されます。
+拡張子(`.md`)を省略した形式(例: `"api"`, `"user_manual"`)を指定すると、自動的に `.md` が補完されます。許可リスト外のファイル名を指定した場合は `ClaudeUpdateDocumentation::badtarget` メッセージが表示され、処理は中断されます。
 
 ```mathematica
 (* 不正なファイル名を指定した場合のエラー例 *)
@@ -1279,15 +1389,15 @@ ClaudeUpdateDocumentation["MyPackage", "更新指示",
 
 ### [実験的] LLM 適用グラフ (LLMGraph)
 
-`ClaudeEval` や `ClaudeQuery` などの LLM 呼び出しを実行すると、各呼び出しがノードとしてノートブック固有の DAG（有向非巡回グラフ）に自動記録されます。このグラフ構造は Mathematica 14.2 で導入された `LLMGraph` と類似の設計を採用しています（将来的には `LLMGraph` そのものとの統合を目指しますが、現状では独自実装）。
+`ClaudeEval` や `ClaudeQuery` などの LLM 呼び出しを実行すると、各呼び出しがノードとしてノートブック固有の DAG(有向非巡回グラフ)に自動記録されます。このグラフ構造は Mathematica 14.2 で導入された `LLMGraph` と類似の設計を採用しています(将来的には `LLMGraph` そのものとの統合を目指しますが、現状では独自実装)。
 
 この実装は、`claudecode_info/design/` にある 1992-WOOC'92.pdf および 1993-WOOC'93「信号処理に向いたオブジェクトモデルの提案と応用」で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。
 
 #### アーキテクチャ
 
-グラフデータはノートブックの TaggingRules に圧縮保存され、フルレスポンスやコードは外部キャッシュ（`$UserBaseDirectory/ClaudeCode/llmgraph_cache/`）に WXF 形式で保存されます。インメモリキャッシュにより、頻繁なアクセスでも Compress/Uncompress のオーバーヘッドを回避します。
+グラフデータはノートブックの TaggingRules に圧縮保存され、フルレスポンスやコードは外部キャッシュ(`$UserBaseDirectory/ClaudeCode/llmgraph_cache/`)に WXF 形式で保存されます。インメモリキャッシュにより、頻繁なアクセスでも Compress/Uncompress のオーバーヘッドを回避します。
 
-各ノード（L1）は命令テキスト（先頭 500 文字）、応答サマリー（先頭 300 文字）、アクセスレベル（ClaudeCode / ClaudeAPI / LMStudio / WolframLLM / Local）、ステータス（Processing / Completed / Failed / Invalidated）などを保持します。ノード間の関係はエッジタイプ（ContextInheritance: セッション内連続、DataFlow: 出力→入力依存、Sequential: L2 コードブロック間）として記録されます。
+各ノード(L1)は命令テキスト(先頭 500 文字)、応答サマリー(先頭 300 文字)、アクセスレベル(ClaudeCode / ClaudeAPI / LMStudio / WolframLLM / Local)、ステータス(Processing / Completed / Failed / Invalidated)などを保持します。ノード間の関係はエッジタイプ(ContextInheritance: セッション内連続、DataFlow: 出力→入力依存、Sequential: L2 コードブロック間)として記録されます。
 
 L2 グラフはコードブロック単位の追跡を提供し、L1 ノードに紐づいた詳細な実行状態を記録します。
 
@@ -1306,7 +1416,7 @@ NotebookLLMGraphValidate[]
 (* 特定ノードのフルレスポンス取得 *)
 NotebookLLMGraphFetchResponse["history-3"]
 
-(* L2 グラフ（コードブロック単位）の取得・可視化 *)
+(* L2 グラフ(コードブロック単位)の取得・可視化 *)
 NotebookLLMGraphFetchL2[EvaluationNotebook[], "history-3"]
 NotebookLLMGraphPlotL2[EvaluationNotebook[], "history-3"]
 
@@ -1326,7 +1436,7 @@ NotebookLLMGraphErrors[]
 #### 再実行・無効化
 
 ```mathematica
-(* 特定ノードの再実行（下流ノードが自動的に Invalidated にマークされる） *)
+(* 特定ノードの再実行(下流ノードが自動的に Invalidated にマークされる) *)
 NotebookLLMGraphRerun[EvaluationNotebook[], "history-3"]
 
 (* 下流ノードのみ無効化 *)
@@ -1335,7 +1445,7 @@ NotebookLLMGraphInvalidateDownstream[EvaluationNotebook[], "history-3"]
 
 #### スレッド抽出・再適用
 
-特定のノードに至る実行パス（祖先チェーン）を Thread オブジェクトとして抽出し、別のファイルに対して同じ処理を再適用できます。
+特定のノードに至る実行パス(祖先チェーン)を Thread オブジェクトとして抽出し、別のファイルに対して同じ処理を再適用できます。
 
 ```mathematica
 (* 実行スレッドを抽出 *)
@@ -1348,7 +1458,7 @@ NotebookLLMGraphApplyThread[thread, "C:\\...\\another_notebook.nb"]
 NotebookLLMGraphApplyThread[thread, "another.nb", "DryRun" -> True]
 ```
 
-Thread オブジェクトには各ノードの PrivacySpec が保持されており、`PrivacySpec >= 0.9` のノードは自動的に `$ClaudePrivateModel`（LM Studio 等）で実行されます。
+Thread オブジェクトには各ノードの PrivacySpec が保持されており、`PrivacySpec >= 0.9` のノードは自動的に `$ClaudePrivateModel`(LM Studio 等)で実行されます。
 
 #### DAG ジョブ実行 API
 
@@ -1365,9 +1475,9 @@ LLMGraphExecuteStatus[jobId]
 LLMGraphExecuteCancel[jobId]
 ```
 
-#### LLMGraph 並列度の制御（$LLMGraphMaxConcurrency）
+#### LLMGraph 並列度の制御($LLMGraphMaxConcurrency)
 
-`$LLMGraphMaxConcurrency` はカテゴリ別の最大並列実行数をグローバルに制御します。DAG の各ノードは抽象カテゴリに分類され、同一カテゴリのノードが同時に実行できる数を制限します。**`"cli"` カテゴリは `ClaudeUpdateDocumentation` の並列ドキュメント更新（20+ ファイル時）の並列度制御にも使用されます。**
+`$LLMGraphMaxConcurrency` はカテゴリ別の最大並列実行数をグローバルに制御します。DAG の各ノードは抽象カテゴリに分類され、同一カテゴリのノードが同時に実行できる数を制限します。**`"cli"` カテゴリは `ClaudeUpdateDocumentation` の並列ドキュメント更新(20+ ファイル時)の並列度制御にも使用されます。**
 
 ```mathematica
 (* カテゴリ別デフォルト値 *)
@@ -1380,9 +1490,9 @@ $LLMGraphMaxConcurrency["cli"] = 2     (* CLI 呼び出しを同時2本に制限
 
 並列度の解決は以下の優先順位で行われます。
 
-1. `taskDescriptor["maxConcurrency"][abstractCat]` — ジョブ固有のオーバーライド（最優先）
+1. `taskDescriptor["maxConcurrency"][abstractCat]` — ジョブ固有のオーバーライド(最優先)
 2. `$LLMGraphMaxConcurrency[abstractCat]` — グローバルデフォルト
-3. `1` — フォールバック（設定なし）
+3. `1` — フォールバック(設定なし)
 
 ```mathematica
 (* taskDescriptor の例: カテゴリマッピングと並列度オーバーライドを指定 *)
@@ -1397,10 +1507,10 @@ job = LLMGraphDAGCreate[nodes, taskDesc]
 
 | 関数 | 説明 |
 |------|------|
-| `NotebookLLMGraph[nb]` | グラフ全体を取得（キャッシュ優先） |
+| `NotebookLLMGraph[nb]` | グラフ全体を取得(キャッシュ優先) |
 | `NotebookLLMGraphBuild[nb]` | セッション履歴から強制再構築 |
 | `NotebookLLMGraphNodes[nb]` | 全ノードの Association |
-| `NotebookLLMGraphPlot[nb]` | DAG 可視化（カテゴリ別色分け） |
+| `NotebookLLMGraphPlot[nb]` | DAG 可視化(カテゴリ別色分け) |
 | `NotebookLLMGraphValidate[nb]` | 整合性検証 |
 | `NotebookLLMGraphFetchResponse[nb, nodeID]` | フルレスポンス取得 |
 | `NotebookLLMGraphSubSteps[nb, nodeID]` | 内部ステップ履歴 |
@@ -1422,23 +1532,23 @@ job = LLMGraphDAGCreate[nodes, taskDesc]
 | `LLMGraphExecute[graphSpec]` | LLMGraph ジョブの実行 |
 | `LLMGraphExecuteStatus[jobId]` | LLMGraph ジョブのステータス取得 |
 | `LLMGraphExecuteCancel[jobId]` | LLMGraph ジョブのキャンセル |
-| `$LLMGraphMaxConcurrency` | カテゴリ別最大並列度の制御（並列ドキュメント更新にも適用） |
+| `$LLMGraphMaxConcurrency` | カテゴリ別最大並列度の制御(並列ドキュメント更新にも適用) |
 
 ### [実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)
 
-`ClaudeProcessFile` は LLMGraph の応用として、ノートブックファイル（.nb）のセルをプライバシーレベルに基づいて自動分割し、公開セルはクラウド LLM（Claude Code CLI）、秘匿セルはプライベート LLM（`$ClaudePrivateModel` で指定した LM Studio 等）で並列処理してマージします。
+`ClaudeProcessFile` は LLMGraph の応用として、ノートブックファイル(.nb)のセルをプライバシーレベルに基づいて自動分割し、公開セルはクラウド LLM(Claude Code CLI)、秘匿セルはプライベート LLM(`$ClaudePrivateModel` で指定した LM Studio 等)で並列処理してマージします。
 
 #### 動作フロー
 
-`ClaudeEval` でノートブックファイルパスを含む指示を与えると自動検出（auto-dispatch）され、以下のフローが非同期で実行されます。
+`ClaudeEval` でノートブックファイルパスを含む指示を与えると自動検出(auto-dispatch)され、以下のフローが非同期で実行されます。
 
 1. **auto-dispatch**: `.nb` パスを検出し、`ClaudeProcessFile` を自動起動
-2. **Splitter**: Claude Code CLI（`--print` モード）で生プロンプトからファイルパス・保存指示を除去し、セル単位の変換指示を抽出
+2. **Splitter**: Claude Code CLI(`--print` モード)で生プロンプトからファイルパス・保存指示を除去し、セル単位の変換指示を抽出
 3. **NodeB** (公開セル): Claude Code CLI でクラウド LLM に公開セルを送信
-4. **NodeA** (秘匿セル): `$ClaudePrivateModel` のローカル LLM に秘匿セルを送信（NodeB と並列実行）
+4. **NodeA** (秘匿セル): `$ClaudePrivateModel` のローカル LLM に秘匿セルを送信(NodeB と並列実行)
 5. **Merger**: 両ノードの結果を回収し、`NBMergeNotebookCells` で元のセル構造にマージして出力ファイルを保存
 
-処理過程は LLMGraph 上に Fork/Join トポロジ（ContextInheritance + DataFlow エッジ）として記録されます。
+処理過程は LLMGraph 上に Fork/Join トポロジ(ContextInheritance + DataFlow エッジ)として記録されます。
 
 #### 使い方
 
@@ -1446,7 +1556,7 @@ job = LLMGraphDAGCreate[nodes, taskDesc]
 (* $ClaudePrivateModel の設定 *)
 $ClaudePrivateModel = {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.103:1234"};
 
-(* ノートブックファイルの翻訳（auto-dispatch 経由） *)
+(* ノートブックファイルの翻訳(auto-dispatch 経由) *)
 ClaudeEval["C:\\...\\sample.nb
 このファイルを英語に翻訳して、sample-translated.nb として保存してほしい。"]
 
@@ -1475,9 +1585,9 @@ history-N: auto-dispatch (ContextInheritance)
 
 #### 前提条件
 
-- `$ClaudePrivateModel` が設定されていること（秘匿セルの処理先）
+- `$ClaudePrivateModel` が設定されていること(秘匿セルの処理先)
 - 処理対象の .nb ファイルに NBAccess の Confidential タグ付きセルが含まれていること
-- セルのプライバシーレベルは NBAccess の `iNBFileCellPrivacyLevel` により 3 段階（0.0: 公開、0.75: 依存、1.0: 秘匿）で判定されます
+- セルのプライバシーレベルは NBAccess の `iNBFileCellPrivacyLevel` により 3 段階(0.0: 公開、0.75: 依存、1.0: 秘匿)で判定されます
 
 ### NBAccess 分離原則検証
 
@@ -1491,7 +1601,7 @@ ClaudeCheckSeparation["MyPackage"]
 ClaudeFixSeparation["MyPackage"]
 ```
 
-検査対象は以下の10項目です：
+検査対象は以下の10項目です:
 
 1. **SystemCredential 直接利用**: `SystemCredential` の直接呼び出し
 2. **CellObject 直接操作**: `NotebookWrite`/`NotebookRead`/`CellGroupData` 等の直接構築
@@ -1504,14 +1614,14 @@ ClaudeFixSeparation["MyPackage"]
 9. **FrontEnd 状態操作**: `SelectionEvaluate`/`FrontEndTokenExecute` 等の直接使用
 10. **NBAccess 公開グローバルの破壊的更新**: `AppendTo`/`AssociateTo` 等による直接更新
 
-### ClaudeRuntime 統合（オプション）
+### ClaudeRuntime 統合(オプション)
 
 [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) は claudecode とは独立したオプションパッケージです。ロードすると `ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になり、ターン追跡・スナップショット管理・承認フローなどの高度な制御が可能になります。
 
 #### ロードと基本的な使い方
 
 ```mathematica
-(* ClaudeRuntime をロード（claudecode ロード後に実行） *)
+(* ClaudeRuntime をロード(claudecode ロード後に実行) *)
 << ClaudeRuntime`
 
 (* ロード後は ClaudeEval が自動的にランタイム経由で動作します *)
@@ -1537,14 +1647,14 @@ Dataset[KeyValueMap[
 | フィールド | 説明 |
 |---|---|
 | `"RuntimeId"` | ランタイムの一意 ID |
-| `"Status"` | 現在の状態（`"Idle"`, `"Running"`, `"Failed"` 等） |
+| `"Status"` | 現在の状態(`"Idle"`, `"Running"`, `"Failed"` 等) |
 | `"TurnCount"` | 実行したターン数 |
 | `"Profile"` | ランタイムのプロファイル設定 |
-| `"LastFailure"` | 最後の失敗情報（`None` または詳細 Association） |
+| `"LastFailure"` | 最後の失敗情報(`None` または詳細 Association) |
 
-#### NeedsApproval（承認フロー）
+#### NeedsApproval(承認フロー)
 
-ClaudeRuntime が有効な場合、危険な操作（例: 内部変数の直接変更など、`NBAutoEvalProhibitedPatterns` に相当する操作）は `NeedsApproval` として検出され、自動実行がブロックされます。ノートブックには確認ダイアログまたは承認ボタンが表示され、ユーザーが明示的に承認した場合のみ実行されます。
+ClaudeRuntime が有効な場合、危険な操作(例: 内部変数の直接変更など、`NBAutoEvalProhibitedPatterns` に相当する操作)は `NeedsApproval` として検出され、自動実行がブロックされます。ノートブックには確認ダイアログまたは承認ボタンが表示され、ユーザーが明示的に承認した場合のみ実行されます。
 
 ```mathematica
 (* 例: 内部変数の直接変更を試みると NeedsApproval が返る *)
@@ -1578,11 +1688,11 @@ $ClaudeLastRuntimeId
 
 | 状態 | 動作 |
 |---|---|
-| `ClaudeRuntime` 未ロード | 従来の `ClaudeEval` 動作（CLI 直接呼び出し） |
-| `ClaudeRuntime` ロード済み + `$UseClaudeRuntime = True`（デフォルト） | ランタイム経由で実行、承認フロー有効 |
-| `$UseClaudeRuntime = False` | 従来モード（`ClaudeRuntime` ロード済みでも無効化） |
+| `ClaudeRuntime` 未ロード | 従来の `ClaudeEval` 動作(CLI 直接呼び出し) |
+| `ClaudeRuntime` ロード済み + `$UseClaudeRuntime = True`(デフォルト) | ランタイム経由で実行、承認フロー有効 |
+| `$UseClaudeRuntime = False` | 従来モード(`ClaudeRuntime` ロード済みでも無効化) |
 
-### ClaudeOrchestrator 統合（オプション）
+### ClaudeOrchestrator 統合(オプション)
 
 [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) は claudecode とは独立したオプションパッケージです。ロードすると `ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わり、複数タスクのジョブキュー管理・rate-limit 自動待機・リトライスケジューリングが透過的に行われます。
 
@@ -1630,16 +1740,16 @@ ClaudeRateLimitClear[]
 
 | 状態 | 動作 |
 |---|---|
-| ClaudeOrchestrator 未ロード | 従来の `ClaudeEval` 動作（CLI 直接呼び出し・ブロッキング） |
-| ClaudeOrchestrator ロード済み | オーケストレーター管理下の非同期実行モード（ノンブロッキング・rate-limit 自動待機・リトライ有効） |
+| ClaudeOrchestrator 未ロード | 従来の `ClaudeEval` 動作(CLI 直接呼び出し・ブロッキング) |
+| ClaudeOrchestrator ロード済み | オーケストレーター管理下の非同期実行モード(ノンブロッキング・rate-limit 自動待機・リトライ有効) |
 
-### SourceVault 連携（オプション）
+### SourceVault 連携(オプション)
 
-[SourceVault](https://github.com/transreal/SourceVault) は claudecode とは独立したオプションパッケージで、`ClaudeEval` のディスパッチ経路に **PromptRouter ブリッジ**（Order 2 ディスパッチ）を追加します。
+[SourceVault](https://github.com/transreal/SourceVault) は claudecode とは独立したオプションパッケージで、`ClaudeEval` のディスパッチ経路に **PromptRouter ブリッジ**(Order 2 ディスパッチ)を追加します。
 
 #### 設計原則: hard dependency を持たない
 
-claudecode.wl 本体は SourceVault に対して **hard dependency を持ちません**（rule 11）。SourceVault がロードされていない・無効化されている・提案を返さない・許可リスト外の頭部を提案した、いずれのケースでも `ClaudeEval` は従来どおりの自然言語ルーター（spec 5.3 / 24.3）で処理を継続します。
+claudecode.wl 本体は SourceVault に対して **hard dependency を持ちません**(rule 11)。SourceVault がロードされていない・無効化されている・提案を返さない・許可リスト外の頭部を提案した、いずれのケースでも `ClaudeEval` は従来どおりの自然言語ルーター(spec 5.3 / 24.3)で処理を継続します。
 
 #### ロードと基本的な使い方
 
@@ -1658,16 +1768,16 @@ $ClaudeEvalPromptRouterPreemptsNatural = True
 
 | `$ClaudeEvalPromptRouterDispatch` | `$ClaudeEvalPromptRouterPreemptsNatural` | 動作 |
 |---|---|---|
-| `Automatic`（デフォルト） | `True`（デフォルト） | PromptRouter 先行 → 未提案なら自然言語ルーター |
+| `Automatic`(デフォルト) | `True`(デフォルト) | PromptRouter 先行 → 未提案なら自然言語ルーター |
 | `Automatic` | `False` | 自然言語ルーター先行 → 未マッチなら PromptRouter |
-| `False` | （無視） | PromptRouter を一切使わず、常に自然言語ルーターのみ |
+| `False` | (無視) | PromptRouter を一切使わず、常に自然言語ルーターのみ |
 
 #### 後方互換性
 
 | 状態 | 動作 |
 |---|---|
-| SourceVault 未ロード | 従来の `ClaudeEval` 動作（自然言語ルーターのみ） |
-| SourceVault ロード済み + `$ClaudeEvalPromptRouterDispatch = Automatic`（デフォルト） | PromptRouter 経由のディスパッチを試行、未提案時は自然言語ルーターへ |
+| SourceVault 未ロード | 従来の `ClaudeEval` 動作(自然言語ルーターのみ) |
+| SourceVault ロード済み + `$ClaudeEvalPromptRouterDispatch = Automatic`(デフォルト) | PromptRouter 経由のディスパッチを試行、未提案時は自然言語ルーターへ |
 | `$ClaudeEvalPromptRouterDispatch = False` | PromptRouter を完全に無効化 |
 
 #### ChatGPT Codex モデルレジストリ
@@ -1679,7 +1789,7 @@ SourceVaultListModels["chatgptcodex"]
 ClaudeResolveModel["chatgptcodex", "code-heavy"]
 ```
 
-#### 仕様・審査ワークフロー（ClaudeSpec + SourceVault）
+#### 仕様・審査ワークフロー(ClaudeSpec + SourceVault)
 
 SourceVault をロードすると、`ClaudeSpec` で生成した仕様書のバージョン管理・コンセンサス審査・実装ワークフロー化を行う API が追加で利用できます。
 
@@ -1715,7 +1825,7 @@ text = ClaudeSpecText["sv://snapshot/Spec/abcdef1234567890"]
 nb = ClaudeOpenSourceVaultURI["sv://snapshot/Spec/abcdef1234567890"]
 ```
 
-spec/review/requirements の sv:// URI を受け取り、メタデータグリッドと本文（Text セル）を含む新規ノートブックウィンドウを開きます。`NotebookObject` を返します。URI が解決できない場合は `$Failed` を返します。
+spec/review/requirements の sv:// URI を受け取り、メタデータグリッドと本文(Text セル)を含む新規ノートブックウィンドウを開きます。`NotebookObject` を返します。URI が解決できない場合は `$Failed` を返します。
 
 ##### CreateImplementationWorkflow
 
@@ -1737,10 +1847,20 @@ jobId = CreateImplementationWorkflow["MyWorkflowName", approvedSpecText,
 | `"ClaudeModel"` | `$ClaudeModel` | 実装者ロールのモデル |
 | `"AdvisaryModel"` | `$ClaudeAdvisaryModel` | 審査者ロールのモデル |
 | `"MaxRounds"` | `$iOrchConsensusMaxRounds` | 最大レビュー回数 |
-| `"Nb"` | （カレントノートブック） | 結果を書き込むノートブック |
+| `"Nb"` | (カレントノートブック) | 結果を書き込むノートブック |
 | `"Launch"` | `True` | 完了後にワークフローを起動するか |
 
 ワークフロー完了後、生成されたワークフローの起動関数はスラッグと表示名をキーワードとして SourceVault の PromptRouter に自動登録されます。これにより、以降は `ClaudeEval["ワークフロー名"]` の形式でワークフローをディスパッチできます。
+
+**fail-closed 安全ガード**
+
+実装者ロールは、プロジェクト固有 API や外部パッケージ API を呼び出すコードを生成する際、その API の実在を実物(ソースコード等)で確認できない場合は推測で実装を進めず、処理を停止します(fail-closed)。停止した場合、結果の `"FinalStatus"` は `"Blocked"` となり、ノートブックには次のような警告セルが書き込まれます。
+
+```
+⚠ Implementation STOPPED (fail-closed): a required API could not be verified against ground truth, so nothing was generated on a guessed API.
+```
+
+警告セルには未解決 API の詳細(`"BlockReason"`)も付記されます。この場合、正しい API 情報を `"Notes"` に補って再度 `CreateImplementationWorkflow` を実行するか、`ClaudeSpecText` で仕様を確認した上でやり直してください。この安全ガードにより、存在しない関数呼び出しを含むコードが実装・登録されるリスクを防ぎます。
 
 **`$ClaudeAdvisaryModel` の設定**
 
@@ -1755,7 +1875,40 @@ $ClaudeAdvisaryModel = {"claudecode", "claude-opus-4-8"}
 result = LaunchImplementationWorkflow["MyWorkflowName", args]
 ```
 
-### ClaudeTestKit（テストフレームワーク）
+##### ClaudeImplStatus / ClaudeImplMonitor
+
+`CreateImplementationWorkflow` の実行中は進捗がノートブックの `WindowStatusArea`(ウィンドウ下部）に自動表示されますが、`ClaudeImplStatus`/`ClaudeImplMonitor` を使うと能動的に現在の状態を確認・監視できます。
+
+```mathematica
+(* カレントノートブックで実行中の spec-impl ワークフローの状態を Dataset で取得 *)
+ClaudeImplStatus[]
+
+(* 特定ワークフロー(実行中・完了済み問わず)を指定して確認 *)
+ClaudeImplStatus["MyWorkflowName"]
+
+(* 自動更新(約2秒間隔)される Dynamic パネルをセルに配置して監視 *)
+ClaudeImplMonitor[]
+```
+
+`ClaudeImplStatus` が返す Dataset には以下の列が含まれます。
+
+| 列 | 説明 |
+|---|---|
+| `Workflow` | ワークフロー名(スラッグ) |
+| `Running` | 実行中かどうか |
+| `Phase` | 現在のフェーズ |
+| `Model` | 現在使用中のモデル |
+| `Stage` | ステージ番号(`現在/総数`) |
+| `Round` | 審査レビューのラウンド数 |
+| `Message` | 最新の進捗メッセージ |
+| `Artifacts` / `Verifies` | SourceVault の artifact/verify チェーンの件数 |
+| `LatestVerdict` | 最新の審査 Verdict |
+| `PollTicks` | ポーリング回数 |
+| `UpdatedAtUTC` | 最終更新時刻 |
+
+実行中のワークフローが無い場合、`ClaudeImplStatus[]` はメッセージ文字列を返します。
+
+### ClaudeTestKit(テストフレームワーク)
 
 [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) は claudecode および ClaudeRuntime の動作を自動テストするための独立パッケージです。
 
@@ -1800,7 +1953,34 @@ ClaudeCommand["--version"]
 ClaudeStatus[]
 ```
 
-各タスクの経過時間、現在の状態（思考中/テキスト生成中/ツール実行中）、生成済みテキスト断片数、思考断片数、ツール使用数をリアルタイムで表示します。
+各タスクの経過時間、現在の状態(思考中/テキスト生成中/ツール実行中)、生成済みテキスト断片数、思考断片数、ツール使用数をリアルタイムで表示します。
+
+### プロセス/タスクのインタラクティブ一覧(ClaudeProcessList)
+
+`ClaudeProcessList[]` は実行中の全プロセス・タスクを、行ごとに一時停止/再開トグルと停止(kill)ボタン付きのインタラクティブな表として表示します。`ClaudeStatus[]` が一度きりのテキスト出力であるのに対し、`ClaudeProcessList[]` はノートブックにセルとして挿入評価し、その場で操作を行えます。パレットの「プロセス表示」ボタンからも呼び出せます。
+
+```mathematica
+(* 全種別を表示 *)
+ClaudeProcessList[]
+
+(* 種別を絞り込んで表示 *)
+ClaudeProcessList[{"Claude", "Orchestrator"}]
+```
+
+| 種別(Type) | 内容 |
+|---|---|
+| `"Claude"` | メインカーネルで実行中の非同期 CLI タスク |
+| `"Polling"` | 共有ポーリング ScheduledTask と、相乗りしている登録済み tick |
+| `"Fallback"` | フォールバック API 問い合わせ中の ScheduledTask |
+| `"Orchestrator"` | 仕様レビュー(spec-review)・仕様実装(spec-impl)の wolframscript ドライバ、および SourceVault の外部ワークフロー実行(`SourceVaultRunWorkflowAsync`)ジョブ |
+| `"Kernel"` | 並列サブカーネル |
+
+各行には以下の操作ボタンが用意されています。
+
+- **一時停止/再開トグル**: `ScheduledTask` ベースの行(`Polling`/`Fallback` の一部)のみ対応します。一時停止できないタスクは "—" 表示となり、停止(kill)のみ可能です。
+- **停止(kill)ボタン**: プロセスの強制終了、`spec-review`/`spec-impl` ジョブの停止、または対応する外部ワークフローのキャンセルを行います。
+
+`Orchestrator` 種別は、`spec-review`(仕様レビュー)に加えて `spec-impl`(仕様実装ワークフロー、`CreateImplementationWorkflow` が生成するジョブ)と、SourceVault の外部ワークフロー実行ジョブの行が追加され、実行中の全ワークフロー系タスクを一元的に一覧できるようになりました。
 
 ### ドキュメント一覧
 
@@ -1808,7 +1988,7 @@ ClaudeStatus[]
 |---|---|
 | `README.md` | パッケージ概要・セットアップ手順 |
 | `api.md` | 全公開関数の API リファレンス |
-| `user_manual.md` | 使い方・設定・具体例（本ファイル） |
+| `user_manual.md` | 使い方・設定・具体例(本ファイル) |
 | `architecture.md` | 内部アーキテクチャの解説 |
 | `setup.md` | インストール手順書 |
 | `examples/example.md` | 使用例集 |
@@ -1821,8 +2001,8 @@ ClaudeStatus[]
 
 - [NBAccess](https://github.com/transreal/NBAccess) — ノートブック読み書き・プライバシー管理
 - [GitHubREST](https://github.com/transreal/github) — GitHub パッケージ管理・PR 管理
-- [claudecode_directives](https://github.com/transreal/claudecode_directives) — rules/skills ディレクトリのデフォルトコンテンツ管理（オプション）
-- [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) — ランタイムセッション管理・承認フロー・スナップショット機構（オプション）
-- [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) — rate-limit 検出・自動復旧・リトライスケジューリング・ClaudeEval 非同期化（オプション）
-- [SourceVault](https://github.com/transreal/SourceVault) — PromptRouter ブリッジ経由のタスクディスパッチ・ReadOnly 許可リストによる安全実行・仕様審査ワークフロー API（オプション）
-- [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) — claudecode / ClaudeRuntime の自動テストフレームワーク（オプション）
+- [claudecode_directives](https://github.com/transreal/claudecode_directives) — rules/skills ディレクトリのデフォルトコンテンツ管理(オプション)
+- [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) — ランタイムセッション管理・承認フロー・スナップショット機構(オプション)
+- [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) — rate-limit 検出・自動復旧・リトライスケジューリング・ClaudeEval 非同期化(オプション)
+- [SourceVault](https://github.com/transreal/SourceVault) — PromptRouter ブリッジ経由のタスクディスパッチ・ReadOnly 許可リストによる安全実行・仕様審査ワークフロー API(オプション)
+- [ClaudeTestKit](https://github.com/transreal/ClaudeTestKit) — claudecode / ClaudeRuntime の自動テストフレームワーク(オプション)

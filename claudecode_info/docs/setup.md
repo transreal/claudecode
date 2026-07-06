@@ -1,3 +1,5 @@
+---
+
 # セットアップガイド
 
 claudecode パッケージのインストールと初期設定の手順を説明します。
@@ -78,7 +80,7 @@ Claude Code CLI に API キーを設定してください：
 claude auth login
 ```
 
-ChatGPT Codex CLI を provider として使う場合は、別途 `codex login`（前述）でログインしておきます。Claude Code CLI も Codex CLI も、いずれもサブスクリプション契約に基づく CLI であり、メーター制 API（`anthropic` / `openai` provider）とは課金体系が異なります。claudecode の課金 API ガード（`課金API: 禁止` 設定）は `claudecode` provider と `chatgptcodex` provider を無課金扱いとするため、課金 API を許可しなくても Codex 経由のコード生成が利用できます。
+ChatGPT Codex CLI を provider として使う場合は、別途 `codex login`（前述）でログインしておきます。Claude Code CLI も Codex CLI も、いずれもサブスクリプション契約に基づく CLI であり、メーター制 API（`anthropic` / `openai` / `zai` provider）とは課金体系が異なります。claudecode の課金 API ガード（`課金API: 禁止` 設定）は `claudecode` provider と `chatgptcodex` provider を無課金扱いとするため、課金 API を許可しなくても Codex 経由のコード生成が利用できます。
 
 ## パッケージのインストール
 
@@ -204,11 +206,27 @@ Claude Code が利用できない場合のバックアップとして、他の L
 $ClaudeFallbackModels = {
   {"chatgptcodex", "gpt-5.5"},
   {"anthropic", "claude-opus-4-8"},
-  {"openai", "gpt-5.5"}
+  {"openai", "gpt-5.5"},
+  {"zai", "glm-5.2"}
 }
 ```
 
-`chatgptcodex` はサブスクリプション CLI のため課金 API 禁止設定でも使用できます。`anthropic` / `openai` はメーター制 API のため、課金 API を明示的に許可したノートブックでのみ動作します。
+`chatgptcodex` はサブスクリプション CLI のため課金 API 禁止設定でも使用できます。`anthropic` / `openai` / `zai` はメーター制 API のため、課金 API を明示的に許可したノートブックでのみ動作します。
+
+**利用可能な provider 一覧：**
+
+| provider | 説明 | 課金 |
+|---------|------|------|
+| `claudecode` | Claude Code CLI（Anthropic サブスクリプション） | なし |
+| `chatgptcodex` | ChatGPT Codex CLI（OpenAI サブスクリプション） | なし |
+| `anthropic` | Anthropic API 直接接続 | あり |
+| `openai` | OpenAI API | あり |
+| `zai` | z.ai（GLM シリーズ）API | あり |
+| `lmstudio` | ローカル LLM（LM Studio 経由） | なし |
+
+`zai` は z.ai が提供する GLM シリーズ（`glm-5.2`, `glm-5.1`, `glm-5`, `glm-5-turbo`, `glm-4.7` など）への API アクセスです。OpenAI 互換 API 形式で動作します。
+
+パレットの `P:` ボタンをクリックすると provider が順に切り替わります。切り替え順は `$iPaletteProviderOrder` で定義されており、現在の順序は `claudecode → chatgptcodex → anthropic → openai → zai → lmstudio` です。`zai` は `openai` の次、`lmstudio` の前に位置します。
 
 ### 6. ドキュメント生成設定
 
@@ -367,7 +385,7 @@ $ClaudeModel = {"claudecode", "claude-opus-4-8"}
 
 `$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定すると、`ClaudeEval` / `ClaudeQuery` が Codex CLI 経由で実行されます。`Automatic` は Codex CLI の既定モデルを使用します。具体的なモデルを指定する場合は `$ChatgptCodexModel` を設定するか、パレットの `M:` ボタンで選択します（「ChatGPT Codex のモデル管理」を参照）。
 
-Codex provider は Claude CLI と同じ非同期実行経路（バックグラウンドでの CLI 起動と結果ポーリング）で動作するため、実行中にカーネルがブロックされることはありません。
+Codex provider は専用の非同期 bridge（バックグラウンドでの CLI 起動と結果ポーリング）で動作するため、実行中にカーネルがブロックされることはありません。
 
 ### 8. 仕様実装ワークフローの動作確認（オプション）
 
@@ -389,6 +407,14 @@ LaunchImplementationWorkflow["myWorkflow", {}]
 ```
 
 `CreateImplementationWorkflow` は `$ClaudeModel`（実装担当）と `$ClaudeAdvisaryModel`（検証担当）が協調して仕様を実装し、実装完了後にワークフローの起動関数をセッションおよび promptrouter に自動登録します。進捗はウィンドウステータスバーにライブ表示されます。
+
+実装担当は、プロジェクト内 API や外部 API を実物のドキュメント／コードで検証できない場合、推測でコードを生成せずに実行を中断する fail-closed 方針で動作します。中断時は `ClaudeImplStatus[]` の結果が `FinalStatus -> "Blocked"` となり、ノートブックには次のような警告セルが書き込まれます：
+
+```
+⚠ Implementation STOPPED (fail-closed): a required API could not be verified against ground truth, so nothing was generated on a guessed API.
+```
+
+この場合は `BlockReason` に示された未検証の API を確認し、依存パッケージの api.md を用意する、または `Notes` オプションで API の詳細を補足したうえで再実行してください。
 
 ```mathematica
 (* 仕様バージョン管理の確認 *)
@@ -673,6 +699,16 @@ $ClaudeDocUpdateStaleSeconds = 300
 
 N は失敗したファイルの数を示します。この場合、`$ClaudeDocRetryDelay` 秒待ってから再実行すると、成功済みファイルはスキップされ、失敗分のみ再試行されます。
 
+#### 12. 仕様実装ワークフローが「fail-closed」で中断される
+
+`CreateImplementationWorkflow` の実装ラウンドで、実装担当が必要な API（プロジェクト内 API・外部 API を問わず）を実物のドキュメント／コードで検証できなかった場合、推測でコードを生成せずに実行を中断します。この場合 `ClaudeImplStatus[]` の `FinalStatus` は `"Blocked"` となり、ノートブックには以下の警告セルが書き込まれます：
+
+```
+⚠ Implementation STOPPED (fail-closed): a required API could not be verified against ground truth, so nothing was generated on a guessed API.
+```
+
+`BlockReason` に未検証の API が示されます。依存パッケージの api.md を `$packageDirectory` に用意する、または `CreateImplementationWorkflow` の `Notes` オプションで API のシグネチャや使用例を補足したうえで再実行してください。
+
 ### デバッグ情報の取得
 
 ```mathematica
@@ -806,6 +842,50 @@ API エラーや利用制限による中断：
 
 `ClaudeUpdateDocumentation` による各ドキュメント更新提案を実行すると、新しい保存バージョンが自動的に作成され、続く更新ターン（auto-save turn）が開始されます。マルチステップのドキュメント更新ワークフローを実行した場合でも、各ステップの追記がまとめて 1 つのバージョンとして完全に保存されます。
 
+#### 補助 api_*.md の鮮度判定（内容ハッシュ基準）
+
+依存パッケージの補助ドキュメント（`api_<aux>.md` のような、モジュール単位の補助 api ファイル）を今回の更新対象に含めるかどうかの判定は、内容ハッシュを基準に行われます。
+
+- 補助ソース（`<pkg>_<aux>.wl`）の内容ハッシュを、`docsDir` 内のサイドカーファイル（`.aux_source_hashes.json`）に記録・保持します。改行コード（CRLF/LF）だけの差異はハッシュ計算前に除去され、無視されます。
+- 記録済みハッシュと現在のソース内容ハッシュが一致する場合、ファイルの更新日時（mtime）が変化していても再生成は行われません（内容が実際には変わっていないと判断されるため）。
+- 記録済みハッシュが存在しない場合（初回など）は、従来どおり補助ソースと補助ドキュメントの mtime 比較にフォールバックします。この際、変更なしと判定されたタイミングで現在のハッシュを基準として記録し、以後の判定は内容ハッシュ基準に移行します。
+- 補助ドキュメントファイルがまだ存在しない場合は新規作成が必要と判定され、対応する補助ソース（`<pkg>_<aux>.wl`）が見つからない場合は判定対象外として扱われます。
+
+以前は補助ソースと補助ドキュメントの mtime を単純比較していましたが、mtime は Dropbox 同期・複数 PC 間での作業・git 操作などソースの内容変更とは無関係な理由でも変化するため、実際には変更されていない補助モジュールまで不要に再生成してしまうことがありました。この判定方式により、そうした無駄な再生成が抑制されます。設定は不要で、`ClaudeUpdateDocumentation` 実行時に自動的に動作します。
+
+### CLI MCP サーバの登録（ClaudeRegisterCLIMCPServer）
+
+`ClaudeRegisterCLIMCPServer` は、ヘッドレス claude CLI 実行（`ClaudeQueryBg` / `ClaudeQuery` の内部経路）に MCP サーバを接続登録する関数です。外部パッケージ（例: SourceVault MCP）が自身の MCP サーバを登録するために使用します。claudecode 本体はパッケージ非依存の設計を維持します。
+
+```mathematica
+(* MCP サーバを登録する *)
+ClaudeRegisterCLIMCPServer["my-server", <|
+  "ConfigFn"       -> Function[], (* サーバ稼働中: <|"Url"->..., "Headers"->...|>、停止中: None を返す *)
+  "AllowedTools"   -> {"toolName1", "toolName2"},
+  "PromptDirective" -> "MCP サーバ経由でデータを取得すること"
+|>]
+
+(* 登録済みサーバの一覧を確認 *)
+$ClaudeCLIMCPServers
+```
+
+**`spec` キーの説明：**
+
+| キー | 型 | 説明 |
+|------|---|------|
+| `"ConfigFn"` | `Function[]` | サーバ稼働時に `<|"Url"->url, ("Headers"-><|...|>)|>` を返し、停止時に `None` を返す関数。`/health` プローブ等を含み得る。 |
+| `"AllowedTools"` | `{文字列...}` | `--allowedTools` フラグに `mcp__<id>__<tool>` 形式で追加するツール名リスト。`--print` モードでは対話的承認ができないため、事前に許可が必要。 |
+| `"PromptDirective"` | `String` または `Function[]` | サーバ稼働中にクエリプロンプトへ注入する MCP 優先ポリシーテキスト。`Function[]` の場合は注入時に評価される。 |
+
+同じ `id` で再登録すると既存のエントリが置き換えられます。登録済みの稼働中サーバの read-only ツールは claude CLI 実行時に自動的に許可されます。
+
+```mathematica
+(* サーバの登録解除は $ClaudeCLIMCPServers から直接削除 *)
+$ClaudeCLIMCPServers = KeyDrop[$ClaudeCLIMCPServers, "my-server"]
+```
+
+`$ClaudeCLIMCPServers` は `<|id -> spec|>` 形式の Association で、登録済み MCP サーバのスナップショットを保持します。`ConfigFn` はサーバ稼働時のみ接続情報を返すため、停止中のサーバは自動的に CLI 実行から除外されます。
+
 ### 仕様実装ワークフロー（CreateImplementationWorkflow）
 
 `CreateImplementationWorkflow` は、承認済み設計仕様から SourceVault 管理下の codified ワークフローパッケージ（`SVWorkflow_<Name>`）を自動的に実装する機能です。実装担当（`$ClaudeModel`）と検証担当（`$ClaudeAdvisaryModel`）が協調してコードを生成・検証し、合意に達するまでラウンドを繰り返します。
@@ -831,6 +911,14 @@ jobId = CreateImplementationWorkflow["myProcessor", specText,
 
 実装が完了すると、生成されたワークフローの起動関数がセッションと promptrouter に自動登録されます。進捗はウィンドウステータスバーにリアルタイム表示されます（実行モデル・フェーズ・ラウンド数）。
 
+実装担当は fail-closed 方針で動作します。実装に必要な API（プロジェクト内 API・外部 API を問わず）を実物のドキュメント／コードで検証できなかった場合、推測でコードを生成せず実行を中断します。この場合、生成される結果の `FinalStatus` は `"Blocked"` となり、ノートブックには以下のような警告セルが（強調表示で）書き込まれます：
+
+```
+⚠ Implementation STOPPED (fail-closed): a required API could not be verified against ground truth, so nothing was generated on a guessed API.
+```
+
+`BlockReason` には未検証の API が具体的に示されます。対処法は「トラブルシューティング > 12. 仕様実装ワークフローが「fail-closed」で中断される」を参照してください。
+
 ```mathematica
 (* 生成されたワークフローを起動 *)
 LaunchImplementationWorkflow["workflowName", args]
@@ -851,7 +939,7 @@ ClaudeImplStatus["workflowName"]
 ClaudeImplMonitor[]
 ```
 
-`ClaudeImplStatus[]` は現在のフェーズ・実行中モデル・ステージ・ラウンド・メッセージ、および SourceVault のアーティファクト/検証チェーン数と最新の合意結果を表示します。ワークフローの実行中は同じ状態がウィンドウステータスバーにも自動表示されます。
+`ClaudeImplStatus[]` は現在のフェーズ・実行中モデル・ステージ・ラウンド・メッセージ、および SourceVault のアーティファクト/検証チェーン数と最新の合意結果（`FinalStatus`。fail-closed で中断した場合は `"Blocked"`）を表示します。ワークフローの実行中は同じ状態がウィンドウステータスバーにも自動表示されます。
 
 #### 仕様バージョン管理
 
@@ -1039,3 +1127,5 @@ ShowClaudePalette[]
 ?ClaudeSpecVersions
 ?ClaudeSpecText
 ?ClaudeOpenSourceVaultURI
+?$ClaudeCLIMCPServers
+?ClaudeRegisterCLIMCPServer

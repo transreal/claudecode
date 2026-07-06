@@ -6,7 +6,7 @@ claudecode パッケージは Wolfram Language / Mathematica から Claude Code 
 
 ### $ClaudeModel
 型: {String, String} (tuple), 初期値: {"claudecode", "claude-sonnet-4-6"}
-Claude CLI に渡すプロバイダーとモデル名のペア。形式: {provider, modelName}。provider は "claudecode" | "anthropic" | "openai" | "lmstudio" | "chatgptcodex"。
+Claude CLI に渡すプロバイダーとモデル名のペア。形式: {provider, modelName}。provider は "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "lmstudio"。
 例: $ClaudeModel = {"claudecode", "claude-opus-4-8"}; $ClaudeModel = {"anthropic", "claude-sonnet-4-6"}
 
 ### $ClaudeAdvisaryModel
@@ -143,6 +143,10 @@ ClaudeEval の詳細ログ。
 ### $ClaudePaletteServiceControls
 型: List, 初期値: {}
 ShowClaudePalette の Privacy セクション下に表示するサービストグルのレジストリ。外部パッケージが登録する。各エントリは <|"Id"->id, "RunningQ"->(Function[]->True|False|Missing[]), "Start"->Function[], "Stop"->Function[], "RunningLabel"->label, "StoppedLabel"->label, "UnknownLabel"->label, (opt)"RunningColor"->color, "StoppedColor"->color|>。各 *Label は String または 0 引数 Function。
+
+### $ClaudeCLIMCPServers
+型: Association, 初期値: <||>
+ヘッドレス claude CLI 実行 (ClaudeQueryBg 等) に組み込む MCP サーバーのレジストリ。形式: <|id -> spec|>。外部パッケージ (SourceVault MCP 等) が ClaudeRegisterCLIMCPServer 経由で登録する。claudecode 本体はパッケージ中立を保つ。
 
 ### $LLMGraphMaxConcurrency
 型: Integer
@@ -361,7 +365,7 @@ Options: ClaudeEval と同じ
 → Null
 
 ### ClaudeSpecStatus[]
-現在のノートブックのプロジェクト (TaggingRule SourceVaultSpecProjectId) の仕様/合意形成ドラフティングステータスを表示する。ノートブックプロジェクトがない場合は実行中のバックグラウンド合意形成ジョブを一覧表示する。
+現在のノートブックのプロジェクト (TaggingRule SourceVaultSpecProjectId) の仕様/合意形成ドラフティングステータスを表示する。ノートブックプロジェクトがない場合は実行中のバックグラウンド合意形成ジョブを一覧表示する。SourceVault のみで完結し、ワークフローエンジンは不要。
 → Dataset | Null
 
 ### ClaudeSpecStatus["project"]
@@ -369,7 +373,7 @@ Options: ClaudeEval と同じ
 → Dataset
 
 ### ClaudeSpecVersions[]
-現在のノートブックのプロジェクトの全 spec/review バージョンを Dataset として一覧表示する。列: Role, Round, Verdict, Seq, CreatedAtUTC, URI。
+現在のノートブックのプロジェクトの全 spec/review バージョンを Dataset として一覧表示する。列: Role, Round, Verdict, Seq, CreatedAtUTC, URI。SourceVault のポインタチェーン orch/<project>/spec, orch/<project>/review から取得する (合意形成フロー・単一モデル仕様フロー両方が書き込む)。表示は sv:// URI のみ (内部 ref は非表示)。
 → Dataset
 
 ### ClaudeSpecVersions["project"]
@@ -381,15 +385,15 @@ role を "spec" | "review" | "requirements" に限定して一覧表示する。
 → Dataset
 
 ### ClaudeSpecText[uri]
-sv:// URI (ClaudeSpecVersions の URI 列) から spec/review/requirements バージョンのテキストを返す。sv://snapshot/Class/hex・sv://snapshot/Class:hex・生の snapshot:Class:hex ref を受け付ける。
+sv:// URI (ClaudeSpecVersions の URI 列) から spec/review/requirements バージョンのテキストを返す。sv://snapshot/Class/hex・sv://snapshot/Class:hex・生の snapshot:Class:hex ref を受け付ける (手動 ref 変換不要)。
 → String
 
 ### ClaudeOpenSourceVaultURI[uri]
-sv:// スナップショット URI を解決し内容を新規ノートブックウィンドウで開く (メタデータグリッド + Text 本体。review は Findings も含む)。sv:// リンクのクリックアクション。
+sv:// スナップショット URI (spec/review/requirements) を解決し内容を新規ノートブックウィンドウで開く (メタデータグリッド + Text 本体。review は Findings も含む)。sv:// リンクのクリックアクション。スナップショットが読み込めない場合は $Failed。
 → NotebookObject | $Failed
 
 ### CreateImplementationWorkflow[name, approvedSpec, opts]
-承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。$ClaudeModel が実装担当、$ClaudeAdvisaryModel が検証担当。複雑な作業はステージ分割して補助仕様をレビューしてから実装する。進捗は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録してサマリーをノートブックに書き込む。
+承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。$ClaudeModel が実装担当、$ClaudeAdvisaryModel が検証担当で、仕様との整合性を確認しフィードバックを合意まで繰り返す。複雑な作業はステージ分割して補助仕様をレビューしてから実装する。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
 → String (バックグラウンドジョブ id)
 Options: "Notes" -> "" (追加指示), "ClaudeModel" -> $ClaudeModel, "AdvisaryModel" -> $ClaudeAdvisaryModel, "MaxRounds" -> 3, "Nb" -> Automatic (ターゲットノートブック), "Launch" -> True (完了後自動起動)
 
@@ -615,6 +619,8 @@ Git コミット用のメッセージを自動生成して表示する。変更�
 → String (コミットメッセージ)
 Options: BaseBranch -> "main", Branch -> Automatic, Owner -> Automatic, Repository -> Automatic, DryRun -> False
 
+補足: ClaudeUpdatePackage / ClaudeCreatePackage / ClaudeConvertToPaclet / ClaudeBackupDataset / ClaudeRestorePackage 等のパッケージ編集系関数は ClaudePackageManager.wl へ移管済み (エイリアス経由で claudecode からも引き続き呼び出し可能)。それらの詳細は ClaudePackageManager 側の api.md を参照する。
+
 ## NBFileTranslate / ClaudeProcessFile
 
 ### NBFileTranslate[files, opts]
@@ -718,6 +724,10 @@ LLMGraph を $iLLMGraphCache に保存する。
 ### iLLMGraphFlush[nb]
 nb の LLMGraph キャッシュをフラッシュする。
 → Null
+
+### iLLMGraphNode[opts]
+LLMGraph ノードを解決・生成する内部ヘルパー。外部パッケージ参照用に Public 化されている (BeginPackage の公開シンボルリストに登録済み)。
+→ Association
 
 ### $iLLMGraphCache
 型: Association
@@ -875,7 +885,7 @@ NB 最終段 hook。SourceVault ロード時に `SourceVaultCellOutput` (URI env
 ## パレット・UI
 
 ### ShowClaudePalette[]
-Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。
+Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → lmstudio。zai は z.ai GLM シリーズ (glm-5.x 等)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補にフォールバック)、マイナーバージョンの手動変更不要。
 → NotebookObject
 
 ### ClaudeRegisterPaletteServiceControl[spec]
@@ -885,6 +895,13 @@ Claude Code コントロールパレットを表示する。Provider 選択 (cla
 ### ClaudeUnregisterPaletteServiceControl[id]
 パレットサービスコントロールを id で削除する。
 → Null
+
+## CLI MCP サーバー
+
+### ClaudeRegisterCLIMCPServer[id, spec]
+ヘッドレス claude CLI 実行 (ClaudeQueryBg 等) に組み込む MCP サーバーを $ClaudeCLIMCPServers に登録する。同じ id を再登録すると置換される。
+→ id (String)
+spec キー: "ConfigFn" -> Function[] (サーバー到達可能時は <|"Url"->..., ("Headers"-><|...|>)|>、停止時は None を返す)、"AllowedTools" -> {ツール名...} (--allowedTools に mcp__\<id\>__\<tool\> 形式で追加。--print モードは対話承認できないため事前許可が必須)、"PromptDirective" -> String | Function[] (サーバー起動中にクエリプロンプトへ注入するポリシーテキスト)。
 
 ## 機密管理
 
@@ -944,6 +961,10 @@ LLM 出力テキストから不要なヘッダー・末尾空白等を除去す�
 
 ### stripANSI[text]
 テキストから ANSI エスケープシーケンスを除去する。CLI 出力のクリーンアップに使用する。
+→ String
+
+### iMakeBat[...]
+Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する内部ヘルパー。iMakeBatStreamJson (ストリーミング JSON 出力版) / iMakeBatVerbose (詳細ログ版) と対になる。外部パッケージ参照用に Public 化されている (BeginPackage の公開シンボルリストに登録済み)。
 → String
 
 ### $iMediaMaxImageSize

@@ -69,6 +69,7 @@ Claude Directives/
     sourcevault-sync-relink-uuid/ SourceVault の notebook source 鮮度管理・移動追跡・UUID 同定 (notebook-management-extraction から分離)。SourceVaultSync (mtime 鮮度トークン)、SourceVaultRelinkSources (UUID / 内容ハッシュ / ファイル名の 3 段照合、シンボリックパス解決で別 PC のパス差を誤検出しない)、Notebook UUID 埋め込み (TaggingRules、非破壊)
     nbaccess-semantic-api/      NBAccess Stage 9 P1 で追加された semantic API 7 個 (NBReadHeader / NBReadTodos / NBFindCellByPredicate + 書き込み系 4 個) の設計詳細。FrontEnd 不要のファイル直接編集、AccessLevel RBAC + DryRun、CellPath、Header フィルタ、NBReadHeader 3 経路 fallback、罠 #26-#28 対応
     claudeeval-security-guard-placement/ ClaudeEval/ClaudeQuery にセキュリティ・プライバシーガードを追加するときの配置位置。$UseClaudeRuntime=True で Runtime Bridge 経由になるとバイパスされる落とし穴、Deny は最前段 (dispatch 前)・Substitute は共通入口
+    sourcevault-packageapi-narrowing/ 本システムのパッケージで関数・実装箇所を探す初動で、広い rg でなく SourceVault MCP packageapi マイニング (sourcevault_search kinds=[packageapi]) を先に使う手順。1 呼び出し 1 概念トークン・sourcevault_get view=body・StaleDocs 確認・filters.packages scope・条件付き glob 境界 rg fallback
 ```
 
 ## 主要な設計原則
