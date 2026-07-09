@@ -1,10 +1,10 @@
 {
-	"Cycle":"18jy4klyvvs4",
+	"Cycle":"w0l0owaungty",
 	"Done":[
 		"api.md",
-		"docs\/api_directives.md",
 		"setup.md",
 		"user_manual.md",
-		"examples\/example.md"
+		"examples\/example.md",
+		"README.md"
 	]
 }

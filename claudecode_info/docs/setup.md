@@ -1,5 +1,3 @@
----
-
 # セットアップガイド
 
 claudecode パッケージのインストールと初期設定の手順を説明します。
@@ -252,7 +250,7 @@ $ClaudeDocUpdateStaleSeconds = 1800
 
 `ClaudeUpdateDocumentation` は同一サイクル内での**再開（resumption）**に対応しています。API エラーや利用制限などで更新が途中で中断した場合、再実行すると成功済みのファイルは自動的にスキップされ、未完了分のみ処理が再開されます。サイクルが完全に完了すると進捗ファイルは自動的にクリアされます（次回の実行ではソース変更に基づく新しいサイクルとして開始されます）。
 
-20 ファイル以上のパッケージでは、README 以外のドキュメントファイルが `$LLMGraphMaxConcurrency["cli"]` で制御される並列度で同時更新されます（既定 2）。並列更新中はウィンドウステータスバーに「完了 N/M • K 並列実行中 • 経過 Ts」がライブ表示されます。複数ファイルの更新に失敗した場合は、チェーン全体が中断され `⚠ Doc update aborted (N failed)` と表示されます（N は失敗ファイル数）。
+20 ファイル以上のパッケージでは、README 以外のドキュメントファイルが `$LLMGraphMaxConcurrency["cli"]` で制御される並列度で同時更新されます（既定 2）。並列更新中はウィンドウステータスバーに「完了 N/M • K 並列実行中 • 経過 Ts」がライブ表示されます。API エラー・利用制限・プロバイダ内部エラー・空応答などのシステム的失敗が複数のファイルで発生した場合は、チェーン全体が中断され `⚠ Doc update aborted (N failed)` と表示されます（N は失敗ファイル数）。一方、切り詰め・サイズ退行・タイトル不整合などの品質失敗は当該ファイルのみをスキップして次のファイルへ進むため、チェーン全体は中断されません（2026-07-09 改訂。詳細は後述の「切り詰め検出（品質ゲート3）」を参照）。
 
 ドキュメントの新規作成は `ClaudeCreateDocumentation`、既存ドキュメントの更新は `ClaudeUpdateDocumentation` で行います（後述の「高度な設定 > ドキュメントの自動生成・更新」を参照）。
 
@@ -406,7 +404,7 @@ ClaudeImplMonitor[]
 LaunchImplementationWorkflow["myWorkflow", {}]
 ```
 
-`CreateImplementationWorkflow` は `$ClaudeModel`（実装担当）と `$ClaudeAdvisaryModel`（検証担当）が協調して仕様を実装し、実装完了後にワークフローの起動関数をセッションおよび promptrouter に自動登録します。進捗はウィンドウステータスバーにライブ表示されます。
+`CreateImplementationWorkflow` は `$ClaudeModel`（実装担当）と `$ClaudeAdvisaryModel`（検証担当）が協調して仕様を実装し、実装完了後にワークフローの起動関数をセッションおよび promptrouter に自動登録します。進捗はウィンドウステータスバーにリアルタイム表示されます（実行モデル・フェーズ・ラウンド数）。
 
 実装担当は、プロジェクト内 API や外部 API を実物のドキュメント／コードで検証できない場合、推測でコードを生成せずに実行を中断する fail-closed 方針で動作します。中断時は `ClaudeImplStatus[]` の結果が `FinalStatus -> "Blocked"` となり、ノートブックには次のような警告セルが書き込まれます：
 
@@ -691,13 +689,13 @@ $ClaudeDocUpdateStaleSeconds = 300
 
 **再開（resumption）について**：更新が API エラー等で途中中断した場合、再実行すると同一サイクル内であれば成功済みのファイルは自動的にスキップされます。「✅ All documents already updated in this cycle.」または「✅ Target documents already updated in this cycle.」と表示された場合は、当該サイクルの対象ファイルが既に全て処理済みであることを意味します。ソースコードを変更してから再実行すると新しいサイクルとして扱われます。
 
-**複数ファイルの更新失敗によるチェーン中断**：並列更新中に複数のファイルが失敗した場合、チェーン全体が中断され以下のメッセージが表示されます：
+**複数ファイルの更新失敗によるチェーン中断**：並列更新中に API エラー・利用制限・プロバイダ内部エラー・空応答などのシステム的失敗が複数のファイルで発生した場合、チェーン全体が中断され以下のメッセージが表示されます：
 
 ```
 ⚠ Doc update aborted (N failed)
 ```
 
-N は失敗したファイルの数を示します。この場合、`$ClaudeDocRetryDelay` 秒待ってから再実行すると、成功済みファイルはスキップされ、失敗分のみ再試行されます。
+N は失敗したファイルの数を示します。この場合、`$ClaudeDocRetryDelay` 秒待ってから再実行すると、成功済みファイルはスキップされ、失敗分のみ再試行されます。切り詰め・サイズ退行・タイトル不整合などの品質失敗は個々のファイル単位でスキップされるのみでチェーン全体は中断されません（2026-07-09 改訂。詳細は「切り詰め検出（品質ゲート3）」を参照）。
 
 #### 12. 仕様実装ワークフローが「fail-closed」で中断される
 
@@ -708,6 +706,35 @@ N は失敗したファイルの数を示します。この場合、`$ClaudeDocR
 ```
 
 `BlockReason` に未検証の API が示されます。依存パッケージの api.md を `$packageDirectory` に用意する、または `CreateImplementationWorkflow` の `Notes` オプションで API のシグネチャや使用例を補足したうえで再実行してください。
+
+#### 13. LLM バックエンドが応答しない・利用不可と表示される
+
+`ClaudeBackendAvailableQ` を使うと、LLM バックエンドの事前可用性チェック（preflight）を手動で実行できます。結果は 60 秒間キャッシュされます。
+
+```mathematica
+(* claudecode バックエンドの可用性確認 *)
+ClaudeBackendAvailableQ[{"claudecode", Automatic}]
+
+(* lmstudio バックエンドの可用性確認 *)
+ClaudeBackendAvailableQ[{"lmstudio", "my-model", "http://localhost:1234"}]
+
+(* キャッシュを無視して再取得 *)
+ClaudeBackendAvailableQ[{"lmstudio", Automatic}, "Refresh" -> True]
+```
+
+返り値は `<|"Available" -> True|False, "Reason" -> "OK"|"NotRunning"|"ModelNotLoaded"|"RateLimited"|...|>` 形式の Association です。`"Reason"` が `"NotRunning"` の場合はサーバ未起動、`"ModelNotLoaded"` の場合はモデル未ロード、`"RateLimited"` の場合はレート制限中を示します。
+
+`/api/v1` 系にしか対応していないサーバは state 情報が取得できないため、可用性チェックでブロックされません（既知の挙動）。
+
+#### 14. docs/docs/ にネストした重複ドキュメントが検出される
+
+`ClaudeUpdateDocumentation` / `ClaudeCreateDocumentation` は、`docsDir` 配下に `docs/docs/` のようにネストしたサブディレクトリ内の重複ドキュメントを自動検出し、更新対象から除外します。これは Dropbox 同期や git 操作の事故によって生じる root ドキュメントファイルの重複コピーであり、放置すると次回以降のドキュメント更新でも繰り返し検出され続けます。検出時は次のような警告が表示されます：
+
+```
+⚠️ docs/docs/ にネストした重複ドキュメントを検出した (N 件)。更新対象から除外します。削除を推奨: <path>
+```
+
+表示されたパスの重複ファイルを削除することを推奨します。この機能は設定不要で自動的に動作します。
 
 ### デバッグ情報の取得
 
@@ -724,7 +751,15 @@ ClaudeUpdatePackageHistory[]
 
 (* バックアップ履歴の確認 *)
 ClaudeBackupDataset[]
+
+(* SIEM 診断イベントの確認（直近 40 件） *)
+ClaudeDiagEvents[]
+
+(* 件数を指定して確認 *)
+ClaudeDiagEvents[20]
 ```
+
+`ClaudeDiagEvents[n]` は SIEM spool（diag-spool、マシンローカル）の直近 n 件を新しい順の Dataset で返します。SourceVault service による ingest 前でも、自マシンの運用イベント（SpawnFailed / ScheduleSubmitFailed 等）をリアルタイムで確認できます。
 
 ## 高度な設定
 
@@ -814,29 +849,39 @@ $LLMGraphMaxConcurrency["cli"] = 4
 
 より高い並列度を設定するほど更新全体の所要時間が短縮されますが、API レート制限に達しやすくなります。環境に応じて適切な値を設定してください。
 
-複数のファイルが失敗した場合、チェーン全体が以下のメッセージとともに中断されます：
+API エラー・利用制限・プロバイダ内部エラー・空応答などのシステム的失敗が複数のファイルで発生した場合、チェーン全体が以下のメッセージとともに中断されます：
 
 ```
 ⚠ Doc update aborted (N failed)
 ```
 
-この場合は再実行すると成功済みファイルをスキップして失敗分のみ再試行されます。
+この場合は再実行すると成功済みファイルをスキップして失敗分のみ再試行されます。なお、切り詰め・サイズ退行・タイトル不整合などの品質失敗は個々のファイル単位でスキップされ、チェーン全体は中断されません（詳細は次項「切り詰め検出（品質ゲート3）」を参照）。
 
-#### 切り詰め検出（品質ゲート 3）
+#### 切り詰め検出（品質ゲート3）
 
-LLM レスポンスが切り詰められた（truncated）と判定された場合（例：未閉コードフェンス `` ``` `` が奇数個残っている、文章が途中の開き括弧で終わっているなど）、そのファイルの更新は品質失敗として即座に中断されます。タイトル不整合やサイズ退行も同様に検出された場合、チェーンを即中断します。
+LLM レスポンスが切り詰められた（truncated）と判定された場合（例：未閉コードフェンス `` ``` `` が奇数個残っている、文章が途中の開き括弧で終わっているなど）、タイトル不整合やサイズ退行が検出された場合と同様に、そのファイルの更新は品質失敗として扱われます。
 
-品質失敗によるファイル中断：
+**失敗の分類（2026-07-09 改訂）**：
+
+- **システム的失敗**（API エラー・利用制限・プロバイダ内部エラー・空応答）― 従来どおりチェーン全体を即中断します（fail-fast）。
+- **品質失敗**（切り詰め・サイズ退行・タイトル不整合）― 当該ファイルのみをスキップして次のファイルの更新に進みます。チェーン全体は中断されません。
+
+以前は品質失敗もチェーン全体を即中断していたため、持続的に品質失敗を起こす1ファイル（例：巨大化した setup.md）が残り全部の更新を永遠にブロックしてしまう事故がありました。この改訂により、そうした事故を根絶しています。
+
+品質失敗で前回の再生成が未完了だった場合はまず同一ファイルの再生成が試行されます（このとき単一応答・ツール不使用・コードフェンスを正しく閉じることを強く指示するリトライ通知が付加されます）。再試行しても品質ゲートを通過しない場合は当該ファイルをスキップし、次のファイルへ進みます：
+
 ```
-⚠ [i/N] <file> の更新を中断 (無効/切り詰め/サイズ退行/タイトル不整合)。
+⚠ [i/N] <file> の生成が未完了です。再生成します。
+⛔ [i/N] <file> をスキップします。ファイルは変更せず次のファイルへ進みます。
 ```
 
-API エラーや利用制限による中断：
+API エラーや利用制限によるチェーン中断：
+
 ```
 ⚠ <file> の更新を中断しました (API エラー/利用制限/内部エラー)。
 ```
 
-いずれの場合も、同一サイクルの再実行で対象ファイルのみ再試行されます。
+いずれの場合も、同一サイクルの再実行で未処理・失敗分のファイルのみ再試行されます。
 
 #### 更新提案の自動バージョン保存
 
@@ -852,6 +897,10 @@ API エラーや利用制限による中断：
 - 補助ドキュメントファイルがまだ存在しない場合は新規作成が必要と判定され、対応する補助ソース（`<pkg>_<aux>.wl`）が見つからない場合は判定対象外として扱われます。
 
 以前は補助ソースと補助ドキュメントの mtime を単純比較していましたが、mtime は Dropbox 同期・複数 PC 間での作業・git 操作などソースの内容変更とは無関係な理由でも変化するため、実際には変更されていない補助モジュールまで不要に再生成してしまうことがありました。この判定方式により、そうした無駄な再生成が抑制されます。設定は不要で、`ClaudeUpdateDocumentation` 実行時に自動的に動作します。
+
+#### docs/docs/ 重複ドキュメントの自動除外
+
+`docsDir` 配下に `docs/docs/` のようにネストしたサブディレクトリがあり、その中に root ドキュメント（README.md / api.md / setup.md / user_manual.md 等）と同名の重複ファイルが存在する場合、これらは Dropbox 同期や git 操作の事故で生じた重複コピーとみなされ、更新対象から自動的に除外されます。除外時には警告が表示され、削除が推奨されます（詳細は前述の「トラブルシューティング > 14. docs/docs/ にネストした重複ドキュメントが検出される」を参照）。この判定は設定不要で自動的に行われます。
 
 ### CLI MCP サーバの登録（ClaudeRegisterCLIMCPServer）
 
@@ -885,6 +934,72 @@ $ClaudeCLIMCPServers = KeyDrop[$ClaudeCLIMCPServers, "my-server"]
 ```
 
 `$ClaudeCLIMCPServers` は `<|id -> spec|>` 形式の Association で、登録済み MCP サーバのスナップショットを保持します。`ConfigFn` はサーバ稼働時のみ接続情報を返すため、停止中のサーバは自動的に CLI 実行から除外されます。
+
+### LLM ティアルーティングとバックエンド管理
+
+claudecode はタスクのクラスに応じて実行バックエンドを自動選択する LLM ティアルーティング機能を備えています。以下の関数でルーティング状態の確認や手動チェックが行えます。
+
+#### ClaudeResolveLLMTier
+
+`ClaudeResolveLLMTier[class]` はタスククラスに対応するバックエンドを `$ClaudeLLMTierTable` と `ClaudeBackendAvailableQ` による preflight の結果から決定します。
+
+```mathematica
+(* タスククラスに対応するバックエンドを解決 *)
+ClaudeResolveLLMTier["code"]
+(* 例: <|"Candidates" -> {{"claudecode", "opus"}, {"anthropic", "claude-opus-4-8"}}, "Rejected" -> {}|> *)
+
+ClaudeResolveLLMTier["classify"]
+(* ティア表の候補から preflight を通過したものが返る *)
+
+ClaudeResolveLLMTier["general"]
+(* "general" は Automatic（従来の provider fallback 連鎖）をそのまま使う *)
+```
+
+`"general"` クラスは従来の provider fallback 連鎖を使用します。未知のクラスは `"general"` に降格され、warn が emit されます。
+
+#### ClaudeTaskClassAttributes
+
+`ClaudeTaskClassAttributes[class]` はタスククラスの属性（エスカレーション許可・バリデーター要否など）を返します。
+
+```mathematica
+(* コード生成クラスの属性を確認 *)
+ClaudeTaskClassAttributes["code"]
+(* <|"AllowEscalation" -> False, "RequiresValidator" -> False, ...|> *)
+
+(* 分類クラスの属性を確認 *)
+ClaudeTaskClassAttributes["classify"]
+(* <|"AllowEscalation" -> True, "RequiresValidator" -> True, ...|> *)
+
+(* 未知クラスは "general" に降格 *)
+ClaudeTaskClassAttributes["unknown-class"]
+```
+
+現在定義されているタスククラスは `"code"`、`"classify"`、`"general"` などです。`"code"` クラスはエスカレーション禁止・バリデーター不要、`"classify"` クラスはエスカレーション許可・バリデーター必須の設定になっています。
+
+#### ClaudeBackendAvailableQ
+
+`ClaudeBackendAvailableQ[{provider, model, url...}]` は LLM バックエンドの事前可用性チェック（preflight）を実行します。結果は 60 秒間キャッシュされます。
+
+```mathematica
+(* claudecode バックエンドの可用性確認 *)
+ClaudeBackendAvailableQ[{"claudecode", Automatic}]
+
+(* lmstudio バックエンドの可用性確認（URL 付き） *)
+ClaudeBackendAvailableQ[{"lmstudio", "my-model", "http://localhost:1234"}]
+
+(* キャッシュを無視して再取得 *)
+ClaudeBackendAvailableQ[{"lmstudio", Automatic}, "Refresh" -> True]
+```
+
+返り値の形式：
+
+| キー | 値の例 | 説明 |
+|------|--------|------|
+| `"Available"` | `True` / `False` | バックエンドが利用可能かどうか |
+| `"Reason"` | `"OK"` / `"NotRunning"` / `"ModelNotLoaded"` / `"RateLimited"` / `"StateUnknown"` | 利用可否の理由 |
+| `"BaseURL"` | `"http://localhost:1234"` | 接続先 URL（lmstudio 等） |
+
+`"Reason"` が `"RateLimited"` の場合はレート制限中を示します。`"StateUnknown"` は `/api/v1` 系のみ対応するサーバ（state 情報が取得できないため）で返され、この場合はブロックされません。
 
 ### 仕様実装ワークフロー（CreateImplementationWorkflow）
 
@@ -1129,3 +1244,7 @@ ShowClaudePalette[]
 ?ClaudeOpenSourceVaultURI
 ?$ClaudeCLIMCPServers
 ?ClaudeRegisterCLIMCPServer
+?ClaudeBackendAvailableQ
+?ClaudeResolveLLMTier
+?ClaudeTaskClassAttributes
+?ClaudeDiagEvents

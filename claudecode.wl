@@ -173,6 +173,7 @@ Quiet[Scan[
    "MarkConfidential","UnmarkConfidential","IsConfidential","Confidential","NonConfidential",
    "ScanConfidentialCells","ShowClaudePalette","ClaudeQueryShowContext",
    "ClaudeShowAccessConfig","ClaudeSessionStatus","ClaudeCompactHistory","ClaudeHistorySize",
+   "$ClaudeAutoCompactThresholdTokens",
    "ClaudeWebSearch","ClaudeWebFetch","WebFetch","WebSearch",
    "ClaudeCommand","ClaudeCheckSeparation","ClaudeFixSeparation","ClaudeStatus","ClaudeAbort",
    "ClaudeProcessList",
@@ -1641,6 +1642,50 @@ $ClaudeLMStudioIntegrations::usage =
 $ClaudeLMStudioAPIToken::usage =
   "$ClaudeLMStudioAPIToken \[LongDash] LM Studio \:3078\:306e Authorization Bearer \:30c8\:30fc\:30af\:30f3\:3002\n" <>
   "None \:306e\:5834\:5408\:306f \"lm-studio\" \:3092\:4f7f\:7528 (\:30ed\:30fc\:30ab\:30eb\:63a5\:7d9a\:3067\:306f\:901a\:5e38\:4e0d\:8981)\:3002";
+
+$ClaudeLMStudioBaseURL::usage =
+  "$ClaudeLMStudioBaseURL \[LongDash] LM Studio の既定 base URL (既定 \"http://127.0.0.1:1234\")。\n" <>
+  "model tuple に URL が無い場合の fallback。ポート変更時はこの 1 箇所を変える (hardening 04 Inc1)。";
+
+ClaudeBackendAvailableQ::usage =
+  "ClaudeBackendAvailableQ[{provider, model, url...}] は LLM backend の事前可用性チェック (preflight)。\n" <>
+  "lmstudio: /api/v0/models のロード状態を確認 (未起動/未ロードへ POST して長時間 timeout を待たない)。\n" <>
+  "claudecode: rate limit 状態。結果は 60 秒キャッシュ、\"Refresh\"->True で再取得。\n" <>
+  "返り値: <|\"Available\"->True|False, \"Reason\"->\"OK\"|\"NotRunning\"|\"ModelNotLoaded\"|..., ...|>。";
+
+$ClaudeLLMTierTable::usage =
+  "$ClaudeLLMTierTable \[LongDash] TaskClass -> backend 候補列 (優先順) の宣言表 (hardening 04 Inc2)。\n" <>
+  "候補は model tuple ({\"lmstudio\", Automatic} = ロード済みモデルから解決)。\n" <>
+  "Automatic は従来経路 (provider fallback 連鎖) をそのまま使う。";
+
+$ClaudeTaskClassTable::usage =
+  "$ClaudeTaskClassTable \[LongDash] TaskClass の属性表: AllowEscalation / RequiresValidator /\n" <>
+  "MaxCostClass (local-only<cheap<premium) / DefaultTimeout。新 class は本表へ追記してから実装する。";
+
+ClaudeTaskClassAttributes::usage =
+  "ClaudeTaskClassAttributes[class] は TaskClass の属性を返す。未知 class は \"general\" に降格し warn を emit。";
+
+$ClaudeSpendLimit::usage =
+  "$ClaudeSpendLimit \[LongDash] 課金 API の日次上限 (hardening 04 Inc5)。<|\"DailyUSD\" -> 5.0|> の形式、既定 None (無効)。\n" <>
+  "当日の LLMCall CostUSD 合計が上限以上のとき、ティア解決から metered provider (anthropic/openai) を除外する。\n" <>
+  "claudecode CLI (定額) と lmstudio (無料) は対象外。全候補除外時は Failure[\"SpendLimitExceeded\"]。\n" <>
+  "kill-switch であって精密会計ではない (CostUSD は CLI 由来の実測のみ、直 API は現状 Null=0 扱い)。";
+
+$ClaudeAutoCompactThresholdTokens::usage =
+  "$ClaudeAutoCompactThresholdTokens \[LongDash] 会話履歴の自動コンパクション発火トークン概算上限 (hardening 04 Inc6, 既定 60000)。\n" <>
+  "履歴のトークン概算 (ByteCount/4) がこれを超えるとターン完了時に自動コンパクションする。\n" <>
+  "既存のバイト閾値 ($iHistoryMaxBytes) との OR 条件。0/None で token 条件を無効化 (バイト条件は残る)。\n" <>
+  "コンパクション時に ConversationCompacted イベントを emit (before/after の bytes/tokens 概算)。";
+
+ClaudeUsageReport::usage =
+  "ClaudeUsageReport[opts] は LLMCall イベント (spool + 正準 diagnostics-log) を集計する (hardening 04 Inc4)。\n" <>
+  "\"Days\"->1 (既定) の期間で Provider/Model 別に Calls/InTokens/OutTokens/CacheRead/CostUSD を Dataset で返す。\n" <>
+  "EventId で重複排除 (spool と正準ログの二重計上なし)。CostUSD は CLI の total_cost_usd 由来 (API/local は Null=0 扱い)。";
+
+ClaudeResolveLLMTier::usage =
+  "ClaudeResolveLLMTier[class] はティア表と preflight から実行 backend を決める。\n" <>
+  "返り値: <|\"TaskClass\"->実効class, \"Selected\"->tuple|Automatic|None, \"Candidates\"->..., \"Rejected\"->{<|\"Backend\",\"Reason\"|>..}|>。\n" <>
+  "Selected===Automatic は従来経路へ委譲、None は全候補 preflight 不通。";
 
 $ClaudeLMStudioContextLength::usage =
   "$ClaudeLMStudioContextLength \[LongDash] /api/v1/chat \:306e context_length \:30d1\:30e9\:30e1\:30fc\:30bf\:3002\n" <>
@@ -4548,6 +4593,14 @@ $iHistoryCompactP = 2;    (* \:521d\:671f\:9593\:5f15\:304d\:9593\:9694 \[LongDa
 $iHistoryMaxBytes = 200000; (* TaggingRules \:63a8\:5b9a\:30b5\:30a4\:30ba\:4e0a\:9650\:ff08\:7d04200KB\:ff09\[LongDash]
                                \:8d85\:904e\:6642\:306f\:30a8\:30f3\:30c8\:30ea\:6570\:306b\:95a2\:308f\:3089\:305a\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:767a\:52d5 *)
 
+(* hardening 04 Inc6 (P1-3, 2026-07-09): token ベース閾値の明示化。
+   既存のバイト閾値 ($iHistoryMaxBytes) に加え、トークン概算での上限も
+   トリガにする (spec 04 §6)。概算は保守的に bytes/4 (UTF-8 日本語混在で
+   粗いが kill-switch 用途には十分)。0/None で無効。 *)
+If[! ValueQ[$ClaudeAutoCompactThresholdTokens],
+  $ClaudeAutoCompactThresholdTokens = 60000];
+iClaudeHistoryTokenEst[bytes_] := If[NumberQ[bytes], Round[bytes/4], 0];
+
 (* 1\:30a8\:30f3\:30c8\:30ea\:306e\:6982\:8981\:30c6\:30ad\:30b9\:30c8 (API \:4e0d\:8981) *)
 iMakeLocalSummary[entry_Association] :=
   Module[{inst, resp, code},
@@ -4580,10 +4633,13 @@ iMergeSummaries[sum1_String, sum2_String] :=
 (* \:5c65\:6b74\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:5b9f\:884c *)
 iCompactHistory[nb_NotebookObject, tag_String] :=
   Module[{entries, n, w, p, total, keepDetailIndices, i, entry,
-          summary, prevSummary, merged},
+          summary, prevSummary, merged, beforeBytes, afterBytes},
     entries = NBAccess`NBHistoryEntries[nb, tag];
     total = Length[entries];
     If[total === 0, Return[]];
+    (* hardening 04 Inc6: compaction 前後のサイズを記録 (ConversationCompacted emit 用) *)
+    beforeBytes = Quiet @ Check[
+      ByteCount[NBAccess`NBHistoryRawData[nb, tag]], 0];
 
     (* \:30bb\:30c3\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:304b\:3089 p \:3092\:53d6\:5f97 *)
     Module[{hdr = NBAccess`NBHistoryReadHeader[nb, tag]},
@@ -4635,6 +4691,17 @@ iCompactHistory[nb_NotebookObject, tag_String] :=
         "lastCompactTime" -> AbsoluteTime[],
         "lastCompactTotal" -> total|>];
 
+    (* hardening 04 Inc6: SIEM 可観測性。before/after のサイズとトークン概算を記録。 *)
+    afterBytes = Quiet @ Check[
+      ByteCount[NBAccess`NBHistoryRawData[nb, tag]], beforeBytes];
+    iClaudeDiagEmit["ConversationCompacted", <|
+      "SessionTag" -> tag,
+      "SummarizedEntries" -> (total - Length[keepDetailIndices]),
+      "TotalEntries" -> total,
+      "BeforeBytes" -> beforeBytes, "AfterBytes" -> afterBytes,
+      "BeforeTokens" -> iClaudeHistoryTokenEst[beforeBytes],
+      "AfterTokens" -> iClaudeHistoryTokenEst[afterBytes]|>, "info"];
+
     If[TrueQ[$ClaudeVerbose],
       NBAccess`NBWritePrintNotice[None,
         "[History] \:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:5b8c\:4e86: " <>
@@ -4656,11 +4723,17 @@ iCheckHistoryCompaction[nb_NotebookObject, tag_String] :=
     w = If[AssociationQ[hdr], Lookup[hdr, "compactW", $iHistoryCompactW], $iHistoryCompactW];
     (* \:6761\:4ef61: \:30a8\:30f3\:30c8\:30ea\:6570\:30d9\:30fc\:30b9 *)
     If[total > 2 n + 1 + w, needCompact = True];
-    (* \:6761\:4ef62: \:30b5\:30a4\:30ba\:30d9\:30fc\:30b9\:ff08\:30a8\:30f3\:30c8\:30ea\:6570\:304c\:5c11\:306a\:304f\:3066\:3082\:5de8\:5927\:306a\:5834\:5408\:ff09 *)
+    (* \:6761\:4ef62: \:30b5\:30a4\:30ba\:30d9\:30fc\:30b9\:ff08\:30a8\:30f3\:30c8\:30ea\:6570\:304c\:5c11\:306a\:304f\:3066\:3082\:5de8\:5927\:306a\:5834\:5408\:ff09\:3002
+       hardening 04 Inc6: \:30d0\:30a4\:30c8\:9650\:307e\:305f\:306f\:30c8\:30fc\:30af\:30f3\:6982\:7b97\:9650\:306e\:3044\:305a\:308c\:304b\:3002 *)
     If[!needCompact && total > w + 1,
       rawData = Quiet[NBAccess`NBHistoryRawData[nb, tag]];
       estimatedBytes = Quiet @ Check[ByteCount[rawData], 0];
-      If[estimatedBytes > $iHistoryMaxBytes, needCompact = True]];
+      If[estimatedBytes > $iHistoryMaxBytes, needCompact = True];
+      If[!needCompact && NumberQ[$ClaudeAutoCompactThresholdTokens] &&
+         $ClaudeAutoCompactThresholdTokens > 0 &&
+         iClaudeHistoryTokenEst[estimatedBytes] >
+           $ClaudeAutoCompactThresholdTokens,
+        needCompact = True]];
     If[needCompact, iCompactHistory[nb, tag]]
   ];
 
@@ -4794,6 +4867,235 @@ ClaudeCode`ClaudeFreezeReport[n_Integer:60] :=
         Import[f, {"Text", "Lines"}]], {}];
     If[!ListQ[lines], lines = {}];
     <|"File" -> f, "Tail" -> Take[lines, -Min[n, Length[lines]]]|>];
+
+(* ============================================================
+   SIEM emit shim + per-process spool (hardening 05 Inc1, 2026-07-07)
+
+   運用イベント (SeatDenied / SpawnFailed / ScheduleSubmitFailed 等) を
+   標準 schema で machine-local spool に記録する。設計は
+   SourceVault_info/design/system_hardening_operations_guideline/
+   05_siem_events_spec_v0.2.md。
+
+   要点:
+   - 書き込みは常に $UserBaseDirectory 配下 (Dropbox 外) の
+     per-process ファイル <producer>-<pid>-<yyyymmdd>.jsonl。
+     ファイル名に PID を含むため書き手は常に 1 プロセス
+     = 共有 JSONL への多重追記 (P0-6 クラス) を構造的に排除。
+   - SourceVaultDiagnosticsLog は直接呼ばない (正準ログへの転記は
+     SourceVault service の ingest hook = 単一書き手だけが行う)。
+   - emit 自体の失敗は握り潰してよい唯一の場所 (無限再帰防止)。
+   - 同一 class×payload が短時間に洪水した場合は collapse
+     ("Collapsed"->n 付き 1 件へ集約)。 *)
+
+If[!ValueQ[$ClaudeDiagProducer], $ClaudeDiagProducer = "claudecode"];
+If[!ValueQ[$iClaudeDiagCollapseWindow], $iClaudeDiagCollapseWindow = 60];
+If[!ValueQ[$iClaudeDiagCollapseMax], $iClaudeDiagCollapseMax = 10];
+If[!ValueQ[$iClaudeDiagSpoolMaxBytes], $iClaudeDiagSpoolMaxBytes = 20*^6];
+If[!AssociationQ[$iClaudeDiagRecent], $iClaudeDiagRecent = <||>];
+If[!ValueQ[$iClaudeDiagLastPruneAt], $iClaudeDiagLastPruneAt = 0];
+
+iClaudeDiagSpoolDir[] :=
+  FileNameJoin[{$UserBaseDirectory, "ApplicationData", "ClaudeRuntime",
+    "diag-spool"}];
+
+iClaudeDiagUTCNowISO[] :=
+  DateString[TimeZoneConvert[Now, 0], "ISODateTime"] <> "Z";
+
+iClaudeDiagMachineTag[] := ToLowerCase[ToString[$MachineName]];
+
+(* RawJSON で書けない原子は InputForm 文字列へ落とす (単一エンコード:
+   ExportByteArray 一発。sourcevault-mcp-jsonl-double-encoding-fix の教訓) *)
+iClaudeDiagJSONSafe[a_Association] :=
+  Association @ KeyValueMap[ToString[#1] -> iClaudeDiagJSONSafe[#2] &, a];
+iClaudeDiagJSONSafe[l_List] := iClaudeDiagJSONSafe /@ l;
+iClaudeDiagJSONSafe[x_String] := x;
+iClaudeDiagJSONSafe[x_Integer] := x;
+iClaudeDiagJSONSafe[x_Real] := x;
+iClaudeDiagJSONSafe[x : (True | False | Null)] := x;
+iClaudeDiagJSONSafe[x_] := ToString[x, InputForm];
+
+iClaudeDiagSpoolFile[producer_String] :=
+  Module[{dir = iClaudeDiagSpoolDir[], f},
+    If[!DirectoryQ[dir],
+      Quiet @ CreateDirectory[dir, CreateIntermediateDirectories -> True]];
+    f = FileNameJoin[{dir,
+      producer <> "-" <> ToString[$ProcessID] <> "-" <>
+        DateString[TimeZoneConvert[Now, 0],
+          {"Year", "Month", "Day"}] <> ".jsonl"}];
+    (* ローテート 1 世代 (リング) *)
+    If[FileExistsQ[f] && FileByteCount[f] > $iClaudeDiagSpoolMaxBytes,
+      Quiet[CopyFile[f, f <> ".1", OverwriteTarget -> True]];
+      Quiet[DeleteFile[f]]];
+    f];
+
+(* 低頻度 prune: 14 日超 or 総量 200MB 超の spool を古い順に削除。
+   emit のついでに 1 時間に 1 回だけ走る (service 不在マシンの自衛)。 *)
+iClaudeDiagSpoolPrune[] :=
+  Module[{dir = iClaudeDiagSpoolDir[], files, now = AbsoluteTime[], total},
+    If[!DirectoryQ[dir], Return[Null]];
+    files = Quiet @ Check[FileNames["*.jsonl*", dir], {}];
+    files = Select[files, FileExistsQ];
+    Scan[If[now - AbsoluteTime[FileDate[#, "Modification"]] > 14*86400,
+       Quiet @ DeleteFile[#]] &, files];
+    files = SortBy[Select[files, FileExistsQ],
+      AbsoluteTime[FileDate[#, "Modification"]] &];
+    total = Total[FileByteCount /@ files];
+    While[total > 200*^6 && Length[files] > 1,
+      total -= FileByteCount[First[files]];
+      Quiet @ DeleteFile[First[files]];
+      files = Rest[files]];
+    Null];
+
+iClaudeDiagSpoolAppend[rec_Association] :=
+  Module[{f, ba, strm},
+    f = iClaudeDiagSpoolFile[Lookup[rec, "Producer", "unknown"]];
+    ba = ExportByteArray[iClaudeDiagJSONSafe[rec], "RawJSON",
+      "Compact" -> True];
+    If[!ByteArrayQ[ba], Return[Null]];
+    strm = OpenAppend[f, BinaryFormat -> True];
+    If[Head[strm] =!= OutputStream, Return[Null]];
+    BinaryWrite[strm, ba];
+    BinaryWrite[strm, StringToByteArray["\n", "UTF-8"]];
+    Close[strm];
+    If[AbsoluteTime[] - $iClaudeDiagLastPruneAt > 3600,
+      $iClaudeDiagLastPruneAt = AbsoluteTime[];
+      Quiet @ iClaudeDiagSpoolPrune[]];
+    f];
+
+(* collapse: 同一 class×payload 署名が $iClaudeDiagCollapseWindow 秒内に
+   $iClaudeDiagCollapseMax 件を超えたら以後を落として数え、window 明け後の
+   次の emit 時に "Collapsed"->n 付き 1 件として flush する。
+   返り値: 書くべき rec (そのまま or flush 済み) | Null (drop)。 *)
+iClaudeDiagCollapseGate[rec_Association] :=
+  Module[{sig, now = AbsoluteTime[], ent, flush = Null},
+    sig = Lookup[rec, "EventClass", ""] <> ":" <>
+      ToString[Hash[{Lookup[rec, "EventClass"], Lookup[rec, "Payload"]}]];
+    ent = Lookup[$iClaudeDiagRecent, sig,
+      <|"WindowStart" -> now, "Count" -> 0, "Dropped" -> 0|>];
+    If[now - ent["WindowStart"] > $iClaudeDiagCollapseWindow,
+      (* window 明け: 溜まった drop を collapsed 1 件で flush。
+         EventId は新規採番 (rec と共有すると ingest dedup で片方消える) *)
+      If[ent["Dropped"] > 0,
+        flush = Join[rec, <|"EventId" -> CreateUUID[],
+          "Collapsed" -> ent["Dropped"]|>]];
+      ent = <|"WindowStart" -> now, "Count" -> 0, "Dropped" -> 0|>];
+    ent["Count"] = ent["Count"] + 1;
+    If[ent["Count"] > $iClaudeDiagCollapseMax,
+      ent["Dropped"] = ent["Dropped"] + 1;
+      $iClaudeDiagRecent[sig] = ent;
+      flush,                       (* flush があればそれだけ書く / 無ければ drop *)
+      $iClaudeDiagRecent[sig] = ent;
+      If[flush =!= Null, iClaudeDiagSpoolAppend[flush]];
+      rec]];
+
+iClaudeDiagEmit[class_String, payload_Association,
+    severity_String: "warn", opts___Rule] :=
+  Quiet @ Check[
+    Module[{producer, rec, gated},
+      producer = Lookup[<|opts|>, "Producer",
+        If[StringQ[$ClaudeDiagProducer], $ClaudeDiagProducer, "unknown"]];
+      rec = <|"Type" -> "DiagnosticsEvent", "EventId" -> CreateUUID[],
+        "EventClass" -> class, "AtUTC" -> iClaudeDiagUTCNowISO[],
+        "MachineTag" -> iClaudeDiagMachineTag[], "Producer" -> producer,
+        "ProducerPid" -> $ProcessID, "Severity" -> severity,
+        "Payload" -> payload|>;
+      gated = iClaudeDiagCollapseGate[rec];
+      If[AssociationQ[gated], iClaudeDiagSpoolAppend[gated]];
+      Null],
+    Null];
+
+ClaudeCode`ClaudeDiagEvents::usage =
+  "ClaudeDiagEvents[n] は SIEM spool (diag-spool, machine-local) の直近 n 件 (既定 40) を新しい順の Dataset で返す。SourceVault service の ingest 前でも自マシンの運用イベント (SpawnFailed / ScheduleSubmitFailed 等) を確認できる。";
+ClaudeCode`ClaudeDiagEvents[n_Integer: 40] :=
+  Module[{dir = iClaudeDiagSpoolDir[], files, lines, recs},
+    If[!DirectoryQ[dir], Return[Dataset[{}]]];
+    files = SortBy[Quiet @ Check[FileNames["*.jsonl", dir], {}],
+      AbsoluteTime[FileDate[#, "Modification"]] &];
+    lines = Flatten[Quiet @ Check[
+        Block[{$CharacterEncoding = "UTF-8"},
+          StringSplit[Import[#, "Text"], "\n"]], {}] & /@ files];
+    lines = Select[lines, StringLength[#] > 2 &];
+    lines = Take[lines, -Min[n, Length[lines]]];
+    recs = Quiet @ Check[
+        ImportByteArray[StringToByteArray[#, "UTF-8"], "RawJSON"],
+        Nothing] & /@ lines;
+    Dataset[Reverse @ Select[recs, AssociationQ]]];
+
+(* ============================================================
+   席ゲートヘルパ (hardening 01 Inc2, 2026-07-07)
+
+   SeatBroker (ClaudeRuntime_seatbroker.wl) がロード済みなら
+   ClaudeSeatAcquire へ委譲。未ロード環境では license 実測の
+   probe だけで gate する暫定 fallback (spec 01 §6)。
+   戻り値: <|"Token"->_String|None, ...|> (取得成功 or 素通り)
+         | Failure["NoSeat"|"SeatBrokerBusy", <|"Deferred"->True|>]
+   Acquire に成功した呼び出し元は spawn 失敗時に必ず
+   iClaudeSeatRelease を呼ぶこと (spec 01 §5.1)。 *)
+
+iClaudeSeatBrokerLoadedQ[] :=
+  Length[DownValues[ClaudeRuntime`ClaudeSeatAcquire]] > 0;
+
+iClaudeSeatTryAcquire[purpose_String, opts___Rule] := Which[
+  iClaudeSeatBrokerLoadedQ[],
+    ClaudeRuntime`ClaudeSeatAcquire[purpose, opts],
+  TrueQ[Quiet @ Check[$MaxLicenseProcesses - $LicenseProcesses <= 0, False]],
+    iClaudeDiagEmit["SeatDenied",
+      <|"Purpose" -> purpose, "Pool" -> "Controller", "FreeSeats" -> 0,
+        "Priority" -> Lookup[<|opts|>, "Priority", 40],
+        "Fallback" -> True|>];
+    Failure["NoSeat", <|"MessageTemplate" -> "no license seat (probe fallback)",
+      "Deferred" -> True, "Fallback" -> True|>],
+  True,
+    <|"Token" -> None|>];   (* broker 無し・席あり → gate 素通り *)
+
+iClaudeSeatRelease[None] := Null;
+iClaudeSeatRelease[tok_String] :=
+  If[iClaudeSeatBrokerLoadedQ[],
+    Quiet @ ClaudeRuntime`ClaudeSeatRelease[tok], Null];
+iClaudeSeatRelease[e_Association] :=
+  iClaudeSeatRelease[Lookup[e, "Token", None]];
+iClaudeSeatRelease[_] := Null;
+
+(* hardening 03 Inc2: ProcessSupervisor 経由の spawn ヘルパ。
+   supervisor (ClaudeRuntime_processsupervisor.wl) ロード済みなら 2 相
+   manifest 付き spawn (孤児回収対象になる)、未ロードなら素の StartProcess。
+   戻り値は従来互換の ProcessObject | $Failed。supervisor-only オプション
+   (DoneMarker/SeatToken/DeadlineSeconds/JobId) は fallback では無視される。 *)
+iClaudeSupervisedStart[cmd_List, purpose_String, opts___Rule] :=
+  If[Length[DownValues[ClaudeRuntime`ClaudeSupervisedStartProcess]] > 0,
+    Module[{r = ClaudeRuntime`ClaudeSupervisedStartProcess[cmd, purpose, opts]},
+      If[AssociationQ[r] && MatchQ[Lookup[r, "Process"], _ProcessObject],
+        iClaudeEnsureSupervisorReapPoll[];   (* hardening 03 Inc4 *)
+        r["Process"], $Failed]],
+    Quiet @ Check[StartProcess[cmd], $Failed]];
+
+(* hardening 03 Inc4: 低頻度 reap tick。supervised spawn がある間だけ共有
+   polling tick に登録し、manifest が空になったら自己解除する (idle 時に
+   共有 tick を占有しない)。tick 死のケースはカーネル起動時 reap
+   (EndPackage 後ブロック) が補償する二重化 (spec 03 §8)。 *)
+If[! ValueQ[$iClaudeLastSupervisorReap], $iClaudeLastSupervisorReap = 0];
+
+iClaudeSupervisorReapTick[] :=
+  Quiet @ Check[
+    Module[{now = AbsoluteTime[], counts},
+      If[now - $iClaudeLastSupervisorReap < 300, Return[Null, Module]];
+      $iClaudeLastSupervisorReap = now;
+      If[Length[DownValues[ClaudeRuntime`ClaudeProcessReap]] === 0,
+        Return[Null, Module]];
+      TimeConstrained[ClaudeRuntime`ClaudeProcessReap[], 8, Null];
+      counts = Quiet @ Check[
+        ClaudeRuntime`ClaudeProcessManifestCounts[], <||>];
+      If[Lookup[counts, "Active", 0] === 0 &&
+         Length[DownValues[ClaudeUnregisterPollingTick]] > 0,
+        Quiet @ ClaudeUnregisterPollingTick["process-supervisor-reap"]];
+      Null],
+    Null];
+
+iClaudeEnsureSupervisorReapPoll[] :=
+  If[Length[DownValues[ClaudeRegisterPollingTick]] > 0,
+    Quiet @ Check[
+      ClaudeRegisterPollingTick["process-supervisor-reap",
+        Function[Null, iClaudeSupervisorReapTick[]]], Null]];
 
 (* 2026-06-12 (freeze fix 2): 並行 LLM ジョブ数の上限。
    多重 ClaudeEval / ClaudeUpdateDocumentation で CLI プロセスと tick 負荷が
@@ -5120,6 +5422,7 @@ iClaudeMailSummaryPollTick[] :=
                 d = Quiet @ Check[Import[donePath, "JSON"], <||>];
                 iClaudeMailSummaryNotify[Lookup[info, "Nb", None], jid, d];
                 iClaudeFreezeLog["mailsum-done", jid];
+                iClaudeSeatRelease[Lookup[info, "SeatToken", None]];
                 $iClaudeMailSummaryJobs = KeyDrop[$iClaudeMailSummaryJobs, jid],
               True,
                 st = Quiet @ Check[
@@ -5128,6 +5431,7 @@ iClaudeMailSummaryPollTick[] :=
                   iClaudeMailSummaryNotify[Lookup[info, "Nb", None], jid,
                     <|"Failed" -> True|>];
                   iClaudeFreezeLog["mailsum-died", jid];
+                  iClaudeSeatRelease[Lookup[info, "SeatToken", None]];
                   $iClaudeMailSummaryJobs = KeyDrop[$iClaudeMailSummaryJobs, jid]]]]],
         jobs]],
     Null];
@@ -5142,7 +5446,7 @@ iClaudeEnsureMailSummaryPoll[] :=
    同時1ジョブ制限 (席1つ分)。返り値は常に Submitted->True (mail head は
    sync に落とさない=フリーズさせない)。 *)
 iClaudeSpawnMailSummaryJob[heldExpr_, nb_] :=
-  Module[{running, jobId, jobDir, script, scriptPath, exe, proc},
+  Module[{running, jobId, jobDir, script, scriptPath, exe, proc, seat},
     running = If[AssociationQ[$iClaudeMailSummaryJobs],
       Select[$iClaudeMailSummaryJobs,
         ! FileExistsQ[FileNameJoin[{Lookup[#, "JobDir", ""], "done.json"}]] &],
@@ -5158,13 +5462,36 @@ iClaudeSpawnMailSummaryJob[heldExpr_, nb_] :=
     scriptPath = FileNameJoin[{jobDir, "run.wls"}];
     Quiet @ Export[scriptPath, script, "Text"];
     exe = iClaudeResolveWolframScript[];
-    proc = Quiet @ Check[StartProcess[{exe, "-file", scriptPath}], $Failed];
+    (* hardening 01 Inc2: 席ゲート。枯渇時は spawn せず Deferred で返す
+       (旧: 席を見ずに StartProcess → 席枯渇時は不可解な exit で失敗)。
+       Priority 90 = ユーザーが明示起動する同期操作 (NB 検証で判明:
+       FE+常駐で capacity=1 のトポロジーでは 40+Reserve 1 だと恒久 NoSeat)。
+       自動バッチ経路は autotrigger 側の席ゲートが上流で防ぐ。 *)
+    seat = iClaudeSeatTryAcquire["MailSummary", "Priority" -> 90,
+      "TTLSeconds" -> 900, "JobId" -> jobId];
+    If[FailureQ[seat],
+      iClaudeFreezeLog["mailsum-seat-denied", jobId];
+      Return[<|"Submitted" -> False, "Deferred" -> True, "Error" -> "NoSeat",
+        "Note" -> "ライセンス席が空いていません。他のカーネル/ジョブの終了後に再実行してください (SourceVaultSystemDoctor[] で確認可)。"|>,
+        Module]];
+    (* hardening 03 Inc2: supervisor 経由 (2 相 manifest + 孤児回収対象化)。
+       DoneMarker=done.json なので、poll tick が死んでも reap が
+       Completed/Vanished を判定して席とプロセスを回収できる。 *)
+    proc = iClaudeSupervisedStart[{exe, "-file", scriptPath}, "MailSummary",
+      "JobId" -> jobId, "DoneMarker" -> FileNameJoin[{jobDir, "done.json"}],
+      "SeatToken" -> Lookup[seat, "Token", None],
+      "DeadlineSeconds" -> 900];
     If[proc === $Failed,
+      iClaudeSeatRelease[seat];   (* spawn 失敗 → 即返却 (spec 01 §5.1) *)
       iClaudeFreezeLog["mailsum-spawn-failed", jobId];
+      iClaudeDiagEmit["SpawnFailed",
+        <|"Purpose" -> "MailSummary", "Exe" -> ToString[exe],
+          "JobId" -> jobId|>, "error"];
       Return[<|"Submitted" -> True, "Error" -> "StartProcessFailed",
         "Note" -> "\:5225\:30d7\:30ed\:30bb\:30b9 (wolframscript) \:306e\:8d77\:52d5\:306b\:5931\:6557\:3057\:307e\:3057\:305f\:3002"|>, Module]];
     $iClaudeMailSummaryJobs[jobId] = <|"JobDir" -> jobDir,
-      "Nb" -> nb, "Started" -> AbsoluteTime[], "Proc" -> proc|>;
+      "Nb" -> nb, "Started" -> AbsoluteTime[], "Proc" -> proc,
+      "SeatToken" -> Lookup[seat, "Token", None]|>;
     iClaudeEnsureMailSummaryPoll[];
     iClaudeFreezeLog["mailsum-spawn", jobId];
     <|"Submitted" -> True, "JobID" -> jobId, "JobDir" -> jobDir,
@@ -5273,6 +5600,7 @@ iClaudeMailFetchPollTick[] :=
                 d = Quiet @ Check[Import[donePath, "JSON"], <||>];
                 iClaudeMailFetchNotify[Lookup[info, "Nb", None], Lookup[info, "MBox", "?"], d];
                 iClaudeFreezeLog["mailfetch-done", jid];
+                iClaudeSeatRelease[Lookup[info, "SeatToken", None]];
                 $iClaudeMailFetchJobs = KeyDrop[$iClaudeMailFetchJobs, jid],
               True,
                 st = Quiet @ Check[
@@ -5281,6 +5609,7 @@ iClaudeMailFetchPollTick[] :=
                   iClaudeMailFetchNotify[Lookup[info, "Nb", None], Lookup[info, "MBox", "?"],
                     <|"Failed" -> True|>];
                   iClaudeFreezeLog["mailfetch-died", jid];
+                  iClaudeSeatRelease[Lookup[info, "SeatToken", None]];
                   $iClaudeMailFetchJobs = KeyDrop[$iClaudeMailFetchJobs, jid]]]]],
         jobs]],
     Null];
@@ -5295,7 +5624,7 @@ iClaudeEnsureMailFetchPoll[] :=
    あれば二重起動しない。返り値 <|"Submitted"->_,...|>。Submitted->False のとき
    呼び元は同期 fetch にフォールバックする (安全側)。 *)
 iClaudeSpawnMailFetchJob[mbox_String, period_:"Latest", nb_:None] :=
-  Module[{running, jobId, jobDir, script, scriptPath, exe, proc},
+  Module[{running, jobId, jobDir, script, scriptPath, exe, proc, seat},
     (* run.wls へ素直に埋め込むため mbox トークンを制限 (注入防止) *)
     If[! StringMatchQ[mbox, RegularExpression["[A-Za-z0-9_.-]+"]],
       Return[<|"Submitted" -> False, "Reason" -> "UnsafeMbox"|>, Module]];
@@ -5315,12 +5644,30 @@ iClaudeSpawnMailFetchJob[mbox_String, period_:"Latest", nb_:None] :=
     scriptPath = FileNameJoin[{jobDir, "run.wls"}];
     Quiet @ Export[scriptPath, script, "Text"];
     exe = iClaudeResolveWolframScript[];
-    proc = Quiet @ Check[StartProcess[{exe, "-file", scriptPath}], $Failed];
+    (* hardening 01 Inc2: 席ゲート (mailsum と同型)。Priority 90 =
+       ユーザー明示起動 (capacity=1 トポロジーで Reserve に飢えないため)。 *)
+    seat = iClaudeSeatTryAcquire["MailFetch", "Priority" -> 90,
+      "TTLSeconds" -> 900, "JobId" -> jobId];
+    If[FailureQ[seat],
+      iClaudeFreezeLog["mailfetch-seat-denied", jobId];
+      Return[<|"Submitted" -> False, "Deferred" -> True, "Error" -> "NoSeat",
+        "Note" -> "ライセンス席が空いていません。他のカーネル/ジョブの終了後に再実行してください。"|>,
+        Module]];
+    (* hardening 03 Inc2: supervisor 経由 (mailsum と同型) *)
+    proc = iClaudeSupervisedStart[{exe, "-file", scriptPath}, "MailFetch",
+      "JobId" -> jobId, "DoneMarker" -> FileNameJoin[{jobDir, "done.json"}],
+      "SeatToken" -> Lookup[seat, "Token", None],
+      "DeadlineSeconds" -> 900];
     If[proc === $Failed,
+      iClaudeSeatRelease[seat];
       iClaudeFreezeLog["mailfetch-spawn-failed", jobId];
+      iClaudeDiagEmit["SpawnFailed",
+        <|"Purpose" -> "MailFetch", "Exe" -> ToString[exe],
+          "JobId" -> jobId|>, "error"];
       Return[<|"Submitted" -> False, "Error" -> "StartProcessFailed"|>, Module]];
     $iClaudeMailFetchJobs[jobId] = <|"JobDir" -> jobDir, "MBox" -> mbox,
-      "Nb" -> nb, "Started" -> AbsoluteTime[], "Proc" -> proc|>;
+      "Nb" -> nb, "Started" -> AbsoluteTime[], "Proc" -> proc,
+      "SeatToken" -> Lookup[seat, "Token", None]|>;
     iClaudeEnsureMailFetchPoll[];
     iClaudeFreezeLog["mailfetch-spawn", jobId <> " " <> mbox];
     <|"Submitted" -> True, "JobID" -> jobId, "JobDir" -> jobDir,
@@ -5577,6 +5924,65 @@ iClaudeTickPriority[entry_] :=
 iClaudeTickSuppressible[entry_] :=
   TrueQ[If[AssociationQ[entry], Lookup[entry, "suppressible", False], False]];
 
+(* ============================================================
+   tick 安全化 (hardening P1-5 + P0-7a, 2026-07-08)
+
+   背景: runInline handler (final action の NotebookWrite 等) を
+   FE が対話評価/Dynamic で塞がっている最中に同期実行すると、
+   kernel は FE 応答待ち・FE は kernel 応答待ちの相互待ちで
+   フリーズする (schedule 照会/mailfetch/doc 更新の 3 実例)。
+
+   対策:
+   1. FE 応答性 probe — runInline 実行前に軽量 FE 往復を短い
+      TimeConstrained で試し、応答しなければこの周回は延期する。
+      ジョブの実体 (子プロセス/出力ファイル) はディスク側で進むため
+      取りこぼしは無く、FE が空いた次の tick で回収される。
+   2. handler 個別 TimeConstrained — 1 つの handler の hang が
+      tick 全体を巻き込まない。3 連続超過で当該 key を放棄
+      (stale-drop と同じ流儀) し TickHandlerTimeout を emit。 *)
+
+If[! ValueQ[$ClaudeTickHandlerTimeLimit], $ClaudeTickHandlerTimeLimit = 60];
+$iClaudeTickTimedOut = "__tickTimedOut__";
+
+iClaudeFEResponsiveQ[] :=
+  If[$FrontEnd === Null, True,   (* headless: FE 競合は存在しない *)
+    TrueQ[Quiet @ Check[
+      TimeConstrained[(CurrentValue[$FrontEnd, "MachineID"]; True),
+        0.5, False],
+      False]]];
+
+iClaudeTickHandlerTimeoutBump[k_String] := Module[{c},
+  iClaudeFreezeLog["tick-inline-timeout", k];
+  c = Quiet @ Check[
+    Lookup[$claudeProgress[k], "timeoutCount", 0], 0] + 1;
+  If[AssociationQ[$claudeProgress[k]],
+    $claudeProgress[k]["timeoutCount"] = c];
+  iClaudeDiagEmit["TickHandlerTimeout",
+    <|"HandlerKey" -> k, "LimitSeconds" -> $ClaudeTickHandlerTimeLimit,
+      "Count" -> c|>];
+  If[c >= 3,
+    iClaudeFreezeLog["tick-timeout-suspend", k];
+    iClaudeDiagEmit["TickHandlerTimeout",
+      <|"HandlerKey" -> k, "LimitSeconds" -> $ClaudeTickHandlerTimeLimit,
+        "Count" -> c, "Suspended" -> True|>, "error"];
+    $claudeProgress = KeyDrop[$claudeProgress, k]]];
+
+iClaudeTickHandlerTimeoutReset[k_String] :=
+  If[AssociationQ[$claudeProgress[k]] &&
+     Lookup[$claudeProgress[k], "timeoutCount", 0] > 0,
+    $claudeProgress[k]["timeoutCount"] = 0];
+
+(* FE busy による延期の記録 (20 回に 1 回だけ freeze log; 洪水防止) *)
+iClaudeTickFEBusyNote[k_String] := Module[{c},
+  c = Quiet @ Check[
+    Lookup[$claudeProgress[k], "feBusyDeferCount", 0], 0] + 1;
+  If[AssociationQ[$claudeProgress[k]],
+    $claudeProgress[k]["feBusyDeferCount"] = c];
+  If[Mod[c, 20] === 1,
+    iClaudeFreezeLog["tick-inline-defer-febusy", k];
+    iClaudeDiagEmit["FEBusyDeferred",
+      <|"HandlerKey" -> k, "Count" -> c|>, "info"]]];
+
 iSharedPollingTick[] := Module[{keys, tickFn, entry, suppressible,
                                 highPrio, sortedKeys, nbList},
   keys = Keys[$claudeProgress];
@@ -5618,9 +6024,21 @@ iSharedPollingTick[] := Module[{keys, tickFn, entry, suppressible,
              ため、inline 同期実行が必須。FrontEnd ブロックは最大 1 件・短時間
              で、AsyncActive でない隙にのみ実行されるので安全。 *)
           If[TrueQ[Lookup[entry, "runInline", False]],
-            (iClaudeFreezeLog["tick-inline-start", k];
-             Quiet @ Check[tickFn[], Null];
-             iClaudeFreezeLog["tick-inline-end", k]),
+            (* hardening P1-5+P0-7a (2026-07-08): FE probe gate + 個別 timeout。
+               FE が塞がっていれば延期 (デッドロック 3 実例の恒久対策)、
+               実行時は TimeConstrained で hang を tick 全体から隔離。 *)
+            If[! iClaudeFEResponsiveQ[],
+              iClaudeTickFEBusyNote[k],
+              (iClaudeFreezeLog["tick-inline-start", k];
+               Module[{tr},
+                 tr = Quiet @ Check[
+                   TimeConstrained[tickFn[],
+                     $ClaudeTickHandlerTimeLimit, $iClaudeTickTimedOut],
+                   Null];
+                 If[tr === $iClaudeTickTimedOut,
+                   iClaudeTickHandlerTimeoutBump[k],
+                   iClaudeTickHandlerTimeoutReset[k]]];
+               iClaudeFreezeLog["tick-inline-end", k])],
             (* 2026-05-16: tick \:5b9f\:884c\:3092 SessionSubmit \:3067\:80cc\:666f\:30bf\:30b9\:30af\:5316\:3002
                \:65e7\:5b9f\:88c5\:306f Quiet @ Check[tickFn[], Null] \:306e\:540c\:671f\:5b9f\:884c\:3067\:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057\:305f\:3002
                tick \:5185\:306e handler \:304c ClaudeQueryBg \:7b49\:540c\:671f LLM \:547c\:3073\:51fa\:3057\:3092\:884c\:3046\:5834\:5408\:3001
@@ -5895,11 +6313,19 @@ iEnsureParallelKernelsForRuntime[] :=
        ParallelSubmit \:7d4c\:8def\:306f synchronous fallback \:306b\:59d4\:306d\:308b\:3002 *)
     target = iClaudeParallelKernelTarget[];
     If[target >= 1,
-      Quiet @ Check[LaunchKernels[target], Null],
-      $iParallelKernelsReady = True];
+      Quiet @ Check[LaunchKernels[target], Null]];
     kernels = Quiet @ Check[Kernels[], {}];
-    If[ListQ[kernels] && Length[kernels] > 0,
-      $iParallelKernelsReady = True];
+    (* hardening 01 Inc2 (P0-2): 起動の成否に関わらず ready を立てる。
+       旧実装は失敗時 ready=False のままで、以後の ParallelSubmit 経路が
+       毎回ここで同期 LaunchKernels を再試行し、席枯渇時にその都度
+       数十秒メインカーネルをブロックした (フリーズループ)。失敗後の
+       再試行は明示的な ClaudeBeginParallelKernels[] のみとする。 *)
+    If[target >= 1 && ! (ListQ[kernels] && Length[kernels] > 0),
+      iClaudeDiagEmit["SpawnFailed",
+        <|"Purpose" -> "ParallelKernels", "Exe" -> "subkernel",
+          "ExitInfo" -> "LaunchKernels returned no kernels (license?)"|>,
+        "error"]];
+    $iParallelKernelsReady = True;
     If[ListQ[kernels], Length[kernels], 0]
   ];
 
@@ -5938,7 +6364,14 @@ ClaudeBeginParallelKernels[] :=
       <|"Ready"       -> True,
         "KernelCount" -> Length[kernels],
         "Action"      -> "Launched"|>,
-      $iParallelKernelsReady = False;
+      (* hardening 01 Inc2 (P0-2): 失敗でも ready=True (sync fallback へ)。
+         ready=False のままだと iEnsureParallelKernelsForRuntime が
+         ParallelSubmit のたびに同期再試行してフリーズループになる。
+         本関数の明示再呼び出しは Kernels[] を直接見るので再試行可能。 *)
+      $iParallelKernelsReady = True;
+      iClaudeDiagEmit["SpawnFailed",
+        <|"Purpose" -> "ParallelKernels", "Exe" -> "subkernel",
+          "ExitInfo" -> "ClaudeBeginParallelKernels LaunchFailed"|>, "error"];
       <|"Ready"       -> False,
         "KernelCount" -> 0,
         "Action"      -> "LaunchFailed"|>]
@@ -6346,8 +6779,14 @@ iSafeReadStreamFile[file_String] :=
   ];
 
 (* 1\:884c\:306eJSONL\:3092\:30d1\:30fc\:30b9\:3057\:3066\:30a4\:30d9\:30f3\:30c8\:60c5\:5831\:3092\:8fd4\:3059 *)
+(* hardening 04 Inc4: 全 stream-json リーダーの共通点で result 行の usage を
+   会計する (LLMCall emit)。複数リーダーが同じ行を再パースしても uuid dedup
+   ($iClaudeEmittedLLMCalls) が二重 emit を防ぐ。 *)
 iParseStreamJsonLine[line_String] :=
-  Quiet @ Check[Developer`ReadRawJSONString[line], $Failed];
+  Module[{j = Quiet @ Check[Developer`ReadRawJSONString[line], $Failed]},
+    If[AssociationQ[j] && Lookup[j, "type", ""] === "result",
+      iClaudeEmitLLMCallFromResult[j]];
+    j];
 
 (* stream-json \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304b\:3089\:6700\:7d42\:30c6\:30ad\:30b9\:30c8\:7d50\:679c\:3092\:62bd\:51fa\:3059\:308b\:3002
    text_delta \:3092\:7d50\:5408\:3057\:3066\:30c6\:30ad\:30b9\:30c8\:3092\:5fa9\:5143\:3059\:308b\:3002 *)
@@ -6583,11 +7022,19 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
       With[{p1 = prompt, c1 = callback, n1 = nb, e1 = extraImageDirs,
             j1 = jobId, f1 = fallbackModels, x1 = excludeRead,
             d1 = excludeDirs},
-        Quiet @ Check[
-          SessionSubmit[ScheduledTask[
-            iClaudeQueryAsyncWithProgress[p1, c1, n1, e1, j1, f1, x1, d1],
-            {5, 1}]],
-          $Failed]];
+        (* hardening 05 Inc1 (P1-8): 再試行予約自体の失敗を握り潰さない。
+           失敗するとこのジョブは二度と起動しないため、SIEM に記録して
+           少なくとも事後に追えるようにする。 *)
+        If[Quiet @ Check[
+             SessionSubmit[ScheduledTask[
+               iClaudeQueryAsyncWithProgress[p1, c1, n1, e1, j1, f1, x1, d1],
+               {5, 1}]]; True,
+             False] =!= True,
+          iClaudeFreezeLog["job-retry-submit-failed", ToString[j1]];
+          iClaudeDiagEmit["ScheduleSubmitFailed",
+            <|"Context" -> "job-deferred-retry", "JobId" -> ToString[j1],
+              "Detail" -> "SessionSubmit[ScheduledTask] retry scheduling failed; job dropped"|>,
+            "error"]]];
       Return[Null]];
     useJob = (jobId =!= "");
     norm       = iNormalizePrompt[iInjectAttachments[prompt]];
@@ -9051,6 +9498,13 @@ iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
     If[!AssociationQ[json],
       Return[iL["Error: OpenAI API \:5fdc\:7b54\:30d1\:30fc\:30b9\:5931\:6557: ", "Error: OpenAI API response parse failed: "] <>
         StringTake[bodyStr, UpTo[200]]]];
+    (* hardening 04 Inc4: usage 会計。integrations 無しの lmstudio 既定経路は
+       この /v1/chat/completions を通る (iQueryLMStudioChat ではない) ため
+       ここにもフックが必要 (2026-07-08 実測)。provider は呼び出し側が
+       $iClaudeCurrentAPIProvider で伝搬 (未設定なら openai)。 *)
+    iClaudeEmitLLMCallFromAPI[
+      If[StringQ[$iClaudeCurrentAPIProvider], $iClaudeCurrentAPIProvider,
+        "openai"], model, json];
     choices = json["choices"];
     If[ListQ[choices] && Length[choices] > 0,
       msg = First[choices]["message"];
@@ -9307,7 +9761,7 @@ iLMStudioResolvePaletteURL[] :=
       ToLowerCase[$ClaudeModel[[1]]] === "lmstudio" &&
       StringQ[$ClaudeModel[[3]]] && $ClaudeModel[[3]] =!= "",
       $ClaudeModel[[3]],
-    True, "http://127.0.0.1:1234"];
+    True, $ClaudeLMStudioBaseURL];
 
 (* model server root: strip any chat / models path + trailing slash *)
 iLMStudioServerRoot[baseURL_String] :=
@@ -9316,7 +9770,7 @@ iLMStudioServerRoot[baseURL_String] :=
       {"/api/v1/chat" -> "", "/api/v1/models" -> "", "/api/v0/models" -> "",
        "/v1/chat/completions" -> "", "/v1/models" -> ""}],
     "/"];
-iLMStudioServerRoot[_] := "http://127.0.0.1:1234";
+iLMStudioServerRoot[_] := $ClaudeLMStudioBaseURL;
 
 (* GET one models endpoint -> list of entry associations, or $Failed.
    v0 wraps the list in "data"; v1 wraps it in "models". *)
@@ -9399,6 +9853,394 @@ iLMStudioPaletteModels[] :=
     $iLMStudioPaletteModelsCache[cacheKey] = <|"t" -> now, "ids" -> ids|>;
     ids];
 iLMStudioPaletteModels[___] := {};
+
+(* ============================================================
+   Backend preflight (hardening 04 Inc1, 2026-07-08)
+
+   目的: 未起動の LM Studio / 未ロードモデルへ POST して HTTP timeout
+   (最大 20 分) を待つ事故の根絶 (指針 P1-2)。既存パレット照会機構
+   (iLMStudioFetchModelList / iLMStudioLoadedQ) を流用する。
+   /api/v1 系にしか繋がらないサーバは state が無いため block しない
+   (Reason "StateUnknown")。 *)
+
+If[! ValueQ[$ClaudeLMStudioBaseURL],
+  $ClaudeLMStudioBaseURL = "http://127.0.0.1:1234"];
+If[! AssociationQ[$iClaudeBackendAvailCache], $iClaudeBackendAvailCache = <||>];
+If[! ValueQ[$iClaudeBackendAvailTTL], $iClaudeBackendAvailTTL = 60];
+
+ClaudeBackendAvailableQ[spec_List, opts___Rule] :=
+  Module[{provider, refresh, key, now, cached, res},
+    provider = ToLowerCase[ToString[First[spec, ""]]];
+    refresh = TrueQ[Lookup[<|opts|>, "Refresh", False]];
+    key = provider <> "|" <> ToString[spec, InputForm];
+    now = AbsoluteTime[];
+    cached = Lookup[$iClaudeBackendAvailCache, key, Missing[]];
+    If[! refresh && AssociationQ[cached] &&
+       now - Lookup[cached, "t", 0] < $iClaudeBackendAvailTTL,
+      Return[cached["r"], Module]];
+    res = iClaudeBackendAvailCompute[provider, spec];
+    $iClaudeBackendAvailCache[key] = <|"t" -> now, "r" -> res|>;
+    If[AssociationQ[res] && res["Available"] === False,
+      iClaudeDiagEmit["PreflightFailed",
+        <|"Backend" -> provider, "Reason" -> Lookup[res, "Reason", "?"],
+          "Model" -> ToString[If[Length[spec] >= 2, spec[[2]], Automatic]]|>]];
+    res];
+
+iClaudeBackendAvailCompute["lmstudio", spec_List] :=
+  Module[{model, url, models, chat, hasState, loadedIds, ok},
+    model = If[Length[spec] >= 2, spec[[2]], Automatic];
+    url = If[Length[spec] >= 3 && StringQ[spec[[3]]] && spec[[3]] =!= "",
+      spec[[3]], $ClaudeLMStudioBaseURL];
+    models = iLMStudioFetchModelList[url];
+    If[! ListQ[models],
+      Return[<|"Available" -> False, "Reason" -> "NotRunning",
+        "BaseURL" -> url|>, Module]];
+    chat = Select[models, iLMStudioChatModelQ];
+    hasState = AnyTrue[chat, KeyExistsQ[#, "state"] &];
+    loadedIds = Select[DeleteMissing[
+      iLMStudioModelEntryId /@ Select[chat, iLMStudioLoadedQ]], StringQ];
+    Which[
+      ! hasState,
+        (* /api/v1 fallback: state 情報なし → block しない (既知知見) *)
+        <|"Available" -> True, "Reason" -> "StateUnknown", "BaseURL" -> url|>,
+      model === Automatic || ! StringQ[model] || model === "",
+        If[Length[loadedIds] > 0,
+          <|"Available" -> True, "Reason" -> "OK",
+            "LoadedModels" -> loadedIds|>,
+          <|"Available" -> False, "Reason" -> "NoModelLoaded",
+            "LoadedModels" -> {}, "BaseURL" -> url|>],
+      True,
+        (* id は "org/name" 形式のことがあるので suffix 一致も許す *)
+        ok = MemberQ[loadedIds, model] ||
+          AnyTrue[loadedIds,
+            (StringEndsQ[#, "/" <> model] || StringEndsQ[model, "/" <> #]) &];
+        If[ok,
+          <|"Available" -> True, "Reason" -> "OK",
+            "LoadedModels" -> loadedIds|>,
+          <|"Available" -> False, "Reason" -> "ModelNotLoaded",
+            "LoadedModels" -> loadedIds, "BaseURL" -> url|>]]];
+
+iClaudeBackendAvailCompute["claudecode", _] :=
+  Module[{rli = Quiet @ Check[ClaudeRateLimitStatus["claudecode"], None]},
+    If[AssociationQ[rli],
+      <|"Available" -> False, "Reason" -> "RateLimited",
+        "ResetsAt" -> Lookup[rli, "ResetsAt", None]|>,
+      <|"Available" -> True, "Reason" -> "OK"|>]];
+
+(* anthropic/openai の key 存在チェックは Inc3 で。
+   preflight 不明の provider は block しない。 *)
+iClaudeBackendAvailCompute[_, _] :=
+  <|"Available" -> True, "Reason" -> "Unchecked"|>;
+
+(* ============================================================
+   LLM ティア表 + TaskClass 属性 (hardening 04 Inc2a, 2026-07-08)
+
+   宣言的な「タスク種別 → backend 候補列」表。解決は preflight を
+   通した最初の候補。従来経路との互換: TaskClass 未申告 / 表に無い
+   class の general は Automatic (= 既存 provider fallback 連鎖)。
+   ClaudeEval 系への配線は Inc2b。
+   属性表 (spec 04 §2.1): securityjudge は escalation 禁止
+   (mining rev6 の隔離判定を経路変更で汚さない)。 *)
+
+If[! AssociationQ[$ClaudeLLMTierTable],
+  $ClaudeLLMTierTable = <|
+    "extract"       -> {{"lmstudio", Automatic}, {"claudecode", "haiku"}},
+    "classify"      -> {{"lmstudio", Automatic}, {"claudecode", "haiku"}},
+    "summarize"     -> {{"lmstudio", Automatic}, {"claudecode", "sonnet"}},
+    "securityjudge" -> {{"lmstudio", Automatic}},
+    "mailtriage"    -> {{"lmstudio", Automatic}, {"claudecode", "sonnet"}},
+    "code"          -> {{"claudecode", "opus"}, {"anthropic", "claude-opus-4-8"}},
+    "design"        -> {{"claudecode", "opus"}},
+    "general"       -> Automatic
+  |>];
+
+If[! AssociationQ[$ClaudeTaskClassTable],
+  $ClaudeTaskClassTable = <|
+    "extract"       -> <|"AllowEscalation" -> True,  "RequiresValidator" -> True,
+                         "MaxCostClass" -> "cheap",      "DefaultTimeout" -> 120|>,
+    "classify"      -> <|"AllowEscalation" -> True,  "RequiresValidator" -> True,
+                         "MaxCostClass" -> "cheap",      "DefaultTimeout" -> 60|>,
+    "summarize"     -> <|"AllowEscalation" -> True,  "RequiresValidator" -> False,
+                         "MaxCostClass" -> "cheap",      "DefaultTimeout" -> 180|>,
+    "securityjudge" -> <|"AllowEscalation" -> False, "RequiresValidator" -> True,
+                         "MaxCostClass" -> "local-only", "DefaultTimeout" -> 120|>,
+    "mailtriage"    -> <|"AllowEscalation" -> True,  "RequiresValidator" -> True,
+                         "MaxCostClass" -> "cheap",      "DefaultTimeout" -> 120|>,
+    "code"          -> <|"AllowEscalation" -> False, "RequiresValidator" -> False,
+                         "MaxCostClass" -> "premium",    "DefaultTimeout" -> 1200|>,
+    "design"        -> <|"AllowEscalation" -> False, "RequiresValidator" -> False,
+                         "MaxCostClass" -> "premium",    "DefaultTimeout" -> 1200|>,
+    "general"       -> <|"AllowEscalation" -> False, "RequiresValidator" -> False,
+                         "MaxCostClass" -> "premium",    "DefaultTimeout" -> Automatic|>
+  |>];
+
+iClaudeEffectiveTaskClass[class_] := Module[{c = ToString[class]},
+  Which[
+    class === Automatic || class === None || c === "", "general",
+    KeyExistsQ[$ClaudeTaskClassTable, c], c,
+    True,
+      (* 未知 class → general 降格 (schema drift 検出のため warn) *)
+      iClaudeDiagEmit["UnknownTaskClass", <|"TaskClass" -> c|>];
+      "general"]];
+
+ClaudeTaskClassAttributes[class_] :=
+  Lookup[$ClaudeTaskClassTable, iClaudeEffectiveTaskClass[class],
+    $ClaudeTaskClassTable["general"]];
+
+ClaudeResolveLLMTier[class_] := Module[
+  {eff, cands, rejected = {}, selected = None},
+  eff = iClaudeEffectiveTaskClass[class];
+  cands = Lookup[$ClaudeLLMTierTable, eff, Automatic];
+  If[cands === Automatic || ! ListQ[cands],
+    Return[<|"TaskClass" -> eff, "Selected" -> Automatic,
+      "Candidates" -> Automatic, "Rejected" -> {}|>]];
+  Scan[Function[cand, Module[{pre},
+      If[selected === None,
+        If[iClaudeSpendBlockedQ[cand],   (* hardening 04 Inc5 *)
+          AppendTo[rejected, <|"Backend" -> cand,
+            "Reason" -> "SpendLimit"|>],
+          pre = Quiet @ Check[ClaudeBackendAvailableQ[cand], <||>];
+          If[AssociationQ[pre] && pre["Available"] === True,
+            selected = iClaudeMaterializeTierModel[cand, pre],
+            AppendTo[rejected, <|"Backend" -> cand,
+              "Reason" -> Lookup[pre, "Reason", "?"]|>]]]]]],
+    cands];
+  <|"TaskClass" -> eff, "Selected" -> selected,
+    "Candidates" -> cands, "Rejected" -> rejected|>];
+
+(* 2026-07-08 fix (Inc2b 由来バグ): {"lmstudio", Automatic} のまま返すと
+   iResolveDefaultModelSpec の StringQ 条件を通らず既定モデル (CLI) へ
+   静かに転落していた。preflight の LoadedModels で実モデル名に具体化する。 *)
+iClaudeMaterializeTierModel[cand_List, pre_Association] :=
+  If[Length[cand] >= 2 && cand[[2]] === Automatic &&
+     ListQ[Lookup[pre, "LoadedModels"]] &&
+     Lookup[pre, "LoadedModels"] =!= {},
+    ReplacePart[cand, 2 -> First[pre["LoadedModels"]]],
+    cand];
+
+(* hardening 04 Inc2b: TaskClass → Model 解決の適用ヘルパ。
+   - 明示 Model 指定は TaskClass より常に優先 (呼び出し側の意図尊重)
+   - tier が None (全候補 preflight 不通) は Failure で返し、黙って
+     cloud へ転落しない (securityjudge の local-only を守る要)
+   - ClaudeEval (対話) は配線しない: 対話は本質的に general であり
+     従来経路が正。プログラム呼び出しは ClaudeQuerySync/Bg/Async を使う。 *)
+(* ── hardening 04 Inc4: usage 会計 (LLMCall emit + 集計) ──
+   CLI stream-json の result 行 / API・LM Studio レスポンスの usage を
+   LLMCall イベントとして spool へ emit する。TaskClass は動的変数
+   $iClaudeCurrentTaskClass で伝搬 (Sync/Bg は同期なので正確。Async の
+   完了は tick 側なので best-effort — 帰属精度向上は後続 inc)。 *)
+
+If[! ValueQ[$iClaudeCurrentTaskClass], $iClaudeCurrentTaskClass = "general"];
+If[! ValueQ[$iClaudeCurrentAPIProvider], $iClaudeCurrentAPIProvider = None];
+If[! AssociationQ[$iClaudeEmittedLLMCalls], $iClaudeEmittedLLMCalls = <||>];
+
+iClaudeLLMCallDedupQ[uuid_] := Module[{},
+  If[! StringQ[uuid], Return[False, Module]];
+  If[KeyExistsQ[$iClaudeEmittedLLMCalls, uuid], Return[True, Module]];
+  $iClaudeEmittedLLMCalls[uuid] = True;
+  If[Length[$iClaudeEmittedLLMCalls] > 500,
+    $iClaudeEmittedLLMCalls =
+      Association @ Take[Normal[$iClaudeEmittedLLMCalls], -250]];
+  False];
+
+(* CLI result 行 (type=="result") から。usage も cost も無い行は emit しない。 *)
+iClaudeEmitLLMCallFromResult[j_Association] := Quiet @ Check[Module[
+    {uuid, usage, mu},
+    uuid = Lookup[j, "uuid", None];
+    usage = Lookup[j, "usage", <||>];
+    If[! AssociationQ[usage], usage = <||>];
+    If[usage === <||> && ! NumberQ[Lookup[j, "total_cost_usd"]],
+      Return[Null, Module]];
+    If[iClaudeLLMCallDedupQ[uuid], Return[Null, Module]];
+    mu = Lookup[j, "modelUsage", <||>];
+    iClaudeDiagEmit["LLMCall", <|
+      "Provider" -> "claudecode",
+      "Model" -> If[AssociationQ[mu] && Length[mu] > 0,
+        StringRiffle[Keys[mu], "+"], ToString[$ClaudeModel]],
+      "TaskClass" -> If[StringQ[$iClaudeCurrentTaskClass],
+        $iClaudeCurrentTaskClass, "general"],
+      "InTokens" -> Lookup[usage, "input_tokens", Null],
+      "CacheReadTokens" -> Lookup[usage, "cache_read_input_tokens", Null],
+      "CacheCreateTokens" -> Lookup[usage, "cache_creation_input_tokens", Null],
+      "OutTokens" -> Lookup[usage, "output_tokens", Null],
+      "CostUSD" -> Lookup[j, "total_cost_usd", Null],
+      "DurationMs" -> Lookup[j, "duration_ms", Null],
+      "Outcome" -> If[TrueQ[Lookup[j, "is_error"]], "error", "success"]|>,
+      "info"];
+    Null], Null];
+
+(* API / LM Studio レスポンスから (anthropic: usage.input_/output_tokens,
+   OpenAI 互換: usage.prompt_/completion_tokens,
+   LM Studio /api/v1/chat: stats.input_tokens/total_output_tokens ← 実測 2026-07-08)。
+   cost は取得不可 → Null。 *)
+iClaudeEmitLLMCallFromAPI[provider_String, model_, json_Association] :=
+  Quiet @ Check[Module[{usage, mdl},
+    (* model が Automatic (tier の {"lmstudio", Automatic} 経由) の場合は
+       応答の model_instance_id で補完 (2026-07-08: model_String パターンが
+       Automatic を静かに弾き emit されないバグの修正) *)
+    mdl = Which[
+      StringQ[model] && model =!= "", model,
+      StringQ[Lookup[json, "model_instance_id"]],
+        Lookup[json, "model_instance_id"],
+      True, ToString[model]];
+    usage = Lookup[json, "usage", <||>];
+    If[! AssociationQ[usage] || usage === <||>,
+      usage = Lookup[json, "stats", <||>];
+      If[AssociationQ[usage] && KeyExistsQ[usage, "total_output_tokens"],
+        usage = <|"input_tokens" -> Lookup[usage, "input_tokens", Null],
+          "output_tokens" -> Lookup[usage, "total_output_tokens", Null]|>]];
+    If[! AssociationQ[usage] || usage === <||>, Return[Null, Module]];
+    iClaudeDiagEmit["LLMCall", <|
+      "Provider" -> ToLowerCase[provider], "Model" -> mdl,
+      "TaskClass" -> If[StringQ[$iClaudeCurrentTaskClass],
+        $iClaudeCurrentTaskClass, "general"],
+      "InTokens" -> Lookup[usage, "input_tokens",
+        Lookup[usage, "prompt_tokens", Null]],
+      "OutTokens" -> Lookup[usage, "output_tokens",
+        Lookup[usage, "completion_tokens", Null]],
+      "CostUSD" -> Null, "DurationMs" -> Null,
+      "Outcome" -> "success"|>, "info"];
+    Null], Null];
+
+(* 集計。spool (全 producer) + 正準 log (SourceVault ロード済みなら) を
+   EventId dedup 込みで読む。 *)
+Options[ClaudeUsageReport] = {"Days" -> 1};
+ClaudeUsageReport[OptionsPattern[]] := Module[
+  {cutoff, files, lines, recs, seenIds = <||>, calls, groups},
+  cutoff = DateString[
+    TimeZoneConvert[Now, 0] - Quantity[OptionValue["Days"]*24, "Hours"],
+    "ISODateTime"];
+  files = Quiet @ Check[
+    FileNames["*.jsonl", iClaudeDiagSpoolDir[]], {}];
+  If[Names["SourceVault`Private`iSVDiagLogPath"] =!= {} &&
+     Length[DownValues[Symbol["SourceVault`Private`iSVDiagLogPath"]]] > 0,
+    With[{p = Quiet @ Check[
+        Symbol["SourceVault`Private`iSVDiagLogPath"][], $Failed]},
+      If[StringQ[p] && FileExistsQ[p], AppendTo[files, p]]]];
+  lines = Flatten[Quiet @ Check[
+      Select[StringTrim /@ StringSplit[
+        ByteArrayToString[ReadByteArray[#], "UTF-8"], "\n"],
+        StringContainsQ[#, "LLMCall"] &], {}] & /@ files];
+  recs = Select[Quiet @ Check[ImportByteArray[
+      StringToByteArray[#, "UTF-8"], "RawJSON"], Nothing] & /@ lines,
+    AssociationQ];
+  calls = Select[recs,
+    Lookup[#, "EventClass", ""] === "LLMCall" &&
+    (* ISO8601 は辞書順=時系列順。文字列に >= は使えない (未評価) ので OrderedQ *)
+    OrderedQ[{cutoff, ToString[Lookup[#, "AtUTC", ""]]}] &];
+  (* EventId dedup (spool と正準ログの二重計上防止) *)
+  calls = Select[calls, Module[{id = Lookup[#, "EventId", None]},
+    If[StringQ[id],
+      If[KeyExistsQ[seenIds, id], False, seenIds[id] = True; True],
+      True]] &];
+  groups = GroupBy[calls,
+    ({Lookup[Lookup[#, "Payload", <||>], "Provider", "?"],
+      Lookup[Lookup[#, "Payload", <||>], "Model", "?"]} &)];
+  Dataset[KeyValueMap[Function[{k, v}, Module[{ps = Lookup[#, "Payload", <||>] & /@ v},
+      <|"Provider" -> k[[1]], "Model" -> k[[2]], "Calls" -> Length[v],
+        "InTokens" -> Total[Select[Lookup[ps, "InTokens", 0] /. Null -> 0, NumberQ]],
+        "OutTokens" -> Total[Select[Lookup[ps, "OutTokens", 0] /. Null -> 0, NumberQ]],
+        "CacheReadTokens" -> Total[Select[
+          Lookup[ps, "CacheReadTokens", 0] /. Null -> 0, NumberQ]],
+        "CostUSD" -> Total[Select[Lookup[ps, "CostUSD", 0] /. Null -> 0, NumberQ]]|>]],
+    groups]]];
+
+(* ── hardening 04 Inc3: validator + escalate ヘルパ ──
+   validator 契約 (spec 04 §4.1): 純関数 validator[response_String] ->
+   True | Failure[tag, ...]。contracts 層の schema を使う呼び出し元は
+   自側で関数へコンパイルして渡す (claudecode は Function 契約のみ知る)。 *)
+
+iClaudeErrorResponseQ[r_] :=
+  ! StringQ[r] || StringStartsQ[r, "Error"] || StringStartsQ[r, "ERROR"];
+
+(* validator 実行。validator 自体の異常 (crash) は応答の罪ではないので
+   True 扱い + warn (昇格判定を誤らせない)。 *)
+iClaudeValidateResponse[response_, None] := True;
+iClaudeValidateResponse[response_String, validator_] := Module[{v},
+  v = Quiet @ Check[validator[response], $iClaudeValidatorCrashed];
+  Which[
+    v === $iClaudeValidatorCrashed,
+      iClaudeDiagEmit["ValidatorCrashed", <|"Note" -> "validator threw"|>];
+      True,
+    v === True, True,
+    FailureQ[v], v,
+    True, Failure["ValidationFailed",
+      <|"MessageTemplate" -> "validator returned non-True",
+        "Returned" -> ToString[v, InputForm]|>]]];
+iClaudeValidateResponse[_, _] := True;   (* 非 String 応答は error 側で扱う *)
+
+(* tier 内で current の次に preflight を通る候補。無ければ None *)
+iClaudeTierNextCandidate[tcEff_String, current_] := Module[
+  {cands, pos, rest, found = None},
+  cands = Lookup[$ClaudeLLMTierTable, tcEff, Automatic];
+  If[! ListQ[cands], Return[None, Module]];
+  pos = FirstPosition[cands, current, None];
+  rest = If[pos === None, cands, Drop[cands, First[pos]]];
+  Scan[Function[cand, Module[{pre},
+      If[found === None && cand =!= current &&
+         ! iClaudeSpendBlockedQ[cand],   (* hardening 04 Inc5 *)
+        pre = Quiet @ Check[ClaudeBackendAvailableQ[cand], <||>];
+        If[AssociationQ[pre] && pre["Available"] === True,
+          found = iClaudeMaterializeTierModel[cand, pre]]]]],
+    rest];
+  found];
+
+(* ── hardening 04 Inc5: SpendLimit ──
+   当日 CostUSD 合計 (60s キャッシュ) が上限以上なら metered provider を
+   tier 候補から除外する。CLI(定額)/lmstudio(無料) は常に許可。 *)
+
+If[! ValueQ[$ClaudeSpendLimit], $ClaudeSpendLimit = None];
+If[! AssociationQ[$iClaudeSpendCache], $iClaudeSpendCache = <||>];
+
+iClaudeMeteredProviderQ[cand_List] :=
+  MemberQ[{"anthropic", "openai"},
+    ToLowerCase[ToString[First[cand, ""]]]];
+
+iClaudeSpentTodayUSD[] := Module[{now = AbsoluteTime[], c, v},
+  c = $iClaudeSpendCache;
+  If[AssociationQ[c] && NumberQ[Lookup[c, "t"]] &&
+     now - c["t"] < 60, Return[c["v"], Module]];
+  v = Quiet @ Check[
+    Total[Select[Lookup[Normal[ClaudeUsageReport["Days" -> 1]],
+      "CostUSD", 0] /. Null -> 0, NumberQ]], 0];
+  If[! NumberQ[v], v = 0];
+  $iClaudeSpendCache = <|"t" -> now, "v" -> v|>;
+  v];
+
+(* 上限超過中に metered 候補を除外すべきか *)
+iClaudeSpendBlockedQ[cand_List] := Module[{lim},
+  If[! AssociationQ[$ClaudeSpendLimit], Return[False, Module]];
+  lim = Lookup[$ClaudeSpendLimit, "DailyUSD", None];
+  If[! NumberQ[lim], Return[False, Module]];
+  If[! iClaudeMeteredProviderQ[cand], Return[False, Module]];
+  If[iClaudeSpentTodayUSD[] >= lim,
+    iClaudeDiagEmit["SpendLimitHit",
+      <|"LimitUSD" -> lim, "SpentUSD" -> iClaudeSpentTodayUSD[],
+        "Backend" -> ToString[cand, InputForm]|>];
+    True,
+    False]];
+
+iClaudeApplyTaskClassToModel[tc_, modelOpt_] := Module[{tier},
+  If[tc === Automatic || tc === None || ToString[tc] === "" ||
+     modelOpt =!= Automatic,
+    Return[modelOpt, Module]];
+  tier = ClaudeResolveLLMTier[tc];
+  Which[
+    ListQ[tier["Selected"]], tier["Selected"],
+    tier["Selected"] === None &&
+      AnyTrue[tier["Rejected"],
+        Lookup[#, "Reason", ""] === "SpendLimit" &],
+      (* hardening 04 Inc5: 全滅が SpendLimit 起因なら専用タグ *)
+      Failure["SpendLimitExceeded",
+        <|"MessageTemplate" -> "daily spend limit reached; metered providers excluded",
+          "TaskClass" -> tier["TaskClass"],
+          "Rejected" -> tier["Rejected"], "Deferred" -> True|>],
+    tier["Selected"] === None,
+      Failure["NoBackendAvailable",
+        <|"MessageTemplate" -> "no backend passed preflight for task class",
+          "TaskClass" -> tier["TaskClass"],
+          "Rejected" -> tier["Rejected"], "Deferred" -> True|>],
+    True, modelOpt]];
 
 (* ---- \:30bb\:30c3\:30b7\:30e7\:30f3\:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb\:89e3\:6c7a\:30d8\:30eb\:30d1 ----
    Model \:30aa\:30d7\:30b7\:30e7\:30f3\:304c Automatic (\:307e\:305f\:306f\:975e\:30ea\:30b9\:30c8) \:306e\:3068\:304d\:3001
@@ -9495,9 +10337,25 @@ iQueryLMStudioChat[model_String, prompt_String, baseURL_String,
                    opts:OptionsPattern[]] :=
   Module[{url, integrations, sysPrompt, ctxLen, temp, token, includeTrace,
           timeout, debugRaw, bodyAssoc, body, req, resp, statusCode, bodyStr,
-          json, outputs, msgs, traces, msgText, prefix, reasoning},
+          json, outputs, msgs, traces, msgText, prefix, reasoning, pre},
     url = iEnsureLMStudioV1ChatPath[
-      If[baseURL =!= "", baseURL, "http://localhost:1234"]];
+      If[baseURL =!= "", baseURL, $ClaudeLMStudioBaseURL]];
+    (* hardening 04 Inc1: preflight。未起動/未ロードへ POST して
+       timeout (最大 20 分) を待たない。結果は 60s キャッシュなので
+       連続呼び出しのオーバーヘッドは初回のみ。 *)
+    pre = Quiet @ Check[
+      ClaudeBackendAvailableQ[{"lmstudio", model, baseURL}], <||>];
+    If[AssociationQ[pre] && pre["Available"] === False,
+      Return["Error: LM Studio preflight failed (" <>
+        ToString[Lookup[pre, "Reason", "?"]] <> "). " <>
+        Which[
+          Lookup[pre, "Reason", ""] === "NotRunning",
+            "LM Studio が " <> ToString[Lookup[pre, "BaseURL", "?"]] <>
+            " で起動していません。",
+          Lookup[pre, "Reason", ""] === "ModelNotLoaded",
+            "ロード済み: " <> StringRiffle[
+              ToString /@ Lookup[pre, "LoadedModels", {}], ", "],
+          True, "モデルがロードされていません。"]]];
     integrations = OptionValue["Integrations"];
     (* 2026-06-01: integrations \:89e3\:6c7a\:3092\:4e00\:5143\:5316\:3002Automatic \:306a\:3089
        override / \:30b0\:30ed\:30fc\:30d0\:30eb / SourceVault \:306e\:9806\:3067\:89e3\:6c7a\:3001\:660e\:793a\:30ea\:30b9\:30c8\:306f\:5c0a\:91cd\:3002 *)
@@ -9525,7 +10383,7 @@ iQueryLMStudioChat[model_String, prompt_String, baseURL_String,
     (* NBAccess \:304b\:3089\:30c8\:30fc\:30af\:30f3\:3092\:53d6\:5f97 ({"lmstudio", baseURL} -> credName -> SystemCredential) *)
     If[!StringQ[token] || token === "",
       Module[{k = Quiet @ NBAccess`NBGetLocalLLMAPIKey["lmstudio",
-        If[baseURL =!= "", baseURL, "http://localhost:1234"],
+        If[baseURL =!= "", baseURL, $ClaudeLMStudioBaseURL],
         PrivacySpec -> <|"AccessLevel" -> 1.0|>]},
         If[StringQ[k] && k =!= "", token = k]]];
     (* \:6700\:7d42\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af: LM Studio \:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:30c0\:30df\:30fc\:30ad\:30fc *)
@@ -9596,6 +10454,7 @@ iQueryLMStudioChat[model_String, prompt_String, baseURL_String,
         "Error: LM Studio /api/v1/chat \:5fdc\:7b54\:30d1\:30fc\:30b9\:5931\:6557: ",
         "Error: LM Studio /api/v1/chat response parse failed: "] <>
         StringTake[bodyStr, UpTo[300]]]];
+    iClaudeEmitLLMCallFromAPI["lmstudio", model, json];  (* 04 Inc4: 会計 *)
     outputs = Lookup[json, "output", None];
     If[!ListQ[outputs],
       Return[iL[
@@ -9704,10 +10563,48 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
             PrivacySpec -> <|"AccessLevel" -> 1.0|>]},
             If[StringQ[k] && k =!= "", resolvedKey = k]]];
         If[!StringQ[resolvedKey] || resolvedKey === "", resolvedKey = "lm-studio"];
-        Return @ iQueryOpenAIAPI[resolvedKey, model, prompt, url]
+        Return @ Block[{$iClaudeCurrentAPIProvider = "lmstudio"},
+          iQueryOpenAIAPI[resolvedKey, model, prompt, url]]
       ]
     ];
-    (* \:901a\:5e38\:30d7\:30ed\:30d0\:30a4\:30c0\:30fc (\:672a\:5909\:66f4) *)
+    (* ―― NBAccess ノートブック課金 API チェック (Phase 28 Paid フラグベース) ――
+       2026-07-07: 同期経路の穴を封鎖。従来この gate は非同期 fallback
+       (iStartFallbackAsync) と multimodal にのみあり、ClaudeQuerySync →
+       iQueryViaAPI の同期 metered 呼び出し (ContinueEval / SourceVault 要約等)
+       は notebook gating を素通りして headless からでも課金 API に到達できた
+       (SourceVault_llmlog テストで z.ai へ実送信が発生した実事故への対処)。
+       仕様: 課金 API 呼び出しは paidAPIAllowed を許可したノートブックからの
+       直接実行のみ。headless (service/wolframscript) は NotebookObject が
+       無いため常に拒否。claudecode/lmstudio は上で処理済み (非課金・対象外)。 *)
+    Module[{caps, capEntry, isPaid},
+      caps = If[ValueQ[ClaudeDirectives`$ClaudeModelCapabilities] &&
+                AssociationQ[ClaudeDirectives`$ClaudeModelCapabilities],
+        ClaudeDirectives`$ClaudeModelCapabilities, <||>];
+      capEntry = Lookup[caps, Key[{prov, model}], <||>];
+      isPaid = Which[
+        AssociationQ[capEntry] && KeyExistsQ[capEntry, "Paid"],
+          TrueQ[capEntry["Paid"]],
+        True,
+          (* 未登録: provider 名で fallback (zai=z.ai も課金 API) *)
+          MemberQ[{"anthropic", "openai", "zai"}, prov]
+      ];
+      If[isPaid,
+        Module[{targetNb, nbAllowed},
+          targetNb = Quiet[EvaluationNotebook[]];
+          If[Head[targetNb] =!= NotebookObject,
+            targetNb = Quiet[InputNotebook[]]];
+          nbAllowed = TrueQ @ Quiet @ NBAccess`NBGetNotebookPaidAPIAllowed[targetNb];
+          If[!nbAllowed,
+            Return[
+              "Error: このノートブックでは課金 API 呼び出しが禁止されています (NBAccess)。\n" <>
+              "要求されたモデル: {" <> provider <> ", " <> model <> "} (Paid=True, 同期経路)。\n" <>
+              "パレットの「課金API」ボタンで「許可」に切り替えるか、\n" <>
+              "NBAccess`NBSetNotebookPaidAPIAllowed[nb, True] で許可してください。\n" <>
+              "(Phase 28: iQueryViaAPI 同期チョークポイント)"
+            ]]]
+      ]
+    ];
+    (* \:901a\:5e38\:30d7\:30ed\:30d0\:30a4\:30c0\:30fc *)
     apiKey = Quiet[NBAccess`NBGetAPIKey[provider,
       PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
     If[apiKey === $Failed || !StringQ[apiKey],
@@ -11289,7 +12186,11 @@ Options[ClaudeQuerySync] = {
   Model -> Automatic,
   PrivacySpec -> Automatic,
   PrivacyLevel -> Automatic,
-  Timeout -> Automatic
+  Timeout -> Automatic,
+  "TaskClass" -> Automatic,  (* hardening 04 Inc2b: ティア表経由の backend 選択 *)
+  "Validator" -> None        (* hardening 04 Inc3: 応答検証の純関数
+                                validator[response_String] -> True | Failure[tag, ...]
+                                失敗時、AllowEscalation な class は tier 次候補へ 1 回昇格 *)
 };
 
 (* \:540c\:671f LLM \:30af\:30a8\:30ea\:ff08WindowStatusArea \:7d4c\:904e\:6642\:9593\:8868\:793a\:4ed8\:304d\:ff09\:3002
@@ -11305,7 +12206,13 @@ Options[ClaudeQuerySync] = {
 ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
   Module[{modelSpec, response, nb, startTime, progressTask, label, elapsed,
           privLevel, useFallback},
-    modelSpec = iResolveDefaultModelSpec[OptionValue[Model]];
+    (* hardening 04 Inc2b: TaskClass 申告があればティア解決を経由 *)
+    $iClaudeCurrentTaskClass =
+      iClaudeEffectiveTaskClass[OptionValue["TaskClass"]];  (* 04 Inc4: 会計帰属 *)
+    modelSpec = iClaudeApplyTaskClassToModel[
+      OptionValue["TaskClass"], OptionValue[Model]];
+    If[FailureQ[modelSpec], Return[modelSpec, Module]];
+    modelSpec = iResolveDefaultModelSpec[modelSpec];
     privLevel = Replace[OptionValue[PrivacyLevel], Automatic -> 0.0];
     useFallback = TrueQ[OptionValue[Fallback]];
 
@@ -11375,6 +12282,51 @@ ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
         iQueryWithFallback[prompt, useFallback]
     ];
 
+    (* hardening 04 Inc3: validator + escalate (1 回だけ)。
+       条件: TaskClass 明示 + Model 未指定 (=tier 解決経路) + AllowEscalation。
+       securityjudge は属性で昇格禁止 (隔離判定の経路を変えない)。
+       validator 明示の呼び出し元には最終不合格を Failure で構造化して返す。 *)
+    Module[{tc = OptionValue["TaskClass"], validator = OptionValue["Validator"],
+            tcEff, attrs, vres, nextCand, reason, next2},
+      If[tc =!= Automatic && tc =!= None && OptionValue[Model] === Automatic,
+        tcEff = iClaudeEffectiveTaskClass[tc];
+        attrs = ClaudeTaskClassAttributes[tcEff];
+        If[TrueQ[attrs["RequiresValidator"]] && validator === None,
+          iClaudeDiagEmit["ValidatorMissing", <|"TaskClass" -> tcEff|>]];
+        vres = If[iClaudeErrorResponseQ[response],
+          Failure["ErrorResponse", <|"Response" ->
+            If[StringQ[response], StringTake[response, UpTo[200]],
+              ToString[response]]|>],
+          iClaudeValidateResponse[response, validator]];
+        If[vres =!= True && TrueQ[attrs["AllowEscalation"]],
+          reason = If[FailureQ[vres] && vres[[1]] === "ErrorResponse",
+            "ErrorResponse", "ValidationFailed"];
+          nextCand = iClaudeTierNextCandidate[tcEff, modelSpec];
+          If[ListQ[nextCand],
+            iClaudeDiagEmit["LLMEscalated",
+              <|"From" -> ToString[modelSpec, InputForm],
+                "To" -> ToString[nextCand, InputForm],
+                "Reason" -> reason, "TaskClass" -> tcEff|>, "info"];
+            next2 = iResolveDefaultModelSpec[nextCand];
+            response = Which[
+              ListQ[next2] && Length[next2] >= 2 &&
+                StringQ[next2[[1]]] && ToLowerCase[next2[[1]]] === "claudecode",
+                Block[{$ClaudeModel = next2[[2]]}, iClaudeQueryRaw[prompt]],
+              ListQ[next2] && Length[next2] >= 2,
+                iQueryViaAPI[next2[[1]], next2[[2]], prompt,
+                  If[Length[next2] >= 3, next2[[3]], ""]],
+              True, response];
+            vres = If[iClaudeErrorResponseQ[response],
+              Failure["ErrorResponse", <|"Response" ->
+                If[StringQ[response], StringTake[response, UpTo[200]],
+                  ToString[response]]|>],
+              iClaudeValidateResponse[response, validator]]]];
+        If[vres =!= True && validator =!= None,
+          response = Failure["ValidationFailed",
+            <|"TaskClass" -> tcEff, "Detail" -> vres,
+              "Response" -> If[StringQ[response], response,
+                ToString[response]]|>]]]];
+
     (* \:9032\:6357\:8868\:793a\:3092\:505c\:6b62\:30fb\:30af\:30ea\:30a2 *)
     If[progressTask =!= None,
       Quiet[StopScheduledTask[progressTask]];
@@ -11411,12 +12363,19 @@ Options[ClaudeQueryBg] = {
   Fallback -> False,
   Model    -> Automatic,
   Timeout  -> Automatic,
-  NonBlocking -> False
+  NonBlocking -> False,
+  "TaskClass" -> Automatic   (* hardening 04 Inc2b *)
 };
 
 ClaudeQueryBg[prompt_String, opts:OptionsPattern[]] :=
   Module[{useFallback, nonBlock, modelSpec, hasExplicitModel, providerLower, modelName},
-    modelSpec = iResolveDefaultModelSpec[OptionValue[Model]];
+    (* hardening 04 Inc2b: TaskClass 申告があればティア解決を経由 *)
+    $iClaudeCurrentTaskClass =
+      iClaudeEffectiveTaskClass[OptionValue["TaskClass"]];  (* 04 Inc4: 会計帰属 *)
+    modelSpec = iClaudeApplyTaskClassToModel[
+      OptionValue["TaskClass"], OptionValue[Model]];
+    If[FailureQ[modelSpec], Return[modelSpec, Module]];
+    modelSpec = iResolveDefaultModelSpec[modelSpec];
     useFallback = TrueQ[OptionValue[Fallback]];
     nonBlock = TrueQ[OptionValue[NonBlocking]];
     (* Model \:304c {provider, model, ...} \:5f62\:5f0f\:3067\:660e\:793a\:6307\:5b9a\:3055\:308c\:3066\:3044\:308b\:304b *)
@@ -11661,7 +12620,13 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
    API \:30d1\:30b9: \:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb content \:914d\:5217\:3092\:69cb\:7bc9\:3057\:3066\:9001\:4fe1\:3002 *)
 ClaudeQueryBg[items_List, opts:OptionsPattern[]] :=
   Module[{useFallback, nonBlock, hasMedia, modelSpec, hasExplicitModel},
-    modelSpec = iResolveDefaultModelSpec[OptionValue[Model]];
+    (* hardening 04 Inc2b: TaskClass 申告があればティア解決を経由 *)
+    $iClaudeCurrentTaskClass =
+      iClaudeEffectiveTaskClass[OptionValue["TaskClass"]];  (* 04 Inc4: 会計帰属 *)
+    modelSpec = iClaudeApplyTaskClassToModel[
+      OptionValue["TaskClass"], OptionValue[Model]];
+    If[FailureQ[modelSpec], Return[modelSpec, Module]];
+    modelSpec = iResolveDefaultModelSpec[modelSpec];
     useFallback = TrueQ[OptionValue[Fallback]];
     nonBlock = TrueQ[OptionValue[NonBlocking]];
     hasExplicitModel = ListQ[modelSpec] && Length[modelSpec] >= 2 &&
@@ -11931,7 +12896,8 @@ Options[ClaudeQueryAsync] = {
   PrivacyLevel -> Automatic,
   Timeout -> Automatic,
   Integrations -> Automatic,
-  AutoCellize -> True
+  AutoCellize -> True,
+  "TaskClass" -> Automatic   (* hardening 04 Inc2b *)
 };
 
 ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPattern[]] :=
@@ -11941,7 +12907,13 @@ ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPatter
   Module[{modelSpec, privLevel, useFallback, availModels, useClaudeCode,
           jobId, wrappedCallback, accessLevel, norm, hasMedia, mediaFiles,
           autoCellize},
-    modelSpec = iResolveDefaultModelSpec[OptionValue[Model]];
+    (* hardening 04 Inc2b: TaskClass 申告があればティア解決を経由 *)
+    $iClaudeCurrentTaskClass =
+      iClaudeEffectiveTaskClass[OptionValue["TaskClass"]];  (* 04 Inc4: 会計帰属 *)
+    modelSpec = iClaudeApplyTaskClassToModel[
+      OptionValue["TaskClass"], OptionValue[Model]];
+    If[FailureQ[modelSpec], Return[modelSpec, Module]];
+    modelSpec = iResolveDefaultModelSpec[modelSpec];
     autoCellize = TrueQ[OptionValue[AutoCellize]];
     privLevel = Replace[OptionValue[PrivacyLevel], Automatic -> 0.0];
     useFallback = TrueQ[OptionValue[Fallback]];
@@ -16487,16 +17459,19 @@ iAuxHashSet[docsDir_String, auxName_String, hash_String] :=
       Export[iAuxHashPath[docsDir], Developer`WriteRawJSONString[j],
         "Text", CharacterEncoding -> "UTF-8"], Null]];
 
-(* docFile が補助 api なら、対応ソースの現内容ハッシュを基準として記録する。
-   doc 生成成功時に呼び、以後の鮮度判定を content 基準にする。 *)
+(* docFile の対応ソースの現内容ハッシュを基準として記録する。doc 生成成功時に呼び、
+   以後の鮮度判定 (ClaudeUpdateDocumentation / PackageCommit DocsGate) を content 基準にする。
+   api.md 本体 → 主ソース <pkg>.wl を予約キー "@main" に、api_<aux>.md → 補助ソースを auxName に記録。 *)
 iRecordAuxHash[docsDir_String, packageName_String, docFile_String] :=
-  Module[{auxName, srcFile, h},
-    auxName = iExtractAuxNameFromApiDoc[FileNameTake[docFile]];
-    If[auxName === None, Return[]];
-    srcFile = iFindAuxPackageSource[packageName, auxName];
-    If[srcFile === $Failed, Return[]];
+  Module[{base = FileBaseName[FileNameTake[docFile]], auxName, srcFile, key, h},
+    If[base === "api",
+      key = "@main"; srcFile = iPackageSourceFile[packageName],
+      auxName = iExtractAuxNameFromApiDoc[FileNameTake[docFile]];
+      If[auxName === None, Return[]];
+      key = auxName; srcFile = iFindAuxPackageSource[packageName, auxName]];
+    If[!StringQ[srcFile] || !FileExistsQ[srcFile], Return[]];
     h = iAuxSourceHash[srcFile];
-    If[StringQ[h], iAuxHashSet[docsDir, auxName, h]]];
+    If[StringQ[h], iAuxHashSet[docsDir, key, h]]];
 
 iAuxMtimeFreshQ[auxSrcFile_String, auxDocFile_String] :=
   Quiet @ Check[
@@ -17758,6 +18733,13 @@ iDocLooksTruncated[_] := True;
    \:66f4\:65b0\:6e08\:307f\:30d5\:30a1\:30a4\:30eb\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:3066\:6b8b\:308a\:304b\:3089\:518d\:958b\:3059\:308b (\:5b8c\:5168\:5b8c\:4e86\:6642\:306b\:30af\:30ea\:30a2)\:3002 *)
 If[!AssociationQ[$iDocCycle], $iDocCycle = <||>];   (* packageName -> cycleKey *)
 If[!StringQ[$iDocLastFailReason], $iDocLastFailReason = ""];  (* iSafeWriteDoc \:6700\:7d42\:5931\:6557\:7406\:7531(\:8a3a\:65ad\:7528) *)
+(* 2026-07-09: \:54c1\:8cea\:30b2\:30fc\:30c8\:5931\:6557 (\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408) \:6642\:306e
+   bounded retry + skip-and-continue \:7528\:72b6\:614b\:3002\:5f93\:6765\:306f 1 \:30d5\:30a1\:30a4\:30eb\:306e\:5931\:6557\:3067 fail-fast \:3057
+   \:30c1\:30a7\:30fc\:30f3\:5168\:4f53\:3092\:4e2d\:65ad\:3057\:305f\:305f\:3081\:3001\:518d\:5b9f\:884c\:3057\:3066\:3082\:540c\:3058\:30d5\:30a1\:30a4\:30eb(\:4f8b: setup.md \:304c\:5de8\:5927\:5316\:3057
+   agentic \:751f\:6210\:304c\:9014\:4e2d\:5207\:308c\:308b)\:3067\:518d\:5ea6\:5931\:6557\:3057\:3001\:6c38\:9060\:306b\:5b8c\:4e86\:3057\:306a\:304b\:3063\:305f\:3002 *)
+If[!AssociationQ[$iDocRetryCount], $iDocRetryCount = <||>];  (* "pkg|docFile" -> \:518d\:8a66\:884c\:6e08\:56de\:6570 *)
+If[!IntegerQ[$iDocMaxRetries], $iDocMaxRetries = 1];         (* \:54c1\:8cea\:5931\:6557\:6642\:306e\:540c\:4e00\:30d5\:30a1\:30a4\:30eb\:518d\:751f\:6210\:56de\:6570 *)
+$iDocChainReentry = False;   (* retry \:518d\:5165\:6642\:306b idx===1 \:306e\:591a\:91cd\:8d77\:52d5\:30ac\:30fc\:30c9\:3092\:30d0\:30a4\:30d1\:30b9\:3059\:308b\:4e00\:56de\:6027\:30d5\:30e9\:30b0 *)
 iDocCycleKey[srcFile_String, instruction_String, docs_List] :=
   IntegerString[Hash[{Quiet@Check[Import[srcFile, "Text"], ""], instruction, Sort[docs]}], 36];
 iDocProgressPath[docsDir_String] := FileNameJoin[{docsDir, ".docupdate_progress.json"}];
@@ -17804,20 +18786,29 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
       Return[$Failed]];
     cleaned = iCleanDocResponse[response];
     docFileName = FileNameTake[destPath];
-    (* === \:30ac\:30fc\:30c91: \:30b5\:30a4\:30ba\:9000\:884c\:30c1\:30a7\:30c3\:30af === *)
-    (* \:65e2\:5b58\:30d5\:30a1\:30a4\:30eb\:304c\:5b58\:5728\:3059\:308b\:5834\:5408\:3001\:65b0\:3057\:3044\:5185\:5bb9\:304c\:65e2\:5b58\:306e 40% \:672a\:6e80\:306a\:3089\:62d2\:5426 *)
+    (* === \:30ac\:30fc\:30c91: \:30b5\:30a4\:30ba\:9000\:884c\:30c1\:30a7\:30c3\:30af ===
+       \:65e2\:5b58\:30d5\:30a1\:30a4\:30eb\:304c\:5b58\:5728\:3059\:308b\:5834\:5408\:3001\:65b0\:3057\:3044\:5185\:5bb9\:304c\:65e2\:5b58\:306e 40% \:672a\:6e80\:306a\:3089\:62d2\:5426\:3002
+       2026-07-09: retry \:4e2d (\:524d\:56de\:304c\:5207\:308a\:8a70\:3081\:7b49\:3067\:5931\:6557\:3057\:3001RETRY NOTICE \:3067\:300c\:5358\:4e00\:5fdc\:7b54\:30fb
+       \:7c21\:6f54\:300d\:3092\:660e\:793a\:3057\:305f\:5834\:5408) \:306f\:610f\:56f3\:7684\:306a\:7e2e\:5c0f\:306a\:306e\:3067 40% \:6bd4\:7387\:30b2\:30fc\:30c8\:3092\:7de9\:548c\:3057\:3001
+       stub \:9632\:6b62\:306e\:7d76\:5bfe\:5024\:5e8a (600 \:6587\:5b57) \:306e\:307f\:9069\:7528\:3059\:308b\:3002\:5b8c\:5168\:6027\:306f Gate3(\:5207\:308a\:8a70\:3081)\:3068
+       iIsValidDocContent \:304c\:4fdd\:8a3c\:3059\:308b\:3002\:3053\:306e\:7de9\:548c\:304c\:306a\:3044\:3068\:3001\:5de8\:5927\:5316\:3057\:305f doc \:306f\:6c38\:9060\:306b
+       \:76ee\:6a19\:30b5\:30a4\:30ba\:3078\:7e2e\:5c0f\:3067\:304d\:305a (ratchet)\:3001\:6bce\:56de\:5927\:304d\:3059\:304e\:3066\:5207\:308a\:8a70\:3081\:308b\:60aa\:5faa\:74b0\:306b\:9665\:308b\:3002 *)
     If[FileExistsQ[destPath],
       existingContent = Quiet @ Check[Import[destPath, "Text"], ""];
       If[StringQ[existingContent] && StringLength[existingContent] > 200,
         existingLen = StringLength[existingContent];
         newLen = StringLength[StringTrim[cleaned]];
-        If[newLen < existingLen * 0.4,
-          $iDocLastFailReason = "\:30b5\:30a4\:30ba\:9000\:884c " <> ToString[existingLen] <> "\[RightArrow]" <>
-            ToString[newLen] <> "\:6587\:5b57(" <> ToString[Round[100. newLen / existingLen]] <> "%, \:95be\:5024 40%)";
-          Print[iL["\:26a0 iSafeWriteDoc: \:30b5\:30a4\:30ba\:9000\:884c\:3092\:691c\:51fa (", "\:26a0 iSafeWriteDoc: Size regression detected ("] <> docFileName <> "): " <>
-            ToString[existingLen] <> " \[RightArrow] " <> ToString[newLen] <>
-            " \:6587\:5b57 (" <> ToString[Round[100. newLen / existingLen]] <> "%)\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
-          Return[$Failed]
+        Module[{retryingQ = Lookup[$iDocRetryCount, packageName <> "|" <> docFileName, 0] > 0, tooSmall},
+          tooSmall = If[retryingQ, newLen < 600, newLen < existingLen * 0.4];
+          If[tooSmall,
+            $iDocLastFailReason = "\:30b5\:30a4\:30ba\:9000\:884c " <> ToString[existingLen] <> "\[RightArrow]" <>
+              ToString[newLen] <> "\:6587\:5b57(" <> ToString[Round[100. newLen / existingLen]] <> "%" <>
+              If[retryingQ, ", retry\:5e8a 600", ", \:95be\:5024 40%"] <> ")";
+            Print[iL["\:26a0 iSafeWriteDoc: \:30b5\:30a4\:30ba\:9000\:884c\:3092\:691c\:51fa (", "\:26a0 iSafeWriteDoc: Size regression detected ("] <> docFileName <> "): " <>
+              ToString[existingLen] <> " \[RightArrow] " <> ToString[newLen] <>
+              " \:6587\:5b57 (" <> ToString[Round[100. newLen / existingLen]] <> "%)\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
+            Return[$Failed]
+          ]
         ]
       ]
     ];
@@ -19244,9 +20235,19 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
         Return[$Failed]];
       prevSrcFile = FileNameJoin[{prevBackup, FileNameTake[srcFile]}];
       diffText = iComputeSourceDiff[prevSrcFile, srcFile]];
-    (* \:30bd\:30fc\:30b9\:5dee\:5206\:3082 design \:65b0\:898f\:5185\:5bb9\:3082\:7121\:3051\:308c\:3070\:4f55\:3082\:3057\:306a\:3044 *)
+    (* ソース差分も design 新規内容も無ければ何もしない。
+       ただし TargetFiles 明示指定時は早期リターンしない: 主ソース ClaudeOrchestrator.wl 等が
+       未変更でも、補助 <pkg>_<aux>.wl が変わって api_<aux>.md が古くなる場合があり、
+       PackageCommit の DocsGate はそれを stale と判定する。明示指定は常に再生成させて
+       この齟齬を解消する (補助 doc は対応補助ソースの現内容から再生成される)。 *)
     If[diffText === "(\:5909\:66f4\:306a\:3057)" &&
-       (!StringQ[designContext] || designContext === ""),
+       (!StringQ[designContext] || designContext === "") &&
+       OptionValue[TargetFiles] === Automatic,
+      (* 「docs 最新」の判定を PackageCommit の DocsGate と共有する:
+         主ソースの現内容ハッシュを予約キー "@main" に記録し、DocsGate が
+         mtime 揺れ (github.wl 等を触っただけ) で api.md を stale と誤判定しないようにする。 *)
+      With[{mh = iAuxSourceHash[srcFile]},
+        If[StringQ[mh], iAuxHashSet[docsDir, "@main", mh]]];
       nbPrint[nb, "\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306b\:5909\:66f4\:304c\:3042\:308a\:307e\:305b\:3093\:3002\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:6700\:65b0\:3067\:3059\:3002"];
       Return[]];
     (* \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:5bfe\:8c61\:306b\:3059\:308b *)
@@ -19265,13 +20266,31 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
           iExpandApiInTargetFiles[vtf, packageName, docsDir]], Module]];
       (* Automatic: \:5168\:30d5\:30a1\:30a4\:30eb\:3092\:691c\:51fa *)
       rootDocs = FileNameTake /@ FileNames["*.md", docsDir];
+      (* 2026-07-08 fix: \:540c\:540d\:9664\:5916\:306e\:6bd4\:8f03\:76f8\:624b (rootNames) \:306f\:30d5\:30a3\:30eb\:30bf\:524d\:306e
+         root \:4e00\:89a7\:3092\:4f7f\:3046\:3002\:65e7\:5b9f\:88c5\:306f\:30d5\:30a3\:30eb\:30bf\:5f8c\:306b\:53d6\:3063\:3066\:3044\:305f\:305f\:3081\:3001
+         \:300c\:6700\:65b0\:3067\:9664\:5916\:3055\:308c\:305f root \:30d5\:30a1\:30a4\:30eb\:300d\:306e\:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:91cd\:8907\:307b\:3069
+         \:5bfe\:8c61\:306b\:6ecb\:308a\:8fbc\:3080\:9006\:8ee2\:304c\:8d77\:304d\:3066\:3044\:305f\:3002 *)
+      rootNames = rootDocs;
       (* \:88dc\:52a9 api: \:30bd\:30fc\:30b9\:304c\:53e4\:3044\:3082\:306e\:306f\:9664\:5916\:3057\:3001\:672a\:4f5c\:6210\:306a\:3082\:306e\:306f\:8ffd\:52a0 *)
       rootDocs = iFilterAndExpandAuxApi[rootDocs, packageName, docsDir];
-      rootNames = rootDocs;
-      (* examples/ \:306a\:3069\:306e\:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:5185\:306e .md *)
-      subDocs = Module[{subFiles},
+      (* examples/ \:306a\:3069\:306e\:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:5185\:306e .md\:3002
+         2026-07-08 fix: docs/ \:3068\:3044\:3046\:540d\:306e\:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea (docsDir/docs/) \:306f
+         \:540c\:671f\:4e8b\:6545\:306e\:7523\:7269 (root \:306e\:91cd\:8907\:30b3\:30d4\:30fc) \:3067\:3042\:308a\:6c38\:7d9a\:5316\:30eb\:30fc\:30d7\:3092
+         \:8d77\:3053\:3059\:305f\:3081\:5e38\:306b\:9664\:5916\:3059\:308b\:3002\:691c\:51fa\:3057\:305f\:3089\:8b66\:544a\:3092\:51fa\:3059\:3002 *)
+      subDocs = Module[{subFiles, nested},
         subFiles = FileNames["*.md", docsDir, 2];
         subFiles = Select[subFiles, DirectoryName[#] =!= docsDir &];
+        nested = Select[subFiles,
+          FileNameTake[DirectoryName[#], -1] === "docs" &];
+        If[nested =!= {},
+          nbPrint[nb, Style[
+            "\:26a0\:fe0f docs/docs/ \:306b\:30cd\:30b9\:30c8\:3057\:305f\:91cd\:8907\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:691c\:51fa (" <>
+            ToString[Length[nested]] <>
+            " \:4ef6)\:3002\:66f4\:65b0\:5bfe\:8c61\:304b\:3089\:9664\:5916\:3057\:307e\:3059\:3002\:524a\:9664\:3092\:63a8\:5968: " <>
+            FileNameJoin[{docsDir, "docs"}],
+            FontColor -> RGBColor[0.8, 0.4, 0]]]];
+        subFiles = Select[subFiles,
+          FileNameTake[DirectoryName[#], -1] =!= "docs" &];
         (FileNameTake[DirectoryName[#], -1] <> "/" <> FileNameTake[#]) & /@ subFiles];
       (* \:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306e\:30d5\:30a1\:30a4\:30eb\:304c\:30eb\:30fc\:30c8\:3068\:540c\:540d\:306a\:3089\:9664\:5916 *)
       subDocs = Select[subDocs, !MemberQ[rootNames, FileNameTake[#]] &];
@@ -19620,7 +20639,10 @@ iBuildDocPrompt[sourceCode_String, packageName_String, docsDir_String, docFile_S
         Module[{siblingDocs, siblingContent = ""},
           siblingDocs = DeleteDuplicates @ Join[
             FileNames["*.md", docsDir],
-            FileNames["*.md", docsDir, 2]];
+            (* docs/docs/ ネスト残骸は README 素材にしない (2026-07-08) *)
+            Select[FileNames["*.md", docsDir, 2],
+              (DirectoryName[#] === docsDir ||
+               FileNameTake[DirectoryName[#], -1] =!= "docs") &]];
           siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
           If[Length[siblingDocs] > 0,
             siblingContent = "\n=== OTHER DOCUMENTATION FILES (use as source for README overview) ===\n" <>
@@ -19735,10 +20757,15 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     (* 2026-06-10 (freeze fix): 同一パッケージのドキュメント更新チェーンの
        多重起動ガード。2 本の連鎖が同じ docs/ と履歴を同時更新すると
        ファイル破損に加え、共有 tick の負荷が倍増し FE フリーズを招く。 *)
-    If[idx === 1 && iDocUpdateActiveQ[packageName],
+    If[idx === 1 && !TrueQ[$iDocChainReentry] && iDocUpdateActiveQ[packageName],
       nbPrint[nb, "⚠️ " <> packageName <>
         " のドキュメント更新が既に進行中です。完了を待ってから再実行してください。"];
       Return[$Failed]];
+    (* \:65b0\:898f\:30c1\:30a7\:30fc\:30f3\:958b\:59cb (idx===1 \:4e14\:3064\:975e\:518d\:8a66\:884c) \:6642\:306f\:3053\:306e\:30d1\:30c3\:30b1\:30fc\:30b8\:306e retry \:72b6\:614b\:3092\:521d\:671f\:5316\:3002
+       \:524d\:56de\:5b9f\:884c\:306e\:6b8b\:5b58\:30ab\:30a6\:30f3\:30bf\:3067\:521d\:56de\:8a66\:884c\:304c\:8aa4\:3063\:3066 skip \:3055\:308c\:308b\:306e\:3092\:9632\:3050\:3002 *)
+    If[idx === 1 && !TrueQ[$iDocChainReentry] && AssociationQ[$iDocRetryCount],
+      $iDocRetryCount = KeySelect[$iDocRetryCount, !StringStartsQ[#, packageName <> "|"] &]];
+    $iDocChainReentry = False;   (* \:518d\:5165\:30d5\:30e9\:30b0\:306f\:6bce\:56de\:6d88\:8cbb (\:6b21\:306e idx===1 \:65b0\:898f\:8d77\:52d5\:306f\:518d\:3073\:30ac\:30fc\:30c9\:3055\:308c\:308b) *)
     $iDocUpdateActive[packageName] = AbsoluteTime[];
     If[idx > Length[targetDocs],
       $iDocUpdateActive = KeyDrop[$iDocUpdateActive, packageName];
@@ -19859,7 +20886,10 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         Module[{siblingDocs, siblingContent = ""},
           siblingDocs = DeleteDuplicates @ Join[
             FileNames["*.md", docsDir],
-            FileNames["*.md", docsDir, 2]];
+            (* docs/docs/ ネスト残骸は README 素材にしない (2026-07-08) *)
+            Select[FileNames["*.md", docsDir, 2],
+              (DirectoryName[#] === docsDir ||
+               FileNameTake[DirectoryName[#], -1] =!= "docs") &]];
           siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
           If[Length[siblingDocs] > 0,
             siblingContent = "\n=== OTHER DOCUMENTATION FILES (use as source for README overview) ===\n" <>
@@ -19973,6 +21003,17 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
           "TASK REMINDER (update " <> docFile <> " now)",
           useInstruction]]];
 
+    (* \:518d\:751f\:6210\:6642 (\:524d\:56de\:304c\:5207\:308a\:8a70\:3081\:7b49\:3067\:5931\:6557): \:5358\:4e00\:5fdc\:7b54\:30fb\:30c4\:30fc\:30eb\:4e0d\:4f7f\:7528\:30fb\:30b3\:30fc\:30c9\:67f5\:9589\:3058\:3092
+       \:5f37\:304f\:6307\:793a\:3057\:3001\:9577\:3044 agentic \:751f\:6210\:306e\:9014\:4e2d\:5207\:308c\:3068\:65e2\:5b58\:5de8\:5927 doc \:306e\:518d\:73fe\:3092\:56de\:907f\:3059\:308b\:3002 *)
+    If[Lookup[$iDocRetryCount, packageName <> "|" <> docFile, 0] > 0,
+      AppendTo[promptParts,
+        "\nRETRY NOTICE: A previous attempt was cut off before finishing " <>
+        "(unbalanced ``` code fence, or the text ended mid-sentence). This time:\n" <>
+        "- Output the COMPLETE document in ONE response, from the first line to the last.\n" <>
+        "- Do NOT use any tools \[LongDash] all the source you need is already included above.\n" <>
+        "- Be concise; respect the target length and do NOT pad with redundant bulk.\n" <>
+        "- Make sure EVERY ``` code fence has a matching closing ```.\n\n"]];
+
     fullPrompt = StringJoin[promptParts];
 
     (* \:30d7\:30ed\:30f3\:30d7\:30c8\:5065\:5168\:6027\:30c1\:30a7\:30c3\:30af *)
@@ -19998,11 +21039,13 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
             md = mode, mf = docMediaFiles, dc = designContext},
         Function[response,
           Module[{writeResult},
-            (* fail-fast (2026-06-25 \:5f37\:5316): \:30b7\:30b9\:30c6\:30e0\:7684\:5931\:6557 (API \:30a8\:30e9\:30fc/\:5229\:7528\:5236\:9650/
-               \:30d7\:30ed\:30d0\:30a4\:30c0\:5185\:90e8\:30a8\:30e9\:30fc/\:7a7a\:5fdc\:7b54) \:3082\:3001\:54c1\:8cea\:5931\:6557 (\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c/
-               \:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408) \:3082\:3001\:691c\:51fa\:3057\:305f\:3089\:30c1\:30a7\:30fc\:30f3\:3092\:5373\:4e2d\:65ad\:3059\:308b\:3002\:4ee5\:524d\:306f
-               \:54c1\:8cea\:5931\:6557\:3092 skip \:3057\:3066\:6b21\:30d5\:30a1\:30a4\:30eb\:306b\:9032\:307f\:3001\:30a8\:30e9\:30fc\:304c\:51fa\:3066\:3082\:66f4\:65b0\:3092\:7d9a\:3051\:3066
-               \:3044\:305f\:3002\:6210\:529f\:3057\:305f\:30d5\:30a1\:30a4\:30eb\:306f\:9032\:6357\:8a18\:9332\:3055\:308c\:3001\:518d\:5b9f\:884c\:6642\:306b\:306f\:30b9\:30ad\:30c3\:30d7\:3055\:308c\:308b\:3002 *)
+            (* \:5931\:6557\:5206\:985e (2026-07-09 \:6539\:8a02): \:30b7\:30b9\:30c6\:30e0\:7684\:5931\:6557 (API \:30a8\:30e9\:30fc/\:5229\:7528\:5236\:9650/
+               \:30d7\:30ed\:30d0\:30a4\:30c0\:5185\:90e8\:30a8\:30e9\:30fc/\:7a7a\:5fdc\:7b54) \:306f\:5f93\:6765\:901a\:308a\:30c1\:30a7\:30fc\:30f3\:5373\:4e2d\:65ad (fail-fast)\:3002
+               \:4e00\:65b9\:3067\:54c1\:8cea\:5931\:6557 (\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408) \:306f\:5f8c\:6bb5\:3067
+               bounded retry + skip-and-continue \:3059\:308b (\:4e26\:5217\:7d4c\:8def iDocParallelReport \:3068\:540c\:69d8)\:3002
+               \:4ee5\:524d\:306f\:54c1\:8cea\:5931\:6557\:3082\:30c1\:30a7\:30fc\:30f3\:3092\:5373\:4e2d\:65ad\:3057\:3066\:3044\:305f\:305f\:3081\:3001\:6301\:7d9a\:7684\:306b\:5931\:6557\:3059\:308b 1 \:30d5\:30a1\:30a4\:30eb
+               (\:4f8b: \:5de8\:5927\:5316\:3057\:305f setup.md) \:304c\:6b8b\:308a\:5168\:90e8\:306e\:66f4\:65b0\:3092\:6c38\:9060\:306b\:30d6\:30ed\:30c3\:30af\:3057\:3066\:3044\:305f\:3002
+               \:6210\:529f\:3057\:305f\:30d5\:30a1\:30a4\:30eb\:306f\:9032\:6357\:8a18\:9332\:3055\:308c\:3001\:518d\:5b9f\:884c\:6642\:306b\:306f\:30b9\:30ad\:30c3\:30d7\:3055\:308c\:308b\:3002 *)
             If[!StringQ[response] || iIsAPIErrorResponse[response],
               nbPrint[nb2, Style[
                 "\:26d4 [" <> ToString[i] <> "/" <> ToString[Length[tds]] <> "] " <> df <>
@@ -20013,18 +21056,40 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
               $iDocUpdateActive = KeyDrop[$iDocUpdateActive, pn];
               Return[Null]];
             writeResult = iSafeWriteDoc[dp, response, pn];
+            (* \:54c1\:8cea\:5931\:6557 (\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408) \:6642\:306e\:6271\:3044\:3092
+               fail-fast (\:30c1\:30a7\:30fc\:30f3\:5168\:4f53\:4e2d\:65ad) \:304b\:3089 bounded retry + skip-and-continue \:306b\:5909\:66f4\:3002
+               API \:30a8\:30e9\:30fc (\:4e0a\:306e iIsAPIErrorResponse \:5206\:5c90) \:306f\:5f93\:6765\:901a\:308a\:30c1\:30a7\:30fc\:30f3\:3092\:6b62\:3081\:308b\:304c\:3001
+               1 \:30d5\:30a1\:30a4\:30eb\:306e\:54c1\:8cea\:5931\:6557\:3067\:6b8b\:308a\:5168\:90e8\:306e\:66f4\:65b0\:3092\:5dfb\:304d\:6dfb\:3048\:306b\:3057\:306a\:3044\:3002 *)
             If[writeResult === $Failed,
-              nbPrint[nb2, Style[
-                "\:26d4 [" <> ToString[i] <> "/" <> ToString[Length[tds]] <> "] " <> df <>
-                  " \:306e\:66f4\:65b0\:3092\:4e2d\:65ad" <>
-                  If[StringQ[$iDocLastFailReason] && $iDocLastFailReason =!= "",
-                    " [" <> $iDocLastFailReason <> "]",
-                    " (\:7121\:52b9/\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408)"] <> "\:3002" <>
-                  "\:30d5\:30a1\:30a4\:30eb\:306f\:5909\:66f4\:3057\:3066\:3044\:307e\:305b\:3093\:3002\:518d\:5b9f\:884c\:3067\:518d\:958b\:3057\:307e\:3059\:3002",
-                FontColor -> RGBColor[0.8, 0.2, 0.2]]];
-              $iDocUpdateActive = KeyDrop[$iDocUpdateActive, pn];
-              Return[Null]];
-            (* \:6210\:529f: \:9032\:6357\:8a18\:9332 \[RightArrow] \:6b21\:30d5\:30a1\:30a4\:30eb\:3078 *)
+              Module[{rkey = pn <> "|" <> df, rc, reason},
+                reason = If[StringQ[$iDocLastFailReason] && $iDocLastFailReason =!= "",
+                  " [" <> $iDocLastFailReason <> "]",
+                  " (\:7121\:52b9/\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408)"];
+                rc = Lookup[$iDocRetryCount, rkey, 0];
+                If[rc < $iDocMaxRetries,
+                  (* \:540c\:4e00\:30d5\:30a1\:30a4\:30eb\:3092\:518d\:751f\:6210 (bounded)\:3002\:518d\:751f\:6210\:6642\:306f\:5358\:4e00\:5fdc\:7b54\:30fb\:7c21\:6f54\:30ca\:30c3\:30b8\:304c\:4ed8\:304f
+                     ($iDocRetryCount>0 \:3092\:898b\:3066 promptParts \:306b RETRY NOTICE \:8ffd\:52a0)\:3002 *)
+                  $iDocRetryCount[rkey] = rc + 1;
+                  nbPrint[nb2, Style[
+                    "\:26a0 [" <> ToString[i] <> "/" <> ToString[Length[tds]] <> "] " <> df <>
+                      " \:306e\:751f\:6210\:304c\:672a\:5b8c\:4e86" <> reason <> "\:3002\:518d\:751f\:6210\:3057\:307e\:3059 (" <>
+                      ToString[rc + 1] <> "/" <> ToString[$iDocMaxRetries] <> ")...",
+                    FontColor -> RGBColor[0.8, 0.5, 0]]];
+                  $iDocChainReentry = True;   (* idx===1 \:3067\:3082\:591a\:91cd\:8d77\:52d5\:30ac\:30fc\:30c9\:3092\:901a\:3059 *)
+                  iUpdateDocNext[sc, pn, nb2, dd, instr, tds, i, dt, sf, sp, md, mf, dc];
+                  Return[Null]];
+                (* \:518d\:8a66\:884c\:6790\:5c3d: \:3053\:306e\:30d5\:30a1\:30a4\:30eb\:306f\:66f4\:65b0\:305b\:305a skip \:3057\:3066\:6b21\:306e\:30d5\:30a1\:30a4\:30eb\:3078\:9032\:3080\:3002
+                   \:9032\:6357\:8a18\:9332\:306f\:3057\:306a\:3044 (\:672a\:66f4\:65b0\:306e\:307e\:307e) \[RightArrow] \:6b21\:56de\:5b9f\:884c\:6642\:306b\:518d\:8a66\:884c\:3055\:308c\:308b\:3002 *)
+                $iDocRetryCount = KeyDrop[$iDocRetryCount, rkey];
+                nbPrint[nb2, Style[
+                  "\:26d4 [" <> ToString[i] <> "/" <> ToString[Length[tds]] <> "] " <> df <>
+                    " \:3092\:30b9\:30ad\:30c3\:30d7" <> reason <> "\:3002\:30d5\:30a1\:30a4\:30eb\:306f\:5909\:66f4\:305b\:305a\:6b21\:306e\:30d5\:30a1\:30a4\:30eb\:3078\:9032\:307f\:307e\:3059 " <>
+                    "(\:672a\:66f4\:65b0\:30fb\:6b21\:56de\:5b9f\:884c\:3067\:518d\:8a66\:884c)\:3002",
+                  FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+                iUpdateDocNext[sc, pn, nb2, dd, instr, tds, i + 1, dt, sf, sp, md, mf, dc];
+                Return[Null]]];
+            (* \:6210\:529f: \:518d\:8a66\:884c\:72b6\:614b\:3092\:30af\:30ea\:30a2 \[RightArrow] \:9032\:6357\:8a18\:9332 \[RightArrow] \:6b21\:30d5\:30a1\:30a4\:30eb\:3078 *)
+            $iDocRetryCount = KeyDrop[$iDocRetryCount, pn <> "|" <> df];
             iDocProgressMark[dd, Lookup[$iDocCycle, pn, ""], df];
             iRecordAuxHash[dd, pn, df];
             nbPrint[nb2, "  \[Checkmark] " <> df <> " \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"];
@@ -37060,6 +38125,28 @@ iDecodeProviderResult[other_] :=
 End[];
 
 EndPackage[];
+
+(* hardening 01 Inc2: SeatBroker を同ディレクトリから自動ロード (存在すれば)。
+   無くても席ゲートは probe fallback で機能する。EndPackage 後に置くのは
+   seatbroker の BeginPackage/EndPackage が ClaudeCode` のロード文脈を
+   汚さないようにするため。 *)
+Module[{dir, f, g},
+  dir = Quiet @ Check[
+    If[StringQ[$InputFileName] && $InputFileName =!= "",
+      DirectoryName[$InputFileName], Directory[]], Directory[]];
+  f = FileNameJoin[{dir, "ClaudeRuntime_seatbroker.wl"}];
+  If[Length[DownValues[ClaudeRuntime`ClaudeSeatAcquire]] === 0 && FileExistsQ[f],
+    Quiet @ Check[Block[{$CharacterEncoding = "UTF-8"}, Get[f]], Null]];
+  (* hardening 03 Inc2: ProcessSupervisor も同様に自動ロード *)
+  g = FileNameJoin[{dir, "ClaudeRuntime_processsupervisor.wl"}];
+  If[Length[DownValues[ClaudeRuntime`ClaudeSupervisedStartProcess]] === 0 &&
+     FileExistsQ[g],
+    Quiet @ Check[Block[{$CharacterEncoding = "UTF-8"}, Get[g]], Null]];
+  (* hardening 03 Inc4: 前セッションの残骸 (孤児 manifest/プロセス) を
+     起動時に回収する。ここが「tick が死ぬと漏れる」問題の最終補償点。
+     ロード遅延を抑えるため TimeConstrained で上限を切る。 *)
+  If[Length[DownValues[ClaudeRuntime`ClaudeProcessReap]] > 0,
+    Quiet @ Check[TimeConstrained[ClaudeRuntime`ClaudeProcessReap[], 15], Null]]];
 
 (* Phase 33 Task 5 version marker *)
 ClaudeCode`$claudecodeVersion = "2026-06-10-update-segment-merge-context-supply";
