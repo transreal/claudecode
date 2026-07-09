@@ -343,9 +343,15 @@ ClaudeUpdateDocumentation["testpkg"]
 
 (* GithubRepositories のコミット版を基準に更新 *)
 ClaudeUpdateDocumentation["testpkg", Baseline -> "Github"]
+
+(* 特定のファイルのみを更新対象に指定 *)
+ClaudeUpdateDocumentation["testpkg", TargetFiles -> {"api.md"}]
+
+(* examples/ 配下の全 *.md を一括更新 *)
+ClaudeUpdateDocumentation["testpkg", TargetFiles -> {"examples/*"}]
 ```
 
-`ClaudeUpdateDocumentation` の `Baseline` オプションについては後述の「高度な設定 > ドキュメントの自動生成・更新」を参照してください。
+`ClaudeUpdateDocumentation` の `Baseline` オプション、`TargetFiles` オプションについては後述の「高度な設定 > ドキュメントの自動生成・更新」を参照してください。
 
 ### 6. ClaudeRuntime の動作確認（オプション）
 
@@ -736,6 +742,16 @@ ClaudeBackendAvailableQ[{"lmstudio", Automatic}, "Refresh" -> True]
 
 表示されたパスの重複ファイルを削除することを推奨します。この機能は設定不要で自動的に動作します（2026-07-08 修正：除外判定の比較対象はフィルタ前の全ファイル一覧から取得されるため、`docsDir` 自体が `docs` という名前であっても正しく判定されます）。
 
+#### 15. TargetFiles に指定したファイル名がエラーになる
+
+`TargetFiles` に許可されていないファイル名を指定すると、以下のようなエラーが表示されます：
+
+```
+TargetFiles に不正なファイル名 "xxx.md" が含まれています。許可されるファイル: README.md, api.md, setup.md, user_manual.md (補助 api_*.md も可)
+```
+
+許可されるのは root ドキュメント（README.md / api.md / setup.md / user_manual.md）、補助 api ドキュメント（`api_<aux>.md`）、および `docsDir/examples` 配下の個別ファイル（`examples/<name>.md`）または一括指定マーカー（`examples/*`）です。ファイル名を確認し、対象を絞り込んでから再実行してください（詳細は後述の「TargetFiles オプション（更新対象ファイルを明示指定する）」を参照）。
+
 ### デバッグ情報の取得
 
 ```mathematica
@@ -901,6 +917,37 @@ API エラーや利用制限によるチェーン中断：
 #### docs/docs/ 重複ドキュメントの自動除外
 
 `docsDir` 配下に `docs/docs/` のようにネストしたサブディレクトリがあり、その中に root ドキュメント（README.md / api.md / setup.md / user_manual.md 等）と同名の重複ファイルが存在する場合、これらは Dropbox 同期や git 操作の事故で生じた重複コピーとみなされ、更新対象から自動的に除外されます。除外時には警告が表示され、削除が推奨されます（詳細は前述の「トラブルシューティング > 14. docs/docs/ にネストした重複ドキュメントが検出される」を参照）。この判定は設定不要で自動的に行われ、`docsDir` 自体が `docs` という名前のディレクトリである場合など、紛らわしいディレクトリ名のケースでも正しく重複と非重複を区別します（2026-07-08 修正）。
+
+#### TargetFiles オプション（更新対象ファイルを明示指定する）
+
+`ClaudeUpdateDocumentation` / `ClaudeCreateDocumentation` は `TargetFiles` オプションで、生成・更新の対象ファイルを明示的に絞り込めます。
+
+```mathematica
+(* README.md と api.md のみを更新 *)
+ClaudeUpdateDocumentation["pkg", TargetFiles -> {"README.md", "api.md"}]
+
+(* 特定の補助 api ドキュメントのみを更新 *)
+ClaudeUpdateDocumentation["pkg", TargetFiles -> {"api_eagle.md"}]
+
+(* examples/ 配下の特定ファイルのみを更新 *)
+ClaudeUpdateDocumentation["pkg", TargetFiles -> {"examples/basic.md"}]
+
+(* examples/ 配下に実在する全 *.md を一括更新 *)
+ClaudeUpdateDocumentation["pkg", TargetFiles -> {"examples/*"}]
+```
+
+許可されるファイル名は次のとおりです：
+
+- root ドキュメント: `README.md` / `api.md` / `setup.md` / `user_manual.md`
+- 補助 api ドキュメント: `api_<aux>.md`
+- `docsDir/examples` 配下の個別ファイル: `examples/<name>.md`
+- `docsDir/examples` 配下の一括指定マーカー: `examples/*`
+
+許可されないファイル名を指定すると「トラブルシューティング > 15. TargetFiles に指定したファイル名がエラーになる」で示したエラーが表示されます。
+
+`TargetFiles` に `"api.md"` を含めると、ソースが新鮮な（未反映の変更がある）補助 api_*.md が自動的に更新対象へ追加されます（前述の「補助 api_*.md の鮮度判定」を参照）。`"examples/*"` を含めると、`docsDir/examples` 内に実在する `*.md` 全件が更新対象に展開されます（2026-07-09 追加）。
+
+**注意**：`examples/*.md` は、通常の自動更新（`Baseline` オプションによる差分検出）の対象からは除外されています。`examples/` 配下のドキュメントを更新するには、`TargetFiles` で個別ファイル（`"examples/<name>.md"`）または一括マーカー（`"examples/*"`）を明示的に指定する必要があります（2026-07-09 変更）。
 
 ### CLI MCP サーバの登録（ClaudeRegisterCLIMCPServer）
 

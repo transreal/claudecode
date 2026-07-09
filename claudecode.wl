@@ -17505,19 +17505,24 @@ iIsAuxApiFresh[packageName_String, auxName_String, docsDir_String] :=
   ];
 iIsAuxApiFresh[___] := False;
 
-(* TargetFiles \:30ea\:30b9\:30c8\:306b "api.md" \:304c\:542b\:307e\:308c\:3066\:3044\:308b\:5834\:5408\:3001
-   \:88dc\:52a9 api_*.md (\:30bd\:30fc\:30b9\:304c\:65b0\:9bae\:306a\:3082\:306e) \:3092\:8ffd\:52a0\:3059\:308b\:3002
-   "api.md" \:304c\:306a\:3044\:5834\:5408\:306f\:5165\:529b\:3092\:305d\:306e\:307e\:307e\:8fd4\:3059\:3002 *)
+(* TargetFiles \:30ea\:30b9\:30c8\:306e\:5c55\:958b:
+   (1) "api.md" \:304c\:542b\:307e\:308c\:308b\:5834\:5408\:3001\:88dc\:52a9 api_*.md (\:30bd\:30fc\:30b9\:304c\:65b0\:9bae\:306a\:3082\:306e) \:3092\:8ffd\:52a0\:3002
+   (2) "examples/*" \:30de\:30fc\:30ab\:30fc\:304c\:542b\:307e\:308c\:308b\:5834\:5408\:3001docsDir/examples \:5185\:306e\:5168 *.md \:306b\:5c55\:958b\:3002 *)
 iExpandApiInTargetFiles[targetFiles_List, packageName_String, docsDir_String] :=
-  Module[{result = targetFiles, auxNames, auxFile, added = {}},
-    If[!MemberQ[result, "api.md"], Return[result]];
-    auxNames = iScanAuxPackages[packageName];
-    Do[
-      auxFile = "api_" <> auxName <> ".md";
-      If[!MemberQ[result, auxFile] && iIsAuxApiFresh[packageName, auxName, docsDir],
-        AppendTo[result, auxFile];
-        AppendTo[added, auxFile]],
-      {auxName, auxNames}];
+  Module[{result = targetFiles, auxNames, auxFile},
+    If[MemberQ[result, "api.md"],
+      auxNames = iScanAuxPackages[packageName];
+      Do[
+        auxFile = "api_" <> auxName <> ".md";
+        If[!MemberQ[result, auxFile] && iIsAuxApiFresh[packageName, auxName, docsDir],
+          AppendTo[result, auxFile]],
+        {auxName, auxNames}]];
+    (* 2026-07-09: examples/* \:30de\:30fc\:30ab\:30fc\:3092\:5b9f\:5728\:3059\:308b examples/*.md \:5168\:4ef6\:306b\:5c55\:958b *)
+    If[MemberQ[result, "examples/*"],
+      Module[{exDir = FileNameJoin[{docsDir, "examples"}], exFiles},
+        exFiles = If[DirectoryQ[exDir],
+          ("examples/" <> FileNameTake[#]) & /@ FileNames["*.md", exDir], {}];
+        result = DeleteDuplicates[Join[DeleteCases[result, "examples/*"], exFiles]]]];
     result
   ];
 iExpandApiInTargetFiles[targetFiles_, _, _] := targetFiles;
@@ -19951,15 +19956,24 @@ $iAllowedTargetBases = {"api", "README", "setup", "user_manual", "example"};
 $iAllowedTargetFiles = (# <> ".md") & /@ $iAllowedTargetBases;
 
 iNormalizeOneTargetFile[f_String] :=
-  Which[
-    MemberQ[$iAllowedTargetFiles, f], f,
-    MemberQ[$iAllowedTargetBases, f], f <> ".md",
+  Module[{ff = StringReplace[f, "\\" -> "/"]},
+   Which[
+    (* examples \:4e00\:62ec\:30de\:30fc\:30ab\:30fc: \:5168 examples/*.md \:3092\:5bfe\:8c61 (iExpandApiInTargetFiles \:3067\:5c55\:958b) *)
+    MemberQ[{"examples", "examples/", "examples/*", "examples/*.md"}, ff], "examples/*",
+    (* example / example.md \:306f canonical examples/example.md \:306b\:6b63\:898f\:5316 *)
+    ff === "example" || ff === "example.md", "examples/example.md",
+    (* examples/<name>.md: \:305d\:306e\:307e\:307e (\:660e\:793a\:6307\:5b9a\:3067\:500b\:5225\:66f4\:65b0) *)
+    StringMatchQ[ff, "examples/" ~~ Except["/"].. ~~ ".md"], ff,
+    (* examples/<name> (\:62e1\:5f35\:5b50\:306a\:3057): .md \:4ed8\:4e0e *)
+    StringMatchQ[ff, "examples/" ~~ Except["/"]..], ff <> ".md",
+    MemberQ[$iAllowedTargetFiles, ff], ff,
+    MemberQ[$iAllowedTargetBases, ff], ff <> ".md",
     (* \:88dc\:52a9 api: api_<aux>.md \:5f62\:5f0f *)
-    iIsAuxApiName[FileBaseName[f]] && FileExtension[f] === "md", f,
+    iIsAuxApiName[FileBaseName[ff]] && FileExtension[ff] === "md", ff,
     (* \:88dc\:52a9 api: api_<aux> \:62e1\:5f35\:5b50\:306a\:3057 *)
-    iIsAuxApiName[f], f <> ".md",
+    iIsAuxApiName[ff], ff <> ".md",
     True, $Failed
-  ];
+   ]];
 
 iValidateTargetFiles[Automatic] := Automatic;
 iValidateTargetFiles[tf_String] :=
@@ -19982,7 +19996,7 @@ iValidateTargetFiles[tf_List] :=
 iValidateTargetFiles[_] := Automatic;
 
 ClaudeUpdateDocumentation::badtarget =
-  "TargetFiles \:306b\:4e0d\:6b63\:306a\:30d5\:30a1\:30a4\:30eb\:540d `1` \:304c\:542b\:307e\:308c\:3066\:3044\:307e\:3059\:3002\:8a31\:53ef\:3055\:308c\:308b\:30d5\:30a1\:30a4\:30eb: `2` (\:88dc\:52a9 api_*.md \:3082\:53ef)";
+  "TargetFiles \:306b\:4e0d\:6b63\:306a\:30d5\:30a1\:30a4\:30eb\:540d `1` \:304c\:542b\:307e\:308c\:3066\:3044\:307e\:3059\:3002\:8a31\:53ef\:3055\:308c\:308b\:30d5\:30a1\:30a4\:30eb: `2` (\:88dc\:52a9 api_*.md\:3001examples/<name>.md\:3001\:5168\:4f8b\:306f examples/* \:3082\:53ef)";
 
 $iDocKeywords = <|
   "README.md"       -> {"README", "readme", "\:6982\:8981", "\:306f\:3058\:3081",
@@ -20297,6 +20311,18 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
             FontColor -> RGBColor[0.8, 0.4, 0]]]];
         subFiles = Select[subFiles,
           FileNameTake[DirectoryName[#], -1] =!= "docs" &];
+        (* 2026-07-09: examples/*.md \:306f\:81ea\:52d5\:66f4\:65b0\:304b\:3089\:9664\:5916 (\:660e\:793a\:6307\:5b9a\:6642\:306e\:307f\:66f4\:65b0)\:3002
+           \:5b9f\:4f8b\:306f\:624b\:4f5c\:696d\:5185\:5bb9\:304c\:4e3b\:3067\:6bce\:56de\:518d\:751f\:6210\:306f\:7121\:99c4\:3001\:591a\:6570\:4f5c\:308b\:3068\:66f4\:65b0\:304c\:7d42\:308f\:3089\:306a\:304f\:306a\:308b\:305f\:3081\:3002
+           \:66f4\:65b0\:306b\:306f TargetFiles \:3067\:500b\:5225 (\"examples/<name>.md\") \:304b\:4e00\:62ec (\"examples/*\") \:3092\:660e\:793a\:6307\:5b9a\:3002 *)
+        Module[{exSkipped = Select[subFiles,
+            FileNameTake[DirectoryName[#], -1] === "examples" &]},
+          If[exSkipped =!= {},
+            nbPrint[nb, Style[
+              "\:2139 examples/*.md (" <> ToString[Length[exSkipped]] <>
+              " \:4ef6) \:306f\:81ea\:52d5\:66f4\:65b0\:304b\:3089\:9664\:5916\:3002\:66f4\:65b0\:3059\:308b\:306b\:306f TargetFiles \:3067\:660e\:793a\:6307\:5b9a (\:500b\:5225 \"examples/<name>.md\" \:307e\:305f\:306f\:4e00\:62ec \"examples/*\")\:3002",
+              FontColor -> GrayLevel[0.5]]]]];
+        subFiles = Select[subFiles,
+          FileNameTake[DirectoryName[#], -1] =!= "examples" &];
         (FileNameTake[DirectoryName[#], -1] <> "/" <> FileNameTake[#]) & /@ subFiles];
       (* \:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306e\:30d5\:30a1\:30a4\:30eb\:304c\:30eb\:30fc\:30c8\:3068\:540c\:540d\:306a\:3089\:9664\:5916 *)
       subDocs = Select[subDocs, !MemberQ[rootNames, FileNameTake[#]] &];

@@ -5,8 +5,8 @@ claudecode パッケージは Wolfram Language / Mathematica から Claude Code 
 ## 基本設定変数
 
 ### $ClaudeModel
-型: {String, String} (tuple), 初期値: {"claudecode", "claude-sonnet-4-6"}
-Claude CLI に渡すプロバイダーとモデル名のペア。形式: {provider, modelName}。provider は "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "lmstudio"。
+型: {String, String} (tuple) | "", 初期値: "" (未設定)
+Claude CLI に渡すプロバイダーとモデル名のペア。形式: {provider, modelName}。provider は "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "lmstudio"。パッケージロード直後は "" (未設定) で、この場合 Claude Code CLI 自身の既定モデルが使われる。ShowClaudePalette でのプロバイダー/モデル選択操作が $ClaudeModel にタプル値を反映する (claudecode/anthropic の既定候補は SourceVault 経由で動的解決、フォールバックは claude-opus-4-8)。
 例: $ClaudeModel = {"claudecode", "claude-opus-4-8"}; $ClaudeModel = {"anthropic", "claude-sonnet-4-6"}
 
 ### $ClaudeAdvisaryModel
@@ -325,7 +325,7 @@ LLM backend の事前可用性チェック (preflight)。lmstudio は /api/v0/mo
 プロンプトルーターが軽量 LLM 作業に使うモデル層を制御する。Automatic (既定) は電源状態に従う (AC→ローカル軽量モデル、バッテリー→クラウド軽量モデル)。"Local"/"Cloud" で固定、"Off" は軽量層ディスパッチを止める (リクエストは $ClaudeModel にフォールスルー、LLM 不使用のコンテキストプランナーは動作継続)。ShowClaudePalette から切替可能。
 
 ### ClaudeRoutingModelClass[] → "Local" | "Cloud" | "Off"
-$ClaudeRoutingModelPolicy の Automatic を現在の電源状態に対して解決した実効クラスを返す。
+$ClaudeRoutingModelPolicy の Automatic を現在の電源状態 (Windows: BatteryStatus WMI、他 OS では常に "AC" とみなす) に対して解決した実効クラスを返す。
 
 ### ClaudeRoutingPolicyStatus[] → Association
 現在のルーティングポリシー状態を返す。キー: "Policy" (生の $ClaudeRoutingModelPolicy), "Power" ("AC"|"Battery"|"Unknown"), "Effective" (解決済みクラス)。
@@ -1108,7 +1108,7 @@ Options: NBAccess`NBEnqueueFinalAction のオプションを継承
 ## パレット・UI
 
 ### ShowClaudePalette[]
-Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → lmstudio。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-4-8/claude-sonnet-4-6/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (SourceVault カタログが優先)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する。
+Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → lmstudio。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-4-8/claude-sonnet-4-6/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (SourceVault カタログが優先)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。
 → NotebookObject
 
 ### ClaudeRegisterPaletteServiceControl[spec]
@@ -1283,4 +1283,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE (chunked for token efficiency) の全域を実ソース (claudecode.wl, 38,314 行) と突き合わせて同期済み。ClaudeDebug / ClaudeReview / ClaudeWebSearch / ClaudeWebFetch / NBFileTranslate / ClaudeProcessFile / ClaudeStartRuntime / ClaudeEvalViaRuntime / ClaudeApproveProposal / CreateClaudeSession / ClaudeAddDirective / ClaudeSyncDirectives / ClaudeUpdateDirective / LLMGraphDAGCreate 等、旧版ドキュメントの usage 文字列と実装が食い違っていた関数は実装 (Private セクションの実際の定義) を正としてシグネチャ・オプションを更新した。今回のパスでは BeginPackage の公開シンボルリストと突き合わせ、`## ランタイム` に $UseClaudeRuntime / $ClaudeLastRuntimeId / $ClaudeRoutingProviders / $ClaudeRuntimeAsyncExecution / $ClaudeRuntimeAsyncForce / $ClaudeRuntimeAsyncSuppressInputEval を、`## LLMGraphDAG` に $LLMGraphMaxConcurrency / $LLMGraphAutoStopThreshold / $LLMGraphDAGStallSeconds / $LLMGraphDAGMaxJobSeconds を追加した (usage 文字列がソースの提供範囲外のため、変数名と Phase コメントの文脈から用途を記述)。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl, 38,355 行) と再度突き合わせて同期を確認した。今回のパスでは、全 248 件の `::usage` 宣言 (BeginPackage 直後の公開シンボル定義ブロック) を機械的に列挙し、既存ドキュメントの関数・変数一覧が完全に一致することを確認した。加えて ClaudeQuery / ClaudeEval / ContinueEval / ContinueUpdate / ClaudeQuerySync / ClaudeQueryBg / ClaudeQueryAsync の `Options[...]` 宣言を実ソースから直接読み取り、オプション名・既定値がすべて一致することを確認した。唯一の修正点は `$ClaudeModel` の初期値: 旧記述の `{"claudecode", "claude-sonnet-4-6"}` は誤りで、実際にはパッケージロード直後は `""` (未設定、Claude Code CLI 自身の既定モデルを使用) であり、`{provider, modelName}` タプルは ShowClaudePalette 等でのユーザー操作時に `iPaletteSyncClaudeModel[]` が設定する値だった。この点を本セクションおよび ShowClaudePalette の説明に反映した。それ以外の関数シグネチャ・オプション・デフォルト値・削除/追加シンボルの差分はなし。

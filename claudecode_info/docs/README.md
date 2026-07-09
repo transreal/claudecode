@@ -32,7 +32,7 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 パッケージキーワード自動注入システムにより、各外部パッケージが `$ClaudePackageKeywordMap` を通じて独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。これにより claudecode.wl はパッケージ非依存を保ちつつ、必要な API ドキュメントを自動的に提供できます。さらに `$ClaudePackageAuxKeywordMap` により、パッケージ本体とは別に提供される補助 API ドキュメント（`api_<aux>.md` 形式）ごとに注入条件となるキーワードを個別指定することも可能です。
 
-ドキュメント生成機能 (`ClaudeCreateDocumentation`, `ClaudeUpdateDocumentation`) では、ソースコードから API リファレンス・使用例・セットアップガイドなどの文書一式を自動生成します。ドキュメント更新時はノートブックの現在のコンテキストも参照でき、「上で議論された内容を反映して」といった自然な指示が可能です。`TargetFiles` オプションでは `api`・`setup`・`user_manual`・`example`・`README` の5種類の .md ファイルのみが許可リストとして設定されており、拡張子 `.md` は省略可能（自動補完）です。`Baseline` オプションにより差分検出の基準を選択でき、`"LastDocUpdate"`（直近のドキュメント更新バックアップ）と `"Github"`（GitHub コミット版）のいずれかを指定できます。`"Github"` を指定すると、コミット版以降のソースコード変更に加えて `_info/design` 配下の新規設計ドキュメントも加味した更新が行われます。ドキュメント更新チェーンの多重起動防止ガードにより、同一パッケージに対して複数の更新チェーンが同時起動することを防ぎます。チェーンが異常終了した場合も `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放されます。更新失敗は「システム的失敗（fail-fast でチェーンを即中断）」と「品質ゲート失敗（切り詰め・サイズ退行・タイトル不整合。当該ファイルのみスキップして次へ進む）」に明確に分類されるため、1 ファイルの持続的な品質失敗が残り全ファイルの更新を巻き添えにすることがなくなりました。品質ゲート失敗時はまず 1 回だけ自動リトライが行われ（単一応答での出力・ツール不使用・コードフェンスの正しい閉じを明示する RETRY NOTICE をプロンプトに追加注入）、それでも同じ理由で失敗した場合にのみ当該ファイルをスキップします。既存ファイルへの上書き時には、新しい内容が既存内容の 40% 未満に縮小した場合は書き込み自体を拒否するサイズ退行ガードも機能します。また `docs/` 配下に同期事故等で生じた `docs/docs/` ネスト重複ドキュメントを自動検出し、更新対象から除外した上で削除を推奨する警告を表示します。`Disclaimer`・`License`・`Acknowledgments` 等のオプションで免責事項・ライセンス情報・謝辞を指定でき、`References` オプションで参考文献リストを、`Demos` オプションでデモ動画や使用例のリンクを README に追加できます。これらは `doc_options.json` に永続化されて以降の更新でも保持されます。補助 API ドキュメント（`api_<aux>.md`）の再生成要否判定は、更新日時（mtime）比較からコンテンツハッシュ比較へ段階的に移行しており、Dropbox 同期や複数 PC 環境による mtime のずれだけでは不要な再生成が発生しないようになっています。ドキュメント生成にはトークン節約のためソースコードのチャンク化が行われ、ドキュメント種別ごとに関連セクションのみを選択的に送信します。ドキュメント生成専用モデル (`$ClaudeDocModel`) を指定でき、Sonnet クラスの安価なモデルでコスト効率よく生成できます。リミット到達時は自動停止し、再実行で未生成分のみ続行します。20 ファイル以上の一括更新時は、README を除くドキュメントを LLM へ並列投入し、ウィンドウステータスバーにリアルタイム進捗（完了数・並列実行数・経過時間）を表示します。API エラー等で中断した場合も、サイクル再開（resumption）機能により同一サイクル内の更新済みファイルをスキップして効率的に継続できます。ディレクティブファイルの書き込みには、サイズ退行・タイトル整合性・スキル名保持を検証するガード機構 (`iSafeWriteDirective`) が組み込まれています。
+ドキュメント生成機能 (`ClaudeCreateDocumentation`, `ClaudeUpdateDocumentation`) では、ソースコードから API リファレンス・使用例・セットアップガイドなどの文書一式を自動生成します。ドキュメント更新時はノートブックの現在のコンテキストも参照でき、「上で議論された内容を反映して」といった自然な指示が可能です。`TargetFiles` オプションでは `api`・`setup`・`user_manual`・`example`・`README` の5種類の .md ファイルのみが許可リストとして設定されており、拡張子 `.md` は省略可能（自動補完）です。`Baseline` オプションにより差分検出の基準を選択でき、`"LastDocUpdate"`（直近のドキュメント更新バックアップ）と `"Github"`（GitHub コミット版）のいずれかを指定できます。`"Github"` を指定すると、コミット版以降のソースコード変更に加えて `_info/design` 配下の新規設計ドキュメントも加味した更新が行われます。ドキュメント更新チェーンの多重起動防止ガードにより、同一パッケージに対して複数の更新チェーンが同時起動することを防ぎます。チェーンが異常終了した場合も `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放されます。更新失敗は「システム的失敗（fail-fast でチェーンを即中断）」と「品質ゲート失敗（切り詰め・サイズ退行・タイトル不整合。当該ファイルのみスキップして次へ進む）」に明確に分類されるため、1 ファイルの持続的な品質失敗が残り全ファイルの更新を巻き添えにすることがなくなりました。品質ゲート失敗時はまず 1 回だけ自動リトライが行われ（単一応答での出力・ツール不使用・コードフェンスの正しい閉じを明示する RETRY NOTICE をプロンプトに追加注入）、それでも同じ理由で失敗した場合にのみ当該ファイルをスキップします。品質ゲート失敗時のリトライ・スキップ経路においても、共有ポーリングタスクの再発火や派生クエリの二重起動によってドキュメント更新チェーンが分岐（fork）してしまう不具合を防ぐため、各ステップに一意のシリアルトークンを発行し最初のコールバックのみを有効化する二重発火ガードが導入されています。既存ファイルへの上書き時には、新しい内容が既存内容の 40% 未満に縮小した場合は書き込み自体を拒否するサイズ退行ガードも機能します。また `docs/` 配下に同期事故等で生じた `docs/docs/` ネスト重複ドキュメントを自動検出し、更新対象から除外した上で削除を推奨する警告を表示します。さらに `docs/examples/` 配下の使用例ドキュメント（`*.md`）は、既定（Automatic）モードでの自動更新対象から除外されます。使用例ドキュメントの多くは手作業で作成された内容であり、毎回自動再生成すると数が多い場合に更新が終わらなくなるための設計で、更新する場合は `TargetFiles` オプションで明示的に指定する必要があります。`Disclaimer`・`License`・`Acknowledgments` 等のオプションで免責事項・ライセンス情報・謝辞を指定でき、`References` オプションで参考文献リストを、`Demos` オプションでデモ動画や使用例のリンクを README に追加できます。これらは `doc_options.json` に永続化されて以降の更新でも保持されます。補助 API ドキュメント（`api_<aux>.md`）の再生成要否判定は、更新日時（mtime）比較からコンテンツハッシュ比較へ段階的に移行しており、Dropbox 同期や複数 PC 環境による mtime のずれだけでは不要な再生成が発生しないようになっています。ドキュメント生成にはトークン節約のためソースコードのチャンク化が行われ、ドキュメント種別ごとに関連セクションのみを選択的に送信します。ドキュメント生成専用モデル (`$ClaudeDocModel`) を指定でき、Sonnet クラスの安価なモデルでコスト効率よく生成できます。リミット到達時は自動停止し、再実行で未生成分のみ続行します。20 ファイル以上の一括更新時は、README を除くドキュメントを LLM へ並列投入し、ウィンドウステータスバーにリアルタイム進捗（完了数・並列実行数・経過時間）を表示します。API エラー等で中断した場合も、サイクル再開（resumption）機能により同一サイクル内の更新済みファイルをスキップして効率的に継続できます。ディレクティブファイルの書き込みには、サイズ退行・タイトル整合性・スキル名保持を検証するガード機構 (`iSafeWriteDirective`) が組み込まれています。
 
 AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImageGenerate`）と OpenAI TTS API による音声合成（`ClaudeSpeech`）を統合しています。ClaudeQuery のリッチレスポンスモードでは、ユーザーの要求に応じて自動的にこれらの API を呼び出すコードや、安全な可視化コード（Plot、Graphics 等）を自動評価します。
 
@@ -48,7 +48,7 @@ AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImag
 
 **claudecode_directives 連携とディレクティブ投影レイヤー**: オプションの独立パッケージ [claudecode_directives](https://github.com/transreal/claudecode_directives) をロードすることで、`rules/` および `skills/` ディレクトリのデフォルトセットが自動的にインストールされます。ロード後は Claude Code CLI のコンテキストに `rules/` の制約と `skills/` の手順が自動的に注入され、Claude がスキルを呼び出せるようになります。これらのディレクティブは Claude Code の振る舞いを規定するルールとスキルを体系的に提供し、claudecode.wl 本体はディレクティブの内容に非依存のまま、claudecode_directives がその管理・配布を担います。NotebookDirectory ごとに独立したプロジェクト固有のルール・スキルを定義してメインのディレクティブと自動マージすることも可能です。
 
-このパッケージは、単なる rules/skills の配布にとどまらず、**ディレクティブ投影レイヤー（ClaudeDirectives）** を備えています。正規ディレクティブ・リポジトリ（`.claude/CLAUDE.md` / `rules/` / `skills/`）を読み込み、モデルの能力（コンテキスト長・課金有無・クラス）・ロール・タスク内容に応じて、投影モード（**Full / Summary / Index / Lazy**）と適用するスキル・ルールを in-memory で動的に選択します。モデル能力は `$ClaudeModelCapabilities` テーブルで管理され、`"claudecode"`（CLI・課金なし）/`"anthropic"`（API・課金）/`"openai"`（API・課金）/`"lmstudio"`（ローカル・課金なし）の provider 別に登録されます。さらに、単一の正規リポジトリから Claude CLI 用（`.claude/`）と Codex CLI 用（`AGENTS.md` / `.agents/`）のハーネスを生成・実体化する機能を備え、ファイル形式は Claude Code 互換を維持します。Claude CLI ハーネスの生成方式は `$ClaudeCLIHarnessMode` で制御でき、`"Direct"`（既定・作業中の `.claude/` をそのままコピー）と `"Generated"`（正規ディレクティブリポジトリから `.claude/` を生成するオプトインモード）を選択できます。投影レイヤーは claudecode.wl / NBAccess.wl に依存しない純 Wolfram Language 実装で、claudecode.wl 側から optional に統合されます。リポジトリのインベントリ・Manifest・ContentHash 算出による整合性管理も備えています。
+このパッケージは、単なる rules/skills の配布にとどまらず、**ディレクティブ投影レイヤー（ClaudeDirectives）** を備えています。正規ディレクティブ・リポジトリ（`.claude/CLAUDE.md` / `rules/` / `skills/`）を読み込み、モデルの能力（コンテキスト長・課金有無・クラス）・ロール・タスク内容に応じて、投影モード（**Full / Summary / Index / Lazy**）と適用するスキル・ルールを in-memory で動的に選択します。モデル能力は `$ClaudeModelCapabilities` テーブルで管理され、`"claudecode"`（CLI・課金なし）/`"anthropic"`（API・課金）/`"openai"`（API・課金）/`"lmstudio"`（ローカル・課金なし）の provider 別に登録されます。タスク内容に応じたルール選別は、常時注入対象（`$ClaudeAlwaysOnRules`）を除き、rule の frontmatter に記載されたキーワード・パスとタスクヒントとの一致度によってスコアリングされます。さらに、単一の正規リポジトリから Claude CLI 用（`.claude/`）と Codex CLI 用（`AGENTS.md` / `.agents/`）のハーネスを生成・実体化する機能を備え、ファイル形式は Claude Code 互換を維持します。Claude CLI ハーネスの生成方式は `$ClaudeCLIHarnessMode` で制御でき、`"Direct"`（既定・作業中の `.claude/` をそのままコピー）と `"Generated"`（正規ディレクティブリポジトリから `.claude/` を生成するオプトインモード）を選択できます。投影レイヤーは claudecode.wl / NBAccess.wl に依存しない純 Wolfram Language 実装で、claudecode.wl 側から optional に統合されます。リポジトリのインベントリ・Manifest・ContentHash 算出による整合性管理も備えています。
 
 **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすることで、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、内部状態を保持した複数ターンにわたる対話を可能にします。危険な操作(内部変数の直接書き換え等)に対しては自動的に承認フロー(`NeedsApproval`)を介挿し、意図しない破壊的操作を防止します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、以降の `ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode を単独でロードした場合はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。
 
@@ -401,7 +401,7 @@ ShowClaudePalette[]
 
 **ドキュメント生成**
 - `ClaudeCreateDocumentation["name"]` — パッケージの文書一式を自動生成。`Disclaimer`・`License`・`Acknowledgments` 等のオプションで README に免責事項・ライセンス情報・謝辞を付加可能。`References -> {URL, ...}` で参考文献リスト、`Demos -> {URL, ...}` でデモリンクを追加可能。リミット到達時は自動停止し、再実行で未生成分のみ続行。`$ClaudeDocModel` で生成専用モデルを指定可能
-- `ClaudeUpdateDocumentation["name", "指示"]` — 既存ドキュメントの更新。ノートブックのコンテキストも参照可能。オプション設定は `doc_options.json` に永続化。`TargetFiles` オプションで更新対象を `api`・`setup`・`user_manual`・`example`・`README` の5種類に限定でき（拡張子 `.md` は省略可能）。`Baseline` オプションで差分の基準を `"LastDocUpdate"`（直近の更新バックアップ）または `"Github"`（GitHub コミット版）から選択可能。多重起動防止ガードにより同一パッケージへの同時更新を防止。更新失敗は「システム的失敗（fail-fast）」と「品質ゲート失敗（当該ファイルのみスキップ）」に分類され、1 ファイルの失敗が全体を巻き添えにしない。品質ゲート失敗時はまず自動リトライが1回行われ（RETRY NOTICE 付きプロンプトで再送）、失敗が続く場合のみ当該ファイルをスキップ。既存ファイル上書き時のサイズ退行ガード（新内容が既存の40%未満に縮小した場合は書き込み拒否）も機能。`docs/docs/` ネスト重複ドキュメントを自動検出し更新対象から除外。20 ファイル以上の一括更新時は並列投入とリアルタイム進捗表示が行われ、中断後もサイクル再開（resumption）機能により効率的に継続可能。チェーンが異常終了した場合は `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放。補助 API ドキュメント（`api_<aux>.md`）の再生成要否はコンテンツハッシュ比較で判定され、mtime のずれのみによる不要な再生成を防止
+- `ClaudeUpdateDocumentation["name", "指示"]` — 既存ドキュメントの更新。ノートブックのコンテキストも参照可能。オプション設定は `doc_options.json` に永続化。`TargetFiles` オプションで更新対象を `api`・`setup`・`user_manual`・`example`・`README` の5種類に限定でき（拡張子 `.md` は省略可能）。`Baseline` オプションで差分の基準を `"LastDocUpdate"`（直近の更新バックアップ）または `"Github"`（GitHub コミット版）から選択可能。多重起動防止ガードにより同一パッケージへの同時更新を防止。更新失敗は「システム的失敗（fail-fast）」と「品質ゲート失敗（当該ファイルのみスキップ）」に分類され、1 ファイルの失敗が全体を巻き添えにしない。品質ゲート失敗時はまず自動リトライが1回行われ（RETRY NOTICE 付きプロンプトで再送）、失敗が続く場合のみ当該ファイルをスキップ。品質ゲート失敗のリトライ・スキップ経路でチェーンが分岐（fork）しないよう、各ステップに一意のシリアルトークンを発行する二重発火ガードも機能。既存ファイル上書き時のサイズ退行ガード（新内容が既存の40%未満に縮小した場合は書き込み拒否）も機能。`docs/docs/` ネスト重複ドキュメントを自動検出し更新対象から除外。`docs/examples/` 配下の使用例ドキュメントは既定（Automatic）モードでの自動更新対象から除外（`TargetFiles` で明示指定すれば更新可能）。20 ファイル以上の一括更新時は並列投入とリアルタイム進捗表示が行われ、中断後もサイクル再開（resumption）機能により効率的に継続可能。チェーンが異常終了した場合は `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放。補助 API ドキュメント（`api_<aux>.md`）の再生成要否はコンテンツハッシュ比較で判定され、mtime のずれのみによる不要な再生成を防止
 
 **ディレクティブ管理**
 - `ClaudeAddDirective[target, description]` — CLAUDE.md やスキルファイルにディレクティブを追加。`Scope -> "Local"` でプロジェクト固有のディレクティブも追加可能
@@ -417,6 +417,7 @@ ShowClaudePalette[]
 **ディレクティブ投影レイヤー（ClaudeDirectives・claudecode_directives ロード時）**
 - 正規ディレクティブ・リポジトリ（`.claude/CLAUDE.md` / `rules/` / `skills/`）を読み込み、モデル能力・ロール・タスクに応じて投影モード（Full / Summary / Index / Lazy）と適用スキル・ルールを動的選択
 - `$ClaudeModelCapabilities` によるモデル能力テーブル管理（provider 別の課金有無・コンテキスト長・クラス）
+- タスクヒントに基づく rule/skill 選別（frontmatter のキーワード・パスとの一致度でスコアリング）と、常時注入対象を定義する `$ClaudeAlwaysOnRules`
 - 単一の正規リポジトリから Claude CLI 用（`.claude/`）と Codex CLI 用（`AGENTS.md` / `.agents/`）のハーネスを生成・実体化（生成方式は `$ClaudeCLIHarnessMode` で `"Direct"` / `"Generated"` を選択）
 - リポジトリのインベントリ・Manifest・ContentHash 算出による整合性管理
 
@@ -700,6 +701,8 @@ ClaudeQuery["Explain how to implement Fibonacci sequence"]
 
 拡張子 `.md` は省略可能で自動補完されます。許可リスト外の値を指定するとエラーになります。
 
+既定（`Automatic`）モードでの一括更新では、`docs/examples/` 配下の使用例ドキュメント（`*.md`）は自動更新対象から除外されます。使用例ドキュメントの多くは手作業で作成された内容であり、毎回自動再生成すると数が多い場合に更新が終わらなくなるための設計です。これらを更新したい場合は、`TargetFiles` オプションで明示的に指定してください。
+
 ```mathematica
 (* 拡張子なしで指定可能 *)
 ClaudeUpdateDocumentation["claudecode", "新機能を追記して",
@@ -708,6 +711,10 @@ ClaudeUpdateDocumentation["claudecode", "新機能を追記して",
 (* 拡張子ありでも同様に動作 *)
 ClaudeUpdateDocumentation["claudecode", "セットアップ手順を更新して",
   TargetFiles -> {"setup.md"}]
+
+(* docs/examples 配下の使用例ドキュメントを明示的に更新 *)
+ClaudeUpdateDocumentation["claudecode", "使用例を追加して",
+  TargetFiles -> {"example"}]
 ```
 
 ### Baseline オプション — 差分検出の基準
@@ -736,7 +743,7 @@ ClaudeUpdateDocumentation["claudecode", "最新版に追従して",
 | `user_manual.md` | ユーザーマニュアル（機能別の詳細な使い方） |
 | `example.md` | 使用例集（代表的なユースケースとコード例） |
 
-各ドキュメントの詳細はリンク先を参照してください。README は概要のみを提供しており、すべての機能・オプションの網羅的な解説は `user_manual.md` および `api.md` に記載されています。
+各ドキュメントの詳細はリンク先を参照してください。README は概要のみを提供しており、すべての機能・オプションの網羅的な解説は `user_manual.md` および`api.md` に記載されています。
 
 ## 使用例・デモ
 
