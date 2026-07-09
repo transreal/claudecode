@@ -18740,6 +18740,12 @@ If[!StringQ[$iDocLastFailReason], $iDocLastFailReason = ""];  (* iSafeWriteDoc \
 If[!AssociationQ[$iDocRetryCount], $iDocRetryCount = <||>];  (* "pkg|docFile" -> \:518d\:8a66\:884c\:6e08\:56de\:6570 *)
 If[!IntegerQ[$iDocMaxRetries], $iDocMaxRetries = 1];         (* \:54c1\:8cea\:5931\:6557\:6642\:306e\:540c\:4e00\:30d5\:30a1\:30a4\:30eb\:518d\:751f\:6210\:56de\:6570 *)
 $iDocChainReentry = False;   (* retry \:518d\:5165\:6642\:306b idx===1 \:306e\:591a\:91cd\:8d77\:52d5\:30ac\:30fc\:30c9\:3092\:30d0\:30a4\:30d1\:30b9\:3059\:308b\:4e00\:56de\:6027\:30d5\:30e9\:30b0 *)
+(* 2026-07-09: step \:30c8\:30fc\:30af\:30f3\:306b\:3088\:308b\:4e8c\:91cd\:767a\:706b\:30ac\:30fc\:30c9\:3002\:54c1\:8cea\:5931\:6557\:3092 fail-fast \:304b\:3089
+   \:7d9a\:884c(retry/skip)\:306b\:5909\:3048\:305f\:3053\:3068\:3067\:3001docCallback \:304c (\:5171\:6709 tick \:306e\:518d\:767a\:706b\:3084
+   \:6d3e\:751f query \:306e\:4e8c\:91cd\:8d77\:52d5\:3067) \:8907\:6570\:56de\:5b9f\:884c\:3055\:308c\:308b\:3068 chain \:304c fork \:3059\:308b\:3002
+   \:5404 step \:306b\:4e00\:610f\:30c8\:30fc\:30af\:30f3\:3092\:632f\:308a\:3001\:6700\:521d\:306e cb \:306e\:307f\:6709\:52b9\:5316\:3059\:308b (\:4e26\:5217\:7d4c\:8def\:306e\:4e16\:4ee3\:756a\:53f7\:3068\:540c\:69cb\:9020)\:3002 *)
+If[!IntegerQ[$iDocStepSerial], $iDocStepSerial = 0];         (* \:5358\:8abf\:5897\:52a0 step \:30b7\:30ea\:30a2\:30eb *)
+If[!AssociationQ[$iDocStepCurrent], $iDocStepCurrent = <||>]; (* pn -> \:73fe\:5728\:6709\:52b9\:306a step \:30c8\:30fc\:30af\:30f3 *)
 iDocCycleKey[srcFile_String, instruction_String, docs_List] :=
   IntegerString[Hash[{Quiet@Check[Import[srcFile, "Text"], ""], instruction, Sort[docs]}], 36];
 iDocProgressPath[docsDir_String] := FileNameJoin[{docsDir, ".docupdate_progress.json"}];
@@ -20752,7 +20758,7 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     mode_String:"Update", docMediaFiles_List:{}, designContext_String:""] :=
   Module[{docFile, docPath, currentContent, fullPrompt, histDir,
           split, chunkedSource, narrowQ, savedModel, isReadme, isApi,
-          promptParts, useInstruction,
+          promptParts, useInstruction, stepTok,
           srcResolved, useSource, useName, effectiveCache},
     (* 2026-06-10 (freeze fix): 同一パッケージのドキュメント更新チェーンの
        多重起動ガード。2 本の連鎖が同じ docs/ と履歴を同時更新すると
@@ -21032,13 +21038,22 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:7528\:30e2\:30c7\:30eb\:3067\:30af\:30a8\:30ea\:5b9f\:884c *)
     savedModel = $ClaudeModel;
     $ClaudeModel = iDocModelOverride[];
+    (* \:3053\:306e step \:306b\:4e00\:610f\:30c8\:30fc\:30af\:30f3\:3092\:632f\:308a\:3001docCallback \:306b\:6355\:6349\:3055\:305b\:308b\:3002
+       \:6700\:521d\:306e cb \:304c\:6d88\:8cbb\:3057\:3001\:4ee5\:964d\:306e\:91cd\:8907\:767a\:706b\:306f\:7121\:8996\:3055\:308c\:308b (fork \:9632\:6b62)\:3002 *)
+    stepTok = ($iDocStepSerial = $iDocStepSerial + 1);
+    $iDocStepCurrent[packageName] = stepTok;
     Module[{docCallback =
       With[{nb2 = nb, dd = docsDir, tds = targetDocs, i = idx,
             df = docFile, dp = docPath, sc = sourceCode, pn = packageName,
             instr = instruction, dt = diffText, sf = srcFile, sp = split,
-            md = mode, mf = docMediaFiles, dc = designContext},
+            md = mode, mf = docMediaFiles, dc = designContext, mt = stepTok},
         Function[response,
           Module[{writeResult},
+            (* \:4e8c\:91cd\:767a\:706b/\:4e8c\:91cd\:8d77\:52d5\:30ac\:30fc\:30c9: \:3053\:306e step \:306e\:6700\:521d\:306e cb \:306e\:307f\:901a\:3059\:3002
+               \:6355\:6349\:3057\:305f mt \:304c\:73fe\:5728\:6709\:52b9\:30c8\:30fc\:30af\:30f3\:3068\:4e00\:81f4\:3057\:306a\:3051\:308c\:3070 (\:65e2\:306b\:6b21\:306e
+               step \:3078\:9032\:3093\:3060/\:6d88\:8cbb\:6e08\:307f) \:7121\:8996\:3057\:3066 chain \:306e\:4e8c\:91cd\:5316\:3092\:9632\:3050\:3002 *)
+            If[Lookup[$iDocStepCurrent, pn, Null] =!= mt, Return[Null]];
+            $iDocStepCurrent[pn] = -1;   (* \:6d88\:8cbb: \:6b21\:306e iUpdateDocNext \:8d77\:52d5\:307e\:3067\:306e\:9593\:306e\:91cd\:8907\:767a\:706b\:3092\:7121\:52b9\:5316 *)
             (* \:5931\:6557\:5206\:985e (2026-07-09 \:6539\:8a02): \:30b7\:30b9\:30c6\:30e0\:7684\:5931\:6557 (API \:30a8\:30e9\:30fc/\:5229\:7528\:5236\:9650/
                \:30d7\:30ed\:30d0\:30a4\:30c0\:5185\:90e8\:30a8\:30e9\:30fc/\:7a7a\:5fdc\:7b54) \:306f\:5f93\:6765\:901a\:308a\:30c1\:30a7\:30fc\:30f3\:5373\:4e2d\:65ad (fail-fast)\:3002
                \:4e00\:65b9\:3067\:54c1\:8cea\:5931\:6557 (\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408) \:306f\:5f8c\:6bb5\:3067

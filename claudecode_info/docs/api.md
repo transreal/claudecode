@@ -1,5 +1,3 @@
----
-
 # claudecode API Reference
 
 claudecode パッケージは Wolfram Language / Mathematica から Claude Code CLI および各種 LLM プロバイダーを呼び出すための統合インターフェースを提供する。依存: [NBAccess](https://github.com/transreal/NBAccess), [github](https://github.com/transreal/github) (GitHubREST`)。
@@ -336,7 +334,7 @@ $ClaudeRoutingModelPolicy の Automatic を現在の電源状態に対して解�
 $ClaudeRoutingModelPolicy を p (Automatic | "Local" | "Cloud" | "Off") に設定し、カーネル再起動後も残るようマシンにも永続化する。
 → p | $Failed (不正な値の場合)
 
-## LLM クエリ関数
+## LLMクエリ関数
 
 ### ClaudeQuery[task, opts]
 LLM に問い合わせてテキスト応答をノートブックセルに出力する。task は String または {String, Image, ...} (マルチモーダル、画像/PDF/音声を API に直接送信)。$UseClaudeRuntime が True ならランタイムブリッジ経由になる。
@@ -861,6 +859,22 @@ LLMGraph キャッシュのノートブック参照インデックス。
 
 タスクの有向非循環グラフを共有スケジューラ (共有 polling tick) 上で非同期実行する低レベルフレームワーク。ClaudeProcessFile / NBFileTranslate 等が内部でこの上に構築されている。
 
+### $LLMGraphMaxConcurrency
+型: Integer
+LLMGraphDAG / LLMGraphExecute の同時実行ノード数上限。
+
+### $LLMGraphAutoStopThreshold
+型: Integer
+LLMGraphDAG が連続失敗等を検知して自動停止するまでの閾値。
+
+### $LLMGraphDAGStallSeconds
+型: Number
+LLMGraphDAG ノードが「停滞」と判定されるまでの無進捗秒数。
+
+### $LLMGraphDAGMaxJobSeconds
+型: Number
+LLMGraphDAG ジョブ全体の最大実行秒数上限。超過したジョブは失敗扱いになる。
+
 ### LLMGraphDAGCreate[spec] → String (jobId)
 DAG ベースの非同期ジョブを作成し起動する。spec (Association) のキー: "nodes" (Association, nodeId -> ノード仕様 <|"status","dependsOn",...|>)、"taskDescriptor" (ノード種別ごとの実行ハンドラ定義)、"nb" (省略時は EvaluationNotebook[])、"onComplete" (完了時コールバック、省略可)、"context" (ノード共有コンテキスト、省略可)。より簡便な入口としては LLMGraphExecute を推奨。
 
@@ -950,6 +964,30 @@ LLMGraphExecute のジョブをキャンセルする。
 ## ランタイム
 
 ClaudeRuntime` (別パッケージ) 上に構築された、承認ゲート付きマルチターン実行ブリッジ。
+
+### $UseClaudeRuntime
+型: Boolean
+True で ClaudeQuery / ClaudeEval 等がランタイムブリッジ (ClaudeStartRuntime 等) 経由の実行に切り替わる。False (既定) では従来の直接クエリ経路を使う。
+
+### $ClaudeLastRuntimeId
+型: String
+最後に開始/登録されたランタイムの id。ClaudeStartRuntime / ClaudeRegisterDAGRuntime 等が設定する。
+
+### $ClaudeRoutingProviders
+型: List
+$UseClaudeRuntime 経由のランタイムルーティング対象となるプロバイダー名のリスト。
+
+### $ClaudeRuntimeAsyncExecution
+型: Boolean
+True でランタイムのコード実行 (NBExecuteHeldExpr 等) を ParallelSubmit 経由で非同期化する (Phase 32)。
+
+### $ClaudeRuntimeAsyncForce
+型: Boolean
+$ClaudeRuntimeAsyncExecution の判定に関わらず非同期実行を強制するフラグ。
+
+### $ClaudeRuntimeAsyncSuppressInputEval
+型: Boolean
+非同期コード実行時に入力セルの自動 InputEval を抑制するフラグ。
 
 ### ClaudeBuildRuntimeAdapter[nb, opts]
 ノートブック nb 用のランタイムアダプター Association を構築する。ClaudeStartRuntime / ClaudeEvalViaRuntime で内部使用する。
@@ -1245,4 +1283,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE (chunked for token efficiency) の全域を実ソース (claudecode.wl, 38,314 行) と突き合わせて同期済み。ClaudeDebug / ClaudeReview / ClaudeWebSearch / ClaudeWebFetch / NBFileTranslate / ClaudeProcessFile / ClaudeStartRuntime / ClaudeEvalViaRuntime / ClaudeApproveProposal / CreateClaudeSession / ClaudeAddDirective / ClaudeSyncDirectives / ClaudeUpdateDirective / LLMGraphDAGCreate 等、旧版ドキュメントの usage 文字列と実装が食い違っていた関数は実装 (Private セクションの実際の定義) を正としてシグネチャ・オプションを更新した。
+PACKAGE SOURCE CODE (chunked for token efficiency) の全域を実ソース (claudecode.wl, 38,314 行) と突き合わせて同期済み。ClaudeDebug / ClaudeReview / ClaudeWebSearch / ClaudeWebFetch / NBFileTranslate / ClaudeProcessFile / ClaudeStartRuntime / ClaudeEvalViaRuntime / ClaudeApproveProposal / CreateClaudeSession / ClaudeAddDirective / ClaudeSyncDirectives / ClaudeUpdateDirective / LLMGraphDAGCreate 等、旧版ドキュメントの usage 文字列と実装が食い違っていた関数は実装 (Private セクションの実際の定義) を正としてシグネチャ・オプションを更新した。今回のパスでは BeginPackage の公開シンボルリストと突き合わせ、`## ランタイム` に $UseClaudeRuntime / $ClaudeLastRuntimeId / $ClaudeRoutingProviders / $ClaudeRuntimeAsyncExecution / $ClaudeRuntimeAsyncForce / $ClaudeRuntimeAsyncSuppressInputEval を、`## LLMGraphDAG` に $LLMGraphMaxConcurrency / $LLMGraphAutoStopThreshold / $LLMGraphDAGStallSeconds / $LLMGraphDAGMaxJobSeconds を追加した (usage 文字列がソースの提供範囲外のため、変数名と Phase コメントの文脈から用途を記述)。
