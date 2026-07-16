@@ -1100,7 +1100,8 @@ ClaudeCreateDocumentation::usage =
   "  \"Github\" \:3067\:306f\:30b3\:30df\:30c3\:30c8\:7248\:304b\:3089\:306e\:30bd\:30fc\:30b9\:5dee\:5206\:306b\:52a0\:3048\:3001_info/design \:306e\:65b0\:898f\:5185\:5bb9\:3082\:52a0\:5473\:3057\:3066\:8a18\:8ff0\:3092\:6539\:5584\:3059\:308b\:3002\n" <>
   "\:4f8b: ClaudeUpdateDocumentation[\"claudecode\", \"api.md\:306e\:307f\:66f4\:65b0\:3057\:3066\"]\n" <>
   "\:4f8b: ClaudeUpdateDocumentation[\"pkg\", Baseline -> \"Github\"]\n" <>
-  "\:4f8b: ClaudeUpdateDocumentation[\"pkg\", \"...\", TargetFiles -> {\"api.md\"}]";
+  "\:4f8b: ClaudeUpdateDocumentation[\"pkg\", \"...\", TargetFiles -> {\"api.md\"}]\n" <>
+  "既定では生成パイプライン全体を外部 wolframscript ワーカーで実行し FE を塞がない ($ClaudeDocUpdateExternal=False で従来のカーネル内実行)。席枯渇・画像添付・非 claude CLI モデル時は自動で従来経路。";
 
 (* Phase Q-5 \:79fb\:7ba1: ClaudeUpdatePackageHistory::usage \:306f ClaudePackageManager.wl \:3078\:5b8c\:5168\:79fb\:7ba1 *)
 
@@ -1919,6 +1920,16 @@ $ChatgptCodexSourceExposureMode::usage =
 (* === Phase 4 (2026-05-25): Claude CLI harness materialization === *)
 $ClaudeCLIHarnessMode::usage =
   "$ClaudeCLIHarnessMode selects how the Claude CLI harness (.claude/) is produced. \"Direct\" (default) keeps the existing iPrepareClaudeProjectDirectory behaviour: the working .claude/ directory is copied as-is. \"Generated\" is an opt-in mode that materializes .claude/ from the canonical Claude Directives repository.";
+
+(* === Markdown -> notebook cells / mermaid graphs (canonical, 2026-07-15) === *)
+MarkdownToCells::usage =
+  "MarkdownToCells[md] converts a markdown string into a list of notebook Cell expressions (headings, bullet/numbered items, code fences, GFM pipe tables, images, mermaid flowcharts). It is the canonical markdown -> cells converter; the spec-impl, workflow-catalog and commit-safety renderers delegate here. Options: \"HeadingStyles\" (styles for #/##/###/####, default {\"Subsection\", \"Subsubsection\", \"Subsubsubsection\", \"Subsubsubsection\"}), \"DefaultMode\" (\"Para\" | \"Code\"; \"Code\" turns fence-less text into a single Input cell), \"TeXMath\" (True renders $...$ as inline formulas), \"CleanInline\" (True strips **bold**, __underline__ and `code` markers), \"MermaidGraphs\" (True renders ```mermaid blocks as Graph output cells via MermaidGraph), \"UntaggedCodeStyle\" (\"Program\" (default) | \"Input\" for bare ``` blocks), \"Tables\" (True renders | a | b | tables as Dataset output cells), \"TableStyle\" (\"Dataset\" (default) | \"Grid\" | \"Text\"), \"Images\" (True embeds ![alt](path) images), \"BaseDirectory\" (directory that relative image paths resolve against; Automatic uses the source file's directory, else NotebookDirectory[]), \"MaxImageWidth\" (display width cap in pixels for embedded images, default 600; None keeps the natural size).";
+
+MarkdownToNotebook::usage =
+  "MarkdownToNotebook[File[path]] or MarkdownToNotebook[md] expands a markdown file or string into a new notebook via CreateDocument and returns the NotebookObject (or a Notebook[...] expression when no front end is available). A single-line string that names an existing .md/.markdown/.txt file is treated as a file path (also resolved against the notebook directory). Relative image paths resolve against the file's own directory. Accepts all MarkdownToCells options plus \"WindowTitle\".";
+
+MermaidGraph::usage =
+  "MermaidGraph[src] parses a mermaid flowchart (\"flowchart TD\", \"graph LR\", ...) and returns a Wolfram Graph with framed node labels, edge labels and a layered layout following the declared direction. src may be raw mermaid text, a ```mermaid fenced block, or File[path]. Supported: node shapes [..], (..), ((..)), {..}, ([..]), [[..]], {{..}}, >..]; edges -->, ---, -.->, ==>, <-->, -->|label|, A -- label --> B, chains A --> B --> C and & fan-in/out; literal \\n or <br> in labels become line breaks; %% comments and subgraph/class/style/click lines are ignored. Extra options are passed to Graph and override the defaults.";
 
 Begin["`Private`"];(* ============================================================
    \:8a2d\:5b9a\:ff1a\:5fc5\:8981\:306b\:5fdc\:3058\:3066\:624b\:52d5\:3067\:4e0a\:66f8\:304d\:53ef\:80fd
@@ -8538,6 +8549,547 @@ iWriteQueryResponseQueued[nb_NotebookObject, text_String, autoEvaluate_:False] :
   ];
 
 (* ============================================================
+   Markdown -> notebook cells (canonical converter) + mermaid
+   ------------------------------------------------------------
+   2026-07-15: single canonical markdown -> Cell-list converter.
+   Consolidates the previously scattered implementations:
+     - iSpecImplMarkdownCells (this file, spec-impl example.md)
+     - iSVWFMarkdownToCells   (SourceVault_workflowcatalog.wl)
+     - iParseMarkdownToCells  (ClaudeOrchestrator.wl commit safety)
+   The two external ones delegate here via a weak Names[] check and
+   keep their old code only as a headless fallback (claudecode not
+   loaded). Public API:
+     MarkdownToCells[md, opts]      markdown string -> {Cell[...]}
+     MarkdownToNotebook[src, opts]  md text / File[...] -> new notebook
+     MermaidGraph[src, opts]        mermaid flowchart -> Graph
+   ```mermaid fenced blocks inside markdown are rendered as Graph
+   output cells via MermaidGraph (option "MermaidGraphs" -> True).
+   ============================================================ *)
+
+ClearAll[MarkdownToCells, MarkdownToNotebook, MermaidGraph,
+  iMarkdownReadUTF8, iMarkdownResolvePath, iMarkdownToNotebookImpl,
+  iMarkdownCodeCell, iMarkdownSplitRow, iMarkdownTableCell,
+  iMarkdownImageCell, iMermaidStrip, iMermaidLabelText,
+  iMermaidParseNodeToken, iMermaidVertexInset, iMermaidEdgeFunction,
+  iMermaidEdgeLabel];
+
+Options[MarkdownToCells] = {
+  "HeadingStyles" -> {"Subsection", "Subsubsection", "Subsubsubsection", "Subsubsubsection"},
+  "DefaultMode" -> "Para",          (* "Code": no ``` fence -> whole text as one Input cell *)
+  "TeXMath" -> True,                (* render $...$ / $$...$$ as inline formulas *)
+  "CleanInline" -> True,            (* strip **bold** / __underline__ / `code` markers *)
+  "MermaidGraphs" -> True,          (* render ```mermaid blocks as Graph output cells *)
+  "UntaggedCodeStyle" -> "Program", (* style for bare ``` blocks: "Program" | "Input" *)
+  "Tables" -> True,                 (* GFM pipe tables -> Dataset/Grid output cells *)
+  "TableStyle" -> "Dataset",        (* "Dataset" | "Grid" | "Text" *)
+  "Images" -> True,                 (* ![alt](path) -> embedded image output cells *)
+  "BaseDirectory" -> Automatic,     (* relative image paths resolve against this *)
+  "MaxImageWidth" -> 600            (* display cap in px; None -> natural size *)
+};
+
+(* ---- GFM pipe table ------------------------------------------------
+   "| a | b |" rows delimited by a "| --- | --- |" separator. Cells are
+   split on unescaped pipes; \| survives as a literal. *)
+iMarkdownSplitRow[row_String] := Module[{t},
+  t = StringTrim[row];
+  t = StringReplace[t, "\\|" -> "\[FormalCapitalP]"];
+  If[StringStartsQ[t, "|"], t = StringDrop[t, 1]];
+  If[StringEndsQ[t, "|"], t = StringDrop[t, -1]];
+  StringReplace[StringTrim[#], "\[FormalCapitalP]" -> "|"] & /@
+    StringSplit[t, "|", All]];
+
+(* Reads the table starting at line `start`; returns {cell, lastLineIndex}. *)
+iMarkdownTableCell[lines_List, start_Integer, clean_, style_String] := Module[
+  {i = start, rows = {}, header, body, ncol, expr},
+  While[i <= Length[lines] && StringStartsQ[StringTrim[lines[[i]]], "|"],
+    AppendTo[rows, lines[[i]]]; i++];
+  If[Length[rows] < 2, Return[{Nothing, i - 1}, Module]];
+  header = clean /@ iMarkdownSplitRow[rows[[1]]];
+  body = (clean /@ iMarkdownSplitRow[#]) & /@ Drop[rows, 2];   (* row 2 = separator *)
+  ncol = Max[Length /@ Prepend[body, header]];
+  header = PadRight[header, ncol, ""];
+  body = PadRight[#, ncol, ""] & /@ body;
+  expr = Which[
+    (* Dataset needs unique, non-empty column keys and at least one data row *)
+    style === "Dataset" && body =!= {} &&
+      DuplicateFreeQ[header] && ! MemberQ[header, ""],
+      Dataset[AssociationThread[header, #] & /@ body],
+    style === "Text",
+      Return[{Column[Cell[StringRiffle[#, " | "], "Text"] & /@ Prepend[body, header]],
+        i - 1}, Module],
+    True,
+      Grid[Prepend[body, header],
+        Frame -> All, FrameStyle -> GrayLevel[0.75],
+        Background -> {None, {GrayLevel[0.94], {White}}},
+        Alignment -> {Left, Center}, ItemSize -> Full,
+        BaseStyle -> {FontSize -> 11}]];
+  {Cell[BoxData[ToBoxes[expr, StandardForm]], "Output"], i - 1}];
+
+(* ---- ![alt](path) --------------------------------------------------
+   Local files are embedded; http(s) targets become a hyperlink rather
+   than a silent network fetch during conversion. *)
+iMarkdownImageCell[line_String, baseDir_, maxW_] := Module[
+  {m, alt, path, full, img},
+  m = StringCases[line,
+    RegularExpression["!\\[([^\\]]*)\\]\\(([^)]+)\\)"] :> {"$1", "$2"}, 1];
+  If[m === {}, Return[Nothing, Module]];
+  {alt, path} = First[m];
+  path = StringTrim[path];
+  (* ![](path "title") -> drop the title part *)
+  path = First[StringSplit[path, RegularExpression["\\s+"], 2]];
+  If[StringMatchQ[path, RegularExpression["(?i)https?://.*"]],
+    Return[Cell[TextData[{Hyperlink[If[alt === "", path, alt], path]}], "Text"],
+      Module]];
+  path = StringReplace[path, {"%20" -> " "}];
+  full = Which[
+    StringQ[baseDir] && FileExistsQ[FileNameJoin[Prepend[StringSplit[path, "/"], baseDir]]],
+      FileNameJoin[Prepend[StringSplit[path, "/"], baseDir]],
+    FileExistsQ[path], path,
+    True, $Failed];
+  If[full === $Failed,
+    Return[Cell[If[alt === "", path, alt <> " (" <> path <> ")"], "Text"], Module]];
+  img = Quiet @ Check[Import[full], $Failed];
+  If[! ImageQ[img],
+    Return[Cell[If[alt === "", path, alt <> " (" <> path <> ")"], "Text"], Module]];
+  If[NumericQ[maxW] && First[ImageDimensions[img]] > maxW,
+    img = Image[img, ImageSize -> maxW]];
+  Cell[BoxData[ToBoxes[img, StandardForm]], "Output"]];
+
+iMarkdownReadUTF8[f_String] :=
+  Quiet @ Check[ByteArrayToString[ReadByteArray[f], "UTF-8"], $Failed];
+
+iMarkdownCodeCell[code_String, lang_String, mermaidQ_, untaggedStyle_String] :=
+  Module[{l = ToLowerCase[StringTrim[lang]], g},
+    Which[
+      StringTrim[code] === "", Nothing,
+      MemberQ[{"mathematica", "wolfram", "wl", "mma", "wolframlanguage"}, l],
+        Cell[code, "Input"],
+      l === "", Cell[code, untaggedStyle],
+      l === "mermaid" && TrueQ[mermaidQ],
+        g = Quiet @ Check[MermaidGraph[code], $Failed];
+        If[GraphQ[g],
+          Cell[BoxData[ToBoxes[g, StandardForm]], "Output"],
+          Cell[code, "Program"]],
+      True, Cell[code, "Program"]]];
+
+MarkdownToCells[mdRaw_String, opts : OptionsPattern[]] := Module[
+  {md, hs, texQ, cleanQ, mermQ, untagged, tablesQ, tableStyle, imagesQ,
+   baseDir, maxImgW, lines, cells = {}, buf = {}, skipThrough = 0,
+   inCode = False, codeLang = "", codeBuf = {},
+   clean, mkText, flushPara, flushCode},
+  md = StringReplace[mdRaw, {"\r\n" -> "\n", "\r" -> "\n"}];
+  If[StringTrim[md] === "", Return[{}, Module]];
+  hs = OptionValue["HeadingStyles"];
+  If[StringQ[hs], hs = {hs}];
+  If[!ListQ[hs] || hs === {},
+    hs = {"Subsection", "Subsubsection", "Subsubsubsection", "Subsubsubsection"}];
+  hs = PadRight[hs, 4, Last[hs]];
+  texQ = TrueQ[OptionValue["TeXMath"]];
+  cleanQ = TrueQ[OptionValue["CleanInline"]];
+  mermQ = TrueQ[OptionValue["MermaidGraphs"]];
+  tablesQ = TrueQ[OptionValue["Tables"]];
+  tableStyle = OptionValue["TableStyle"];
+  If[!StringQ[tableStyle], tableStyle = "Dataset"];
+  imagesQ = TrueQ[OptionValue["Images"]];
+  maxImgW = OptionValue["MaxImageWidth"];
+  baseDir = OptionValue["BaseDirectory"];
+  If[baseDir === Automatic,
+    baseDir = Quiet @ Check[NotebookDirectory[], $Failed]];
+  If[!StringQ[baseDir], baseDir = None];
+  untagged = OptionValue["UntaggedCodeStyle"];
+  If[!StringQ[untagged], untagged = "Program"];
+  If[OptionValue["DefaultMode"] === "Code" && !StringContainsQ[md, "```"],
+    Return[{Cell[StringTrim[md], "Input"]}, Module]];
+  clean[s_String] := If[cleanQ,
+    StringReplace[s, {"**" -> "", "__" -> "",
+      RegularExpression["`([^`\n]*)`"] -> "$1"}], s];
+  mkText[s_String, style_String] := Module[{t = StringTrim[s]},
+    If[t === "", Nothing,
+      t = clean[t];
+      If[texQ && Length[DownValues[iTeXMathToCell]] > 0,
+        iTeXMathToCell[t, style], Cell[t, style]]]];
+  flushPara[] := (
+    If[buf =!= {},
+      With[{c = mkText[StringRiffle[buf, "\n"], "Text"]},
+        If[c =!= Nothing, AppendTo[cells, c]]]];
+    buf = {});
+  flushCode[] := (
+    If[codeBuf =!= {},
+      With[{c = iMarkdownCodeCell[StringRiffle[codeBuf, "\n"], codeLang, mermQ, untagged]},
+        If[c =!= Nothing, AppendTo[cells, c]]]];
+    codeBuf = {}; codeLang = "");
+  lines = StringSplit[md, "\n", All];
+  Do[
+    If[i > skipThrough,
+    Module[{line = lines[[i]], trimmed, tbl},
+      trimmed = StringTrim[line];
+      Which[
+        !inCode && StringStartsQ[trimmed, "```"],
+          flushPara[]; inCode = True;
+          codeLang = StringTrim[StringDrop[trimmed, 3]]; codeBuf = {},
+        inCode && StringStartsQ[trimmed, "```"],
+          flushCode[]; inCode = False,
+        inCode,
+          AppendTo[codeBuf, line],
+        (* GFM pipe table: a "| ... |" row followed by a "| --- |" rule *)
+        tablesQ && StringStartsQ[trimmed, "|"] && i < Length[lines] &&
+          StringMatchQ[StringTrim[lines[[i + 1]]],
+            RegularExpression["\\|[\\s:|-]*-[\\s:|-]*\\|"]],
+          flushPara[];
+          tbl = iMarkdownTableCell[lines, i, clean, tableStyle];
+          If[tbl[[1]] =!= Nothing, AppendTo[cells, tbl[[1]]]];
+          skipThrough = tbl[[2]],
+        (* standalone image paragraph *)
+        imagesQ &&
+          StringMatchQ[trimmed, RegularExpression["!\\[[^\\]]*\\]\\([^)]+\\)"]],
+          flushPara[];
+          With[{ic = iMarkdownImageCell[trimmed, baseDir, maxImgW]},
+            If[ic =!= Nothing, AppendTo[cells, ic]]],
+        StringStartsQ[trimmed, "> "],
+          AppendTo[buf, StringDrop[trimmed, 2]],
+        StringStartsQ[trimmed, "#### "],
+          flushPara[]; AppendTo[cells, mkText[StringDrop[trimmed, 5], hs[[4]]]],
+        StringStartsQ[trimmed, "### "],
+          flushPara[]; AppendTo[cells, mkText[StringDrop[trimmed, 4], hs[[3]]]],
+        StringStartsQ[trimmed, "## "],
+          flushPara[]; AppendTo[cells, mkText[StringDrop[trimmed, 3], hs[[2]]]],
+        StringStartsQ[trimmed, "# "],
+          flushPara[]; AppendTo[cells, mkText[StringDrop[trimmed, 2], hs[[1]]]],
+        StringContainsQ[line, RegularExpression["^(\\s{4,}|\\t\\t)[-*+\[Bullet]]\\s"]],
+          flushPara[]; AppendTo[cells,
+            mkText[StringReplace[trimmed,
+              RegularExpression["^[-*+\[Bullet]]\\s*"] -> ""], "Subsubitem"]],
+        StringContainsQ[line, RegularExpression["^(\\s{2,3}|\\t)[-*+\[Bullet]]\\s"]],
+          flushPara[]; AppendTo[cells,
+            mkText[StringReplace[trimmed,
+              RegularExpression["^[-*+\[Bullet]]\\s*"] -> ""], "Subitem"]],
+        StringStartsQ[trimmed, "- "] || StringStartsQ[trimmed, "* "] ||
+          StringStartsQ[trimmed, "+ "] || StringStartsQ[trimmed, "\[Bullet] "],
+          flushPara[]; AppendTo[cells, mkText[StringDrop[trimmed, 2], "Item"]],
+        StringMatchQ[trimmed, RegularExpression["^\\d+[.)]\\s.*"]],
+          flushPara[]; AppendTo[cells,
+            mkText[StringReplace[trimmed,
+              RegularExpression["^\\d+[.)]\\s*"] -> ""], "Item"]],
+        StringMatchQ[trimmed, RegularExpression["^[-*_]{3,}$"]],
+          flushPara[],
+        trimmed === "",
+          flushPara[],
+        True,
+          AppendTo[buf, trimmed]]]],
+    {i, Length[lines]}];
+  If[inCode, flushCode[], flushPara[]];
+  cells];
+
+Options[MarkdownToNotebook] =
+  Join[{"WindowTitle" -> Automatic}, Options[MarkdownToCells]];
+
+MarkdownToNotebook[File[f_String], opts : OptionsPattern[]] := Module[{path},
+  path = iMarkdownResolvePath[f];
+  If[path === $Failed,
+    Return[Failure["MarkdownToNotebook",
+      <|"MessageTemplate" -> "File not found: `1`",
+        "MessageParameters" -> {f}|>], Module]];
+  iMarkdownToNotebookImpl[iMarkdownReadUTF8[path], FileNameTake[path],
+    DirectoryName[ExpandFileName[path]], {opts}]];
+
+MarkdownToNotebook[md_String, opts : OptionsPattern[]] := Module[{path = $Failed},
+  If[!StringContainsQ[md, "\n"] && StringLength[md] < 400 &&
+     StringMatchQ[ToLowerCase[FileExtension[md]], "md" | "markdown" | "txt"],
+    path = iMarkdownResolvePath[md]];
+  If[path =!= $Failed,
+    iMarkdownToNotebookImpl[iMarkdownReadUTF8[path], FileNameTake[path],
+      DirectoryName[ExpandFileName[path]], {opts}],
+    iMarkdownToNotebookImpl[md, Automatic, Automatic, {opts}]]];
+
+iMarkdownResolvePath[f_String] := Module[{cands = {f}, nbdir},
+  nbdir = Quiet @ Check[NotebookDirectory[], $Failed];
+  If[StringQ[nbdir], AppendTo[cands, FileNameJoin[{nbdir, f}]]];
+  If[StringQ[Global`$packageDirectory] && Global`$packageDirectory =!= "",
+    AppendTo[cands, FileNameJoin[{Global`$packageDirectory, f}]]];
+  SelectFirst[cands, (Quiet @ TrueQ @ FileExistsQ[#]) &, $Failed]];
+
+iMarkdownToNotebookImpl[md_, title_, baseDir_, optList_List] := Module[{cells, wt},
+  If[!StringQ[md],
+    Return[Failure["MarkdownToNotebook",
+      <|"MessageTemplate" -> "Could not read the markdown source as UTF-8 text."|>],
+      Module]];
+  (* the file's own directory wins over the Automatic default so that
+     relative image paths resolve even when the caller has no notebook *)
+  cells = MarkdownToCells[md,
+    Sequence @@ FilterRules[optList, Options[MarkdownToCells]],
+    "BaseDirectory" -> baseDir];
+  wt = OptionValue[MarkdownToNotebook, optList, "WindowTitle"];
+  If[wt === Automatic,
+    wt = If[StringQ[title], title,
+      With[{h = StringCases[md,
+          StartOfLine ~~ ("#" ..) ~~ " " ~~ t : Except["\n"] .. :> StringTrim[t], 1]},
+        If[h =!= {}, First[h], "Markdown"]]]];
+  If[$FrontEnd === Null,
+    Notebook[cells],
+    CreateDocument[cells, WindowTitle -> wt]]];
+
+(* ---- mermaid flowchart -> Graph ------------------------------------
+   Supported subset (see MermaidGraph::usage). Statements outside the
+   subset (subgraph/class/style/click/%%) are skipped gracefully, so a
+   typical flowchart from an LLM or documentation renders as a Graph.
+   Anything unparseable yields MermaidGraph::noparse + $Failed, and
+   MarkdownToCells then falls back to a plain "Program" cell. *)
+
+MermaidGraph::noparse =
+  "No flowchart nodes or edges could be parsed from the mermaid source.";
+
+iMermaidStrip[src_String] := Module[{t, m},
+  t = StringReplace[src, {"\r\n" -> "\n", "\r" -> "\n"}];
+  m = StringCases[t,
+    "```" ~~ ("mermaid" | "Mermaid") ~~ Shortest[body___] ~~ "```" :> body, 1];
+  If[m =!= {}, First[m], t]];
+
+iMermaidLabelText[s_String] := Module[{t = StringTrim[s]},
+  If[StringLength[t] >= 2 && StringStartsQ[t, "\""] && StringEndsQ[t, "\""],
+    t = StringTake[t, {2, -2}]];
+  StringTrim @ StringReplace[t,
+    {"\\n" -> "\n", "<br/>" -> "\n", "<br />" -> "\n", "<br>" -> "\n"}]];
+
+iMermaidParseNodeToken[raw_String] := Module[
+  {s = StringTrim[raw], id, rest, inner = None, shape = "plain"},
+  If[s === "", Return[$Failed, Module]];
+  id = StringCases[s, StartOfString ~~
+    i : ((LetterCharacter | DigitCharacter | "_" | "." | "-") ..) :> i, 1];
+  If[id === {}, Return[$Failed, Module]];
+  id = First[id];
+  rest = StringTrim[StringDrop[s, StringLength[id]]];
+  Which[
+    rest === "", Null,
+    StringLength[rest] >= 4 && StringStartsQ[rest, "(("] && StringEndsQ[rest, "))"],
+      inner = StringTake[rest, {3, -3}]; shape = "circle",
+    StringLength[rest] >= 4 && StringStartsQ[rest, "(["] && StringEndsQ[rest, "])"],
+      inner = StringTake[rest, {3, -3}]; shape = "stadium",
+    StringLength[rest] >= 4 && StringStartsQ[rest, "[["] && StringEndsQ[rest, "]]"],
+      inner = StringTake[rest, {3, -3}]; shape = "subroutine",
+    StringLength[rest] >= 4 && StringStartsQ[rest, "{{"] && StringEndsQ[rest, "}}"],
+      inner = StringTake[rest, {3, -3}]; shape = "hexagon",
+    StringLength[rest] >= 2 && StringStartsQ[rest, "["] && StringEndsQ[rest, "]"],
+      inner = StringTake[rest, {2, -2}]; shape = "rect",
+    StringLength[rest] >= 2 && StringStartsQ[rest, "("] && StringEndsQ[rest, ")"],
+      inner = StringTake[rest, {2, -2}]; shape = "round",
+    StringLength[rest] >= 2 && StringStartsQ[rest, "{"] && StringEndsQ[rest, "}"],
+      inner = StringTake[rest, {2, -2}]; shape = "diamond",
+    StringLength[rest] >= 2 && StringStartsQ[rest, ">"] && StringEndsQ[rest, "]"],
+      inner = StringTake[rest, {2, -2}]; shape = "asym",
+    True, Null];
+  {id, If[inner === None, None, iMermaidLabelText[inner]], shape}];
+
+(* framed node graphic (shared by the shape function and the size
+   measurement, so what we measure is exactly what we draw) *)
+iMermaidVertexGraphic[label_String, shape_String] := Module[{content, bg, r},
+  content = If[StringContainsQ[label, "\n"],
+    Column[StringSplit[label, "\n"], Alignment -> Center, Spacings -> 0.15],
+    label];
+  bg = Switch[shape,
+    "diamond" | "hexagon", RGBColor[1, 0.97, 0.87],
+    "circle" | "stadium" | "round", RGBColor[0.93, 0.97, 0.93],
+    _, RGBColor[0.95, 0.97, 1]];
+  r = Switch[shape,
+    "circle", 18, "stadium" | "round", 10, "diamond" | "hexagon", 0, _, 3];
+  Framed[Style[content, 11],
+    Background -> bg,
+    FrameStyle -> Directive[GrayLevel[0.5], AbsoluteThickness[1]],
+    RoundingRadius -> r,
+    FrameMargins -> {{7, 7}, {4, 4}}]];
+
+iMermaidVertexInset[pos_, label_String, shape_String] :=
+  Inset[iMermaidVertexGraphic[label, shape], pos];
+
+iMermaidEdgeLabelGraphic[lbl_String] :=
+  Framed[Style[If[StringContainsQ[lbl, "\n"],
+      Column[StringSplit[lbl, "\n"], Alignment -> Center, Spacings -> 0.1],
+      lbl], 9, GrayLevel[0.25]],
+    Background -> White, FrameStyle -> None, FrameMargins -> 2];
+
+(* {width, height} of a rendered graphic in printer's points. Falls back
+   to a character-count estimate when no front end is available (headless
+   service): the layout stays sane even without rasterization. *)
+iMermaidMeasure[expr_, estLines_List, charW_, lineH_, pad_] := Module[{bb},
+  bb = Quiet @ Check[Rasterize[expr, "BoundingBox"], $Failed];
+  If[VectorQ[bb, NumericQ] && Length[bb] >= 2, {bb[[1]], bb[[2]]},
+    {Max[StringLength /@ estLines, 1]*charW + pad[[1]],
+     Max[Length[estLines], 1]*lineH + pad[[2]]}]];
+
+iMermaidVertexSize[label_String, shape_String] :=
+  iMermaidMeasure[iMermaidVertexGraphic[label, shape],
+    StringSplit[label, "\n"], 7.6, 15.5, {24, 16}];
+
+iMermaidEdgeLabelSize[lbl_String] := If[lbl === "", {0., 0.},
+  iMermaidMeasure[iMermaidEdgeLabelGraphic[lbl],
+    StringSplit[lbl, "\n"], 6.2, 12.5, {10, 8}]];
+
+iMermaidEdgeFunction[type_String] := With[
+  {thick = If[type === "thick", 2.4, 1.2],
+   dash = If[type === "dashed", Dashing[{0.02, 0.012}], Nothing]},
+  Which[
+    type === "open",
+      Function[{pts, e}, {GrayLevel[0.42], AbsoluteThickness[thick], dash, Line[pts]}],
+    type === "bidir",
+      Function[{pts, e}, {GrayLevel[0.42], AbsoluteThickness[thick], dash,
+        Arrowheads[{{-0.02, 0.2}, {0.02, 0.8}}], Arrow[pts, 0.1]}],
+    True,
+      Function[{pts, e}, {GrayLevel[0.42], AbsoluteThickness[thick], dash,
+        Arrowheads[{{0.022, 0.8}}], Arrow[pts, 0.1]}]]];
+
+iMermaidEdgeLabel[lbl_String] := Placed[iMermaidEdgeLabelGraphic[lbl], 0.5];
+
+MermaidGraph[File[f_String], gopts___Rule] := Module[{path, md},
+  path = iMarkdownResolvePath[f];
+  If[path === $Failed, Message[MermaidGraph::noparse]; Return[$Failed, Module]];
+  md = iMarkdownReadUTF8[path];
+  If[!StringQ[md], Message[MermaidGraph::noparse]; Return[$Failed, Module]];
+  MermaidGraph[md, gopts]];
+
+MermaidGraph[src_String, gopts___Rule] := Module[
+  {arrowRe, labelRe, body, lines, dir = "TD", header, stmts,
+   labels = <||>, shapes = <||>, order = {}, edges = {},
+   register, parseChunk, edgeType,
+   edgeObjs, esfRules, elabRules, orient},
+  arrowRe = "<?(?:-\\.+->|-{2,}>|={2,}>|-{3,}|={3,})";
+  labelRe = "(?:\\s*\\|[^|]*\\|)?";
+  body = iMermaidStrip[src];
+  lines = Select[StringTrim /@ StringSplit[body, "\n"],
+    # =!= "" && !StringStartsQ[#, "%%"] &];
+  header = SelectFirst[lines,
+    StringMatchQ[#, RegularExpression["(?i)(flowchart|graph)\\b.*"]] &];
+  If[StringQ[header],
+    With[{d = StringCases[header,
+        RegularExpression["(?i)^(?:flowchart|graph)\\s+([A-Za-z]+)"] -> "$1"]},
+      If[d =!= {}, dir = ToUpperCase[First[d]]]];
+    lines = DeleteCases[lines, header, 1, 1]];
+  lines = Select[lines, ! Or[
+    StringMatchQ[#, RegularExpression[
+      "(?i)(subgraph|classDef|class|style|linkStyle|click|direction|accTitle|accDescr)\\b.*"]],
+    ToLowerCase[#] === "end"] &];
+  stmts = Select[StringTrim /@ Flatten[Map[StringSplit[#, ";"] &, lines]], # =!= "" &];
+  register[tok_] := Module[{id = tok[[1]]},
+    If[!KeyExistsQ[labels, id],
+      AppendTo[order, id]; labels[id] = id; shapes[id] = "rect"];
+    If[tok[[2]] =!= None, labels[id] = tok[[2]]];
+    If[tok[[3]] =!= "plain", shapes[id] = tok[[3]]];
+    id];
+  parseChunk[chunk_String] := Module[{parts},
+    parts = Select[StringTrim /@ StringSplit[chunk, "&"], # =!= "" &];
+    parts = iMermaidParseNodeToken /@ parts;
+    If[MemberQ[parts, $Failed] || parts === {}, $Failed, register /@ parts]];
+  edgeType[a_String] := Which[
+    StringContainsQ[a, "."], "dashed",
+    StringStartsQ[a, "<"], "bidir",
+    StringContainsQ[a, "="], If[StringEndsQ[a, ">"], "thick", "open"],
+    StringEndsQ[a, ">"], "solid",
+    True, "open"];
+  Scan[
+    Function[stmt, Module[{s2, arrows, chunks, nodeLists},
+      (* normalize "A -- label --> B" style inline labels to "-->|label|" *)
+      s2 = StringReplace[stmt, {
+        RegularExpression["--\\s+([^-|>][^-]*?)\\s+-->"] :> "-->|$1|",
+        RegularExpression["==\\s+([^=|>][^=]*?)\\s+==>"] :> "==>|$1|",
+        RegularExpression["-\\.\\s+([^.|>][^.]*?)\\s+\\.->"] :> "-.->|$1|"}];
+      arrows = StringCases[s2,
+        a : RegularExpression[arrowRe] ~~ l : RegularExpression[labelRe] :> {a, l}];
+      If[arrows === {},
+        Module[{tok = iMermaidParseNodeToken[s2]},
+          If[tok =!= $Failed, register[tok]]],
+        chunks = StringSplit[s2, RegularExpression[arrowRe <> labelRe]];
+        If[Length[chunks] === Length[arrows] + 1,
+          nodeLists = parseChunk /@ chunks;
+          If[!MemberQ[nodeLists, $Failed],
+            Do[
+              Module[{a = arrows[[k, 1]], l = StringTrim[arrows[[k, 2]]], lbl},
+                lbl = If[StringLength[l] < 2, "",
+                  iMermaidLabelText[StringTake[l, {2, -2}]]];
+                Do[AppendTo[edges, {from, to, edgeType[a], lbl}],
+                  {from, nodeLists[[k]]}, {to, nodeLists[[k + 1]]}]],
+              {k, Length[arrows]}]]]]]],
+    stmts];
+  If[order === {} || (!StringQ[header] && edges === {}),
+    Message[MermaidGraph::noparse]; Return[$Failed, Module]];
+  edgeObjs = DirectedEdge[#[[1]], #[[2]]] & /@ edges;
+  esfRules = MapThread[#1 -> iMermaidEdgeFunction[#2[[3]]] &, {edgeObjs, edges}];
+  elabRules = MapThread[
+    If[#2[[4]] === "", Nothing, #1 -> iMermaidEdgeLabel[#2[[4]]]] &,
+    {edgeObjs, edges}];
+  orient = Switch[dir, "LR", Left, "RL", Right, "BT", Bottom, _, Top];
+  (* --- size-aware layout ------------------------------------------------
+     The framed node labels have a real pixel size that the graph layout
+     engine does not know about, so a plain LayeredDigraphEmbedding packs
+     wide nodes on top of each other. We keep the engine's layer + ordering
+     (crossing minimisation) but reassign coordinates in point units,
+     spacing every node by its measured label size so nothing overlaps. *)
+  Module[{vertical, layerAxis, spreadAxis, scratch, raw0, raw, vsize,
+          spreadOf, depthOf, layerKey, groups, spreadPos, layerPos,
+          spreadMargin, maxEdgeDepth, layerGap, coord, xs, ys,
+          xlo, xhi, ylo, yhi, imgW},
+    vertical = ! MemberQ[{"LR", "RL"}, dir];
+    layerAxis = If[vertical, 2, 1];
+    spreadAxis = If[vertical, 1, 2];
+    scratch = Graph[order, edgeObjs,
+      GraphLayout -> {"LayeredDigraphEmbedding", "Orientation" -> orient}];
+    raw0 = Quiet @ Check[GraphEmbedding[scratch], $Failed];
+    If[! (MatrixQ[raw0, NumericQ] && Length[raw0] === Length[order]),
+      raw0 = Quiet @ Check[GraphEmbedding[Graph[order, edgeObjs]], $Failed]];
+    If[! (MatrixQ[raw0, NumericQ] && Length[raw0] === Length[order]),
+      raw0 = Table[{Mod[k, 4], -Quotient[k, 4]}, {k, 0, Length[order] - 1}]];
+    raw = AssociationThread[order, N[raw0]];
+    vsize = AssociationMap[iMermaidVertexSize[labels[#], shapes[#]] &, order];
+    spreadOf[v_] := If[vertical, vsize[v][[1]], vsize[v][[2]]];
+    depthOf[v_] := If[vertical, vsize[v][[2]], vsize[v][[1]]];
+    (* group vertices into layers by the layer-axis coordinate *)
+    layerKey[v_] := Round[raw[v][[layerAxis]], 0.01];
+    groups = SortBy[GatherBy[order, layerKey], layerKey[First[#]] &];
+    groups = Map[SortBy[#, raw[#][[spreadAxis]] &] &, groups];
+    (* spread positions inside each layer, layer centred on 0 *)
+    spreadMargin = 26.;
+    spreadPos = <||>;
+    Do[Module[{L = groups[[j]], cum = 0., cs = {}, s},
+        Do[s = spreadOf[L[[k]]];
+          cum = If[k == 1, s/2., cum + spreadMargin + s/2.];
+          AppendTo[cs, cum]; cum = cum + s/2.,
+          {k, Length[L]}];
+        cs = cs - (First[cs] + Last[cs])/2.;
+        Do[spreadPos[L[[k]]] = cs[[k]], {k, Length[L]}]],
+      {j, Length[groups]}];
+    (* depth positions per layer; add room for multi-line edge labels *)
+    maxEdgeDepth = Max[Append[
+      (iMermaidEdgeLabelSize[#[[4]]][[If[vertical, 2, 1]]] &) /@ edges, 0.]];
+    layerGap = 34. + maxEdgeDepth;
+    layerPos = <||>;
+    Module[{cum = 0., prevHalf = 0., dep},
+      Do[Module[{L = groups[[j]]},
+          dep = Max[depthOf /@ L];
+          cum = If[j == 1, dep/2., cum + prevHalf + layerGap + dep/2.];
+          Do[layerPos[L[[k]]] = cum, {k, Length[L]}];
+          prevHalf = dep/2.],
+        {j, Length[groups]}]];
+    coord = AssociationMap[
+      If[vertical, {spreadPos[#], layerPos[#]}, {layerPos[#], spreadPos[#]}] &,
+      order];
+    xs = (coord[#][[1]] &) /@ order; ys = (coord[#][[2]] &) /@ order;
+    xlo = Min[MapThread[#1 - #2[[1]]/2. &, {xs, vsize /@ order}]] - 8;
+    xhi = Max[MapThread[#1 + #2[[1]]/2. &, {xs, vsize /@ order}]] + 8;
+    ylo = Min[MapThread[#1 - #2[[2]]/2. &, {ys, vsize /@ order}]] - 8;
+    yhi = Max[MapThread[#1 + #2[[2]]/2. &, {ys, vsize /@ order}]] + 8;
+    imgW = Clip[(xhi - xlo) + 36, {360, 2200}];
+    Graph[order, edgeObjs,
+      gopts,
+      VertexShapeFunction ->
+        Function[{pos, v, sz}, iMermaidVertexInset[pos, labels[v], shapes[v]]],
+      VertexCoordinates -> (coord /@ order),
+      VertexSize -> 0,
+      EdgeShapeFunction -> esfRules,
+      EdgeLabels -> elabRules,
+      PlotRange -> {{xlo, xhi}, {ylo, yhi}},
+      PlotRangePadding -> 0,
+      AspectRatio -> Automatic,
+      ImageSize -> imgW,
+      ImagePadding -> 6]]];
+
+(* ============================================================
    \:30b3\:30a2\:547c\:3073\:51fa\:3057\:95a2\:6570
    ============================================================ *)
 
@@ -10112,8 +10664,10 @@ ClaudeUsageReport[OptionsPattern[]] := Module[
     "ISODateTime"];
   files = Quiet @ Check[
     FileNames["*.jsonl", iClaudeDiagSpoolDir[]], {}];
+  (* 2026-07-09 fix: DownValues[Symbol[..]] は HoldAll で機能しない *)
   If[Names["SourceVault`Private`iSVDiagLogPath"] =!= {} &&
-     Length[DownValues[Symbol["SourceVault`Private`iSVDiagLogPath"]]] > 0,
+     With[{sym = Symbol["SourceVault`Private`iSVDiagLogPath"]},
+       Length[DownValues[sym]]] > 0,
     With[{p = Quiet @ Check[
         Symbol["SourceVault`Private`iSVDiagLogPath"][], $Failed]},
       If[StringQ[p] && FileExistsQ[p], AppendTo[files, p]]]];
@@ -11097,6 +11651,23 @@ iFallbackDeleteProgress[nb_NotebookObject, key_String] := (
   $iFallbackProgress = KeyDrop[$iFallbackProgress, key];
   NBAccess`NBDeleteCellsByTag[nb, "claude-fb-prog-" <> key]);
 
+(* hardening P1-6 (2026-07-09): 実試行が失敗 (timeout / error 応答) した後の
+   次候補は指数バックオフ (1s→2s→4s 上限) で遅延起動する。429/過負荷の連打を
+   避ける。async 文脈なので Pause 禁止 = SessionSubmit + ScheduledTask 遅延。
+   pre-attempt skip (API キー無し / prepare 失敗) はネットワークを叩いていない
+   のでバックオフを付けない (即前進)。failedIdx = 失敗したモデルの index。
+   スケジューリング失敗時は即前進にフォールバック。$iFallbackDone は
+   iStartFallbackAsync 冒頭で再チェックされるので遅延中の成功と競合しない。 *)
+If[! ValueQ[$iFallbackBackoffCap], $iFallbackBackoffCap = 4.0];
+SetAttributes[iFallbackScheduleNext, HoldFirst];
+iFallbackScheduleNext[call_, failedIdx_Integer] :=
+  Module[{d = Min[$iFallbackBackoffCap, 2.0^(failedIdx - 1)]},
+    iClaudeFreezeLog["fallback-backoff",
+      ToString[failedIdx] <> " -> " <> ToString[d] <> "s"];
+    If[Quiet @ Check[
+         SessionSubmit[ScheduledTask[call, {Max[d, 0.01], 1}]]; True, False],
+      Null, call]];
+
 iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
     modelIdx_Integer:1, jobId_String:"", timeout_:Automatic, mediaFiles_List:{}] :=
   Module[{provider, model, customURL, apiKey, prepared, proc, ts, startTime, progKey, useJob,
@@ -11270,7 +11841,10 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
               Quiet[KillProcess[p]];
               Quiet @ DeleteDirectory[td, DeleteContents -> True];
               $iFallbackLastError = iL["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08", "Error: Timeout ("] <> ToString[rto] <> iL["\:79d2\:ff09 - ", " sec) - "] <> prov <> "/" <> mdl;
-              iStartFallbackAsync[pmt, pNb, cb, mods, mIdx + 1, jid, tmo, mf],
+              (* hardening P1-6: 実試行失敗 → バックオフ後に次候補 *)
+              iFallbackScheduleNext[
+                iStartFallbackAsync[pmt, pNb, cb, mods, mIdx + 1, jid, tmo, mf],
+                mIdx],
               text = iReadAnthropicResult[oFile, eFile];
               Quiet @ DeleteDirectory[td, DeleteContents -> True];
               If[StringQ[text] && !StringStartsQ[text, "Error:"],
@@ -11292,7 +11866,10 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
                       Scan[Function[thk, Quiet[thk[]]], queue]]]],
                 (* \:30a8\:30e9\:30fc: \:6700\:5f8c\:306e\:30a8\:30e9\:30fc\:3092\:4fdd\:5b58\:3057\:3066\:6b21\:306e\:30e2\:30c7\:30eb\:3078 *)
                 If[StringQ[text], $iFallbackLastError = text];
-                iStartFallbackAsync[pmt, pNb, cb, mods, mIdx + 1, jid, tmo, mf]
+                (* hardening P1-6: 実試行失敗 → バックオフ後に次候補 *)
+                iFallbackScheduleNext[
+                  iStartFallbackAsync[pmt, pNb, cb, mods, mIdx + 1, jid, tmo, mf],
+                  mIdx]
               ]
             ]
           ]
@@ -11639,7 +12216,13 @@ iClaudeKillSpecImplJob[jid_] := (
   Module[{job},
     job = If[AssociationQ[$iSpecImplJobs], Lookup[$iSpecImplJobs, jid, None], None];
     If[AssociationQ[job],
-      With[{p = Lookup[job, "Proc", None]}, If[p =!= None, Quiet[KillProcess[p]]]]]];
+      With[{p = Lookup[job, "Proc", None]}, If[p =!= None, Quiet[KillProcess[p]]]];
+      (* session 経路: episode 側も best-effort で cancel + synthetic 終端 *)
+      If[Lookup[job, "Kind", "Legacy"] === "Session",
+        Quiet @ Check[iSpecImplOrchS["ClaudeRuntimeSessionCancel"][
+          job["Wid"], job["EpisodeId"], "user kill"], Null];
+        Quiet @ Check[iSpecImplSessionInjectTerminal[job["Wid"],
+          job["EpisodeId"], job, "Cancelled", "UserKill"], Null]]]];
   If[AssociationQ[$iSpecImplJobs], $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid]];
   If[AssociationQ[$iSpecImplJobs] && Length[$iSpecImplJobs] === 0,
     Quiet @ ClaudeUnregisterPollingTick["specImpl"]];
@@ -11856,8 +12439,13 @@ ClaudeAbort[] :=
       $iOrchConsensusJobs = <||>];
     If[AssociationQ[$iSpecImplJobs],
       Scan[Function[jid,
-        With[{p = Lookup[$iSpecImplJobs[jid], "Proc", None]},
-          If[p =!= None, Quiet[KillProcess[p]]; stopped++]]],
+        Module[{job = $iSpecImplJobs[jid]},
+          With[{p = Lookup[job, "Proc", None]},
+            If[p =!= None, Quiet[KillProcess[p]]; stopped++]];
+          (* session 経路の episode も best-effort cancel *)
+          If[Lookup[job, "Kind", "Legacy"] === "Session",
+            Quiet @ Check[iSpecImplOrchS["ClaudeRuntimeSessionCancel"][
+              job["Wid"], job["EpisodeId"], "ClaudeAbort"], Null]]]],
         Keys[$iSpecImplJobs]];
       $iSpecImplJobs = <||>];
     (* \:5168\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e WindowStatusArea \:3092\:30af\:30ea\:30a2 *)
@@ -18849,6 +19437,32 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
         ]
       ]
     ];
+    (* === README \:6cd5\:7684\:7bc0\:306e\:6c7a\:5b9a\:7684\:751f\:6210 (Design B, 2026-07-13) ===
+       \:8b1d\:8f9e/\:514d\:8cac\:4e8b\:9805/\:30e9\:30a4\:30bb\:30f3\:30b9 \:306f LLM \:306b\:751f\:6210\:3055\:305b\:305a(\:30d7\:30ed\:30f3\:30d7\:30c8\:304b\:3089\:9664\:5916\:6e08)\:3001
+       \:3053\:3053\:3067 doc_options.json + \:65e2\:5b9a\:5024\:304b\:3089\:6c7a\:5b9a\:7684\:306b append \:3059\:308b\:3002\:3053\:308c\:306b\:3088\:308a
+       \:6cd5\:7684\:7bc0\:306f\:51fa\:529b\:5207\:308a\:8a70\:3081\:306e\:5f71\:97ff\:3092\:539f\:7406\:7684\:306b\:53d7\:3051\:305a\:3001\:5e38\:306b verbatim \:53cd\:6620\:3055\:308c\:308b\:3002
+       \:305f\:3060\:3057 append \:306f\:672c\:6587\:672a\:5b8c\:3092\:6b63\:5e38\:306a\:672b\:5c3e\:3067\:9690\:3057\:3066\:3057\:307e\:3046\:305f\:3081\:3001append \:524d\:306b
+       \:672c\:6587\:306e\:5b8c\:5168\:6027(\:5fc5\:9808\:306e\:4f7f\:7528\:4f8b\:7bc0\:306b\:5230\:9054\:3057\:305f\:304b)\:3092\:691c\:8a3c\:3059\:308b\:3002 *)
+    If[docFileName === "README.md",
+      Module[{body},
+        (* LLM \:304c\:8aa4\:3063\:3066\:6cd5\:7684\:7bc0\:3092\:66f8\:3044\:3066\:3044\:305f\:3089\:9664\:53bb (\:91cd\:8907 append \:9632\:6b62) *)
+        body = iStripReadmeLegalTail[cleaned];
+        (* \:672c\:6587\:5b8c\:5168\:6027: \:5fc5\:9808\:306e\:300c## \:4f7f\:7528\:4f8b\:300d\:7bc0\:306b\:5230\:9054\:3057\:3066\:3044\:308b\:304b *)
+        If[!StringContainsQ[body, "## \:4f7f\:7528\:4f8b"],
+          $iDocLastFailReason = "README \:5207\:308a\:8a70\:3081: \:4f7f\:7528\:4f8b\:7bc0\:306b\:5230\:9054\:305b\:305a(\:672c\:6587\:672a\:5b8c)";
+          Print[iL["\:26a0 iSafeWriteDoc: README \:672c\:6587\:304c\:4f7f\:7528\:4f8b\:7bc0\:306b\:5230\:9054\:3057\:3066\:3044\:307e\:305b\:3093(\:5207\:308a\:8a70\:3081\:306e\:53ef\:80fd\:6027)\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002",
+            "\:26a0 iSafeWriteDoc: README body did not reach the usage-examples section (likely truncation). Write rejected."]];
+          Return[$Failed]];
+        (* \:672c\:6587\:81ea\:4f53\:304c\:9014\:4e2d\:3067\:5207\:308c\:3066\:3044\:306a\:3044\:304b *)
+        If[iDocLooksTruncated[StringTrim[body]],
+          $iDocLastFailReason = "README \:5207\:308a\:8a70\:3081: \:672c\:6587\:672b\:5c3e";
+          Print[iL["\:26a0 iSafeWriteDoc: README \:672c\:6587\:304c\:9014\:4e2d\:3067\:5207\:308c\:3066\:3044\:307e\:3059\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002",
+            "\:26a0 iSafeWriteDoc: README body looks truncated. Write rejected."]];
+          Return[$Failed]];
+        (* \:6cd5\:7684\:7bc0\:3092\:6c7a\:5b9a\:7684\:306b append (doc_options.json + \:65e2\:5b9a\:5024\:3002verbatim \:53cd\:6620\:4fdd\:8a3c) *)
+        cleaned = iAppendCanonicalReadmeLegalTail[body, packageName];
+      ]
+    ];
     Export[destPath, cleaned, "Text", CharacterEncoding -> "UTF-8"];
     destPath
   ];
@@ -18992,19 +19606,45 @@ iCompactSourceForUpdate[sourceCode_String, split_Association, docFile_String,
   ];
 
 (* \:8b1d\:8f9e\:30bb\:30af\:30b7\:30e7\:30f3\:306e\:30d7\:30ed\:30f3\:30d7\:30c8 *)
-iDocBuildAcknowledgmentsPrompt[packageName_String] :=
+(* 2026-07-13: \:6cd5\:7684\:7bc0(\:8b1d\:8f9e/\:514d\:8cac\:4e8b\:9805/\:30e9\:30a4\:30bb\:30f3\:30b9)\:306f LLM \:306b\:751f\:6210\:3055\:305b\:305a\:3001
+   \:751f\:6210\:5f8c\:306b iSafeWriteDoc \:304c doc_options.json + \:65e2\:5b9a\:5024\:304b\:3089\:6c7a\:5b9a\:7684\:306b append \:3059\:308b\:3002
+   \:65e7\:30d7\:30ed\:30f3\:30d7\:30c8\:30d3\:30eb\:30c0\:306f\:5168 README \:30d7\:30ed\:30f3\:30d7\:30c8\:7d4c\:8def(3\:7b87\:6240)\:3067\:547c\:3070\:308c\:308b\:305f\:3081\:3001
+   Acknowledgments/Disclaimer \:306f\:7a7a\:3001License \:304c\:552f\:4e00\:306e\:300comit \:6307\:793a\:300d\:3092\:8fd4\:3057\:3001
+   \:5168\:7d4c\:8def\:3067 LLM \:51fa\:529b\:3092\:77ed\:7e2e(=\:5207\:308a\:8a70\:3081\:8010\:6027\:5411\:4e0a)\:3059\:308b\:3002
+   \:6c7a\:5b9a\:7684\:751f\:6210\:672c\:4f53\:306f iReadmeAckSection / iReadmeDisclaimerSection /
+   iReadmeLicenseSection / iAppendCanonicalReadmeLegalTail (\:4e0b\:8a18)\:3002 *)
+iDocBuildAcknowledgmentsPrompt[_String] := "";
+
+(* \:514d\:8cac\:4e8b\:9805\:30bb\:30af\:30b7\:30e7\:30f3\:306e\:30d7\:30ed\:30f3\:30d7\:30c8 *)
+iDocBuildDisclaimerPrompt[_String] := "";
+
+(* \:30e9\:30a4\:30bb\:30f3\:30b9\:30bb\:30af\:30b7\:30e7\:30f3\:306e\:30d7\:30ed\:30f3\:30d7\:30c8 *)
+(* \:5168 README \:30d7\:30ed\:30f3\:30d7\:30c8\:7d4c\:8def\:304c\:3053\:308c\:3092\:547c\:3076\:305f\:3081\:3001\:3053\:3053\:3067\:552f\:4e00\:306e
+   \:300c\:6cd5\:7684\:7bc0\:3092\:66f8\:304b\:306a\:3044\:300d\:6307\:793a\:3092\:8fd4\:3059\:3002\:5b9f\:4f53\:306f append \:6642\:306b\:6c7a\:5b9a\:7684\:751f\:6210\:3002 *)
+iDocBuildLicensePrompt[_String] :=
+  "\n=== LEGAL SECTIONS (\:6c7a\:5b9a\:7684\:306b\:81ea\:52d5\:8ffd\:52a0\:3055\:308c\:308b\:305f\:3081\:3001\:3053\:3053\:3067\:306f\:66f8\:304b\:306a\:3044\:3053\:3068) ===\n" <>
+  "Do NOT write a '## \:8b1d\:8f9e', '## \:514d\:8cac\:4e8b\:9805', or '## \:30e9\:30a4\:30bb\:30f3\:30b9' section.\n" <>
+  "End the document after the '## \:4f7f\:7528\:4f8b\:30fb\:30c7\:30e2' section (and '## \:53c2\:8003\:6587\:732e' if present).\n" <>
+  "These legal sections are appended automatically and verbatim from doc_options.json\n" <>
+  "after generation, so writing them here would only be discarded.\n";
+
+(* ============================================================
+   README \:6cd5\:7684\:7bc0\:306e\:6c7a\:5b9a\:7684\:751f\:6210 (doc_options.json + \:65e2\:5b9a\:5024)
+   iSafeWriteDoc \:304c LLM \:751f\:6210\:672c\:6587\:306e\:672b\:5c3e\:306b append \:3059\:308b\:3002
+   \:6587\:8a00\:306f\:65e7\:30d7\:30ed\:30f3\:30d7\:30c8\:30d3\:30eb\:30c0\:3068\:540c\:4e00(\:5175\:5f1f\:30d1\:30c3\:30b1\:30fc\:30b8\:306e README \:3068\:4e00\:81f4)\:3002
+   ============================================================ *)
+
+(* \:8b1d\:8f9e\:7bc0 (doc_options.json Acknowledgments)\:3002\:7121\:3051\:308c\:3070 "" *)
+iReadmeAckSection[packageName_String] :=
   Module[{items},
     items = Replace[iDocGet[packageName, "Acknowledgments"], Except[_List] -> {}];
     If[Length[items] === 0, Return[""]];
-    "\n=== ACKNOWLEDGMENTS SECTION (add BEFORE \:514d\:8cac\:4e8b\:9805 in README.md) ===\n" <>
-    "Add a '## \:8b1d\:8f9e' section in README.md, placed BEFORE \:514d\:8cac\:4e8b\:9805.\n" <>
-    "Include the following acknowledgments:\n" <>
-    StringRiffle["- " <> ToString[#] & /@ items, "\n"] <> "\n" <>
-    "Write each item as a clear, natural sentence.\n"
+    "## \:8b1d\:8f9e\n\n" <> StringRiffle["- " <> ToString[#] & /@ items, "\n"] <> "\n"
   ];
+iReadmeAckSection[_] := "";
 
-(* \:514d\:8cac\:4e8b\:9805\:30bb\:30af\:30b7\:30e7\:30f3\:306e\:30d7\:30ed\:30f3\:30d7\:30c8 *)
-iDocBuildDisclaimerPrompt[packageName_String] :=
+(* \:514d\:8cac\:4e8b\:9805\:7bc0\:3002\:57fa\:672c\:6587\:8a00 + doc_options.json Disclaimer \:8ffd\:52a0\:9805\:76ee *)
+iReadmeDisclaimerSection[packageName_String] :=
   Module[{extras, base},
     base = "\:672c\:30bd\:30d5\:30c8\:30a6\:30a7\:30a2\:306f \"as is\"\:ff08\:73fe\:72b6\:6709\:59ff\:ff09\:3067\:63d0\:4f9b\:3055\:308c\:3066\:304a\:308a\:3001\:660e\:793a\:30fb\:9ed9\:793a\:3092\:554f\:308f\:305a\:3044\:304b\:306a\:308b\:4fdd\:8a3c\:3082\:3042\:308a\:307e\:305b\:3093\:3002\n" <>
       "\:672c\:30bd\:30d5\:30c8\:30a6\:30a7\:30a2\:306e\:4f7f\:7528\:307e\:305f\:306f\:4f7f\:7528\:4e0d\:80fd\:304b\:3089\:751f\:3058\:308b\:3044\:304b\:306a\:308b\:640d\:5bb3\:306b\:3064\:3044\:3066\:3082\:8cac\:4efb\:3092\:8ca0\:3044\:307e\:305b\:3093\:3002\n" <>
@@ -19012,44 +19652,22 @@ iDocBuildDisclaimerPrompt[packageName_String] :=
       "\:672c\:30bd\:30d5\:30c8\:30a6\:30a7\:30a2\:3068\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:307b\:307c\:3059\:3079\:3066\:304c\:751f\:6210AI\:306b\:3088\:3063\:3066\:751f\:6210\:3055\:308c\:305f\:3082\:306e\:3067\:3059\:3002\n" <>
       "Windows 11\:4e0a\:3067\:306e\:5b9f\:884c\:3092\:60f3\:5b9a\:3057\:3066\:304a\:308a\:3001MacOS, Linux\:306eMathematica\:3067\:306e\:52d5\:4f5c\:691c\:8a3c\:306f\:4e00\:5207\:3057\:3066\:3044\:307e\:305b\:3093(\:751f\:6210AI\:306e\:51e6\:7406\:3067\:5bfe\:5fdc\:53ef\:80fd\:3068\:60f3\:5b9a\:3055\:308c\:307e\:3059)\:3002";
     extras = Replace[iDocGet[packageName, "Disclaimer"], Except[_List] -> {}];
-    "\n=== DISCLAIMER SECTION (add AFTER \:8b1d\:8f9e if present, BEFORE \:30e9\:30a4\:30bb\:30f3\:30b9 in README.md) ===\n" <>
-    "Add a '## \:514d\:8cac\:4e8b\:9805' section in README.md with this text:\n" <>
-    base <> "\n" <>
+    "## \:514d\:8cac\:4e8b\:9805\n\n" <> base <>
     If[Length[extras] > 0,
-      "Additionally, rephrase and add these items:\n" <>
-      StringRiffle["- " <> ToString[#] & /@ extras, "\n"] <> "\n",
-      ""
-    ]
+      "\n\n" <> StringRiffle["- " <> ToString[#] & /@ extras, "\n"], ""] <> "\n"
   ];
+iReadmeDisclaimerSection[_] := "";
 
-(* \:30e9\:30a4\:30bb\:30f3\:30b9\:30bb\:30af\:30b7\:30e7\:30f3\:306e\:30d7\:30ed\:30f3\:30d7\:30c8 *)
-iDocBuildLicensePrompt[packageName_String] :=
-  Module[{holder, licText, yearStr, createdYear, currentYear, docLicense},
+(* \:30e9\:30a4\:30bb\:30f3\:30b9\:7bc0\:3002doc_options.json License \:512a\:5148\:3001\:7121\:3051\:308c\:3070 $GitHubLicenseHolder \:304b\:3089 MIT\:3002
+   holder \:3082\:7a7a\:306a\:3089 "" (\:30e9\:30a4\:30bb\:30f3\:30b9\:7bc0\:306a\:3057=\:65e2\:5b58\:632f\:308b\:821e\:3044\:3092\:4fdd\:5b58) *)
+iReadmeLicenseSection[packageName_String] :=
+  Module[{holder, licText, yearStr, docLicense},
     docLicense = iDocGet[packageName, "License"];
-    (* License \:30aa\:30d7\:30b7\:30e7\:30f3\:306b\:6587\:5b57\:5217\:304c\:6307\:5b9a\:3055\:308c\:3066\:3044\:308c\:3070\:305d\:308c\:3092\:4f7f\:7528 *)
     If[StringQ[docLicense] && StringTrim[docLicense] =!= "",
-      Return[
-        "\n=== LICENSE SECTION (MUST add at the very end of README.md, after \:514d\:8cac\:4e8b\:9805) ===\n" <>
-        "Add a '## \:30e9\:30a4\:30bb\:30f3\:30b9' section.\n" <>
-        "CRITICAL: The license text below is a LEGAL document. Copy it VERBATIM.\n" <>
-        "Do NOT translate, paraphrase, or modify any wording.\n" <>
-        "Insert the following text exactly as-is:\n\n" <>
-        "```\n" <> docLicense <> "\n```\n"]];
-    (* $GitHubLicenseHolder \:3092\:53d6\:5f97 *)
+      Return["## \:30e9\:30a4\:30bb\:30f3\:30b9\n\n```\n" <> docLicense <> "\n```\n"]];
     holder = Quiet @ Check[GitHubREST`$GitHubLicenseHolder, ""];
-    If[!StringQ[holder] || StringTrim[holder] === "",
-      (* \:540d\:524d\:304c\:7a7a \[RightArrow] \:8b66\:544a\:3092\:51fa\:3057\:3066\:30e9\:30a4\:30bb\:30f3\:30b9\:306f\:633f\:5165\:3057\:306a\:3044 *)
-      Print[Style["\:8b66\:544a: $GitHubLicenseHolder \:304c\:8a2d\:5b9a\:3055\:308c\:3066\:3044\:306a\:3044\:305f\:3081\:3001\:30e9\:30a4\:30bb\:30f3\:30b9\:30bb\:30af\:30b7\:30e7\:30f3\:306f\:633f\:5165\:3055\:308c\:307e\:305b\:3093\:3002\n" <>
-        "$GitHubLicenseHolder = \"Your Name\" \:3092\:8a2d\:5b9a\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
-        FontColor -> RGBColor[0.8, 0.4, 0]]];
-      Return[""]];
-    (* \:5e74\:306e\:7bc4\:56f2\:3092\:8a08\:7b97 *)
-    currentYear = DateString[Now, "Year"];
-    (* \:30ea\:30dd\:30b8\:30c8\:30ea\:4f5c\:6210\:5e74\:3092\:63a8\:5b9a: \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a9\:30eb\:30c0\:306e\:4f5c\:6210\:65e5 or \:73fe\:5728\:5e74 *)
-    createdYear = currentYear;  (* \:30c7\:30d5\:30a9\:30eb\:30c8 *)
-    yearStr = If[createdYear === currentYear,
-      currentYear,
-      createdYear <> "-" <> currentYear];
+    If[!StringQ[holder] || StringTrim[holder] === "", Return[""]];
+    yearStr = DateString[Now, "Year"];
     licText = "MIT License\n\n" <>
       "Copyright (c) " <> yearStr <> " " <> holder <> "\n\n" <>
       "Permission is hereby granted, free of charge, to any person obtaining a copy " <>
@@ -19066,15 +19684,30 @@ iDocBuildLicensePrompt[packageName_String] :=
       "AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER " <>
       "LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, " <>
       "OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.";
-    "\n=== LICENSE SECTION (MUST add at the very end of README.md, after \:514d\:8cac\:4e8b\:9805) ===\n" <>
-    "Add a '## \:30e9\:30a4\:30bb\:30f3\:30b9' section.\n" <>
-    "CRITICAL: The license text below is a LEGAL document. You MUST copy it VERBATIM in English.\n" <>
-    "Do NOT translate it into other languages. Do NOT paraphrase. Do NOT modify any wording.\n" <>
-    "Insert the following text exactly as-is:\n\n" <>
-    "```\n" <> licText <> "\n```\n\n" <>
-    "IMPORTANT: When updating an existing README, if a license section already exists,\n" <>
-    "update the year range to end with " <> currentYear <> " (e.g. 2025-" <> currentYear <> ").\n" <>
-    "Do NOT change the holder name or license text.\n"
+    "## \:30e9\:30a4\:30bb\:30f3\:30b9\n\n```\n" <> licText <> "\n```\n"
+  ];
+iReadmeLicenseSection[_] := "";
+
+(* LLM \:304c\:8aa4\:3063\:3066\:751f\:6210\:3057\:305f\:6cd5\:7684\:7bc0\:3092\:672b\:5c3e\:304b\:3089\:9664\:53bb (\:6700\:521d\:306e\:6cd5\:7684\:898b\:51fa\:3057\:4ee5\:964d\:3092\:5207\:308a\:843d\:3068\:3059\:3002\:91cd\:8907 append \:9632\:6b62) *)
+iStripReadmeLegalTail[content_String] :=
+  Module[{pos, before},
+    pos = StringPosition[content,
+      RegularExpression["(?m)^##[ \\t]+(\:8b1d\:8f9e|\:514d\:8cac\:4e8b\:9805|\:30e9\:30a4\:30bb\:30f3\:30b9)"], 1];
+    before = If[Length[pos] === 0, content, StringTake[content, pos[[1, 1]] - 1]];
+    (* \:672b\:5c3e\:306e\:6c34\:5e73\:7f6b\:7dda(---)\:3068\:7a7a\:767d\:3092\:9664\:53bb\:3057\:3001re-append \:3092\:51aa\:7b49\:306b\:3059\:308b *)
+    StringTrim @ StringReplace[StringTrim[before], RegularExpression["(\\n-{3,})+$"] -> ""]
+  ];
+iStripReadmeLegalTail[x_] := x;
+
+(* \:672c\:6587\:672b\:5c3e\:306b\:6cd5\:7684\:7bc0\:3092 append (\:8b1d\:8f9e \[RightArrow] \:514d\:8cac\:4e8b\:9805 \[RightArrow] \:30e9\:30a4\:30bb\:30f3\:30b9)\:3002
+   \:5404\:7bc0\:9593\:306f --- \:533a\:5207\:308a\:3002License \:672c\:6587\:306f ``` \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:3067\:5bc6\:306b\:9589\:3058\:308b\:3002 *)
+iAppendCanonicalReadmeLegalTail[body_String, packageName_String] :=
+  Module[{parts},
+    parts = Select[{iReadmeAckSection[packageName],
+                    iReadmeDisclaimerSection[packageName],
+                    iReadmeLicenseSection[packageName]}, StringQ[#] && # =!= "" &];
+    If[Length[parts] === 0, Return[StringTrim[body] <> "\n"]];
+    StringTrim[body] <> "\n\n---\n\n" <> StringRiffle[parts, "\n---\n\n"] <> ""
   ];
 
 (* \:56f3\:306e\:633f\:5165\:6307\:793a\:3092\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:8ffd\:52a0\:3002
@@ -19149,10 +19782,7 @@ iBuildReadmePrompt[sourceCode_String, packageName_String, outDir_String] :=
     "place Demo URLs and usage examples here)\n" <>
     If[Length[Replace[iDocGet[packageName, "References"], Except[_List] -> {}]] > 0,
       "## \:53c2\:8003\:6587\:732e\n", ""] <>
-    If[Length[Replace[iDocGet[packageName, "Acknowledgments"], Except[_List] -> {}]] > 0,
-      "## \:8b1d\:8f9e\n", ""] <>
-    "## \:514d\:8cac\:4e8b\:9805\n" <>
-    "## \:30e9\:30a4\:30bb\:30f3\:30b9\n" <>
+    "(\:8b1d\:8f9e / \:514d\:8cac\:4e8b\:9805 / \:30e9\:30a4\:30bb\:30f3\:30b9 \:306f\:751f\:6210\:5f8c\:306b\:6c7a\:5b9a\:7684\:306b\:81ea\:52d5\:8ffd\:52a0\:3055\:308c\:308b\:306e\:3067\:3001\:3053\:3053\:306b\:306f\:66f8\:304b\:306a\:3044)\n" <>
     "\n" <>
     "CRITICAL: NEVER fabricate or guess GitHub URLs for dependencies.\n" <>
     "Use ONLY the exact URLs provided in the 'GITHUB REPOSITORY URLs' section below.\n" <>
@@ -19340,12 +19970,19 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         Function[response,
           Module[{destPath, writeResult},
             destPath = FileNameJoin[{od, of}];
-            writeResult = iSafeWriteDoc[destPath, response];
+            (* 3\:5f15\:6570\:7248\:3092\:4f7f\:3044\:3001\:5bfe\:8a71\:751f\:6210\:7d4c\:8def\:3067\:3082\:30b5\:30a4\:30ba\:9000\:884c\:30fb\:5207\:308a\:8a70\:3081\:30fb\:30bf\:30a4\:30c8\:30eb\:6574\:5408\:30fb
+               README \:6cd5\:7684\:7bc0\:53cd\:6620(Gate4)\:306e\:5404\:30ac\:30fc\:30c9\:3092\:901a\:3059\:3002\:5f93\:6765\:306f 2 \:5f15\:6570\:7248\:3067
+               \:3053\:308c\:3089\:3092\:30d0\:30a4\:30d1\:30b9\:3057\:3066\:304a\:308a\:3001\:5207\:308a\:8a70\:3081\:305f README \:304c\:305d\:306e\:307e\:307e\:66f8\:304d\:8fbc\:307e\:308c\:3066\:3044\:305f\:3002 *)
+            writeResult = iSafeWriteDoc[destPath, response, pn];
             If[writeResult =!= $Failed,
               nbPrint[nb2, "  \[Checkmark] " <> dt <> " \[RightArrow] " <> of];
               iGenDocNext[sc, pn, nb2, od, q, i + 1, 0, sp],
-              (* \:7121\:52b9\:306a\:5fdc\:7b54: \:30ea\:30c8\:30e9\:30a4\:307e\:305f\:306f\:4e2d\:65ad *)
-              nbPrint[nb2, "  \:2717 " <> dt <> " \:306e\:751f\:6210\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54): " <>
+              (* \:7121\:52b9\:306a\:5fdc\:7b54\:307e\:305f\:306f\:54c1\:8cea\:30b2\:30fc\:30c8\:62d2\:5426: \:30ea\:30c8\:30e9\:30a4\:307e\:305f\:306f\:4e2d\:65ad\:3002
+                 iSafeWriteDoc \:304c\:8a18\:9332\:3057\:305f\:5177\:4f53\:7406\:7531(\:5207\:308a\:8a70\:3081/\:30b5\:30a4\:30ba\:9000\:884c/
+                 README \:6cd5\:7684\:7bc0\:6b20\:843d\:7b49)\:3092\:8868\:793a\:3057\:3001\:300c\:7121\:52b9\:306a\:5fdc\:7b54\:300d\:8aa4\:8868\:793a\:3092\:9632\:3050\:3002 *)
+              nbPrint[nb2, "  \:2717 " <> dt <> " \:306e\:751f\:6210\:306b\:5931\:6557 (" <>
+                If[StringQ[$iDocLastFailReason] && $iDocLastFailReason =!= "",
+                  $iDocLastFailReason, "\:7121\:52b9\:306a\:5fdc\:7b54"] <> "): " <>
                 StringTake[ToString[response], UpTo[200]]];
               If[rc < $ClaudeDocMaxRetries,
                 Module[{delaySec = $ClaudeDocRetryDelay, taskObj},
@@ -19647,7 +20284,8 @@ iAuxApiDefaultInjectQ[___] := True;
    $ClaudePackageAuxKeywordMap (補助 api_<aux>.md 単位、2026-06-12 追加)。 *)
 (* \:30bf\:30b9\:30af\:6587\:304b\:3089\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:691c\:51fa\:3057\:3001\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3068\:3057\:3066\:8fd4\:3059 *)
 iPackageDocsContext[task_String] :=
-  Module[{pkgDir, wlFiles, pacletDirs, allNames, mentioned, ctx = "", wfDocs = ""},
+  Module[{pkgDir, wlFiles, pacletDirs, allNames, mentioned, mentionedPos = <||>,
+      primSegs = {}, auxSegs = {}, ctx = "", wfDocs = ""},
     pkgDir = Global`$packageDirectory;
     If[!StringQ[pkgDir] || !DirectoryQ[pkgDir],
       Return[Quiet @ Check[iSVWFDocsForTask[task], ""]]];
@@ -19660,6 +20298,11 @@ iPackageDocsContext[task_String] :=
     (* \:30bf\:30b9\:30af\:6587\:306b\:542b\:307e\:308c\:308b\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:691c\:51fa *)
     mentioned = Select[allNames,
       StringContainsQ[task, #, IgnoreCase -> True] &];
+    (* 2026-07-13: record the first-mention position of each detected package.
+       Injection order later follows this position, so the package the task
+       names first gets its api.md into the budget first. *)
+    Do[mentionedPos[p] = Min[First /@ StringPosition[task, p, IgnoreCase -> True]],
+      {p, mentioned}];
     (* \:57fa\:76e4\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30ad\:30fc\:30ef\:30fc\:30c9\:691c\:51fa: \:30bf\:30b9\:30af\:6587\:306b\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:304c\:306a\:304f\:3066\:3082
        \:95a2\:9023\:30ad\:30fc\:30ef\:30fc\:30c9\:304c\:3042\:308c\:3070 api.md \:3092\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306b\:542b\:3081\:308b *)
     Module[{kwMap, pkg, kws, extMap},
@@ -19680,9 +20323,13 @@ iPackageDocsContext[task_String] :=
       kwMap = Join[kwMap, extMap];
       Do[
         pkg = kv[[1]]; kws = kv[[2]];
-        If[!MemberQ[mentioned, pkg] &&
-           AnyTrue[kws, StringContainsQ[task, #, IgnoreCase -> True] &],
-          AppendTo[mentioned, pkg]],
+        If[!MemberQ[mentioned, pkg],
+          Module[{hits = Flatten[
+              StringPosition[task, #, IgnoreCase -> True] & /@
+                Select[Flatten[{kws}], StringQ], 1]},
+            If[hits =!= {},
+              AppendTo[mentioned, pkg];
+              mentionedPos[pkg] = Min[First /@ hits]]]],
         {kv, kwMap}]];
     (* 補助 api キーワード検出: $ClaudePackageAuxKeywordMap[pkg][aux] の
        キーワードが task に含まれれば pkg を mentioned に加える。
@@ -19690,10 +20337,13 @@ iPackageDocsContext[task_String] :=
        トリガされるようにする。 *)
     If[AssociationQ[$ClaudePackageAuxKeywordMap],
       Do[
-        If[!MemberQ[mentioned, kv[[1]]] && AssociationQ[kv[[2]]] &&
-           AnyTrue[Select[Flatten[Values[kv[[2]]]], StringQ],
-             StringContainsQ[task, #, IgnoreCase -> True] &],
-          AppendTo[mentioned, kv[[1]]]],
+        If[!MemberQ[mentioned, kv[[1]]] && AssociationQ[kv[[2]]],
+          Module[{hits = Flatten[
+              StringPosition[task, #, IgnoreCase -> True] & /@
+                Select[Flatten[Values[kv[[2]]]], StringQ], 1]},
+            If[hits =!= {},
+              AppendTo[mentioned, kv[[1]]];
+              mentionedPos[kv[[1]]] = Min[First /@ hits]]]],
         {kv, Normal[$ClaudePackageAuxKeywordMap]}]];
     (* \:30ef\:30fc\:30af\:30d5\:30ed\:30fc api.md \:6ce8\:5165\:7528\:30c6\:30ad\:30b9\:30c8\:3092\:5148\:306b\:6c42\:3081\:308b\:3002\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:30d7\:30ed\:30f3\:30d7\:30c8\:306f
        \:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3092\:542b\:307e\:306a\:3044\:305f\:3081\:3001mentioned \:304c\:7a7a\:3067\:3082\:3053\:308c\:304c\:3042\:308c\:3070\:6ce8\:5165\:3059\:308b
@@ -19701,53 +20351,44 @@ iPackageDocsContext[task_String] :=
     wfDocs = Quiet @ Check[iSVWFDocsForTask[task], ""];
     If[!StringQ[wfDocs], wfDocs = ""];
     If[Length[mentioned] === 0, Return[wfDocs]];
-    (* \:5404\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306b\:542b\:3081\:308b
-       api.md \:3068\:88dc\:52a9 api_*.md \:3092\:6700\:512a\:5148\:3067\:5b8c\:5168\:306b\:8aad\:307f\:8fbc\:3080\:ff08\:30c8\:30fc\:30af\:30f3\:7bc0\:7d04\:306e\:305f\:3081\:4ed6\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:6982\:8981\:306e\:307f\:ff09 *)
+    (* 2026-07-13: multi-package injection redesign.
+       Old behaviour concatenated api.md + ALL default-inject aux per package in
+       directory-scan (near-alphabetical) order, then head-kept the 24K budget
+       with a raw StringTake. With doc-heavy packages first (ClaudeOrchestrator
+       ~78K, ClaudeRuntime ~52K of api docs) a later package's api.md was
+       dropped ENTIRELY -- observed: a task naming SlideWorkflow FIRST plus
+       Orchestrator/Runtime lost SlideWorkflow api.md completely, so the
+       generated code ignored the slide workflow API.
+       New behaviour:
+         1. packages inject in order of first mention in the task (mentionedPos);
+         2. two passes across ALL packages: keyword-matched aux + api.md first,
+            unregistered default-inject aux last -- one package's aux flood can
+            no longer evict another package's api.md;
+         3. the budget keeps whole files only (no mid-file truncation) and lists
+            omitted files so the model can read them via tools if needed. *)
+    mentioned = SortBy[mentioned, Lookup[mentionedPos, #, Infinity] &];
     Do[
       With[{docsDir = iPackageDocsDir[pkg]},
       If[StringQ[docsDir] && DirectoryQ[docsDir],
-        Module[{docFiles, apiFiles, apiContent, summary, isFresh, fileLabel},
+        Module[{docFiles, matchedAux, mainApi, defaultAux, summary, isFresh},
           isFresh = iDocsAvailableAndFresh[pkg];
-          (* api.md \:3068 api_*.md \:3092\:53ce\:96c6\:3002api.md \:3092\:5148\:982d\:306b\:3002
-             \:767b\:9332\:6e08\:307f\:88dc\:52a9 api \:306f task \:3068\:306e\:30ad\:30fc\:30ef\:30fc\:30c9\:4e00\:81f4\:6642\:306e\:307f\:6ce8\:5165 (iAuxApiRelevantQ) *)
-          (* Inject in priority order so the head-keep budget
-             ($ClaudeEvalPackageDocsCharBudget) preserves the most task-relevant
-             docs:
-               1. aux api whose name/keyword matched the task (e.g. api_maildb.md
-                  for a mail task) -- task-specific, highest priority;
-               2. the main api.md;
-               3. unregistered aux api (backward-compatible default inject) --
-                  not task-specific, dropped first under budget pressure.
-             Before this, all "relevant" aux were appended AFTER api.md, and an
-             unregistered-aux flood (SourceVault has ~13 aux api totalling ~180K)
-             pushed the matched api_maildb.md (~17K) past the 24K budget, so
-             SourceVaultMailView never reached the model and it fell back to the
-             legacy showMails. Registered-but-unmatched aux is in neither set and
-             stays excluded. *)
-          apiFiles = Join[
-            Select[Sort @ FileNames["api_*.md", docsDir],
-              iAuxApiKeywordMatchedQ[pkg, #, task] &],
-            Select[{FileNameJoin[{docsDir, "api.md"}]}, FileExistsQ],
-            Select[Sort @ FileNames["api_*.md", docsDir],
-              iAuxApiDefaultInjectQ[pkg, #] &]
-          ];
+          (* 2026-07-13: collect only -- actual injection happens after this
+             loop in two global passes (primSegs = keyword-matched aux + api.md
+             across ALL packages, then auxSegs = unregistered default-inject
+             aux). Per-package priority (matched aux > api.md > default aux)
+             is preserved from the 2026-06-12 fix; see the redesign comment
+             above the loop. Registered-but-unmatched aux stays excluded. *)
+          matchedAux = Select[Sort @ FileNames["api_*.md", docsDir],
+            iAuxApiKeywordMatchedQ[pkg, #, task] &];
+          mainApi = Select[{FileNameJoin[{docsDir, "api.md"}]}, FileExistsQ];
+          defaultAux = Select[Sort @ FileNames["api_*.md", docsDir],
+            iAuxApiDefaultInjectQ[pkg, #] &];
           Which[
-            (* api.md \:307e\:305f\:306f api_*.md \:304c\:5b58\:5728: \:5168\:90e8\:30d5\:30eb\:8aad\:307f\:8fbc\:307f\:ff08\:6700\:512a\:5148\:ff09 *)
-            Length[apiFiles] > 0,
-              Do[
-                apiContent = Quiet @ Check[Import[apiF, "Text"], ""];
-                If[StringQ[apiContent] && StringLength[apiContent] > 0,
-                  fileLabel = FileNameTake[apiF];
-                  ctx = ctx <>
-                    "=== \:30d1\:30c3\:30b1\:30fc\:30b8 API \:30ea\:30d5\:30a1\:30ec\:30f3\:30b9: " <> pkg <> " (" <> fileLabel <> ") ===\n" <>
-                    If[isFresh,
-                      "(\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3088\:308a\:65b0\:3057\:3044\:305f\:3081\:53c2\:8003\:60c5\:5831\:3068\:3057\:3066\:6709\:52b9)\n",
-                      "(\:30bd\:30fc\:30b9\:304c\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3088\:308a\:65b0\:3057\:3044\:304c\:3001API \:30b7\:30b0\:30cd\:30c1\:30e3\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:306f\:6709\:52b9)\n"] <>
-                    "IMPORTANT: \:30b3\:30fc\:30c9\:3092\:751f\:6210\:3059\:308b\:969b\:306f\:3001\:3053\:306e " <> fileLabel <>
-                    " \:306b\:8a18\:8f09\:3055\:308c\:305f\:95a2\:6570\:540d\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:30fb\:5f15\:6570\:306e\:307f\:3092\:4f7f\:7528\:3059\:308b\:3053\:3068\:3002" <>
-                    "\:5b58\:5728\:3057\:306a\:3044\:95a2\:6570\:3092\:751f\:6210\:3057\:306a\:3044\:3053\:3068\:3002\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3067\:4e0d\:660e\:306a\:70b9\:304c\:3042\:308b\:5834\:5408\:306e\:307f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3092\:53c2\:7167\:3059\:308b\:3053\:3068\:3002\n\n" <>
-                    apiContent <> "\n\n"],
-                {apiF, apiFiles}],
+            Length[matchedAux] + Length[mainApi] + Length[defaultAux] > 0,
+              primSegs = Join[primSegs,
+                {pkg, #, isFresh} & /@ Join[matchedAux, mainApi]];
+              auxSegs = Join[auxSegs,
+                {pkg, #, isFresh} & /@ defaultAux],
             (* api \:7cfb\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304c\:306a\:3044\:304c\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304c\:65b0\:9bae: \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306e\:6982\:8981 *)
             isFresh,
               docFiles = FileNames["*.md", docsDir];
@@ -19762,17 +20403,44 @@ iPackageDocsContext[task_String] :=
           ]
         ]]],
     {pkg, mentioned}];
-    (* (B) cap total injected package-docs size (package-neutral). A loose
-       name/keyword match could otherwise inject 100K+ chars of api docs and
-       blow the model context (observed: 104606 chars for an unrelated prompt).
-       api.md is injected first, so head-keep preserves the primary reference.
+    (* (B) two-pass injection under the package-docs budget (package-neutral).
+       Whole files only: a file that does not fit is omitted and reported by
+       name instead of being cut mid-file (a half api.md looks like a broken
+       API to the model). Exception: if NOTHING has been injected yet, the
+       first file is prefix-truncated (better than nothing -- preserves the
+       old single-big-api.md behaviour).
        $ClaudeEvalContextPlanning = "LegacyFull"/False disables the cap. *)
     Module[{bdg = ClaudeCode`$ClaudeEvalPackageDocsCharBudget,
-            md = ClaudeCode`$ClaudeEvalContextPlanning},
-      If[md =!= "LegacyFull" && md =!= False && IntegerQ[bdg] && bdg > 0 &&
-         StringQ[ctx] && StringLength[ctx] > bdg,
-        ctx = StringTake[ctx, bdg] <>
-          "\n...[package docs truncated to fit the model context]\n"]];
+            md = ClaudeCode`$ClaudeEvalContextPlanning, capped, keptAny = False,
+            dropped = {}, pkg2, apiF2, fresh2, apiContent, fileLabel, seg},
+      capped = md =!= "LegacyFull" && md =!= False && IntegerQ[bdg] && bdg > 0;
+      Do[
+        {pkg2, apiF2, fresh2} = s;
+        apiContent = Quiet @ Check[Import[apiF2, "Text"], ""];
+        If[StringQ[apiContent] && StringLength[apiContent] > 0,
+          fileLabel = FileNameTake[apiF2];
+          seg = "=== \:30d1\:30c3\:30b1\:30fc\:30b8 API \:30ea\:30d5\:30a1\:30ec\:30f3\:30b9: " <> pkg2 <> " (" <> fileLabel <> ") ===\n" <>
+            If[fresh2,
+              "(\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3088\:308a\:65b0\:3057\:3044\:305f\:3081\:53c2\:8003\:60c5\:5831\:3068\:3057\:3066\:6709\:52b9)\n",
+              "(\:30bd\:30fc\:30b9\:304c\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3088\:308a\:65b0\:3057\:3044\:304c\:3001API \:30b7\:30b0\:30cd\:30c1\:30e3\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:306f\:6709\:52b9)\n"] <>
+            "IMPORTANT: \:30b3\:30fc\:30c9\:3092\:751f\:6210\:3059\:308b\:969b\:306f\:3001\:3053\:306e " <> fileLabel <>
+            " \:306b\:8a18\:8f09\:3055\:308c\:305f\:95a2\:6570\:540d\:30fb\:30aa\:30d7\:30b7\:30e7\:30f3\:30fb\:5f15\:6570\:306e\:307f\:3092\:4f7f\:7528\:3059\:308b\:3053\:3068\:3002" <>
+            "\:5b58\:5728\:3057\:306a\:3044\:95a2\:6570\:3092\:751f\:6210\:3057\:306a\:3044\:3053\:3068\:3002\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3067\:4e0d\:660e\:306a\:70b9\:304c\:3042\:308b\:5834\:5408\:306e\:307f\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3092\:53c2\:7167\:3059\:308b\:3053\:3068\:3002\n\n" <>
+            apiContent <> "\n\n";
+          Which[
+            !capped || StringLength[ctx] + StringLength[seg] <= bdg,
+              ctx = ctx <> seg; keptAny = True,
+            !keptAny,
+              ctx = ctx <> StringTake[seg, Max[0, bdg - StringLength[ctx]]] <>
+                "\n...[package docs truncated to fit the model context]\n";
+              keptAny = True,
+            True,
+              AppendTo[dropped, pkg2 <> "/" <> fileLabel]]],
+        {s, Join[primSegs, auxSegs]}];
+      If[dropped =!= {},
+        ctx = ctx <> "\n...[api docs omitted to fit the model context: " <>
+          StringRiffle[dropped, ", "] <>
+          " -- read the file under <package>_info/docs/ via tools if the API is needed]\n"]];
     (* (C) \:30bf\:30b9\:30af\:6587\:304c\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:540d\:3092\:542b\:3080\:5834\:5408\:3001\:305d\:306e api.md
        (\:7121\:3051\:308c\:3070 example.md) \:3092\:6ce8\:5165\:3057\:3001LLM \:304c\:6b63\:3057\:3044\:30ed\:30fc\:30c9+\:8d77\:52d5\:30b3\:30fc\:30c9\:3092
        \:751f\:6210\:3067\:304d\:308b\:3088\:3046\:306b\:3059\:308b\:3002budget cap \:5f8c\:306b\:8ffd\:52a0\:3057\:78ba\:5b9f\:306b\:6b8b\:3059
@@ -20364,6 +21032,13 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     If[StringQ[designContext] && designContext =!= "",
       nbPrint[nb, "design 新規内容: " <> ToString[
         Length[StringCases[designContext, "--- design/"]]] <> " 件を加味"]];
+    (* 2026-07-10 (docext): 適格なら全パイプラインを外部 wolframscript ワーカーへ
+       退避し、FE メインカーネルは軽量 status tick のみにする。不成立 ($Failed) 時は
+       従来経路へフォールバック。 *)
+    If[iDocExternalEligibleQ[{}] &&
+       iDocExternalDispatch[packageName, nb, docsDir, autoInstruction, allDocs,
+         diffText, srcFile, "Update", designContext] =!= $Failed,
+      Return[]];
     (* README 以外が閾値以上なら LLM へ並列投入、未満は従来の逐次 *)
     If[Length[Select[allDocs, # =!= "README.md" &]] >= $iDocParallelThreshold,
       iUpdateDocsParallel[sourceCode, packageName, nb, docsDir, autoInstruction, allDocs,
@@ -20509,6 +21184,12 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       If[StringQ[designContext] && designContext =!= "",
         nbPrint[nb, "design 新規内容: " <> ToString[
           Length[StringCases[designContext, "--- design/"]]] <> " 件を加味"]];
+      (* 2026-07-10 (docext): 画像添付なし かつ 適格なら外部 wolframscript ワーカーへ。
+         不成立 ($Failed) 時は従来経路へフォールバック。 *)
+      If[mf === {} && iDocExternalEligibleQ[mf] &&
+         iDocExternalDispatch[packageName, nb, docsDir, enrichedInstruction,
+           targetDocs, diffText, srcFile, mode, designContext] =!= $Failed,
+        Return[]];
       (* README 以外が閾値以上 かつ 画像添付なし なら並列投入、それ以外は逐次 (画像経路は逐次のみ) *)
       If[mf === {} && Length[Select[targetDocs, # =!= "README.md" &]] >= $iDocParallelThreshold,
         iUpdateDocsParallel[sourceCode, packageName, nb, docsDir, enrichedInstruction, targetDocs,
@@ -21392,6 +22073,555 @@ iDocParallelFinalizeFailed[jobId_String] :=
     iSafeSetWindowStatus[st["nb"], iL["\:26d4 \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:4e2d\:65ad (\:5931\:6557 " <> ToString[Length[failedList]] <> " \:4ef6)",
       "\:26d4 Doc update aborted (" <> ToString[Length[failedList]] <> " failed)"]];
     $iDocParallelJobs = KeyDrop[$iDocParallelJobs, jobId];
+  ];
+
+
+(* ════════════════════════════════════════════════════════
+   2026-07-10: ドキュメント更新の外部プロセス化 (docext)。
+   ClaudeUpdateDocumentation のパイプライン全体 (プロンプト構築 → claude CLI →
+   品質ゲート → 書き込み → 進捗マーカー → バックアップ) を子 wolframscript
+   ワーカーへ退避し、FE メインカーネルには「ジョブ投入」と「status.json を
+   読むだけの軽量 poll tick」しか残さない。複数 ClaudeUpdateDocumentation
+   並走時にメインカーネルが飽和して FE がフリーズする問題の抜本対策。
+   メール要約/fetch と同じ実証済みパターン (gen10):
+   席ゲート (iClaudeSeatTryAcquire) + supervisor spawn + done.json poll。
+   - ワーカーは同期ポンプ (Pause ループ) で CLI を最大 maxConc 並列に投入。
+     非同期機構 (ScheduledTask/SessionSubmit) は子プロセスでは一切使わない。
+   - 進捗マーカー (.docupdate_progress.json) と cycleKey は FE 経路と共有。
+     ワーカー中断後の再実行は FE 側 resumption がそのまま効く。
+   - claim ファイル (.docupdate_worker.json, heartbeat 付き) で FE 再起動後の
+     二重ワーカー起動を防止 (stale 120s で自動失効)。
+   - $ClaudeDocUpdateExternal = False で従来のカーネル内経路へ完全復帰。
+     席枯渇/spawn 失敗/非 claude CLI モデル/画像添付時も自動で従来経路。
+   ════════════════════════════════════════════════════════ *)
+
+ClaudeCode`$ClaudeDocUpdateExternal::usage =
+  "$ClaudeDocUpdateExternal は ClaudeUpdateDocumentation を外部 wolframscript ワーカーで実行するトグル (既定 True)。False で従来のカーネル内非同期経路に戻す。外部実行は FE メインカーネルを塞がない。席枯渇・spawn 失敗・非 claude CLI モデル・画像添付時は自動的に従来経路へフォールバックする。";
+If[!ValueQ[ClaudeCode`$ClaudeDocUpdateExternal],
+  ClaudeCode`$ClaudeDocUpdateExternal = True];
+If[!AssociationQ[$iClaudeDocExtJobs], $iClaudeDocExtJobs = <||>];
+
+iClaudeDocExtJobRoot[] :=
+  Module[{root},
+    root = FileNameJoin[{$UserBaseDirectory, "ClaudeRuntime", "docupdatejobs"}];
+    If[!DirectoryQ[root],
+      Quiet@CreateDirectory[root, CreateIntermediateDirectories -> True]];
+    root];
+
+(* JSON 読み書き: UTF-8 バイト単一エンコード (Import["Text"] の encoding 推定と
+   Export["JSON"] の二重エンコードを両方回避) + temp→rename のアトミック書換。
+   reader が rename の隙間に当たったら $Failed (次 tick で再読)。 *)
+iDocExtWriteJson[path_String, data_Association] :=
+  Quiet @ Check[
+    Module[{json, tmp = path <> ".tmp", strm},
+      (* エンコードを先に検証: 失敗時はファイルに一切触らない
+         (エンコード失敗後の rename で空/破損ファイルを作らない) *)
+      json = Quiet @ Check[Developer`WriteRawJSONString[data], $Failed];
+      If[!StringQ[json], Return[False, Module]];
+      strm = OpenWrite[tmp, BinaryFormat -> True];
+      BinaryWrite[strm, StringToByteArray[json, "UTF-8"]];
+      Close[strm];
+      If[FileExistsQ[path], Quiet@DeleteFile[path]];
+      RenameFile[tmp, path];
+      True],
+    False];
+
+iDocExtReadJson[path_String] :=
+  Quiet @ Check[
+    Module[{bytes},
+      If[!FileExistsQ[path], Return[$Failed, Module]];
+      bytes = ReadByteArray[File[path]];
+      If[!ByteArrayQ[bytes] || Length[bytes] === 0, Return[$Failed, Module]];
+      Developer`ReadRawJSONString[ByteArrayToString[bytes, "UTF-8"]]],
+    $Failed];
+
+(* JSON に安全に載せられるモデル指定のみ通す。String / 文字列 tuple はそのまま、
+   それ以外 (Automatic 等) は Null = ワーカー側の既定 $ClaudeModel を使う。 *)
+iDocExtEncodeModel[m_] := Which[
+  StringQ[m] && m =!= "", m,
+  ListQ[m] && Length[m] >= 2 && AllTrue[m, StringQ], m,
+  True, Null];
+
+(* 外部実行の適格判定。不適格なら呼び出し側は従来経路へ。
+   - トグル off / 画像添付あり → 従来経路
+   - モデルが claude CLI 経路 (String / claudecode tuple / 既定) でない
+     (chatgptcodex, anthropic API, lmstudio 等の tuple) → 従来経路
+     (これらは iClaudeQueryAsyncWithProgress のブリッジ実装に依存するため)
+   - ワーカーのブートストラップに必要なファイルが無い → 従来経路 *)
+iDocExternalEligibleQ[mediaFiles_List] :=
+  Module[{m},
+    If[!TrueQ[ClaudeCode`$ClaudeDocUpdateExternal], Return[False, Module]];
+    If[mediaFiles =!= {}, Return[False, Module]];
+    If[!StringQ[Global`$packageDirectory] ||
+       !FileExistsQ[FileNameJoin[{Global`$packageDirectory, "claudecode.wl"}]] ||
+       !FileExistsQ[FileNameJoin[{Global`$packageDirectory, "NBAccess.wl"}]],
+      Return[False, Module]];
+    m = iDocModelOverride[];
+    Which[
+      StringQ[m], True,
+      ListQ[m] && Length[m] >= 2 && StringQ[m[[1]]] &&
+        ToLowerCase[m[[1]]] === "claudecode", True,
+      !ListQ[m], True,   (* Automatic 等 → CLI 既定モデル *)
+      True, False]];
+iDocExternalEligibleQ[___] := False;
+
+(* 子プロセス run.wls を生成。claudecode.wl をヘッドレスロードして
+   iDocWorkerRun を呼ぶだけ。ロード失敗等で done.json が書かれずに終了した
+   場合も最後のガードが必ず done.json を書く (FE poll の永久待機防止)。 *)
+iClaudeDocExtRunScript[jobDir_String] :=
+  Module[{pkgDir, jd, fwd},
+    fwd[p_] := StringReplace[p, "\\" -> "/"];
+    pkgDir = fwd @ Quiet@Check[Global`$packageDirectory, Directory[]];
+    jd = fwd[jobDir];
+    StringJoin[
+      "Block[{$CharacterEncoding=\"UTF-8\"}, SetDirectory[\"", pkgDir, "\"];\n",
+      "Quiet@Check[ClaudeCode`Private`$iDocExtLogStrm = OpenWrite[\"", jd,
+        "/worker_log.txt\"]; AppendTo[$Output, ClaudeCode`Private`$iDocExtLogStrm], Null];\n",
+      "Quiet@Check[Get[\"NBAccess.wl\"],Null];\n",
+      "Quiet@Check[Get[\"claudecode.wl\"],Null];\n",
+      "Quiet@Check[Get[\"github.wl\"],Null];\n",
+      "Quiet@Check[ClaudeCode`Private`iDocWorkerRun[\"", jd, "\"],Null];\n",
+      "If[!FileExistsQ[\"", jd, "/done.json\"],\n",
+      "  Quiet@Check[Export[\"", jd,
+        "/done.json\",<|\"Done\"->True,\"Ok\"->False,\"Error\"->\"WorkerCrashOrLoadFailure\"|>,\"JSON\"],Null]];\n",
+      "];\n"]];
+
+(* ── ワーカー本体 (子 wolframscript 内で実行) ──
+   job.json を読み、同期ポンプでドキュメントを更新し、status.json (heartbeat +
+   イベント列) を随時、done.json を終了時に書く。例外時も必ず done.json。 *)
+iDocWorkerRun[jobDir_String] :=
+  Module[{donePath = FileNameJoin[{jobDir, "done.json"}], job},
+    job = iDocExtReadJson[FileNameJoin[{jobDir, "job.json"}]];
+    If[!AssociationQ[job],
+      iDocExtWriteJson[donePath,
+        <|"Done" -> True, "Ok" -> False, "Error" -> "BadJobSpec"|>];
+      Return[$Failed, Module]];
+    (* メッセージでは中断しない (Check[expr, fb] は benign message でも fb を返し、
+       正常完了後の done.json を上書きしてしまう)。例外/Abort のみ握り潰し、
+       done.json は core 自身が全終了経路で書く。ここでは core が done.json を
+       残せなかった場合のみ補完する。 *)
+    Quiet @ CheckAbort[Catch[iDocWorkerRunCore[jobDir, job], _], Null];
+    If[!FileExistsQ[donePath],
+      iDocExtWriteJson[donePath,
+        <|"Done" -> True, "Ok" -> False, "Error" -> "WorkerException"|>]]
+  ];
+
+iDocWorkerRunCore[jobDir_String, job_Association] :=
+  Module[{pkg, srcFile, docsDir, instruction, diffText, designContext, mode,
+          targets, cycleKey, maxConc, maxRetries, perDocTimeout, jobDeadline,
+          model, effort, sourceCode, splitCache, statusPath, donePath, claimPath,
+          events = {}, pending, launched = <||>, doneDocs = {}, okDocs = {},
+          failedDocs = {}, systemic = False, seq = 0, startT = AbsoluteTime[],
+          emit, writeStatus, launchDoc, handleResponse, grandTotal},
+    pkg           = Replace[Lookup[job, "Package", ""], Except[_String] -> ""];
+    srcFile       = Replace[Lookup[job, "SrcFile", ""], Except[_String] -> ""];
+    docsDir       = Replace[Lookup[job, "DocsDir", ""], Except[_String] -> ""];
+    instruction   = Replace[Lookup[job, "Instruction", ""], Except[_String] -> ""];
+    diffText      = Replace[Lookup[job, "DiffText", ""], Except[_String] -> ""];
+    designContext = Replace[Lookup[job, "DesignContext", ""], Except[_String] -> ""];
+    mode          = Replace[Lookup[job, "Mode", "Update"], Except["Create" | "Update"] -> "Update"];
+    targets       = Replace[Lookup[job, "TargetDocs", {}], Except[_List] -> {}];
+    cycleKey      = Replace[Lookup[job, "CycleKey", ""], Except[_String] -> ""];
+    maxConc       = Max[1, Replace[Lookup[job, "MaxConc", 3], Except[_Integer] -> 3]];
+    maxRetries    = Max[0, Replace[Lookup[job, "MaxRetries", 1], Except[_Integer] -> 1]];
+    perDocTimeout = Replace[Lookup[job, "PerDocTimeoutSeconds", 900], Except[_?NumericQ] -> 900];
+    jobDeadline   = Replace[Lookup[job, "JobDeadlineSeconds", 7200], Except[_?NumericQ] -> 7200];
+    model         = Lookup[job, "Model", Null];
+    effort        = Replace[Lookup[job, "Effort", "medium"], Except[_String] -> "medium"];
+    statusPath = FileNameJoin[{jobDir, "status.json"}];
+    donePath   = FileNameJoin[{jobDir, "done.json"}];
+    claimPath  = FileNameJoin[{docsDir, ".docupdate_worker.json"}];
+    grandTotal = Length[targets];
+    If[pkg === "" || !FileExistsQ[srcFile] || !DirectoryQ[docsDir] || targets === {},
+      iDocExtWriteJson[donePath,
+        <|"Done" -> True, "Ok" -> False, "Error" -> "InvalidJobFields"|>];
+      Return[$Failed, Module]];
+    (* References/Demos 等の doc 状態を job + 永続 doc_options.json から復元 *)
+    iDocInitState[pkg,
+      Replace[Lookup[job, "References", {}], Except[_List] -> {}],
+      Replace[Lookup[job, "Demos", {}], Except[_List] -> {}],
+      Replace[Lookup[job, "Disclaimer", {}], Except[_List] -> {}],
+      Replace[Lookup[job, "Acknowledgments", {}], Except[_List] -> {}],
+      Replace[Lookup[job, "License", ""], Except[_String] -> ""],
+      Replace[Lookup[job, "GlobalInstruction", ""], Except[_String] -> ""],
+      TrueQ[Lookup[job, "ExplicitDemosOrRefs", False]]];
+    iLoadAndMergeDocOptions[pkg];
+    iEnsureReferencesAccessible[pkg];
+    sourceCode = Quiet @ Check[Import[srcFile, "Text"], $Failed];
+    If[!StringQ[sourceCode],
+      iDocExtWriteJson[donePath,
+        <|"Done" -> True, "Ok" -> False, "Error" -> "SourceReadFailure"|>];
+      Return[$Failed, Module]];
+    splitCache = Quiet @ Check[iSplitSource[sourceCode], <||>];
+    If[!AssociationQ[splitCache], splitCache = <||>];
+    (* リトライカウンタは今回サイクル分をクリア (iSafeWriteDoc の retry 床と連動) *)
+    $iDocRetryCount = KeySelect[$iDocRetryCount, !StringStartsQ[#, pkg <> "|"] &];
+    (* ── 進捗書き出しヘルパ ── *)
+    writeStatus = Function[{},
+      iDocExtWriteJson[statusPath, <|
+        "State" -> If[systemic, "aborting", "running"],
+        "Package" -> pkg, "Total" -> grandTotal,
+        "DoneCount" -> Length[doneDocs], "OkCount" -> Length[okDocs],
+        "Inflight" -> Keys[launched], "FailedDocs" -> failedDocs,
+        "Heartbeat" -> AbsoluteTime[], "StartedAt" -> startT,
+        "EventTotal" -> Length[events],
+        "Events" -> Take[events, -Min[200, Length[events]]]|>];
+      iDocExtWriteJson[claimPath, <|
+        "JobDir" -> jobDir, "Package" -> pkg,
+        "Heartbeat" -> AbsoluteTime[]|>]];
+    emit = Function[msg,
+      events = Append[events, ToString[msg]];
+      writeStatus[]];
+    (* ── 1 doc の CLI 投入 ── *)
+    launchDoc = Function[doc,
+      Module[{bp, prompt, pf, of, bat, proc, strm},
+        (* benign message で doc をスキップしないよう、例外のみ $Failed 化 *)
+        bp = Quiet @ CheckAbort[Catch[
+          iBuildDocPrompt[sourceCode, pkg, docsDir, doc, instruction,
+            diffText, mode, designContext, splitCache], _, $Failed &], $Failed];
+        If[!AssociationQ[bp] || Lookup[bp, "status", "ok"] =!= "ok",
+          doneDocs = Append[doneDocs, doc];
+          emit["⚠ " <> doc <> " をスキップ (補助ソース未検出/プロンプト構築失敗)"];
+          Return[False, Module]];
+        prompt = bp["prompt"];
+        (* 再試行時は逐次経路と同じ RETRY NOTICE を付与 (切り詰め再発防止) *)
+        If[Lookup[$iDocRetryCount, pkg <> "|" <> doc, 0] > 0,
+          prompt = prompt <>
+            "\nRETRY NOTICE: A previous attempt was cut off before finishing " <>
+            "(unbalanced ``` code fence, or the text ended mid-sentence). This time:\n" <>
+            "- Output the COMPLETE document in ONE response, from the first line to the last.\n" <>
+            "- Do NOT use any tools \[LongDash] all the source you need is already included above.\n" <>
+            "- Be concise; respect the target length and do NOT pad with redundant bulk.\n" <>
+            "- Make sure EVERY ``` code fence has a matching closing ```.\n\n"];
+        seq++;
+        pf = FileNameJoin[{jobDir, "prompt_" <> ToString[seq] <> ".txt"}];
+        of = FileNameJoin[{jobDir, "out_" <> ToString[seq] <> ".jsonl"}];
+        strm = OpenWrite[pf, BinaryFormat -> True];
+        BinaryWrite[strm, ExportString[iHoistThinkPrefix[prompt], "Text",
+          CharacterEncoding -> "UTF-8"]];
+        Close[strm];
+        bat = iMakeBatStreamJson[pf, of];
+        proc = Quiet @ Check[StartProcess[{"cmd", "/c", bat}], $Failed];
+        If[proc === $Failed,
+          systemic = True;
+          doneDocs = Append[doneDocs, doc]; failedDocs = Append[failedDocs, doc];
+          emit["⛔ " <> doc <> ": CLI プロセス起動失敗。新規投入を停止します。"];
+          Return[False, Module]];
+        launched[doc] = <|"Proc" -> proc, "Out" -> of, "Bat" -> bat,
+          "Prompt" -> pf, "DocPath" -> bp["docPath"], "Start" -> AbsoluteTime[]|>;
+        emit["─ " <> doc <> " を投入 (プロンプト " <>
+          ToString[StringLength[prompt]] <> " chars" <>
+          If[Lookup[$iDocRetryCount, pkg <> "|" <> doc, 0] > 0, ", 再試行", ""] <> ")"];
+        True]];
+    (* ── CLI 完了応答の処理 (iDocParallelReport と同じ意味論) ── *)
+    handleResponse = Function[{doc, info, response},
+      Module[{rkey = pkg <> "|" <> doc, rc, w},
+        If[!StringQ[response] || iIsAPIErrorResponse[response],
+          systemic = True;
+          doneDocs = Append[doneDocs, doc]; failedDocs = Append[failedDocs, doc];
+          emit["⛔ " <> doc <> " 失敗 (API エラー/利用制限/内部エラー)。新規投入を停止します。"],
+          w = Quiet @ Check[iSafeWriteDoc[info["DocPath"], response, pkg], $Failed];
+          If[w === $Failed,
+            rc = Lookup[$iDocRetryCount, rkey, 0];
+            If[rc < maxRetries,
+              $iDocRetryCount[rkey] = rc + 1;
+              pending = iEnsureReadmeLast[Append[pending, doc]];
+              emit["⚠ " <> doc <> " 失敗 [" <> ToString[$iDocLastFailReason] <>
+                "] → 自動再試行 (" <> ToString[rc + 1] <> "/" <> ToString[maxRetries] <> ")"],
+              doneDocs = Append[doneDocs, doc]; failedDocs = Append[failedDocs, doc];
+              emit["⛔ " <> doc <> " 失敗 [" <> ToString[$iDocLastFailReason] <>
+                "] (再試行 " <> ToString[maxRetries] <> " 回後)。ファイルは変更せずスキップ。"]],
+            doneDocs = Append[doneDocs, doc]; okDocs = Append[okDocs, doc];
+            $iDocRetryCount = KeyDrop[$iDocRetryCount, rkey];
+            iDocProgressMark[docsDir, cycleKey, doc];
+            iRecordAuxHash[docsDir, pkg, doc];
+            Quiet[DeleteFile /@ Select[
+              {info["Prompt"], info["Out"], info["Bat"]}, FileExistsQ]];
+            emit["  ✓ " <> doc <> " を更新しました"]]];
+        Null]];
+    (* ── 同期ポンプ: 最大 maxConc 並列。README は「他が全完了かつ全成功」時のみ
+       最後に単独実行 (兄弟 doc をディスクから読むため)。 ── *)
+    pending = iEnsureReadmeLast[targets];
+    Block[{$ClaudeModel = Which[
+        StringQ[model] && model =!= "", model,
+        ListQ[model] && Length[model] >= 2, model,
+        True, $ClaudeModel],
+      $iPaletteEffort = effort},
+      writeStatus[];
+      While[(Length[pending] > 0 && !systemic) || Length[launched] > 0,
+        (* 全体デッドライン: 超過時は残りを失敗扱いにして脱出 *)
+        If[AbsoluteTime[] - startT > jobDeadline,
+          systemic = True;
+          Scan[Function[d, Quiet@KillProcess[launched[d]["Proc"]]], Keys[launched]];
+          failedDocs = DeleteDuplicates[Join[failedDocs, Keys[launched], pending]];
+          doneDocs = DeleteDuplicates[Join[doneDocs, Keys[launched], pending]];
+          launched = <||>; pending = {};
+          emit["⛔ ジョブ全体のデッドライン超過。中断します。"];
+          Break[]];
+        (* 失敗ありで README だけが残ったら README はスキップ (再実行で再開) *)
+        If[!systemic && failedDocs =!= {} && pending === {"README.md"} &&
+           Length[launched] === 0,
+          pending = {};
+          emit["⚠ 失敗した doc があるため README.md をスキップします (再実行で再開)"]];
+        (* 投入 *)
+        While[!systemic && Length[launched] < maxConc && Length[pending] > 0 &&
+              !(First[pending] === "README.md" &&
+                (Length[launched] > 0 || Length[pending] > 1 || failedDocs =!= {})),
+          Module[{doc = First[pending]},
+            pending = Rest[pending];
+            launchDoc[doc]]];
+        Pause[2];
+        (* 回収 *)
+        Scan[Function[doc,
+          Module[{info = launched[doc], st, resp, elapsed},
+            st = Quiet @ Check[ToString[ProcessStatus[info["Proc"]]], "Finished"];
+            elapsed = AbsoluteTime[] - info["Start"];
+            Which[
+              st === "Finished",
+                launched = KeyDrop[launched, doc];
+                resp = Quiet @ CheckAbort[Catch[
+                  iExtractResultFromStreamJson[info["Out"]], _, $Failed &], $Failed];
+                handleResponse[doc, info, resp],
+              elapsed > perDocTimeout,
+                Quiet @ KillProcess[info["Proc"]];
+                launched = KeyDrop[launched, doc];
+                Module[{rkey = pkg <> "|" <> doc, rc},
+                  rc = Lookup[$iDocRetryCount, rkey, 0];
+                  If[rc < maxRetries,
+                    $iDocRetryCount[rkey] = rc + 1;
+                    pending = iEnsureReadmeLast[Append[pending, doc]];
+                    emit["⚠ " <> doc <> " タイムアウト (" <>
+                      ToString[Round[elapsed]] <> "s) → 自動再試行"],
+                    doneDocs = Append[doneDocs, doc];
+                    failedDocs = Append[failedDocs, doc];
+                    emit["⛔ " <> doc <> " タイムアウト (再試行上限)。スキップ。"]]],
+              True, Null]]],
+          Keys[launched]];
+        writeStatus[]];
+      (* ── 完了処理 ── *)
+      Module[{okAll = !systemic && failedDocs === {}, histDir = ""},
+        If[okAll,
+          histDir = Quiet @ Check[
+            iCreateDocUpdateBackup[pkg, srcFile, docsDir, instruction], ""];
+          Quiet @ Check[iSaveDocOptions[pkg], Null];
+          iDocProgressClear[docsDir];
+          emit["✅ ドキュメント更新が完了しました (" <>
+            ToString[Length[okDocs]] <> " 件)"]];
+        writeStatus[];
+        iDocExtWriteJson[donePath, <|
+          "Done" -> True, "Ok" -> okAll,
+          "OkDocs" -> okDocs, "FailedDocs" -> failedDocs,
+          "Systemic" -> systemic,
+          "Backup" -> If[StringQ[histDir], histDir, ""],
+          "ElapsedSeconds" -> Round[AbsoluteTime[] - startT]|>];
+        (* claim は最後に削除 (writeStatus が再作成しない位置で)。
+           これで完了直後の再実行が claim 誤検出でブロックされない。 *)
+        Quiet @ Check[If[FileExistsQ[claimPath], DeleteFile[claimPath]], Null];
+        okAll]]
+  ];
+
+(* ── FE 側: ジョブ投入 ──
+   成功時は jobId (String) を返す。$Failed を返した場合、呼び出し側は
+   従来のカーネル内経路にフォールバックする。 *)
+iDocExternalDispatch[packageName_String, nb_, docsDir_String, instruction_String,
+    targetDocs_List, diffText_String, srcFile_String, mode_String,
+    designContext_String] :=
+  Module[{jobId, jobDir, job, scriptPath, exe, seat, proc, state, running, claim, strm},
+    (* 二重起動防止 1: このカーネルが把握している進行中ジョブ *)
+    running = If[AssociationQ[$iClaudeDocExtJobs],
+      Select[$iClaudeDocExtJobs,
+        Lookup[#, "Package", ""] === packageName &&
+        !FileExistsQ[FileNameJoin[{Lookup[#, "JobDir", ""], "done.json"}]] &],
+      <||>];
+    If[Length[running] > 0,
+      nbPrint[nb, "⚠️ " <> packageName <> " の外部ドキュメント更新が既に進行中です (" <>
+        First[Keys[running]] <> ")。完了をお待ちください。"];
+      Return[First[Keys[running]], Module]];
+    (* 二重起動防止 2: claim ファイル (FE 再起動後もワーカー生存を検知) *)
+    claim = iDocExtReadJson[FileNameJoin[{docsDir, ".docupdate_worker.json"}]];
+    If[AssociationQ[claim] &&
+       NumericQ[Lookup[claim, "Heartbeat", None]] &&
+       AbsoluteTime[] - Lookup[claim, "Heartbeat", 0] < 120,
+      nbPrint[nb, "⚠️ " <> packageName <>
+        " のドキュメント更新ワーカーが既に稼働中です (heartbeat 検出)。完了をお待ちください。"];
+      Return["docext-already-running", Module]];
+    jobId = "docext-" <> ToString[UnixTime[]] <> "-" <>
+      IntegerString[RandomInteger[{16^^100000, 16^^FFFFFF}], 16];
+    jobDir = FileNameJoin[{iClaudeDocExtJobRoot[], jobId}];
+    Quiet @ CreateDirectory[jobDir, CreateIntermediateDirectories -> True];
+    (* ワーカーが References/Demos 等を復元できるよう永続化してから job を書く *)
+    Quiet @ Check[iSaveDocOptions[packageName], Null];
+    state = Lookup[$iDocState, packageName, <||>];
+    If[!AssociationQ[state], state = <||>];
+    job = <|
+      "Package" -> packageName, "SrcFile" -> srcFile, "DocsDir" -> docsDir,
+      "Instruction" -> instruction, "DiffText" -> diffText,
+      "DesignContext" -> designContext, "Mode" -> mode,
+      "TargetDocs" -> targetDocs,
+      "CycleKey" -> Replace[Lookup[$iDocCycle, packageName, ""], Except[_String] -> ""],
+      "MaxConc" -> Max[1, Min[Lookup[$LLMGraphMaxConcurrency, "cli", 3],
+        ClaudeCode`$ClaudeMaxConcurrentJobs]],
+      "MaxRetries" -> 1,
+      "PerDocTimeoutSeconds" -> 900,
+      "JobDeadlineSeconds" -> 7200,
+      "Model" -> iDocExtEncodeModel[iDocModelOverride[]],
+      "Effort" -> If[StringQ[$iPaletteEffort], $iPaletteEffort, "medium"],
+      "References" -> Map[ToString,
+        Replace[Lookup[state, "References", {}], Except[_List] -> {}]],
+      "Demos" -> Map[ToString,
+        Replace[Lookup[state, "Demos", {}], Except[_List] -> {}]],
+      "Disclaimer" -> Map[ToString,
+        Replace[Lookup[state, "Disclaimer", {}], Except[_List] -> {}]],
+      "Acknowledgments" -> Map[ToString,
+        Replace[Lookup[state, "Acknowledgments", {}], Except[_List] -> {}]],
+      "License" -> Replace[Lookup[state, "License", ""], Except[_String] -> ""],
+      "GlobalInstruction" -> Replace[Lookup[state, "GlobalInstruction", ""],
+        Except[_String] -> ""],
+      "ExplicitDemosOrRefs" -> TrueQ[Lookup[state, "ExplicitDemosOrRefs", False]]
+    |>;
+    If[!iDocExtWriteJson[FileNameJoin[{jobDir, "job.json"}], job],
+      nbPrint[nb, Style["⚠ 外部ジョブ仕様の書き出しに失敗しました。従来のカーネル内更新で続行します。",
+        FontColor -> RGBColor[0.8, 0.4, 0]]];
+      Return[$Failed, Module]];
+    scriptPath = FileNameJoin[{jobDir, "run.wls"}];
+    Quiet @ Check[
+      strm = OpenWrite[scriptPath, BinaryFormat -> True];
+      BinaryWrite[strm, StringToByteArray[iClaudeDocExtRunScript[jobDir], "UTF-8"]];
+      Close[strm],
+      Null];
+    If[!FileExistsQ[scriptPath],
+      nbPrint[nb, Style["⚠ ワーカースクリプトの書き出しに失敗しました。従来のカーネル内更新で続行します。",
+        FontColor -> RGBColor[0.8, 0.4, 0]]];
+      Return[$Failed, Module]];
+    exe = iClaudeResolveWolframScript[];
+    (* 席ゲート: 枯渇時は spawn せず従来経路へ (Priority 90 = ユーザー明示起動) *)
+    seat = iClaudeSeatTryAcquire["DocUpdate", "Priority" -> 90,
+      "TTLSeconds" -> 7200, "JobId" -> jobId];
+    If[FailureQ[seat],
+      iClaudeFreezeLog["docext-seat-denied", jobId];
+      nbPrint[nb, Style["⚠ ライセンス席が空いていないため外部プロセスを起動できません。従来のカーネル内更新で続行します。",
+        FontColor -> RGBColor[0.8, 0.4, 0]]];
+      Return[$Failed, Module]];
+    proc = iClaudeSupervisedStart[{exe, "-file", scriptPath}, "DocUpdate",
+      "JobId" -> jobId,
+      "DoneMarker" -> FileNameJoin[{jobDir, "done.json"}],
+      "SeatToken" -> Lookup[seat, "Token", None],
+      "DeadlineSeconds" -> 7200];
+    If[proc === $Failed,
+      iClaudeSeatRelease[seat];
+      iClaudeFreezeLog["docext-spawn-failed", jobId];
+      iClaudeDiagEmit["SpawnFailed",
+        <|"Purpose" -> "DocUpdate", "Exe" -> ToString[exe], "JobId" -> jobId|>,
+        "error"];
+      nbPrint[nb, Style["⚠ 外部プロセス (wolframscript) の起動に失敗しました。従来のカーネル内更新で続行します。",
+        FontColor -> RGBColor[0.8, 0.4, 0]]];
+      Return[$Failed, Module]];
+    $iClaudeDocExtJobs[jobId] = <|"JobDir" -> jobDir, "Nb" -> nb,
+      "Package" -> packageName, "Proc" -> proc,
+      "SeatToken" -> Lookup[seat, "Token", None],
+      "Started" -> AbsoluteTime[], "EventIdx" -> 0, "FinishedAt" -> None|>;
+    $iDocUpdateActive[packageName] = AbsoluteTime[];
+    If[Length[DownValues[ClaudeRegisterPollingTick]] > 0,
+      Quiet @ Check[
+        ClaudeRegisterPollingTick["docext-poll",
+          Function[Null, iClaudeDocExtPollTick[]],
+          "Caller" -> "DocUpdate", "Phase" -> "external"], Null]];
+    nbPrint[nb, Style["外部プロセスでドキュメント更新を開始: " <>
+      ToString[Length[targetDocs]] <> " 件 (モデル: " <> iDocModelLabel[] <>
+      ", ジョブ: " <> jobId <> ")。FE は塞ぎません。進捗は追記されます。", Bold]];
+    iClaudeFreezeLog["docext-spawn", jobId];
+    iSafeSetWindowStatus[nb, "ドキュメント更新 (外部) 準備中... " <>
+      ToString[Length[targetDocs]] <> " 件"];
+    jobId
+  ];
+
+(* ── FE 側: 軽量 poll tick (status.json/done.json を読むだけ) ── *)
+iClaudeDocExtPollTick[] :=
+  Quiet @ Check[
+    Module[{jobs = $iClaudeDocExtJobs},
+      If[!AssociationQ[jobs] || Length[jobs] === 0,
+        If[Length[DownValues[ClaudeUnregisterPollingTick]] > 0,
+          Quiet @ ClaudeUnregisterPollingTick["docext-poll"]];
+        Return[Null, Module]];
+      KeyValueMap[Function[{jid, info}, iClaudeDocExtPollOne[jid, info]], jobs]],
+    Null];
+
+iClaudeDocExtPollOne[jid_String, info_Association] :=
+  Module[{jobDir = Lookup[info, "JobDir", ""], nb = Lookup[info, "Nb", None],
+          pkg = Lookup[info, "Package", ""], donePath, statusPath, d, st,
+          evs, idx, tot, newN, procSt, fa},
+    donePath   = FileNameJoin[{jobDir, "done.json"}];
+    statusPath = FileNameJoin[{jobDir, "status.json"}];
+    (* 進捗イベント描画 + ステータスバー更新 (done 前に必ず 1 回は反映) *)
+    st = iDocExtReadJson[statusPath];
+    If[AssociationQ[st],
+      evs = Replace[Lookup[st, "Events", {}], Except[_List] -> {}];
+      tot = Replace[Lookup[st, "EventTotal", Length[evs]], Except[_Integer] -> Length[evs]];
+      idx = Replace[Lookup[info, "EventIdx", 0], Except[_Integer] -> 0];
+      newN = tot - idx;
+      If[newN > 0 && MatchQ[nb, _NotebookObject],
+        Scan[Function[ev, nbPrint[nb, ToString[ev]]],
+          If[newN >= Length[evs], evs, Take[evs, -newN]]]];
+      If[newN > 0,
+        Module[{e = $iClaudeDocExtJobs[jid]},
+          If[AssociationQ[e],
+            e["EventIdx"] = tot; $iClaudeDocExtJobs[jid] = e]]];
+      If[MatchQ[nb, _NotebookObject] && !FileExistsQ[donePath],
+        iSafeSetWindowStatus[nb, "Claude ドキュメント生成中 (外部) " <>
+          ToString[Lookup[st, "DoneCount", 0]] <> "/" <>
+          ToString[Lookup[st, "Total", 0]] <> " \[Bullet] " <>
+          ToString[Length[Replace[Lookup[st, "Inflight", {}], Except[_List] -> {}]]] <>
+          " 並列 \[Bullet] " <>
+          ToString[Round[AbsoluteTime[] - Lookup[info, "Started", AbsoluteTime[]]]] <> "s"]];
+      (* FE 側の doc 更新中ガードを鮮度維持 (在圏中の二重実行防止) *)
+      If[pkg =!= "", $iDocUpdateActive[pkg] = AbsoluteTime[]]];
+    Which[
+      FileExistsQ[donePath],
+        d = iDocExtReadJson[donePath];
+        iClaudeDocExtFinish[jid, info, If[AssociationQ[d], d, <||>]],
+      True,
+        procSt = Quiet @ Check[
+          ToString[ProcessStatus[Lookup[info, "Proc", Null]]], "Running"];
+        If[procSt === "Finished",
+          (* done.json flush 猶予 10 秒 → それでも無ければワーカー死亡扱い *)
+          fa = Lookup[info, "FinishedAt", None];
+          Which[
+            !NumericQ[fa],
+              Module[{e = $iClaudeDocExtJobs[jid]},
+                If[AssociationQ[e],
+                  e["FinishedAt"] = AbsoluteTime[]; $iClaudeDocExtJobs[jid] = e]],
+            AbsoluteTime[] - fa > 10,
+              iClaudeDocExtFinish[jid, info,
+                <|"Done" -> True, "Ok" -> False, "Error" -> "WorkerDied"|>]]]]
+  ];
+
+iClaudeDocExtFinish[jid_String, info_Association, d_Association] :=
+  Module[{nb = Lookup[info, "Nb", None], pkg = Lookup[info, "Package", ""],
+          ok = TrueQ[Lookup[d, "Ok", False]], okDocs, failedDocs, err, bkup},
+    okDocs = Replace[Lookup[d, "OkDocs", {}], Except[_List] -> {}];
+    failedDocs = Replace[Lookup[d, "FailedDocs", {}], Except[_List] -> {}];
+    err = Replace[Lookup[d, "Error", ""], Except[_String] -> ""];
+    bkup = Replace[Lookup[d, "Backup", ""], Except[_String] -> ""];
+    If[MatchQ[nb, _NotebookObject],
+      If[ok,
+        If[bkup =!= "", nbPrint[nb, "バックアップ: " <> bkup]];
+        nbPrint[nb, iL["✅ ドキュメント更新が完了しました (外部プロセス)。",
+          "✅ Document update complete (external process)."]],
+        nbPrint[nb, Style["⛔ 外部ドキュメント更新が失敗/中断しました" <>
+          If[err =!= "", " (" <> err <> ")", ""] <>
+          "。成功 " <> ToString[Length[okDocs]] <> " 件は保存・記録済み。" <>
+          If[failedDocs =!= {}, "失敗: " <> StringRiffle[failedDocs, ", "] <> "。", ""] <>
+          If[err === "WorkerDied",
+            "ワーカーが完了マーカーを残さず終了しました (ライセンス席枯渇の可能性)。", ""] <>
+          "再実行で未完了分から再開します。",
+          FontColor -> RGBColor[0.8, 0.2, 0.2]]]];
+      iSafeSetWindowStatus[nb, If[ok,
+        iL["✅ ドキュメント更新完了", "✅ Document update complete"],
+        "⛔ ドキュメント更新中断"]]];
+    iClaudeFreezeLog[If[ok, "docext-done", "docext-failed"], jid];
+    iClaudeSeatRelease[Lookup[info, "SeatToken", None]];
+    If[pkg =!= "", $iDocUpdateActive = KeyDrop[$iDocUpdateActive, pkg]];
+    $iClaudeDocExtJobs = KeyDrop[$iClaudeDocExtJobs, jid];
   ];
 
 
@@ -24336,19 +25566,235 @@ If[! ValueQ[$iSpecImplDriver],
   $iSpecImplDriver = FileNameJoin[{Global`$packageDirectory,
     "SourceVault_workflows", "spec-impl", "palette_impl_driver.wls"}]];
 If[! ValueQ[$iSpecImplMaxRounds], $iSpecImplMaxRounds = 3];
+(* implement<->verify ループの MaxWait (cfg で driver/worker へ供給)。
+   実測で 1 round (implement+verify) ≈ 13-15 分なので、MaxRounds=3 が
+   40 分 (旧既定 2400s) に収まらず抜け殻 summary で終わる事例があった
+   (20260622-株価推移ワークフロー3, 2026-07-12)。90 分に引き上げ。 *)
+If[! ValueQ[$iSpecImplMaxWaitSeconds], $iSpecImplMaxWaitSeconds = 5400];
 (* FE poll backstop, measured in WALL-CLOCK SECONDS -- NOT tick count. The shared
    poll tick can fire faster than its nominal 3.0s (extra/orphaned scheduled
    tasks, or a burst right after an FE freeze), so a tick-count budget can expire
    long before real time and falsely report "Timeout" on a job that actually
-   finished. Keep STRICTLY GREATER than the driver's MaxWait (default 2400s = 40
-   min) so the driver always gets to write result.wl first; this backstop only
-   fires if the driver itself dies/hangs (and then it kills the orphaned proc). *)
-If[! ValueQ[$iSpecImplMaxSeconds], $iSpecImplMaxSeconds = 2700]; (* 45 min > driver 40 min *)
+   finished. Keep STRICTLY GREATER than the driver's MaxWait
+   ($iSpecImplMaxWaitSeconds) so the driver always gets to write result.wl
+   first; this backstop only fires if the driver itself dies/hangs (and then it
+   kills the orphaned proc). *)
+If[! ValueQ[$iSpecImplMaxSeconds],
+  $iSpecImplMaxSeconds = $iSpecImplMaxWaitSeconds + 300];
 If[! ValueQ[$iSpecImplJobs], $iSpecImplJobs = <||>];
 If[! ValueQ[$iSpecImplLaunchers], $iSpecImplLaunchers = <||>];
 
 iSpecImplAvailableQ[] := iSVSpecAvailableQ[] &&
   Length[DownValues[SourceVault`SourceVaultLoadWorkflow]] > 0;
+
+(* ============================================================
+   spec-impl RuntimeSession episode 経路 (pilot 移行)
+   実行基盤を episode net + external process backend (worker seam IncE) に
+   載せる。パレット UI / write-back / progress 表示は legacy と共通。
+   起動に失敗したら legacy driver へ自動 fallback (docext と同じ型)。
+   設計: ClaudeOrchestrator_info/design/
+         claude_orchestrator_specimpl_session_migration_v0_1.md
+   ============================================================ *)
+
+(* Automatic = session モジュール群ロード済みなら session 経路 /
+   True = session (不可なら fallback) / False = legacy 固定 *)
+ClaudeCode`$ClaudeSpecImplUseSession::usage =
+  "$ClaudeSpecImplUseSession は spec-impl (パレット Impl) を RuntimeSession " <>
+  "episode 基盤で実行するトグル (既定 Automatic = ClaudeOrchestrator_session/" <>
+  "ClaudeRuntime_sessionrunner ロード済みなら session 経路)。False で従来の " <>
+  "wolframscript driver 経路に固定。session 起動に失敗した場合は自動的に" <>
+  "従来経路へフォールバックする。";
+If[! ValueQ[ClaudeCode`$ClaudeSpecImplUseSession],
+  ClaudeCode`$ClaudeSpecImplUseSession = Automatic];
+(* launcher seam: Automatic = 実 wolframscript (席1消費)。テストは
+   in-kernel launcher を注入する *)
+If[! ValueQ[$iSpecImplSessionLauncher], $iSpecImplSessionLauncher = Automatic];
+If[! ValueQ[$iSpecImplSessionBackendName],
+  $iSpecImplSessionBackendName = "SpecImplExternalProcess"];
+If[! ValueQ[$iSpecImplSessionLastLaunch], $iSpecImplSessionLastLaunch = None];
+If[! ValueQ[$iSpecImplLastSessionFallback], $iSpecImplLastSessionFallback = None];
+
+(* optional 依存 (ClaudeOrchestrator / ClaudeRuntime session 層) は
+   Symbol[] 間接参照 (svasync の ClaudeCancelWorkflow と同じ流儀) *)
+iSpecImplOrchS[f_String] := Symbol["ClaudeOrchestrator`Session`" <> f];
+iSpecImplRtS[f_String]   := Symbol["ClaudeRuntime`Session`" <> f];
+
+iSpecImplSessionAvailableQ[] :=
+  Names["ClaudeOrchestrator`Session`ClaudeCreateRuntimeSessionEpisodeNet"] =!= {} &&
+  Names["ClaudeRuntime`Session`ClaudeRuntimeExternalProcessBackendSpec"] =!= {} &&
+  (* DownValues は HoldAll: With で実 symbol を注入して定義有無を見る *)
+  With[{s = iSpecImplOrchS["ClaudeCreateRuntimeSessionEpisodeNet"]},
+    DownValues[s]] =!= {} &&
+  With[{s = iSpecImplRtS["ClaudeRuntimeExternalProcessBackendSpec"]},
+    DownValues[s]] =!= {};
+
+iSpecImplUseSessionQ[] :=
+  ClaudeCode`$ClaudeSpecImplUseSession =!= False &&
+  iSpecImplSessionAvailableQ[];
+
+(* session モジュール群の on-demand ロード。FE 起動を重くしないため
+   パレット Impl の初回実行まで遅延する。ロード済みモジュールは
+   再 Get しない (レジストリ/実行中 episode 状態を壊さないため)。
+   失敗したら False (呼び出し側が legacy へ fallback)。 *)
+$iSpecImplSessionModules = {
+  {"ClaudeOrchestrator_workflow.wl",
+    "ClaudeOrchestrator`Workflow`ClaudeCreateWorkflowNet"},
+  {"ClaudeOrchestrator_session.wl",
+    "ClaudeOrchestrator`Session`ClaudeCreateRuntimeSessionEpisodeNet"},
+  {"ClaudeRuntime.wl", "ClaudeRuntime`ClaudeRunTurn"},
+  {"ClaudeRuntime_session.wl",
+    "ClaudeRuntime`Session`ClaudeRegisterRuntimeAdapterFactory"},
+  {"ClaudeRuntime_externalrunner.wl",
+    "ClaudeRuntime`ClaudeRunTaskFromManifest"},
+  {"ClaudeRuntime_sessionrunner.wl",
+    "ClaudeRuntime`Session`ClaudeRuntimeExternalProcessBackendSpec"}};
+
+(* 「symbol が存在する」ではなく「定義がある」で判定する: claudecode.wl
+   自身が ClaudeRuntime`ClaudeRunTurn 等を参照して symbol だけ生成するため、
+   Names 判定では未ロードでも定義済みに見えてしまう。DownValues は
+   HoldAll なので With で symbol を注入する。 *)
+iSpecImplSymbolDefinedQ[name_String] :=
+  Names[name] =!= {} &&
+  With[{s = Symbol[name]},
+    DownValues[s] =!= {} || OwnValues[s] =!= {}];
+
+iSpecImplEnsureSessionModules[] := Module[{ok = True},
+  If[ClaudeCode`$ClaudeSpecImplUseSession === False, Return[False]];
+  If[iSpecImplSessionAvailableQ[], Return[True]];
+  Scan[
+    Function[{entry},
+      Module[{file = FileNameJoin[{Global`$packageDirectory,
+                entry[[1]]}], marker = entry[[2]]},
+        If[ok && ! iSpecImplSymbolDefinedQ[marker],
+          If[! FileExistsQ[file], ok = False,
+            ok = ok && TrueQ[Quiet @ Check[
+              Block[{$CharacterEncoding = "UTF-8"}, Get[file]]; True,
+              False]]]]]],
+    $iSpecImplSessionModules];
+  ok && iSpecImplSessionAvailableQ[]];
+
+(* .wls であることに注意: workflow レジストリ (iSVWFMainFile) は slug
+   フォルダ内の Sort 順最初の *.wl を workflow 本体として Get するため、
+   補助ファイルを .wl で置くと SourceVaultLoadWorkflow["spec-impl"] が
+   壊れる (palette_impl_driver.wls と同じ理由で .wls) *)
+iSpecImplSessionWorkerFile[] := FileNameJoin[{Global`$packageDirectory,
+  "SourceVault_workflows", "spec-impl", "session_impl_worker.wls"}];
+
+(* backend を (再)登録。launcher は起動結果 (ProcessObject/SpoolDir) を
+   $iSpecImplSessionLastLaunch に捕捉して tick の dead-proc 検出に使う *)
+iSpecImplEnsureSessionBackend[] := Module[{workerFile, inner, launcher, backend},
+  workerFile = iSpecImplSessionWorkerFile[];
+  If[! FileExistsQ[workerFile], Return[$Failed]];
+  inner = If[$iSpecImplSessionLauncher === Automatic,
+    Function[spec, iSpecImplRtS["ClaudeSessionRunnerRealLauncher"][spec,
+      "MaxRunSeconds" -> Max[$iSpecImplMaxSeconds,
+        $iSpecImplMaxWaitSeconds + 300]]],
+    $iSpecImplSessionLauncher];
+  launcher = With[{lf = inner},
+    Function[spec, Module[{r = lf[spec]},
+      If[AssociationQ[r],
+        $iSpecImplSessionLastLaunch = Append[r,
+          "SpoolDir" -> Lookup[spec, "SpoolDir", None]]];
+      r]]];
+  backend = iSpecImplRtS["ClaudeRuntimeExternalProcessBackendSpec"][
+    "WorkerSpec" -> <|"InitFiles" -> {workerFile},
+      "Function" ->
+        "SourceVaultWorkflow`SpecImplSession`SpecImplEpisodeWorker"|>,
+    "Launcher" -> launcher];
+  iSpecImplOrchS["ClaudeRegisterRuntimeSessionBackend"][
+    $iSpecImplSessionBackendName, backend]];
+
+(* startSpec: template を base に Task/Worker/Environment/ArtifactContract/
+   BudgetGrant を spec-impl 用に上書き (GrantHash は再計算)。
+   artifact = result 連想 (staging=runDir に WXF)、ArtifactStore commit。 *)
+iSpecImplSessionStartSpec[slug_, cfgFile_, runDir_, targetDir_, specURI_, claude_] :=
+  Module[{spec, task, env, contract, grant0, grant},
+    spec = iSpecImplOrchS["ClaudeSessionStartSpecTemplate"][
+      "Backend" -> $iSpecImplSessionBackendName,
+      "GoalRef" -> cfgFile, "PrivacyLabel" -> 1.0,
+      "ReusePolicy" -> "Never",
+      "WorkflowId" -> ("wf-specimpl-" <> StringReplace[CreateUUID[], "-" -> ""])];
+    task = Join[spec[["Task"]], <|
+      "InputArtifactRefs" -> Select[{specURI}, StringQ[#] && # =!= "" &],
+      "ExpectedArtifactType" -> "SpecImplResult",
+      "DeterministicChecks" -> {"ResultWellFormed"}|>];
+    env = Join[spec[["Environment"]], <|
+      "IsolationLevel" -> "ExternalProcess",
+      "WritableStagingRoot" -> runDir,
+      "AllowedDirectories" -> {runDir, targetDir},
+      "CleanupPolicy" -> <|"DeleteStagingOnDispose" -> False|>|>];
+    contract = <|
+      "ExpectedArtifactType" -> "SpecImplResult",
+      "OutputSchema" -> <||>,
+      "AllowedStagingRoot" -> runDir,
+      "MaxArtifactBytes" -> 33554432,
+      "RequiredChecks" -> {"ResultWellFormed"},
+      "CommitTargetRef" -> FileNameJoin[{runDir, "artifact-store"}],
+      "BaseRevision" -> None,
+      "CommitMode" -> "ArtifactStore",
+      "RequireProvenance" -> True|>;
+    grant0 = KeyDrop[spec[["BudgetGrant"]], {"GrantHash"}];
+    grant0["HardLimits"] = Join[grant0[["HardLimits"]],
+      <|"MaxWallClockSeconds" -> N[Max[$iSpecImplMaxSeconds,
+        $iSpecImplMaxWaitSeconds + 300]]|>];
+    grant = Append[grant0, "GrantHash" ->
+      iSpecImplOrchS["ClaudeSessionGrantHash"][grant0]];
+    Join[spec, <|
+      "Worker" -> <|"Provider" -> "wolframscript",
+        "Model" -> ToString[claude],
+        "RuntimeProfile" -> "spec-impl",
+        "AdapterFactory" -> "SpecImplEpisodeWorker"|>,
+      "Task" -> task, "Environment" -> env,
+      "ArtifactContract" -> contract, "BudgetGrant" -> grant|>]];
+
+(* session 経路の起動。成功なら jobId、失敗は $Failed (呼び出し側が legacy へ
+   fallback する) *)
+iSpecImplSessionLaunch[name_, slug_, cfgFile_, runDir_, targetDir_,
+    resultFile_, progressFile_, nb_, launchQ_, project_, specURI_,
+    srcNbURI_, claude_, advisary_] :=
+  Module[{reg, spec, made, wid, epi, sid, info, jobId, launchRec},
+    reg = Quiet @ Check[iSpecImplEnsureSessionBackend[], $Failed];
+    If[reg === $Failed || FailureQ[reg], Return[$Failed]];
+    spec = Quiet @ Check[
+      iSpecImplSessionStartSpec[slug, cfgFile, runDir, targetDir,
+        specURI, claude], $Failed];
+    If[! AssociationQ[spec], Return[$Failed]];
+    $iSpecImplSessionLastLaunch = None;
+    made = Quiet @ Check[
+      iSpecImplOrchS["ClaudeCreateRuntimeSessionEpisodeNet"][spec],
+      $Failed];
+    If[! AssociationQ[made], Return[$Failed]];
+    wid = made[["WorkflowId"]]; epi = made[["EpisodeId"]];
+    sid = made[["SessionId"]];
+    Quiet @ Check[
+      iSpecImplOrchS["ClaudeStartRuntimeSessionEpisode"][wid], Null];
+    info = Quiet @ Check[
+      iSpecImplOrchS["ClaudeRuntimeSessionEpisodeInfo"][wid, epi],
+      $Failed];
+    If[! AssociationQ[info] ||
+       MemberQ[{"Failed", "StartFailed"},
+         Lookup[info, "ControlState", None]],
+      Return[$Failed]];
+    launchRec = If[AssociationQ[$iSpecImplSessionLastLaunch],
+      $iSpecImplSessionLastLaunch, <||>];
+    jobId = "specimpl-" <> StringReplace[CreateUUID[], "-" -> ""];
+    $iSpecImplJobs[jobId] = <|"Nb" -> nb, "Slug" -> slug, "Display" -> name,
+      "ResultFile" -> resultFile, "ProgressFile" -> progressFile,
+      "TargetDir" -> targetDir,
+      "Launch" -> launchQ, "Proc" -> Lookup[launchRec, "Process", None],
+      "Ticks" -> 0, "StartedAt" -> AbsoluteTime[],
+      (* 起動時点で確定する backstop: 残留した古い $iSpecImplMaxSeconds が
+         MaxWait より短くても誤 kill しない (常に MaxWait+300 以上) *)
+      "BackstopSeconds" -> Max[$iSpecImplMaxSeconds,
+        $iSpecImplMaxWaitSeconds + 300],
+      "Project" -> project, "SpecURI" -> specURI,
+      "SourceNotebookURI" -> srcNbURI,
+      "ClaudeModel" -> claude, "AdvisaryModel" -> advisary,
+      "Kind" -> "Session", "Wid" -> wid, "EpisodeId" -> epi,
+      "SessionId" -> sid,
+      "SpoolDir" -> Lookup[launchRec, "SpoolDir", None]|>;
+    iSpecImplEnsurePoller[];
+    jobId];
 
 (* CamelCase canonical name (mirror of the workflow registry's iSVWFCanonicalSlug) *)
 (* mirror of the registry's iSVWFCanonicalSlug (keep identical). A context/symbol
@@ -24491,50 +25937,16 @@ iSpecImplSummaryBoxes[slug_String, res_Association] := With[
     }], Alignment -> Left, Spacings -> 0.6]];
 
 (* ---- render the generated workflow's example.md as notebook cells ----
-   Markdown headings -> Subsection/Subsubsection, prose -> Text, fenced code ->
-   Input (WL) / Program (other) cells. Code cells are NOT auto-evaluated: the
-   examples include firing calls (e.g. running ClaudeUpdateDocumentation) that
-   must only run on the user's explicit Shift+Enter. This is far more useful than
-   a lone launch button: the example shows how to load, inspect, and run the
-   generated workflow, as ready-to-run cells. *)
-iSpecImplCodeCell[lang_String, code_String] := With[{c = StringTrim[code]},
-  If[c === "", Nothing,
-    If[MemberQ[{"wolfram", "mathematica", "wl", ""}, ToLowerCase[lang]],
-      Cell[c, "Input"], Cell[c, "Program"]]]];
-
-iSpecImplTextCells[txt_String] := Module[{lines, buf = {}, sown},
-  lines = StringSplit[txt, "\n"];
-  sown = Reap[
-    Do[
-      Module[{hd = StringCases[line,
-          StartOfString ~~ h : ("#" ..) ~~ Whitespace ~~ rest___ ~~ EndOfString :>
-            {StringLength[h], rest}, 1]},
-        Which[
-          hd =!= {},
-            If[StringTrim[StringRiffle[buf, "\n"]] =!= "",
-              Sow[Cell[cleanMarkdown @ StringTrim @ StringRiffle[buf, "\n"], "Text"]]]; buf = {};
-            Sow[Cell[cleanMarkdown @ StringTrim[hd[[1, 2]]],
-              Switch[hd[[1, 1]], 1, "Subsection", _, "Subsubsection"]]],
-          StringTrim[line] === "",
-            If[StringTrim[StringRiffle[buf, "\n"]] =!= "",
-              Sow[Cell[cleanMarkdown @ StringTrim @ StringRiffle[buf, "\n"], "Text"]]]; buf = {},
-          True, AppendTo[buf, line]]],
-      {line, lines}];
-    If[StringTrim[StringRiffle[buf, "\n"]] =!= "",
-      Sow[Cell[cleanMarkdown @ StringTrim @ StringRiffle[buf, "\n"], "Text"]]];
-  ][[2]];
-  If[sown === {}, {}, First[sown]]];
-
-iSpecImplMarkdownCells[md_String] := Module[{segs},
-  segs = StringSplit[md,
-    "```" ~~ lang : (WordCharacter ...) ~~ "\n" ~~ Shortest[code___] ~~ "\n" ~~ "```" :>
-      {"CODE", lang, code}];
-  Flatten @ Map[
-    Function[seg,
-      If[MatchQ[seg, {"CODE", _, _}],
-        iSpecImplCodeCell[seg[[2]], seg[[3]]],
-        iSpecImplTextCells[seg]]],
-    segs]];
+   Code cells are NOT auto-evaluated: the examples include firing calls
+   (e.g. running ClaudeUpdateDocumentation) that must only run on the
+   user's explicit Shift+Enter.
+   2026-07-15: the local markdown parsers (iSpecImplCodeCell /
+   iSpecImplTextCells) were removed; this now delegates to the canonical
+   MarkdownToCells (see the "Markdown -> notebook cells" section above).
+   "UntaggedCodeStyle" -> "Input" preserves the historical behaviour of
+   bare ``` fences rendering as Input cells here. *)
+iSpecImplMarkdownCells[md_String] :=
+  MarkdownToCells[md, "UntaggedCodeStyle" -> "Input"];
 
 iSpecImplExampleCells[targetDir_String] := Module[{exs, md},
   exs = Quiet @ Check[FileNames["example.md", targetDir, Infinity], {}];
@@ -24669,6 +26081,76 @@ iSpecImplProgressSummary[prog_Association] := Module[{phase, model, rnd, msg, up
     If[StringQ[upd] && upd =!= "", "  (" <> upd <> ")", ""]];
 iSpecImplProgressSummary[_] := "";
 
+(* ---- 生成ワークフロー net の描画 ----
+   生成されたワークフローが Petri net 型 (公開 BuildNet を持つ layer-2) の
+   場合のみ、その構造を result の "WorkflowNetStructure" から描く
+   (observability モジュール非依存の自己完結版。スタイルは
+   plotPetriNetDetail と揃える)。普通の関数パッケージでは
+   WorkflowNetStructure = None なので何も表示しない (ユーザー指定)。
+   実行過程 (implement<->verify) の net は result "NetStructure" にデータ
+   として残るが表示はしない。 *)
+iSpecImplNetGraph[struct_Association] := Module[
+  {places, trans, src, fin, marking, edges, vertices, vLabels, vStyle,
+   vShape},
+  places = Cases[Lookup[struct, "Places", {}], _String];
+  trans = Lookup[struct, "Transitions", <||>];
+  src = Lookup[struct, "SourcePlace", ""];
+  fin = Cases[Lookup[struct, "FinalPlaces", {}], _String];
+  marking = Lookup[struct, "Marking", <||>];
+  If[places === {} || ! AssociationQ[trans] || Length[trans] === 0,
+    Return[None]];
+  edges = Flatten @ KeyValueMap[
+    Function[{tn, td}, Join[
+      Map[# -> tn &, Lookup[td, "In", {}]],
+      Map[tn -> # &, Lookup[td, "Out", {}]]]], trans];
+  vertices = Join[places, Keys[trans]];
+  (* 終了時に token が居た place はラベルに件数を添える *)
+  vLabels = Join[
+    Map[# -> Placed[Style[
+        # <> If[KeyExistsQ[marking, #],
+          " \[FilledCircle]" <> ToString[marking[#]], ""], 9],
+        Center] &, places],
+    Map[# -> Placed[Style[#, Bold, White, 8], Center] &, Keys[trans]]];
+  vStyle = Join[
+    (# -> Directive[Lighter[Blue, 0.7], EdgeForm[Darker[Blue]]]) & /@
+      places,
+    (# -> Directive[Darker[Red, 0.2], EdgeForm[Black]]) & /@ Keys[trans],
+    If[src =!= "" && MemberQ[places, src],
+      {src -> Directive[Lighter[Yellow, 0.3], EdgeForm[Darker[Yellow]]]},
+      {}],
+    Map[# -> Directive[Lighter[Green, 0.5], EdgeForm[Darker[Green]]] &,
+      fin],
+    (* 終了時 token の居場所を強調 (final なら濃緑、途中停止なら橙) *)
+    Map[# -> Directive[
+        If[MemberQ[fin, #], Lighter[Green, 0.2], Lighter[Orange, 0.4]],
+        EdgeForm[{Thick, Black}]] &,
+      Intersection[Keys[marking], places]]];
+  vShape = Join[(# -> "Circle") & /@ places,
+    (# -> "Square") & /@ Keys[trans]];
+  Graph[vertices, edges,
+    VertexLabels -> vLabels, VertexStyle -> vStyle,
+    VertexShapeFunction -> vShape, VertexSize -> {"Scaled", 0.05},
+    EdgeStyle -> Directive[Gray, Arrowheads[0.022]],
+    ImageSize -> 700,
+    PlotLabel -> Style[
+      iL["\:751f\:6210\:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:306e\:30cd\:30c3\:30c8  ",
+        "Generated workflow net  "] <>
+      ToString[Length[places]] <> " places / " <>
+      ToString[Length[trans]] <> " transitions" <>
+      If[Length[marking] > 0,
+        iL["  \[FilledCircle]n = token \:6570",
+          "  \[FilledCircle]n = token count"], ""],
+      12, Bold]]];
+iSpecImplNetGraph[_] := None;
+
+iSpecImplWriteNetCell[nb_, res_] := Module[{g},
+  g = Quiet @ Check[
+    iSpecImplNetGraph[Lookup[res, "WorkflowNetStructure", None]], None];
+  If[g =!= None,
+    NBAccess`NBWriteCell[nb, Cell[BoxData @ ToBoxes[g], "Output",
+      Sequence @@ $specCellOpts,
+      CellTags -> {"sourcevault-impl-net"}]]]];
+
 iSpecImplWriteBack[jid_, job_, res_] := Module[{nb = job["Nb"], slug = job["Slug"], header, prog, td},
   $iJobActiveNb = nb;
   Quiet @ NBAccess`NBMoveToEnd[nb];
@@ -24696,6 +26178,10 @@ iSpecImplWriteBack[jid_, job_, res_] := Module[{nb = job["Nb"], slug = job["Slug
     (* implementation & review process (plan/artifact/verify chains, URI links)
        + per-stage step log: code -> tests -> run -> verify *)
     iSpecImplWriteProcessCells[nb, slug];
+    (* 生成ワークフローが net 型 (公開 BuildNet) の場合のみ、その Petri net
+       図をステップと使用例の間に表示。普通の関数パッケージでは
+       WorkflowNetStructure = None なので何も出ない (ユーザー指定) *)
+    Quiet @ iSpecImplWriteNetCell[nb, res];
     (* register the generated workflow's launch (session + promptrouter) *)
     If[TrueQ[job["Launch"]] && Lookup[res, "FinalStatus", ""] === "Approved",
       Quiet @ iSpecImplRegisterLaunch[slug, Lookup[job, "Display", slug]]];
@@ -24762,48 +26248,173 @@ iSpecImplDeadProcResult[job_] := Module[{p = Lookup[job, "Proc", None], code, di
 iSpecImplTick[] := (
   Scan[
     Function[jid,
-      Module[{job = $iSpecImplJobs[jid], res, prog, procFinished},
+      Module[{job = $iSpecImplJobs[jid], prog},
         job["Ticks"] = Lookup[job, "Ticks", 0] + 1;
         $iSpecImplJobs[jid] = job;
-        (* live progress -> WindowStatusArea *)
+        (* live progress -> WindowStatusArea (legacy / session 共通) *)
         If[StringQ[job["ProgressFile"]] && FileExistsQ[job["ProgressFile"]],
           prog = Quiet @ Check[Get[job["ProgressFile"]], <||>];
           If[AssociationQ[prog],
             iSafeSetWindowStatus[job["Nb"], iSpecImplStatusMsg[prog]]]];
-        (* record when the driver process has ended, so a death without result.wl
-           can be detected and reported fast (instead of hanging on "starting..."
-           until the wall-clock backstop). *)
-        procFinished = With[{p = Lookup[job, "Proc", None]},
-          Head[p] === ProcessObject && Quiet[Check[ProcessStatus[p] =!= "Running", False]]];
-        If[procFinished && ! KeyExistsQ[job, "ProcGoneSince"],
-          job["ProcGoneSince"] = AbsoluteTime[]; $iSpecImplJobs[jid] = job];
-        Which[
-          FileExistsQ[job["ResultFile"]],
-            res = Quiet @ Check[Get[job["ResultFile"]], $Failed];
-            Quiet @ iSpecImplWriteBack[jid, job, res];
-            $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid],
-          (* driver process ended but wrote no result.wl: it died at launch (e.g.
-             the background kernel could not start) or crashed before writing. The
-             ~6s grace avoids racing a just-finished successful run whose result.wl
-             is still being flushed. *)
-          procFinished &&
-            AbsoluteTime[] - Lookup[job, "ProcGoneSince", AbsoluteTime[]] >= 6,
-            Quiet @ iSpecImplWriteBack[jid, job, iSpecImplDeadProcResult[job]];
-            $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid],
-          AbsoluteTime[] - Lookup[job, "StartedAt", AbsoluteTime[]] > $iSpecImplMaxSeconds,
-            (* FE backstop fired (real elapsed time, not tick count): the driver
-               overran even its own MaxWait, so it is hung. Kill the (possibly
-               orphaned) driver process before writing back so a stuck child (e.g.
-               a hung "codex exec") cannot linger. The write-back still surfaces
-               the implementation process. *)
-            Quiet @ Check[KillProcess[Lookup[job, "Proc", None]], Null];
-            Quiet @ iSpecImplWriteBack[jid, job, <|"Status" -> "Timeout"|>];
-            $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid]
-        ]]],
+        If[Lookup[job, "Kind", "Legacy"] === "Session",
+          iSpecImplSessionTickOne[jid, job],
+          iSpecImplLegacyTickOne[jid, job]]]],
     Keys[$iSpecImplJobs]];
   If[Length[$iSpecImplJobs] === 0,
     Quiet @ ClaudeUnregisterPollingTick["specImpl"]]
 );
+
+iSpecImplLegacyTickOne[jid_, job0_] :=
+  Module[{job = job0, res, procFinished},
+    (* record when the driver process has ended, so a death without result.wl
+       can be detected and reported fast (instead of hanging on "starting..."
+       until the wall-clock backstop). *)
+    procFinished = With[{p = Lookup[job, "Proc", None]},
+      Head[p] === ProcessObject && Quiet[Check[ProcessStatus[p] =!= "Running", False]]];
+    If[procFinished && ! KeyExistsQ[job, "ProcGoneSince"],
+      job["ProcGoneSince"] = AbsoluteTime[]; $iSpecImplJobs[jid] = job];
+    Which[
+      FileExistsQ[job["ResultFile"]],
+        res = Quiet @ Check[Get[job["ResultFile"]], $Failed];
+        Quiet @ iSpecImplWriteBack[jid, job, res];
+        $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid],
+      (* driver process ended but wrote no result.wl: it died at launch (e.g.
+         the background kernel could not start) or crashed before writing. The
+         ~6s grace avoids racing a just-finished successful run whose result.wl
+         is still being flushed. *)
+      procFinished &&
+        AbsoluteTime[] - Lookup[job, "ProcGoneSince", AbsoluteTime[]] >= 6,
+        Quiet @ iSpecImplWriteBack[jid, job, iSpecImplDeadProcResult[job]];
+        $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid],
+      AbsoluteTime[] - Lookup[job, "StartedAt", AbsoluteTime[]] >
+        Lookup[job, "BackstopSeconds", $iSpecImplMaxSeconds],
+        (* FE backstop fired (real elapsed time, not tick count): the driver
+           overran even its own MaxWait, so it is hung. Kill the (possibly
+           orphaned) driver process before writing back so a stuck child (e.g.
+           a hung "codex exec") cannot linger. The write-back still surfaces
+           the implementation process. *)
+        Quiet @ Check[KillProcess[Lookup[job, "Proc", None]], Null];
+        Quiet @ iSpecImplWriteBack[jid, job, <|"Status" -> "Timeout"|>];
+        $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid]
+    ]];
+
+(* ---- session 経路の tick (搬送 pump + engine drain + terminal 変換) ---- *)
+
+(* engine を bounded に drain (発火)。§11.5: tick 内は bounded *)
+iSpecImplSessionDrain[wid_] := Module[{n = 0},
+  While[n < 24 &&
+    Lookup[Quiet @ Check[
+      Symbol["ClaudeOrchestrator`Workflow`ClaudeStepWorkflow"][wid],
+      <||>], "Status", None] === "Fired", n++];
+  n];
+
+(* synthetic terminal (§11.2.1): durable evidence を書いてから注入 *)
+iSpecImplSessionInjectTerminal[wid_, epi_, job_, type_, reason_] :=
+  Module[{evFile},
+    evFile = FileNameJoin[{
+      DirectoryName[Lookup[job, "ResultFile", ""]],
+      "evidence-" <> ToLowerCase[reason] <> ".wxf"}];
+    Quiet @ Check[Export[evFile,
+      <|"Reason" -> reason, "At" -> AbsoluteTime[],
+        "JobSlug" -> Lookup[job, "Slug", ""]|>, "WXF"], Null];
+    Quiet @ Check[
+      iSpecImplOrchS["ClaudeRuntimeSessionInjectSyntheticTerminal"][
+        wid, epi, type, evFile], Null];
+    iSpecImplSessionDrain[wid]];
+
+(* 成功 harvest: commit された artifact (receipt TargetRef の WXF) を正とし、
+   読めなければ legacy result.wl へ fallback *)
+iSpecImplSessionHarvest[wid_, epi_, job_] := Module[{receipt, res},
+  receipt = Quiet @ Check[
+    iSpecImplOrchS["ClaudeRuntimeSessionArtifactReceipt"][wid, epi],
+    None];
+  res = If[AssociationQ[receipt] &&
+      StringQ[Lookup[receipt, "TargetRef", None]] &&
+      FileExistsQ[receipt[["TargetRef"]]],
+    Quiet @ Check[Import[receipt[["TargetRef"]], "WXF"], $Failed],
+    $Failed];
+  If[! AssociationQ[res] && StringQ[Lookup[job, "ResultFile", None]] &&
+     FileExistsQ[job["ResultFile"]],
+    res = Quiet @ Check[Get[job["ResultFile"]], $Failed]];
+  If[AssociationQ[res], res,
+    <|"Status" -> "Error",
+      "Error" -> "session episode completed but no readable result artifact"|>]];
+
+(* 失敗変換: worker は失敗時も result.wl に詳細を書く (Failed event の
+   ResultRef)。読めなければ episode 側の状態から合成 *)
+iSpecImplSessionFailureResult[info_, job_] := Module[{res},
+  res = If[StringQ[Lookup[job, "ResultFile", None]] &&
+      FileExistsQ[job["ResultFile"]],
+    Quiet @ Check[Get[job["ResultFile"]], $Failed], $Failed];
+  If[AssociationQ[res] && Lookup[res, "Status", None] =!= "Done", res,
+    <|"Status" -> "Error",
+      "Error" -> ("session episode failed (ControlState: " <>
+        ToString[Lookup[info, "ControlState", "?"]] <>
+        With[{d = Lookup[info, "StatusDetail", None]},
+          If[StringQ[d] && d =!= "", ", " <> d, ""]] <> ")")|>]];
+
+iSpecImplSessionTickOne[jid_, job0_] :=
+  Module[{job = job0, wid = Lookup[job0, "Wid", None],
+          epi = Lookup[job0, "EpisodeId", None], info, cs, done,
+          receipt, res, procFinished},
+    (* 搬送 (一 event) + 発火 *)
+    Quiet @ Check[
+      iSpecImplOrchS["ClaudeRuntimeSessionPumpOnce"][wid, epi], Null];
+    iSpecImplSessionDrain[wid];
+    info = Quiet @ Check[
+      iSpecImplOrchS["ClaudeRuntimeSessionEpisodeInfo"][wid, epi], <||>];
+    If[! AssociationQ[info], info = <||>];
+    cs = Lookup[info, "ControlState", None];
+    done = Lookup[info, "WorkflowStatus", None] === "Done";
+    receipt = Quiet @ Check[
+      iSpecImplOrchS["ClaudeRuntimeSessionArtifactReceipt"][wid, epi],
+      None];
+    procFinished = With[{p = Lookup[job, "Proc", None]},
+      Head[p] === ProcessObject &&
+        Quiet[Check[ProcessStatus[p] =!= "Running", False]]];
+    If[procFinished && ! KeyExistsQ[job, "ProcGoneSince"],
+      job["ProcGoneSince"] = AbsoluteTime[]; $iSpecImplJobs[jid] = job];
+    Which[
+      (* 正常 terminal (commit 済み artifact が正本) *)
+      MemberQ[{"Completed", "Committed", "Closed"}, cs] ||
+        (done && AssociationQ[receipt]),
+        res = iSpecImplSessionHarvest[wid, epi, job];
+        Quiet @ iSpecImplWriteBack[jid, job, res];
+        $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid],
+      (* 失敗 terminal *)
+      MemberQ[{"Failed", "StartFailed"}, cs] || done,
+        res = iSpecImplSessionFailureResult[info, job];
+        Quiet @ iSpecImplWriteBack[jid, job, res];
+        $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid],
+      (* 子プロセス死亡 + result 無し + 猶予 6s: 起動失敗/クラッシュ。
+         synthetic Failed で episode を閉じ、legacy 同等の診断を write-back *)
+      procFinished && ! FileExistsQ[job["ResultFile"]] &&
+        AbsoluteTime[] - Lookup[job, "ProcGoneSince", AbsoluteTime[]] >= 6,
+        Quiet @ Check[iSpecImplSessionInjectTerminal[wid, epi, job,
+          "Failed", "DeadProcess"], Null];
+        Quiet @ iSpecImplWriteBack[jid, job, iSpecImplDeadProcResult[job]];
+        $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid],
+      (* 子は終了し result.wl はあるが episode が進まない (terminal event
+         欠落など)。episode を閉じて result.wl から直接回収 (fallback) *)
+      procFinished && FileExistsQ[job["ResultFile"]] &&
+        AbsoluteTime[] - Lookup[job, "ProcGoneSince", AbsoluteTime[]] >= 12,
+        Quiet @ Check[iSpecImplSessionInjectTerminal[wid, epi, job,
+          "Failed", "ResultWithoutTerminalEvent"], Null];
+        res = Quiet @ Check[Get[job["ResultFile"]], $Failed];
+        Quiet @ iSpecImplWriteBack[jid, job, res];
+        $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid],
+      (* FE wall-clock backstop (legacy と同じ意味論): kill + cancel +
+         synthetic Cancelled *)
+      AbsoluteTime[] - Lookup[job, "StartedAt", AbsoluteTime[]] >
+        Lookup[job, "BackstopSeconds", $iSpecImplMaxSeconds],
+        Quiet @ Check[KillProcess[Lookup[job, "Proc", None]], Null];
+        Quiet @ Check[iSpecImplOrchS["ClaudeRuntimeSessionCancel"][
+          wid, epi, "FE timeout backstop"], Null];
+        Quiet @ Check[iSpecImplSessionInjectTerminal[wid, epi, job,
+          "Cancelled", "FETimeout"], Null];
+        Quiet @ iSpecImplWriteBack[jid, job, <|"Status" -> "Timeout"|>];
+        $iSpecImplJobs = KeyDrop[$iSpecImplJobs, jid]
+    ]];
 
 iSpecImplEnsurePoller[] :=
   Quiet @ ClaudeRegisterPollingTick["specImpl", iSpecImplTick];
@@ -24914,6 +26525,7 @@ CreateImplementationWorkflow[name_String, approvedSpec_String, opts:OptionsPatte
   Put[<|"Name" -> slug, "SpecRef" -> specRef, "SpecText" -> specText,
     "NotesFile" -> notesFile, "ClaudeModel" -> claude, "AdvisaryModel" -> advisary,
     "MaxRounds" -> maxRounds, "MaxAuxRounds" -> $iSpecImplMaxRounds,
+    "MaxWaitSeconds" -> $iSpecImplMaxWaitSeconds,
     "ProgressFile" -> progressFile, "ResultFile" -> resultFile,
     "PackageRoot" -> Global`$packageDirectory, "WorkflowSlug" -> "spec-impl",
     "TargetDir" -> targetDir,
@@ -24929,15 +26541,31 @@ CreateImplementationWorkflow[name_String, approvedSpec_String, opts:OptionsPatte
     $iJobActiveNb = None;
     iSafeSetWindowStatus[nb, "[spec-impl] starting..."]];
 
-  proc = StartProcess[{$iOrchWolframScript, "-file", $iSpecImplDriver, cfgFile}];
-  jobId = "specimpl-" <> StringReplace[CreateUUID[], "-" -> ""];
-  $iSpecImplJobs[jobId] = <|"Nb" -> nb, "Slug" -> slug, "Display" -> name,
-    "ResultFile" -> resultFile, "ProgressFile" -> progressFile, "TargetDir" -> targetDir,
-    "Launch" -> TrueQ[OptionValue["Launch"]], "Proc" -> proc, "Ticks" -> 0,
-    "StartedAt" -> AbsoluteTime[],
-    "Project" -> project, "SpecURI" -> specURI, "SourceNotebookURI" -> srcNbURI,
-    "ClaudeModel" -> claude, "AdvisaryModel" -> advisary|>;
-  iSpecImplEnsurePoller[];
+  (* RuntimeSession episode 経路 (pilot)。session モジュール群は初回に
+     on-demand ロードし、起動に失敗したら legacy driver へ自動 fallback
+     ($ClaudeSpecImplUseSession = False で legacy 固定)。 *)
+  jobId = $Failed;
+  If[TrueQ[Quiet @ Check[iSpecImplEnsureSessionModules[], False]],
+    jobId = Quiet @ Check[
+      iSpecImplSessionLaunch[name, slug, cfgFile, runDir, targetDir,
+        resultFile, progressFile, nb, TrueQ[OptionValue["Launch"]],
+        project, specURI, srcNbURI, claude, advisary], $Failed];
+    If[! StringQ[jobId],
+      $iSpecImplLastSessionFallback = <|"At" -> AbsoluteTime[],
+        "Slug" -> slug|>]];
+  If[! StringQ[jobId],
+    (* legacy 経路 (session 不使用 / 起動失敗 fallback) *)
+    proc = StartProcess[{$iOrchWolframScript, "-file", $iSpecImplDriver, cfgFile}];
+    jobId = "specimpl-" <> StringReplace[CreateUUID[], "-" -> ""];
+    $iSpecImplJobs[jobId] = <|"Nb" -> nb, "Slug" -> slug, "Display" -> name,
+      "ResultFile" -> resultFile, "ProgressFile" -> progressFile, "TargetDir" -> targetDir,
+      "Launch" -> TrueQ[OptionValue["Launch"]], "Proc" -> proc, "Ticks" -> 0,
+      "StartedAt" -> AbsoluteTime[],
+      "BackstopSeconds" -> Max[$iSpecImplMaxSeconds,
+        $iSpecImplMaxWaitSeconds + 300],
+      "Project" -> project, "SpecURI" -> specURI, "SourceNotebookURI" -> srcNbURI,
+      "ClaudeModel" -> claude, "AdvisaryModel" -> advisary|>;
+    iSpecImplEnsurePoller[]];
   jobId
 ];
 

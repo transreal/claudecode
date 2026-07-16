@@ -1,9 +1,3 @@
-# セットアップガイド
-
-claudecode パッケージのインストールと初期設定の手順を説明します。
-
-## システム要件
-
 ### 必須環境
 - **Wolfram Language 12.0** 以上（Mathematica または Wolfram Engine）
 - **Windows 10/11** （現在 Windows 専用実装）
@@ -165,6 +159,10 @@ $ClaudePackageKeywordMap
 ```
 
 各パッケージは自身のロード時にキーワードを自動登録します。claudecode.wl 側はパッケージ非依存です。
+
+依存パッケージの補助ドキュメント（`api_<aux>.md`）をどの条件下で注入するかは `$ClaudePackageAuxKeywordMap` で個別に絞り込めます。詳細は後述の「高度な設定 > 補助 api_*.md のキーワード制御」を参照してください。
+
+複数パッケージのキーワードが同一タスクに同時に一致した場合、各パッケージの api.md はタスク文中でそのパッケージ名・キーワードが最初に言及された位置（mention 順）でコンテキストに注入されます（2026-07-13 変更）。この際、キーワードが一致した補助 api_*.md と該当パッケージの api.md がまず優先的に注入され、続けて未登録の補助 api（`$ClaudePackageAuxKeywordMap` に未登録のため常時注入されるもの）が注入されます。この順序制御は設定不要で自動的に動作します。
 
 ### 4. ClaudeRuntime の設定（オプション）
 
@@ -695,6 +693,8 @@ $ClaudeDocUpdateStaleSeconds = 300
 
 **再開（resumption）について**：更新が API エラー等で途中中断した場合、再実行すると同一サイクル内であれば成功済みのファイルは自動的にスキップされます。「✅ All documents already updated in this cycle.」または「✅ Target documents already updated in this cycle.」と表示された場合は、当該サイクルの対象ファイルが既に全て処理済みであることを意味します。ソースコードを変更してから再実行すると新しいサイクルとして扱われます。
 
+ドキュメント更新が外部ワーカープロセス経由で実行されている場合（後述の「高度な設定 > ドキュメント更新の外部プロセス実行」を参照）、進行中判定はカーネル内メモリだけでなく claim ファイルでも行われます。そのため、ノートブックやカーネルを再起動しても実行中のワーカーは正しく検知され、二重起動が防止されます。
+
 **複数ファイルの更新失敗によるチェーン中断**：並列更新中に API エラー・利用制限・プロバイダ内部エラー・空応答などのシステム的失敗が複数のファイルで発生した場合、チェーン全体が中断され以下のメッセージが表示されます：
 
 ```
@@ -751,6 +751,16 @@ TargetFiles に不正なファイル名 "xxx.md" が含まれています。許�
 ```
 
 許可されるのは root ドキュメント（README.md / api.md / setup.md / user_manual.md）、補助 api ドキュメント（`api_<aux>.md`）、および `docsDir/examples` 配下の個別ファイル（`examples/<name>.md`）または一括指定マーカー（`examples/*`）です。ファイル名を確認し、対象を絞り込んでから再実行してください（詳細は後述の「TargetFiles オプション（更新対象ファイルを明示指定する）」を参照）。
+
+#### 16. ドキュメント更新中に「ワーカーが完了マーカーを残さず終了しました」と表示される
+
+`ClaudeUpdateDocumentation` が外部 wolframscript ワーカー経由で実行された際（後述の「高度な設定 > ドキュメント更新の外部プロセス実行」を参照）、ワーカーが完了マーカーを残さずに終了すると以下の警告が表示されることがあります：
+
+```
+⚠ ワーカーが完了マーカーを残さず終了しました (ライセンス席枯渇の可能性)。
+```
+
+これは主に Wolfram Engine のライセンス席が一時的に枯渇し、ワーカープロセスが正常に起動・完了できなかったことが原因です。他の Wolfram カーネル・ワーカーが同時に多数起動していないか確認し、しばらく待ってから `ClaudeUpdateDocumentation` を再実行してください。同一サイクル内であれば成功済みファイルはスキップされ、未処理分のみ再試行されます。
 
 ### デバッグ情報の取得
 
@@ -873,6 +883,18 @@ API エラー・利用制限・プロバイダ内部エラー・空応答など�
 
 この場合は再実行すると成功済みファイルをスキップして失敗分のみ再試行されます。なお、切り詰め・サイズ退行・タイトル不整合などの品質失敗は個々のファイル単位でスキップされ、チェーン全体は中断されません（詳細は次項「切り詰め検出（品質ゲート3）」を参照）。
 
+#### ドキュメント更新の外部プロセス実行
+
+`ClaudeUpdateDocumentation` は、画像添付を伴わない等の条件を満たす場合、更新処理をメインカーネルから独立した外部 wolframscript ワーカープロセスに委譲して実行します（2026-07-10 導入、通称 docext）。以前は品質ゲートの再検証処理などが数十秒メインカーネルをブロックしてしまう事故（フリーズループ）があったため、その根絶を目的として導入されました。
+
+- 外部実行の適格性は呼び出しごとに自動判定されます。不適格と判定された場合（画像添付がある、等）は、従来どおりメインカーネル内で処理されます。
+- ワーカー起動前に、フロントエンドの応答性を確認する軽量プローブが短いタイムアウトで実行されます。フロントエンドが応答しない場合も従来のカーネル内経路にフォールバックします。この初回プローブ以降、連続呼び出し時のオーバーヘッドは発生しません。
+- ジョブの実体（子プロセスと出力ファイル）はディスク側で進行するため、ノートブックを閉じたりカーネルを再起動しても、次回 `ClaudeUpdateDocumentation` 実行時に生存中のワーカーを検知できます。進行中ジョブの追跡に加え、フロントエンド再起動をまたいで生存を検知する claim ファイルによる二重の多重起動防止が行われます（前述の「トラブルシューティング > 11. ドキュメント更新チェーンが「進行中」と表示される」も参照）。
+- 外部ワーカーには全体デッドラインが設定されています（実運用での長時間ドキュメント更新の実測を踏まえ、既定で 90 分程度に引き上げ済み）。デッドラインを超過した場合、残りの未処理ファイルは失敗扱いとして処理を終了します。この場合も、同一サイクルの再実行で成功済みファイルはスキップされます。
+- ワーカーが完了マーカーを残さず終了した場合は「トラブルシューティング > 16. ドキュメント更新中に『ワーカーが完了マーカーを残さず終了しました』と表示される」の警告が表示されることがあります（ライセンス席枯渇の可能性）。
+
+この機能は設定不要で自動的に動作し、既存の `ClaudeUpdateDocumentation` の呼び出し方法や `TargetFiles` / `Baseline` オプションには影響しません。
+
 #### 切り詰め検出（品質ゲート3）
 
 LLM レスポンスが切り詰められた（truncated）と判定された場合（例：未閉コードフェンス `` ``` `` が奇数個残っている、文章が途中の開き括弧で終わっているなど）、タイトル不整合やサイズ退行が検出された場合と同様に、そのファイルの更新は品質失敗として扱われます。
@@ -881,6 +903,15 @@ LLM レスポンスが切り詰められた（truncated）と判定された場�
 
 - **システム的失敗**（API エラー・利用制限・プロバイダ内部エラー・空応答）― 従来どおりチェーン全体を即中断します（fail-fast）。
 - **品質失敗**（切り詰め・サイズ退行・タイトル不整合）― 当該ファイルのみをスキップして次のファイルの更新に進みます。チェーン全体は中断されません。
+
+README.md の更新では追加のチェックとして、生成された本文が「使用例」セクションまで到達しているかどうかも検証されます。到達していない、または内容が途中で切れていると判定された場合は書き込み自体が拒否され、以下のような警告が表示されます：
+
+```
+⚠ iSafeWriteDoc: README body did not reach the usage-examples section (likely truncation). Write rejected.
+⚠ iSafeWriteDoc: README body looks truncated. Write rejected.
+```
+
+この場合もファイルへの書き込みは行われず、同一サイクルの再実行で README.md の再生成が試行されます。
 
 以前は品質失敗もチェーン全体を即中断していたため、持続的に品質失敗を起こす1ファイル（例：巨大化した setup.md）が残り全部の更新を永遠にブロックしてしまう事故がありました。この改訂により、そうした事故を根絶しています。
 
@@ -913,6 +944,23 @@ API エラーや利用制限によるチェーン中断：
 - 補助ドキュメントファイルがまだ存在しない場合は新規作成が必要と判定され、対応する補助ソース（`<pkg>_<aux>.wl`）が見つからない場合は判定対象外として扱われます。
 
 以前は補助ソースと補助ドキュメントの mtime を単純比較していましたが、mtime は Dropbox 同期・複数 PC 間での作業・git 操作などソースの内容変更とは無関係な理由でも変化するため、実際には変更されていない補助モジュールまで不要に再生成してしまうことがありました。この判定方式により、そうした無駄な再生成が抑制されます。設定は不要で、`ClaudeUpdateDocumentation` 実行時に自動的に動作します。
+
+#### 補助 api_*.md のキーワード制御（$ClaudePackageAuxKeywordMap）
+
+補助ドキュメント（`api_<aux>.md`）を、パッケージ全体の api.md 注入とは別に、モジュール単位でキーワード条件を絞って注入するかどうかを制御できます。
+
+```mathematica
+(* SourceVault パッケージの eagle 補助ドキュメント（api_eagle.md）を、
+   "Eagle" または "Exif" というキーワードを含むタスクのときのみ注入 *)
+$ClaudePackageAuxKeywordMap["SourceVault"] = <|"eagle" -> {"Eagle", "Exif"}|>;
+
+(* 設定確認 *)
+$ClaudePackageAuxKeywordMap
+```
+
+`$ClaudePackageAuxKeywordMap` の形式は `<|パッケージ名 -> <|補助名 -> {キーワード...}|>|>` です。パッケージ全体の docs 注入は従来どおり `$ClaudePackageKeywordMap` のキーワードでトリガーされますが、いったんパッケージの docs 注入が発火した後、登録済みの各補助 api_*.md を実際に注入するかどうかは、対応する補助名またはキーワードが task に一致するかどうかで個別に判定されます。未登録の補助 api（`$ClaudePackageAuxKeywordMap` に aux 名が登録されていないもの）は、従来どおり常に注入されます（後方互換）。関連の深いモジュールが多い大規模パッケージで、コンテキストへの無関係な補助ドキュメントの混入を抑えたい場合に設定してください。
+
+複数パッケージのキーワードが同一タスクに一致した場合の注入順序については、前述の「初期設定 > 3. パッケージキーワードマップの設定」を参照してください。
 
 #### docs/docs/ 重複ドキュメントの自動除外
 
@@ -981,6 +1029,34 @@ $ClaudeCLIMCPServers = KeyDrop[$ClaudeCLIMCPServers, "my-server"]
 ```
 
 `$ClaudeCLIMCPServers` は `<|id -> spec|>` 形式の Association で、登録済み MCP サーバのスナップショットを保持します。`ConfigFn` はサーバ稼働時のみ接続情報を返すため、停止中のサーバは自動的に CLI 実行から除外されます。
+
+### パレットサービストグルの登録（ClaudeRegisterPaletteServiceControl）
+
+`ShowClaudePalette` の「プライバシー」セクションのすぐ下には、外部パッケージが自身のバックグラウンドサービスを起動・停止できるトグル欄が表示できます。この欄は `$ClaudePaletteServiceControls`（Association のリスト）で管理され、外部パッケージ（例: SourceVault MCP）が `ClaudeRegisterPaletteServiceControl` で自分自身を登録することで表示されます。claudecode 本体はここでもパッケージ非依存の設計を維持し、具体的なサービス内容は関知しません。
+
+```mathematica
+(* 外部パッケージ側での登録例（サービスの起動/停止トグルをパレットに追加） *)
+ClaudeRegisterPaletteServiceControl[<|
+  "Id"           -> "sourcevault-mcp",
+  "RunningQ"     -> Function[SourceVaultMCPRunningQ[]],
+  "Start"        -> Function[SourceVaultMCPStart[]],
+  "Stop"         -> Function[SourceVaultMCPStop[]],
+  "RunningLabel" -> "MCP: 稼働中",
+  "StoppedLabel" -> "MCP: 停止中",
+  "UnknownLabel" -> "MCP: 不明"
+|>]
+
+(* 登録済みトグルの一覧を確認 *)
+$ClaudePaletteServiceControls
+
+(* パレットに反映するには再表示 *)
+ShowClaudePalette[]
+
+(* 登録解除 *)
+ClaudeUnregisterPaletteServiceControl["sourcevault-mcp"]
+```
+
+各エントリのキーは `"Id"`（一意な識別子）、`"RunningQ"`（稼働中なら `True`、停止中なら `False`、不明なら `Missing` を返す 0 引数の Function）、`"Start"` / `"Stop"`（実行される 0 引数の Function）、`"RunningLabel"` / `"StoppedLabel"` / `"UnknownLabel"`（トグルの表示ラベル）です。トグルの表示ラベルは `RunningQ` の状態に追従して切り替わります。各ラベルは文字列のほか、表示時に評価される 0 引数の Function（`$Language` に応じたラベル切り替え等に利用）も指定できます。オプションで `"RunningColor"` / `"StoppedColor"` により表示色も指定できます。同じ `Id` で再登録すると既存のエントリが置き換えられます。新規登録・削除後にパレットへ反映するには `ShowClaudePalette[]` を再実行してください。
 
 ### LLM ティアルーティングとバックエンド管理
 
@@ -1275,6 +1351,7 @@ ShowClaudePalette[]
 ?ClaudeCreateDocumentation
 ?ClaudeUpdateDocumentation
 ?$ClaudePackageKeywordMap
+?$ClaudePackageAuxKeywordMap
 ?$LLMGraphMaxConcurrency
 ?$UseClaudeRuntime
 ?$ClaudeLastRuntimeId
@@ -1291,6 +1368,9 @@ ShowClaudePalette[]
 ?ClaudeOpenSourceVaultURI
 ?$ClaudeCLIMCPServers
 ?ClaudeRegisterCLIMCPServer
+?$ClaudePaletteServiceControls
+?ClaudeRegisterPaletteServiceControl
+?ClaudeUnregisterPaletteServiceControl
 ?ClaudeBackendAvailableQ
 ?ClaudeResolveLLMTier
 ?ClaudeTaskClassAttributes
