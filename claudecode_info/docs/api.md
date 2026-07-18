@@ -44,7 +44,7 @@ OpenAI / ChatGPT Codex CLI の作業ディレクトリ。$ChatgptWorkingDirector
 
 ### $ClaudeAccessibleDirs
 型: List, 初期値: {$packageDirectory}
-Claude Code に Read 許可する追加ディレクトリリスト。iPrepareClaudeProjectDirectory が一時 settings.json に Read 許可を注入する。ノートブックの TaggingRules に NBSetAccessibleDirs で永続化可能。$packageDirectory 配下以外の新規ディレクトリは初回使用時にダイアログで許可を確認する。
+Claude Code に Read 許可する追加ディレクトリリスト。iPrepareClaudeProjectDirectory が一時 settings.json に Read 許可を注入する。ノートブックの TaggingRules に NBSetAccessibleDirs で永続化可能。$packageDirectory 配下以外の新規ディレクトリは初回使用時にダイアログで許可を確認する ("Allow"/"Deny" の2択、TaggingRules "claudeDirPermissions" に "read"/"denied" として永続化、$packageDirectory・$ClaudeWorkingDirectory 配下は自動許可)。
 
 ### $ClaudeFallbackModels
 型: List, 初期値: {{"chatgptcodex","gpt-5.5"},{"anthropic","claude-opus-4-8"},{"openai","gpt-5.5"}}
@@ -80,7 +80,7 @@ LLMGraphDAG スナップショットの保存ディレクトリ。
 
 ### $ClaudeDocUpdateStaleSeconds
 型: Number, 初期値: 1800
-ClaudeUpdateDocumentation の非同期ドキュメント更新チェーンのストール検出秒数。このタイムアウトを超えたロックは自動解放される。
+ClaudeUpdateDocumentation の非同期ドキュメント更新チェーンのストール検出秒数。タイムスタンプ方式 ($iDocUpdateActive に各ステップの時刻を記録) でチェーンが異常終了しても、このタイムアウトを超えたロックは自動解放される。
 
 ### $ClaudeEvalMaxDepth
 型: Integer, 初期値: 5
@@ -1108,7 +1108,7 @@ Options: NBAccess`NBEnqueueFinalAction のオプションを継承
 ## パレット・UI
 
 ### ShowClaudePalette[]
-Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → lmstudio。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-4-8/claude-sonnet-4-6/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (SourceVault カタログが優先)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。
+Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → lmstudio。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-4-8/claude-sonnet-4-6/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
 → NotebookObject
 
 ### ClaudeRegisterPaletteServiceControl[spec]
@@ -1283,4 +1283,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl) と再度突き合わせて同期を確認した (2026-07-17 パス)。今回のチャンクは BeginPackage 直後の公開シンボル定義ブロック (Quiet[Scan[...]] クリーンアップ対象リストおよび BeginPackage 内の公開シンボルリスト)、続く主要変数の usage 文字列・デフォルト値初期化コード、および ShowClaudePalette 内部テーブル ($iPaletteProviderOrder, $iPaletteModelsByProvider, iPaletteResolveHeavyModel, iPaletteModelsFor, iPaletteSourceVaultModels, iPaletteShortenModelName) の実装に及んだ。照合の結果、BeginPackage の公開シンボルリストに列挙された全シンボルが本ドキュメントに記載済みであり、新規追加・削除されたシンボルは検出されなかった。$ClaudeModel/$ClaudeAdvisaryModel/$ClaudeStandardFont/$ClaudePrivateModel/$ClaudeAccessibleDirs/$ClaudeFallbackModels/$ClaudeDocModel/$ClaudeEvalMaxDepth/$ClaudeTestModel/$ClaudeDocUpdateStaleSeconds 等の型・初期値も実ソースの定義行と一致することを確認した。ShowClaudePalette のプロバイダー循環順 ({"claudecode","chatgptcodex","anthropic","openai","zai","lmstudio"})・各プロバイダー候補モデル列 ($iPaletteModelsByProvider の claudecode/anthropic: claude-opus-4-8/claude-sonnet-4-6/claude-haiku-4-5、openai: gpt-5.5系、zai: glm-5.2〜glm-4.5、lmstudio: qwen3.6-27b系)・claudecode/anthropic のモデル解決が SourceVault の ClaudeResolveModel 経由で動的に行われる旨も、実装 (iPaletteModelsFor, iPaletteResolveHeavyModel) と一致することを再確認した。ソースファイルは大容量のため、今回のチャンクも Public symbols 宣言ブロックとパレット関連ヘルパーの範囲に限られており、後続の実装本体 (関数本体、Private セクションの残り) は今回のパスでは再検証できていない。確認できた範囲では既存記述との矛盾はない。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl) と再度突き合わせて同期を確認した (2026-07-18 パス、2回目)。今回のチャンクは BeginPackage 直後の内部関数クリーンアップリスト、公開シンボルリスト、および主要変数 ($ClaudeModel, $ClaudeAdvisaryModel, $ClaudeStandardFont, $ClaudePrivateModel, $ClaudePackageKeywordMap, $ClaudePaletteServiceControls, $ClaudeCLIMCPServers, $ClaudeWorkingDirectory, $ClaudeSnapshots, $ClaudeAccessibleDirs, ディレクトリアクセス許可システム, $ClaudeFallbackModels, Fallback/Integrations/References/Demos/Disclaimer/License/Acknowledgments の usage 文字列, $ClaudeDocRetryDelay/$ClaudeDocMaxRetries/$ClaudeDocMaxChunkChars, $ClaudeDocModel, $ClaudeEvalMaxDepth, パッケージ更新排他ロック iAcquirePackageLock/iReleasePackageLock, ドキュメント更新ストール検出 iDocUpdateActiveQ, $ClaudeTestModel, 有料API許可 facade (NBGetNotebookPaidAPIAllowed/NBSetNotebookPaidAPIAllowed), ShowClaudePalette 内部テーブル ($iPaletteProviderOrder, $iPaletteModelsByProvider, $iPaletteHeavyIntent, $iPaletteDefaultClaudeModel, iPaletteSourceVaultModels, iPaletteResolveHeavyModel, iPaletteModelsFor, iPaletteShortenModelName の冒頭部分)) の定義行に及んだ。BeginPackage の公開シンボルリストと本ドキュメント記載シンボルを再照合したが、新規追加・削除は検出されなかった。すべての型・デフォルト値・オプション既定値は実ソースの定義行と一致することを再確認し、既存記述との矛盾は見つからなかった。ソースファイルは大容量のため、今回のチャンクも Public symbols 宣言ブロックと周辺初期化コードの範囲に限られており、後続の実装本体 (関数本体、Private セクションの残り) は今回のパスでは再検証できていない。

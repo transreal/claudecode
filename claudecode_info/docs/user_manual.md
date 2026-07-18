@@ -1,5 +1,3 @@
----
-
 ## 設計思想と実装の概要
 
 ClaudeCode は以下の設計原則に基づいています。
@@ -894,6 +892,17 @@ Anthropic API 経由のフォールバック通信(`ClaudeQueryBg`)では、Wind
 - **フォールバック**: `ImportByteArray` が失敗した場合は、明示的に UTF-8 指定した `ByteArrayToString[rb, "UTF-8"]` でデコードしてから文字列版のパーサーを試みます。
 
 この実装により、Windows 11 の `$CharacterEncoding` が ShiftJIS 等に設定されている環境でも、Anthropic API との通信で日本語テキストが正しく送受信されます。
+
+#### CLI 警告行の自動除去(プレーンテキスト応答、2026-07-16〜)
+
+Claude Code CLI は、未 trust のワークスペースで実行された場合や `.claude/settings.json` の一部 `permissions.allow` エントリが無視された場合などに、stderr へ以下のような警告・通知行を出力することがあります。
+
+- `"...has not been trusted. Run Claude Code interactively here once ..."`(trust dialog 未承認の警告)
+- `"Ignoring N permissions.allow entries from .claude/settings.json: this workspace ..."`(許可エントリ無視の警告)
+
+CLI をプレーンテキスト経路(`iMakeBat`)で呼び出す実行方式では、`2>&1` によって stderr がプレーン応答の先頭に混入することがあります。ストリーミング JSON 経路(`iStreamJsonLikeQ` を用いる経路)はこの種の混入に以前から対策済みでしたが、プレーン経路は未対策のままでした。実際に 2026-07-16 に、未 trust のワークスペースで実行した際の警告文がそのまま「正常な応答」として採用されてしまう事故が発生しています。
+
+この対策として、内部関数 `iStripLeadingCLIWarnings` が導入されました。応答テキストの先頭から連続する CLI 警告行(および空行)のみを、厳格な signature 一致(`"has not been trusted"` + `"permissions."` + `"settings.json"` の組み合わせ、または `"Ignoring"` で始まる行など)で判定して除去します。本文中に警告文言に似た引用が含まれる場合でも、先頭以外は判定対象外のため誤って削除されることはありません。応答全体が警告行のみで構成されていた場合は空文字列 `""` を返すため、下流の空応答判定(fail-fast 分類等)が正しく機能します。この処理はプレーンテキスト応答を返すすべての経路に自動的に適用される内部的な信頼性強化であり、ユーザーが意識して呼び出す新しい公開 API はありません。
 
 ### セッション管理の改善
 

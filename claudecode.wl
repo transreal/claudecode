@@ -7841,8 +7841,38 @@ iLoadPackageHistory[bdir_String, packageName_String, maxSessions_Integer:3] :=
       "=== \:904e\:53bb\:306e\:5909\:66f4\:5c65\:6b74 (\:5c65\:6b74\:304c\:3042\:308c\:3070\:53c2\:8003\:306b) ===\n" <> ctx]
   ];
 
+(* Claude Code CLI が stderr へ出す警告/通知行の判定 (bat の 2>&1 で応答先頭に混入する)。
+   実事故 (2026-07-16): 未 trust ワークスペースの
+   "Ignoring 5 permissions.allow entries from .claude/settings.json: this workspace
+   has not been trusted. Run Claude Code interactively here once ..." が
+   プレーンテキスト応答の先頭に混入し、下流 (PackageCommit の LLM コミットメッセージ生成)
+   が警告行をそのまま正常応答として採用した。stream-json 経路は v2026-07-03 の
+   iStreamJsonLikeQ で対策済みだが、プレーン経路 (iMakeBat) は未対策だった。
+   本文の誤削除を避けるため厳格な signature のみ対象。 *)
+iCLIStderrNoiseLineQ[line_String] := Module[{t = StringTrim[line]},
+  TrueQ @ Or[
+    StringStartsQ[t, "Ignoring"] &&
+      StringContainsQ[t, "permissions."] &&
+      StringContainsQ[t, "settings.json"],
+    StringContainsQ[t, "has not been trusted"] &&
+      StringContainsQ[t,
+        "trust dialog" | "hasTrustDialogAccepted" |
+          "Run Claude Code interactively"]]];
+iCLIStderrNoiseLineQ[_] := False;
+
+(* 出力先頭に連続する CLI 警告行 (と空行) のみ除去する。応答本文中の引用は残す。
+   出力全体が警告のみの場合は "" になり、下流の空応答分類が正しく発火する。 *)
+iStripLeadingCLIWarnings[text_String] := Module[{lines, i},
+  lines = StringSplit[StringReplace[text, "\r\n" -> "\n"], "\n", All];
+  i = 1;
+  While[i <= Length[lines] &&
+      (StringTrim[lines[[i]]] === "" || iCLIStderrNoiseLineQ[lines[[i]]]),
+    i++];
+  If[i === 1, text, StringRiffle[Drop[lines, i - 1], "\n"]]];
+iStripLeadingCLIWarnings[x_] := x;
+
 cleanOutput[s_String] := StringTrim[
-  StringReplace[s,
+  StringReplace[iStripLeadingCLIWarnings[s],
     RegularExpression["[\\x00-\\x08\\x0B-\\x0C\\x0E-\\x1F\\x7F]"] -> ""]
 ];
 
@@ -19580,7 +19610,7 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
        \:305f\:3060\:3057 append \:306f\:672c\:6587\:672a\:5b8c\:3092\:6b63\:5e38\:306a\:672b\:5c3e\:3067\:9690\:3057\:3066\:3057\:307e\:3046\:305f\:3081\:3001append \:524d\:306b
        \:672c\:6587\:306e\:5b8c\:5168\:6027(\:5fc5\:9808\:306e\:4f7f\:7528\:4f8b\:7bc0\:306b\:5230\:9054\:3057\:305f\:304b)\:3092\:691c\:8a3c\:3059\:308b\:3002 *)
     If[docFileName === "README.md",
-      Module[{body},
+      Module[{body, prevAck},
         (* LLM \:304c\:8aa4\:3063\:3066\:6cd5\:7684\:7bc0\:3092\:66f8\:3044\:3066\:3044\:305f\:3089\:9664\:53bb (\:91cd\:8907 append \:9632\:6b62) *)
         body = iStripReadmeLegalTail[cleaned];
         (* \:672c\:6587\:5b8c\:5168\:6027: \:5fc5\:9808\:306e\:300c## \:4f7f\:7528\:4f8b\:300d\:7bc0\:306b\:5230\:9054\:3057\:3066\:3044\:308b\:304b *)
@@ -19595,6 +19625,24 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
           Print[iL["\:26a0 iSafeWriteDoc: README \:672c\:6587\:304c\:9014\:4e2d\:3067\:5207\:308c\:3066\:3044\:307e\:3059\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002",
             "\:26a0 iSafeWriteDoc: README body looks truncated. Write rejected."]];
           Return[$Failed]];
+        (* === \:8b1d\:8f9e\:4fdd\:5168\:30ac\:30fc\:30c9 (2026-07-18) ===
+           \:65e2\:5b58 README \:306b\:8b1d\:8f9e\:304c\:3042\:308b\:306e\:306b doc_options \:5074 (Acknowledgments) \:304c\:7a7a\:3060\:3068\:3001
+           append \:3067\:8b1d\:8f9e\:304c\:9ed9\:3063\:3066\:6d88\:3048\:308b (2026-07-16 \:306e claudecode \:8b1d\:8f9e\:6d88\:5931\:306e\:771f\:56e0)\:3002
+           \:65e2\:5b58\:6587\:8a00\:3092 doc_options.json \:3078\:81ea\:52d5\:4fdd\:5168\:3057\:3001\:4fdd\:5168\:3067\:304d\:306a\:3051\:308c\:3070
+           \:66f8\:304d\:8fbc\:307f\:81ea\:4f53\:3092\:62d2\:5426\:3059\:308b (fail-closed)\:3002 *)
+        If[iReadmeAckSection[packageName] === "",
+          prevAck = If[FileExistsQ[destPath],
+            iExtractReadmeAckText[Quiet @ Check[
+              ByteArrayToString[ReadByteArray[destPath], "UTF-8"], ""]], ""];
+          If[prevAck =!= "",
+            iBackfillDocAcknowledgments[packageName, prevAck];
+            If[iReadmeAckSection[packageName] === "",
+              $iDocLastFailReason = "\:8b1d\:8f9e\:4fdd\:5168: \:65e2\:5b58\:306e\:8b1d\:8f9e\:3092\:4fdd\:5168\:3067\:304d\:305a\:66f8\:304d\:8fbc\:307f\:62d2\:5426";
+              Print[iL["\:26a0 iSafeWriteDoc: \:65e2\:5b58 README \:306e\:8b1d\:8f9e\:3092\:4fdd\:5168\:3067\:304d\:307e\:305b\:3093\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002",
+                "\:26a0 iSafeWriteDoc: could not preserve the existing README acknowledgments. Write rejected."]];
+              Return[$Failed]];
+            Print[iL["iSafeWriteDoc: \:65e2\:5b58 README \:306e\:8b1d\:8f9e\:3092 doc_options.json \:306b\:4fdd\:5168\:3057\:307e\:3057\:305f\:3002",
+              "iSafeWriteDoc: preserved the existing README acknowledgments into doc_options.json."]]]];
         (* \:6cd5\:7684\:7bc0\:3092\:6c7a\:5b9a\:7684\:306b append (doc_options.json + \:65e2\:5b9a\:5024\:3002verbatim \:53cd\:6620\:4fdd\:8a3c) *)
         cleaned = iAppendCanonicalReadmeLegalTail[body, packageName];
       ]
@@ -19775,7 +19823,8 @@ iReadmeAckSection[packageName_String] :=
   Module[{items},
     items = Replace[iDocGet[packageName, "Acknowledgments"], Except[_List] -> {}];
     If[Length[items] === 0, Return[""]];
-    "## \:8b1d\:8f9e\n\n" <> StringRiffle["- " <> ToString[#] & /@ items, "\n"] <> "\n"
+    (* \:5404\:9805\:76ee\:306f\:7b87\:6761\:66f8\:304d\:3067\:306a\:304f\:6bb5\:843d\:3068\:3057\:3066\:51fa\:529b (\:5f93\:6765 README \:306e\:8b1d\:8f9e\:8868\:8a18\:3068\:4e00\:81f4) *)
+    "## \:8b1d\:8f9e\n\n" <> StringRiffle[ToString /@ items, "\n\n"] <> "\n"
   ];
 iReadmeAckSection[_] := "";
 
@@ -19834,6 +19883,36 @@ iStripReadmeLegalTail[content_String] :=
     StringTrim @ StringReplace[StringTrim[before], RegularExpression["(\\n-{3,})+$"] -> ""]
   ];
 iStripReadmeLegalTail[x_] := x;
+
+(* README \:672c\:6587\:304b\:3089\:300c## \:8b1d\:8f9e\:300d\:7bc0\:306e\:672c\:6587\:3092\:62bd\:51fa ("" = \:7bc0\:306a\:3057)\:3002
+   \:8b1d\:8f9e\:4fdd\:5168\:30ac\:30fc\:30c9 (iSafeWriteDoc) \:304b\:3089\:4f7f\:7528\:3002 *)
+iExtractReadmeAckText[content_String] :=
+  Module[{normalized, startPos, rest, endPos, seg},
+    normalized = StringReplace[content, "\r\n" -> "\n"];
+    startPos = StringPosition[normalized,
+      RegularExpression["(?m)^##[ \t]+\:8b1d\:8f9e[ \t]*$"], 1];
+    If[Length[startPos] === 0, Return[""]];
+    rest = StringDrop[normalized, startPos[[1, 2]]];
+    endPos = StringPosition[rest, RegularExpression["(?m)^(##[ \t]|---)"], 1];
+    seg = If[Length[endPos] === 0, rest, StringTake[rest, endPos[[1, 1]] - 1]];
+    StringTrim[seg]
+  ];
+iExtractReadmeAckText[_] := "";
+
+(* \:65e2\:5b58 README \:306e\:8b1d\:8f9e\:6587\:8a00\:3092 doc_options.json (Acknowledgments) \:3078\:4fdd\:5168\:3059\:308b\:3002
+   \:6bb5\:843d\:5358\:4f4d\:3067\:30ea\:30b9\:30c8\:5316\:3057\:3001$iDocState \:3068\:6c38\:7d9a JSON \:306e\:4e21\:65b9\:3092\:66f4\:65b0\:3059\:308b\:3002 *)
+iBackfillDocAcknowledgments[packageName_String, ackText_String] :=
+  Module[{items, state},
+    items = Select[StringTrim /@
+      StringSplit[ackText, RegularExpression["\n[ \t]*\n"]], # =!= "" &];
+    If[Length[items] === 0, Return[False]];
+    state = Replace[Lookup[$iDocState, packageName, <||>],
+      Except[_Association] -> <||>];
+    state["Acknowledgments"] = items;
+    $iDocState[packageName] = state;
+    Quiet @ Check[iSaveDocOptions[packageName], Null];
+    True
+  ];
 
 (* \:672c\:6587\:672b\:5c3e\:306b\:6cd5\:7684\:7bc0\:3092 append (\:8b1d\:8f9e \[RightArrow] \:514d\:8cac\:4e8b\:9805 \[RightArrow] \:30e9\:30a4\:30bb\:30f3\:30b9)\:3002
    \:5404\:7bc0\:9593\:306f --- \:533a\:5207\:308a\:3002License \:672c\:6587\:306f ``` \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:3067\:5bc6\:306b\:9589\:3058\:308b\:3002 *)

@@ -298,7 +298,7 @@ ShowClaudePalette[]
 | 変数 | デフォルト | 説明 |
 |------|-----------|------|
 | `$ClaudeModel` | `""`（未設定） | Claude CLI に渡すプロバイダーとモデル名のペア。タプル `{provider, model}` 形式が標準。パッケージロード直後は `""`（未設定）で、この場合は Claude Code CLI 自身の既定モデルが使用される。`{"lmstudio", "モデル名", "http://host:port"}` 形式で LM Studio を主モデルとして直接指定することも可能。`{"chatgptcodex", Automatic}` 形式で ChatGPT Codex CLI を provider として指定することも可能。provider には `zai`（z.ai の GLM シリーズ API）も指定できる。`ShowClaudePalette[]` でのプロバイダー/モデル選択操作を行うと `$ClaudeModel` にタプル値が反映され、claudecode/anthropic の既定モデル候補は SourceVault 経由で動的に解決される（未解決時は `claude-opus-4-8` にフォールバック） |
-| `$ClaudeAdvisaryModel` | `{"chatgptcodex", "Automatic"}` | 仕様レビュー合意ワークフローにおける Codex アドバイザリーロールのモデル指定。`$ClaudeModel` と同形式 |
+| `$ClaudeAdvisaryModel` | `{"chatgptcodex", "Automatic"}` | 仕様レビュー合意ワークフローにおける Codex アドバイザリーロールのモデル指定。`$ClaudeModel` と同形式（bare provider 文字列 `"chatgptcodex"` も指定可能） |
 | `$ClaudeStandardFont` | `"Yu Gothic UI"` | ClaudeEval が生成する出力コード（Grid/Column/Style/Button 等）で統一使用されるフォント名。ロード後に任意のフォント名を代入して変更可能 |
 | `$ClaudeTimeout` | `1200` | タイムアウト秒数 |
 | `$ClaudeVerbose` | `False` | `True` で履歴コンパクション等の詳細ログを出力 |
@@ -312,7 +312,7 @@ ShowClaudePalette[]
 | `$ClaudeFallbackModels` | `{{"chatgptcodex","gpt-5.5"},{"anthropic","claude-opus-4-8"},{"openai","gpt-5.5"}}` | フォールバックモデル優先順位。各要素は `{provider, model}` または `{provider, model, url}`。`"lmstudio"` プロバイダーでローカル LLM も、`"zai"` プロバイダーで z.ai（GLM シリーズ）の課金 API も指定可能 |
 | `$ClaudePrivateModel` | `{}` | 秘密データ処理用のローカルモデル指定 |
 | `$ClaudeLMStudioIntegrations` | `{}` | LM Studio 使用時に有効にする MCP サーバー ID のリスト（例: `{"mcp/exa"}`）。mcp.json に登録済みのサーバーを指定すると、LM Studio がサーバー側で tool-call を自動実行する |
-| `$ClaudeTestModel` | `$ClaudeModel と同じ` | `ClaudeCheckSeparation` 等のテスト用モデル名 |
+| `$ClaudeTestModel` | `$ClaudeModel と同じ` | `ClaudeCheckSeparation` 等のテスト用モデル名。未設定の場合はロード時に `$ClaudeModel` と同じ値に初期化される |
 | `$ClaudeImageModels` | `{{"openai","gpt-image-1"},{"openai","dall-e-3"}}` | 画像生成モデルのリスト |
 | `$ClaudeTTSModels` | `{{"openai","tts-1-hd"},{"openai","tts-1"}}` | 音声生成モデルのリスト |
 | `$ClaudeDocModel` | `{"claudecode", "claude-sonnet-4-6"}` | ドキュメント生成・更新時に使用するモデル。`""` で `$ClaudeModel` と同じモデルを使用。未カスタマイズ時は最新 Sonnet に自動更新される |
