@@ -1923,10 +1923,16 @@ $ClaudeCLIHarnessMode::usage =
 
 (* === Markdown -> notebook cells / mermaid graphs (canonical, 2026-07-15) === *)
 MarkdownToCells::usage =
-  "MarkdownToCells[md] converts a markdown string into a list of notebook Cell expressions (headings, bullet/numbered items, code fences, GFM pipe tables, images, mermaid flowcharts). It is the canonical markdown -> cells converter; the spec-impl, workflow-catalog and commit-safety renderers delegate here. Options: \"HeadingStyles\" (styles for #/##/###/####, default {\"Subsection\", \"Subsubsection\", \"Subsubsubsection\", \"Subsubsubsection\"}), \"DefaultMode\" (\"Para\" | \"Code\"; \"Code\" turns fence-less text into a single Input cell), \"TeXMath\" (True renders $...$ as inline formulas), \"CleanInline\" (True strips **bold**, __underline__ and `code` markers), \"MermaidGraphs\" (True renders ```mermaid blocks as Graph output cells via MermaidGraph), \"UntaggedCodeStyle\" (\"Program\" (default) | \"Input\" for bare ``` blocks), \"Tables\" (True renders | a | b | tables as Dataset output cells), \"TableStyle\" (\"Dataset\" (default) | \"Grid\" | \"Text\"), \"Images\" (True embeds ![alt](path) images), \"BaseDirectory\" (directory that relative image paths resolve against; Automatic uses the source file's directory, else NotebookDirectory[]), \"MaxImageWidth\" (display width cap in pixels for embedded images, default 600; None keeps the natural size).";
+  "MarkdownToCells[md] converts a markdown string into a list of notebook Cell expressions (headings, bullet/numbered items, code fences, GFM pipe tables, images, mermaid flowcharts). It is the canonical markdown -> cells converter; the spec-impl, workflow-catalog and commit-safety renderers delegate here. Options: \"HeadingStyles\" (styles for #/##/###/####, default {\"Subsection\", \"Subsubsection\", \"Subsubsubsection\", \"Subsubsubsection\"}), \"DefaultMode\" (\"Para\" | \"Code\"; \"Code\" turns fence-less text into a single Input cell), \"TeXMath\" (True renders $...$ as inline formulas), \"CleanInline\" (True strips **bold**, __underline__ and `code` markers), \"MermaidGraphs\" (True renders ```mermaid blocks as Graph output cells via MermaidGraph), \"UntaggedCodeStyle\" (\"Program\" (default) | \"Input\" for bare ``` blocks), \"Tables\" (True renders | a | b | tables as Dataset output cells), \"TableStyle\" (\"Dataset\" (default) | \"Grid\" | \"Text\"), \"Images\" (True embeds ![alt](path) images, honouring a trailing pandoc attribute block such as {width=6.1in} or {height=7.0in}; in/cm/mm/pt/px units are supported), \"BaseDirectory\" (directory that relative image paths resolve against; Automatic uses the source file's directory, else NotebookDirectory[]), \"MaxImageWidth\" (display width cap in points for embedded images, default 600; None keeps the natural size).";
 
 MarkdownToNotebook::usage =
   "MarkdownToNotebook[File[path]] or MarkdownToNotebook[md] expands a markdown file or string into a new notebook via CreateDocument and returns the NotebookObject (or a Notebook[...] expression when no front end is available). A single-line string that names an existing .md/.markdown/.txt file is treated as a file path (also resolved against the notebook directory). Relative image paths resolve against the file's own directory. Accepts all MarkdownToCells options plus \"WindowTitle\".";
+
+MarkdownDisplay::usage =
+  "MarkdownDisplay[md] renders a markdown string (or File[path]) as an inline displayable expression, so evaluating it in a notebook shows the formatted result directly: pipe tables become Dataset objects, images and mermaid flowcharts render, headings and items keep their styles. Use it when you want to see markdown in the current notebook without opening a new one (MarkdownToNotebook) or handling raw Cell expressions (MarkdownToCells). Accepts all MarkdownToCells options.";
+
+MarkdownWriteCells::usage =
+  "MarkdownWriteCells[md] converts a markdown string (or File[path]) with MarkdownToCells and writes the resulting cells into the current notebook below the evaluated cell, returning the number of cells written. MarkdownWriteCells[md, nb] writes into the given NotebookObject. Accepts all MarkdownToCells options.";
 
 MermaidGraph::usage =
   "MermaidGraph[src] parses a mermaid flowchart (\"flowchart TD\", \"graph LR\", ...) and returns a Wolfram Graph with framed node labels, edge labels and a layered layout following the declared direction. src may be raw mermaid text, a ```mermaid fenced block, or File[path]. Supported: node shapes [..], (..), ((..)), {..}, ([..]), [[..]], {{..}}, >..]; edges -->, ---, -.->, ==>, <-->, -->|label|, A -- label --> B, chains A --> B --> C and & fan-in/out; literal \\n or <br> in labels become line breaks; %% comments and subgraph/class/style/click lines are ignored. Extra options are passed to Graph and override the defaults.";
@@ -8566,10 +8572,12 @@ iWriteQueryResponseQueued[nb_NotebookObject, text_String, autoEvaluate_:False] :
    output cells via MermaidGraph (option "MermaidGraphs" -> True).
    ============================================================ *)
 
-ClearAll[MarkdownToCells, MarkdownToNotebook, MermaidGraph,
+ClearAll[MarkdownToCells, MarkdownToNotebook, MarkdownDisplay,
+  MarkdownWriteCells, MermaidGraph,
+  iMarkdownCellsFrom, iMarkdownCellToExpr, iMarkdownTextPart,
   iMarkdownReadUTF8, iMarkdownResolvePath, iMarkdownToNotebookImpl,
   iMarkdownCodeCell, iMarkdownSplitRow, iMarkdownTableCell,
-  iMarkdownImageCell, iMermaidStrip, iMermaidLabelText,
+  iMarkdownImageCell, iMarkdownAttrLength, iMermaidStrip, iMermaidLabelText,
   iMermaidParseNodeToken, iMermaidVertexInset, iMermaidEdgeFunction,
   iMermaidEdgeLabel];
 
@@ -8625,15 +8633,38 @@ iMarkdownTableCell[lines_List, start_Integer, clean_, style_String] := Module[
         BaseStyle -> {FontSize -> 11}]];
   {Cell[BoxData[ToBoxes[expr, StandardForm]], "Output"], i - 1}];
 
-(* ---- ![alt](path) --------------------------------------------------
+(* ---- ![alt](path){width=6.1in} -------------------------------------
    Local files are embedded; http(s) targets become a hyperlink rather
-   than a silent network fetch during conversion. *)
+   than a silent network fetch during conversion. A trailing pandoc
+   attribute block is honoured for sizing. *)
+
+(* Pandoc attribute length -> printer's points. Returns None when absent
+   or when the unit cannot be resolved without a container (e.g. 50%). *)
+iMarkdownAttrLength[attrs_String, key_String] := Module[{m, v, u},
+  If[attrs === "", Return[None, Module]];
+  m = StringCases[attrs,
+    RegularExpression["(?i)\\b" <> key <> "\\s*=\\s*\"?([0-9.]+)\\s*(in|cm|mm|pt|px|%|)\"?"] :>
+      {"$1", "$2"}, 1];
+  If[m === {}, Return[None, Module]];
+  {v, u} = First[m];
+  v = Quiet @ Check[ToExpression[v], $Failed];
+  If[! NumericQ[v], Return[None, Module]];
+  Switch[ToLowerCase[u],
+    "in", 72. v,
+    "cm", 72. v / 2.54,
+    "mm", 72. v / 25.4,
+    "pt", 1. v,
+    "px" | "", 1. v,
+    _, None]];
+
 iMarkdownImageCell[line_String, baseDir_, maxW_] := Module[
-  {m, alt, path, full, img},
+  {m, alt, path, attrs, full, img, w, h, isz},
   m = StringCases[line,
-    RegularExpression["!\\[([^\\]]*)\\]\\(([^)]+)\\)"] :> {"$1", "$2"}, 1];
+    RegularExpression["!\\[([^\\]]*)\\]\\(([^)]+)\\)\\s*(\\{[^}]*\\}|)"] :>
+      {"$1", "$2", "$3"}, 1];
   If[m === {}, Return[Nothing, Module]];
-  {alt, path} = First[m];
+  {alt, path, attrs} = First[m];
+  If[! StringQ[attrs], attrs = ""];
   path = StringTrim[path];
   (* ![](path "title") -> drop the title part *)
   path = First[StringSplit[path, RegularExpression["\\s+"], 2]];
@@ -8651,8 +8682,17 @@ iMarkdownImageCell[line_String, baseDir_, maxW_] := Module[
   img = Quiet @ Check[Import[full], $Failed];
   If[! ImageQ[img],
     Return[Cell[If[alt === "", path, alt <> " (" <> path <> ")"], "Text"], Module]];
-  If[NumericQ[maxW] && First[ImageDimensions[img]] > maxW,
-    img = Image[img, ImageSize -> maxW]];
+  (* explicit markdown sizing wins; MaxImageWidth still caps an explicit width *)
+  w = iMarkdownAttrLength[attrs, "width"];
+  h = iMarkdownAttrLength[attrs, "height"];
+  If[NumericQ[w] && NumericQ[maxW], w = Min[w, maxW]];
+  isz = Which[
+    NumericQ[w] && NumericQ[h], {w, h},
+    NumericQ[w], w,
+    NumericQ[h], {Automatic, h},
+    NumericQ[maxW] && First[ImageDimensions[img]] > maxW, maxW,
+    True, None];
+  If[isz =!= None, img = Image[img, ImageSize -> isz]];
   Cell[BoxData[ToBoxes[img, StandardForm]], "Output"]];
 
 iMarkdownReadUTF8[f_String] :=
@@ -8739,9 +8779,11 @@ MarkdownToCells[mdRaw_String, opts : OptionsPattern[]] := Module[
           tbl = iMarkdownTableCell[lines, i, clean, tableStyle];
           If[tbl[[1]] =!= Nothing, AppendTo[cells, tbl[[1]]]];
           skipThrough = tbl[[2]],
-        (* standalone image paragraph *)
+        (* standalone image paragraph, with an optional pandoc attribute
+           block: ![](fig.png){width=6.1in} *)
         imagesQ &&
-          StringMatchQ[trimmed, RegularExpression["!\\[[^\\]]*\\]\\([^)]+\\)"]],
+          StringMatchQ[trimmed,
+            RegularExpression["!\\[[^\\]]*\\]\\([^)]+\\)\\s*(\\{[^}]*\\})?"]],
           flushPara[];
           With[{ic = iMarkdownImageCell[trimmed, baseDir, maxImgW]},
             If[ic =!= Nothing, AppendTo[cells, ic]]],
@@ -8827,6 +8869,85 @@ iMarkdownToNotebookImpl[md_, title_, baseDir_, optList_List] := Module[{cells, w
   If[$FrontEnd === Null,
     Notebook[cells],
     CreateDocument[cells, WindowTitle -> wt]]];
+
+(* ---- markdown string -> inline display / current-notebook cells ----
+   MarkdownToCells returns Cell expressions (inert when echoed) and
+   MarkdownToNotebook opens a new window. These two cover the common
+   "I have a markdown string, show it here" case. *)
+
+(* shared front door: String | File[path], with BaseDirectory defaulting
+   to the file's own directory so relative images resolve. *)
+iMarkdownCellsFrom[File[f_String], optList_List] := Module[{path},
+  path = iMarkdownResolvePath[f];
+  If[path === $Failed, Return[$Failed, Module]];
+  With[{md = iMarkdownReadUTF8[path]},
+    If[! StringQ[md], Return[$Failed, Module]];
+    MarkdownToCells[md,
+      Sequence @@ FilterRules[optList, Options[MarkdownToCells]],
+      "BaseDirectory" -> DirectoryName[ExpandFileName[path]]]]];
+
+iMarkdownCellsFrom[md_String, optList_List] := Module[{path = $Failed},
+  If[! StringContainsQ[md, "\n"] && StringLength[md] < 400 &&
+     StringMatchQ[ToLowerCase[FileExtension[md]], "md" | "markdown" | "txt"],
+    path = iMarkdownResolvePath[md]];
+  If[path =!= $Failed,
+    iMarkdownCellsFrom[File[path], optList],
+    MarkdownToCells[md,
+      Sequence @@ FilterRules[optList, Options[MarkdownToCells]]]]];
+
+iMarkdownCellsFrom[_, _] := $Failed;
+
+(* Cell -> an expression that displays the same way inline *)
+iMarkdownTextPart[Cell[BoxData[b_], ___]] := RawBoxes[b];
+iMarkdownTextPart[s_String] := s;
+iMarkdownTextPart[other_] := other;
+
+iMarkdownCellToExpr[Cell[BoxData[b_], ___]] := RawBoxes[b];
+iMarkdownCellToExpr[Cell[TextData[parts_List], style_String, ___]] :=
+  Style[Row[iMarkdownTextPart /@ parts], style];
+iMarkdownCellToExpr[Cell[TextData[p_], style_String, ___]] :=
+  Style[iMarkdownTextPart[p], style];
+iMarkdownCellToExpr[Cell[s_String, style_String, ___]] := Switch[style,
+  "Item", Row[{"\[FilledSmallCircle] ", s}],
+  "Subitem", Row[{"    \[Dash] ", s}],
+  "Subsubitem", Row[{"        \[CenterDot] ", s}],
+  "Program", Style[s, "Program", FontFamily -> "Consolas"],
+  _, Style[s, style]];
+iMarkdownCellToExpr[other_] := other;
+
+Options[MarkdownDisplay] = Options[MarkdownToCells];
+
+MarkdownDisplay[src_, opts : OptionsPattern[]] := Module[{cells},
+  cells = iMarkdownCellsFrom[src, {opts}];
+  Which[
+    cells === $Failed,
+      Failure["MarkdownDisplay",
+        <|"MessageTemplate" -> "Could not read the markdown source."|>],
+    cells === {}, "",
+    Length[cells] === 1, iMarkdownCellToExpr[First[cells]],
+    True, Column[iMarkdownCellToExpr /@ cells, Alignment -> Left, Spacings -> 1]]];
+
+Options[MarkdownWriteCells] = Options[MarkdownToCells];
+
+MarkdownWriteCells[src_, opts : OptionsPattern[]] :=
+  MarkdownWriteCells[src, Automatic, opts];
+
+MarkdownWriteCells[src_, target_, opts : OptionsPattern[]] := Module[{cells, nb},
+  cells = iMarkdownCellsFrom[src, {opts}];
+  If[cells === $Failed,
+    Return[Failure["MarkdownWriteCells",
+      <|"MessageTemplate" -> "Could not read the markdown source."|>], Module]];
+  If[cells === {}, Return[0, Module]];
+  nb = If[MatchQ[target, _NotebookObject], target,
+    Quiet @ Check[EvaluationNotebook[], $Failed]];
+  If[! MatchQ[nb, _NotebookObject],
+    Return[Failure["MarkdownWriteCells",
+      <|"MessageTemplate" -> "No notebook is available to write into."|>], Module]];
+  (* keep source order: each write lands after the previous one *)
+  SelectionMove[nb, After, Cell, AutoScroll -> False];
+  Scan[(NotebookWrite[nb, #, All, AutoScroll -> False];
+        SelectionMove[nb, After, Cell, AutoScroll -> False]) &, cells];
+  Length[cells]];
 
 (* ---- mermaid flowchart -> Graph ------------------------------------
    Supported subset (see MermaidGraph::usage). Statements outside the
@@ -15529,8 +15650,11 @@ $iClaudeEvalNaturalPatterns := {
    "refresh summary" | "refresh summaries" |
    "summarize all" | "regenerate summar") -> "refresh_summary",
 
-  (* \:300c\:4eca\:65e5\:304b\:3089\:30fb\:30fb\:306e\:4e88\:5b9a\:300d\:7cfb *)
+  (* \:300c\:4eca\:65e5\:304b\:3089\:30fb\:30fb\:306e\:4e88\:5b9a\:300d\:7cfb\:3002
+     \:300c\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30ea\:30b9\:30c8\:300d\:306f\:5f93\:6765\:30c0\:30c3\:30b7\:30e5\:30dc\:30fc\:30c9
+     (SourceVaultUpcomingSchedule) \:3092\:4e00\:767a\:8d77\:52d5\:3059\:308b\:5165\:53e3 (R9) *)
   ("\:4e88\:5b9a" | "\:30b9\:30b1\:30b8\:30e5\:30fc\:30eb" | "\:30bf\:30b9\:30af" |
+   "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30ea\:30b9\:30c8" | "notebook list" |
    "upcoming" | "schedule") -> "schedule",
 
   (* \:300c\:65b0\:7740\:30e1\:30fc\:30eb(\:306e\:30ea\:30b9\:30c8)\:300d\:7cfb: FetchNew + MailView \:3092 LLM \:629c\:304d\:3067\:5b9f\:884c\:3002
@@ -15554,13 +15678,24 @@ iClaudeEvalNaturalAct[action_String, task_String, optsList_List] :=
             "[Natural Dispatch] schedule: Scope=" <> ToString[scope] <>
             ", Period=" <> ToString[periodDays] <> " Days",
             Italic, RGBColor[0.2, 0.5, 0.7]]]];
+        (* R9 (2026-07-17): a plain schedule prompt opens the unified daily
+           agenda (calendar + notebook deadlines + actionable mails). The
+           notebook-list dashboard stays in charge when the prompt names
+           notebooks (\:30ce\:30fc\:30c8\:30d6\:30c3\:30af/notebook) or pins a scope. *)
         result = Quiet @ Check[
-          Symbol["SourceVault`SourceVaultUpcomingSchedule"][
-            "Scope" -> scope,
-            "Period" -> Quantity[periodDays, "Days"],
-            "IncludeOverdue" -> True,
-            "Refresh" -> "Never",
-            "FallbackToCloud" -> "Deny"],
+          If[!StringContainsQ[task, "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af"] &&
+             !StringContainsQ[ToLowerCase[task], "notebook"] &&
+             scope === Automatic &&
+             Length[DownValues[
+               Symbol["SourceVault`SourceVaultRoutineAgendaView"]]] > 0,
+            Symbol["SourceVault`SourceVaultRoutineAgendaView"][
+              Quantity[periodDays, "Days"]],
+            Symbol["SourceVault`SourceVaultUpcomingSchedule"][
+              "Scope" -> scope,
+              "Period" -> Quantity[periodDays, "Days"],
+              "IncludeOverdue" -> True,
+              "Refresh" -> "Never",
+              "FallbackToCloud" -> "Deny"]],
           $Failed];
         (* 2026-06-30 freeze fix (A): when the deterministic schedule lookup
            FAILS, do NOT escalate an unambiguous schedule prompt to the
@@ -15708,6 +15843,7 @@ iClaudeEvalNaturalMatch[_, _] := $iClaudeEvalNotDispatched;
    list is intentionally small and explicit. *)
 $iClaudeEvalProposalHeadAllowlist = {
   "SourceVault`SourceVaultUpcomingSchedule",
+  "SourceVault`SourceVaultRoutineAgendaView",
   "SourceVault`SourceVaultFormatScheduleRecords",
   "SourceVault`SourceVaultTabularPredicate",
   "SourceVault`SourceVaultFindNotebooks",
