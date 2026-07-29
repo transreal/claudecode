@@ -381,6 +381,16 @@ iL[ja_String, en_String] := If[$Language === "Japanese", ja, en];
 $ClaudeModelCapabilities = <|
 
   (* \[HorizontalLine] Anthropic CLI (claudecode \:30b3\:30de\:30f3\:30c9\:7d4c\:7531\:3001\:8ab2\:91d1\:306a\:3057 = Pro/Max \:30b5\:30d6\:30b9\:30af\:30ea\:30d7\:30b7\:30e7\:30f3\:5185) \[HorizontalLine] *)
+  {"claudecode", "claude-opus-5"} -> <|
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "LongContext", "ToolUse"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "claudecode",
+    "Paid"             -> False
+  |>,
+
   {"claudecode", "claude-opus-4-7"} -> <|
     "ContextWindow"    -> 200000,
     "Class"            -> "Heavy-Cloud",
@@ -422,6 +432,16 @@ $ClaudeModelCapabilities = <|
   |>,
 
   (* \[HorizontalLine] Anthropic API \:76f4\:63a5 (anthropic \:30d7\:30ed\:30d0\:30a4\:30c0\:3001\:8ab2\:91d1\:3042\:308a) \[HorizontalLine] *)
+  {"anthropic", "claude-opus-5"} -> <|
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "LongContext", "ToolUse"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "anthropic",
+    "Paid"             -> True
+  |>,
+
   {"anthropic", "claude-opus-4-7"} -> <|
     "ContextWindow"    -> 200000,
     "Class"            -> "Heavy-Cloud",
@@ -556,10 +576,10 @@ $ClaudeModelCapabilities = <|
 $ClaudeRoleDefaultModels = <|
   (* Phase 28: \:5024\:3092 {provider, model} tuple \:306b\:5909\:66f4\:3002
      \:30c7\:30d5\:30a9\:30eb\:30c8\:306f Anthropic CLI (\:8ab2\:91d1\:306a\:3057) \:3092\:6307\:3059\:3002 *)
-  "Plan"              -> {"claudecode", "claude-opus-4-7"},
-  "Draft"             -> {"claudecode", "claude-opus-4-7"},
-  "Reduce"            -> {"claudecode", "claude-opus-4-7"},
-  "Commit"            -> {"claudecode", "claude-opus-4-7"},
+  "Plan"              -> {"claudecode", "claude-opus-5"},
+  "Draft"             -> {"claudecode", "claude-opus-5"},
+  "Reduce"            -> {"claudecode", "claude-opus-5"},
+  "Commit"            -> {"claudecode", "claude-opus-5"},
   "Explore"           -> {"lmstudio", "qwen3.6-27b"},
   "Verify"            -> {"lmstudio", "qwen3.6-27b"},
   "ConfidentialDraft" -> {"lmstudio", "qwen3.6-27b"}
@@ -1460,7 +1480,7 @@ ClaudeResolveDirectiveBundle[opts:OptionsPattern[]] :=
     If[modelName === Automatic,
       modelName = If[StringQ[role] && KeyExistsQ[$ClaudeRoleDefaultModels, role],
         $ClaudeRoleDefaultModels[role],
-        "claude-opus-4-7"]];
+        "claude-opus-5"]];
     
     capability = ClaudeResolveModelCapability[modelName];
     strengths  = Lookup[capability, "Strengths", {}];
@@ -1719,7 +1739,7 @@ ClaudeBuildDirectivePromptForRole[role_String, modelName_String,
 ClaudeBuildDirectivePromptForRole[role_, model_, ___] :=
   ClaudeBuildDirectivePromptForRole[
     If[StringQ[role], role, ""],
-    If[StringQ[model], model, "claude-opus-4-7"], ""];
+    If[StringQ[model], model, "claude-opus-5"], ""];
 
 ClaudeBuildDirectivePromptForSingle[modelName_String, taskHint_String] :=
   Module[{bundle},

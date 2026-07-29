@@ -10,10 +10,19 @@ description: |
   算出して焼き込み、繰り返し読む registry はキャッシュし、行ごとの重い lookup は
   NextFire 等の不要フィールド計算を外す。headless で再現しないときは FE だけがロード
   する副パッケージ (SourceVault_autotrigger 等) の差分を疑う。
+  (3) 常時表示のフローティングパレット (ShowClaudePalette/ShowDocPalette/SlideWorkflow 等) の
+  Dynamic に UpdateInterval/RefreshRate の常駐タイマを置くと、別ノートブックの長時間 ClaudeEval
+  等でカーネル占有中に preemptive 評価が滞留し、パレット操作時に「動的評価の放棄」ダイアログ+
+  FE 全体フリーズになる (in-cell $Aborted と別症状)。常時パレットは常駐タイマを使わず
+  SynchronousUpdating->False + 明示 TrackedSymbols にし、更新はクリック時の自前ローカル変数/tick
+  で行う (鉄則 4)。
   Use when a Wolfram panel/palette shows $Aborted (especially after a brief FE freeze)
   instead of its list/grid, when a DynamicModule/Manipulate UI is slow to render or gets
   aborted, when adding per-row badges/status cells to a list Grid, or when a UI bug
-  reproduces in the FrontEnd but not in headless wolframscript. 関連 rules: 95
+  reproduces in the FrontEnd but not in headless wolframscript, when adding a floating
+  palette Dynamic or reaching for UpdateInterval/RefreshRate in always-on palette UI, or
+  when a palette freezes with a 動的評価の放棄 dialog while another notebook runs a long
+  ClaudeEval. 関連 rules: 95
   (ScheduledTask 安全)。関連 skill: ui-output-font-customization, wolfram-syntax-pitfalls。
 ---
 
@@ -89,6 +98,57 @@ SourceVault の実例 (2026-06-30):
 
 - **FE でだけ出る UI バグは、FE セッションが追加で読んでいる副パッケージ/フック (autotrigger, mining hook 等) を疑う。** headless の auto-load リストと FE の実ロード状態 (`Names["対象シンボル"]` で在否確認) を突き合わせる。
 - headless で再現させたいなら、その副パッケージを明示的に `Get` してから測る。
+
+## 鉄則 4: 常時表示パレットの Dynamic に常駐タイマ (UpdateInterval/RefreshRate) を置かない
+
+鉄則 1〜2 は**パネル自身の重い body/per-row** が原因で **その領域だけが `$Aborted`** になるケース。これとは別に、**常時表示のフローティングパレット** (`ShowClaudePalette` / `ShowDocPalette` / SlideWorkflow パレット等) の Dynamic に `UpdateInterval -> n` / `RefreshRate` の**常駐タイマ**を置くと、次の経路で **FE 全体がフリーズ**する (in-cell `$Aborted` と症状が違う):
+
+1. 別ノートブックの長時間 `ClaudeEval` や SourceVault のメールシャード読込等が**メインカーネルを占有**する。
+2. 常駐タイマが発火するが、その preemptive 評価が捌けず滞留する (`SynchronousUpdating -> False` でも background eval は溜まる)。
+3. ユーザーがパレットのボタンを押して FE が再同期した瞬間、滞留した評価が**ブロック待ちへ昇格** → **「動的評価の放棄」ダイアログ → 完全フリーズ**。
+
+body が軽くてもタイマ自体が原因になる。ラベル更新のために毎描画で外部 getter (GetPaletteProvider 等) を preemptive 評価するのも同罪。probe が `TimeConstrained[f[], 5]` 等でブロックすると更に悪化する。
+
+**鉄則**: 常時パレットの Dynamic は
+
+- **(a) `UpdateInterval` / `RefreshRate` を使わない** (常駐背景評価ゼロ)。
+- **(b) `SynchronousUpdating -> False`**。
+- **(c) `TrackedSymbols` を明示** (`InputNotebook[]` 等の暗黙依存でフォーカス毎に再評価させない)。
+- **(d) 更新はユーザーのボタンクリック時に自前ローカル変数/tick を叩いて反映**。
+
+### パターン A: ラベル表示 (provider/model/effort 等) は自前変数化 (SlideWorkflow / documentation の方式)
+
+毎描画で外部 getter を評価せず、ラベルを自前変数に持ち、各設定ボタンの action 末尾で `refresh[]` を呼ぶ。
+
+```mathematica
+$myProviderLabel = "P: -";
+refreshLabels[] := ($myProviderLabel =
+  "P: " <> ToString[Quiet[Check[ClaudeCode`PaletteProviderLabel[ClaudeCode`GetPaletteProvider[]], "?"]]]
+  (* 他ラベルも同様に更新 *) );
+(* パレット生成時に refreshLabels[] を 1 回呼ぶ。各設定ボタンは: *)
+Button[
+  Dynamic[Style[$myProviderLabel, 9, Bold],
+    TrackedSymbols :> {$myProviderLabel}, SynchronousUpdating -> False],
+  (ClaudeCode`CyclePaletteProvider[];
+   ClaudeCode`SavePaletteSettings[InputNotebook[]];
+   refreshLabels[]),
+  Appearance -> "Frameless", Method -> "Queued"]
+```
+
+### パターン B: クリック時に確実に再描画したい一覧/状態は DynamicModule ローカル tick (ClaudeProcessList の方式)
+
+グローバル TrackedSymbol は `SynchronousUpdating -> False` だと FE に変更が伝わらないことがある。**DynamicModule ローカル**の tick を宣言し、更新コールバック `((tick++) &)` を各ボタンにスレッドする。
+
+```mathematica
+DynamicModule[{tick = 0},
+  Dynamic[tick; renderSection[((tick++) &)],
+    TrackedSymbols :> {tick}, SynchronousUpdating -> False]]
+(* renderSection が作る各ボタンの action 末尾で refresh[] (= tick++) を呼ぶと確実に再描画される *)
+```
+
+トレードオフ: 別パレットの設定変更やノート切替への**自動追従は弱まる** (クリック/開き直しで反映)。フリーズ回避を優先する。新規サービス登録等でボタン構成自体を変えるには `ShowClaudePalette[]` を再実行する。
+
+実例 (2026-07-21): claudecode パレットのサービス制御セクション (`UpdateInterval -> 15` + `TimeConstrained 5s` RunningQ probe → ローカル tick 化)、documentation.wl の Doc パレット (`UpdateInterval -> 8` → 自前ラベル変数化)。SlideWorkflow.wl は元から本パターン (正典)。関連メモリ: `claudeprocesslist-manual-refresh` / `palette-service-section-updateinterval-freeze`。
 
 ## 診断レシピ (問題のカーネルで実行)
 

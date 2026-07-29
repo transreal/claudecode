@@ -72,7 +72,7 @@ Claude Code CLI に API キーを設定してください：
 claude auth login
 ```
 
-ChatGPT Codex CLI を provider として使う場合は、別途 `codex login`（前述）でログインしておきます。Claude Code CLI も Codex CLI も、いずれもサブスクリプション契約に基づく CLI であり、メーター制 API（`anthropic` / `openai` / `zai` provider）とは課金体系が異なります。claudecode の課金 API ガード（`課金API: 禁止` 設定）は `claudecode` provider と `chatgptcodex` provider を無課金扱いとするため、課金 API を許可しなくても Codex 経由のコード生成が利用できます。
+ChatGPT Codex CLI を provider として使う場合は、別途 `codex login`（前述）でログインしておきます。Claude Code CLI も Codex CLI も、いずれもサブスクリプション契約に基づく CLI であり、メーター制 API（`anthropic` / `openai` / `zai` / `kimi` provider）とは課金体系が異なります。claudecode の課金 API ガード（`課金API: 禁止` 設定）は `claudecode` provider と `chatgptcodex` provider を無課金扱いとするため、課金 API を許可しなくても Codex 経由のコード生成が利用できます。
 
 ## パッケージのインストール
 
@@ -129,7 +129,7 @@ ClaudeRuntime を使用する場合は、別途ロードしてください：
 ClaudeShowAccessConfig[]
 
 (* モデル設定（必要に応じて変更） *)
-$ClaudeModel = {"claudecode", "claude-opus-4-8"}
+$ClaudeModel = {"claudecode", "claude-opus-5"}
 
 (* タイムアウト設定 *)
 $ClaudeTimeout = 1200
@@ -200,14 +200,15 @@ Claude Code が利用できない場合のバックアップとして、他の L
 ```mathematica
 (* フォールバックモデルの設定例 *)
 $ClaudeFallbackModels = {
-  {"chatgptcodex", "gpt-5.5"},
-  {"anthropic", "claude-opus-4-8"},
+  {"chatgptcodex", "gpt-5.6-sol"},
+  {"anthropic", "claude-opus-5"},
   {"openai", "gpt-5.5"},
-  {"zai", "glm-5.2"}
+  {"zai", "glm-5.2"},
+  {"kimi", "kimi-k3"}
 }
 ```
 
-`chatgptcodex` はサブスクリプション CLI のため課金 API 禁止設定でも使用できます。`anthropic` / `openai` / `zai` はメーター制 API のため、課金 API を明示的に許可したノートブックでのみ動作します。
+`chatgptcodex` はサブスクリプション CLI のため課金 API 禁止設定でも使用できます。`anthropic` / `openai` / `zai` / `kimi` はメーター制 API のため、課金 API を明示的に許可したノートブックでのみ動作します。
 
 **利用可能な provider 一覧：**
 
@@ -218,11 +219,16 @@ $ClaudeFallbackModels = {
 | `anthropic` | Anthropic API 直接接続 | あり |
 | `openai` | OpenAI API | あり |
 | `zai` | z.ai（GLM シリーズ）API | あり |
+| `kimi` | Kimi（Moonshot AI）API | あり |
 | `lmstudio` | ローカル LLM（LM Studio 経由） | なし |
 
-`zai` は z.ai が提供する GLM シリーズ（`glm-5.2`, `glm-5.1`, `glm-5`, `glm-5-turbo`, `glm-4.7` など）への API アクセスです。OpenAI 互換 API 形式で動作します。
+`zai` は z.ai が提供する GLM シリーズ（`glm-5.2`, `glm-5.1`, `glm-5`, `glm-5-turbo`, `glm-4.7`, `glm-4.6`, `glm-4.5-air`, `glm-4.5` など）への API アクセスです。OpenAI 互換 API 形式で動作します。
 
-パレットの `P:` ボタンをクリックすると provider が順に切り替わります。切り替え順は `$iPaletteProviderOrder` で定義されており、現在の順序は `claudecode → chatgptcodex → anthropic → openai → zai → lmstudio` です。`zai` は `openai` の次、`lmstudio` の前に位置します。
+`kimi` は Moonshot AI が提供する Kimi シリーズ（`kimi-k3`, `kimi-k2.7-code`, `kimi-k2.7-code-highspeed`, `kimi-k2.6` など）への API アクセスです。`zai` と同様に OpenAI 互換 API 形式で動作します。
+
+`lmstudio` は LM Studio 経由のローカル LLM です。画像などのメディアファイルが添付される場合は OpenAI 互換 `/v1/chat/completions` エンドポイントに自動的にルーティングされ、マルチモーダルクエリをサポートします。
+
+パレットの `P:` ボタンをクリックすると provider が順に切り替わります。切り替え順は `$iPaletteProviderOrder` で定義されており、現在の順序は `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio` です。`kimi` は `zai` の次、`lmstudio` の前に位置します。
 
 ### 6. ドキュメント生成設定
 
@@ -230,7 +236,7 @@ claudecode はパッケージのドキュメント一式（README.md / api.md / 
 
 ```mathematica
 (* ドキュメント生成用モデル *)
-$ClaudeDocModel = "claude-sonnet-4-6"
+$ClaudeDocModel = "claude-sonnet-5"
 
 (* リトライ設定 *)
 $ClaudeDocMaxRetries = 3
@@ -382,7 +388,7 @@ $ClaudeModel = {"chatgptcodex", Automatic}
 ClaudeEval["1 から 100 までの和を求めてください"]
 
 (* provider を Claude Code に戻す *)
-$ClaudeModel = {"claudecode", "claude-opus-4-8"}
+$ClaudeModel = {"claudecode", "claude-opus-5"}
 ```
 
 `$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定すると、`ClaudeEval` / `ClaudeQuery` が Codex CLI 経由で実行されます。`Automatic` は Codex CLI の既定モデルを使用します。具体的なモデルを指定する場合は `$ChatgptCodexModel` を設定するか、パレットの `M:` ボタンで選択します（「ChatGPT Codex のモデル管理」を参照）。
@@ -408,7 +414,9 @@ ClaudeImplMonitor[]
 LaunchImplementationWorkflow["myWorkflow", {}]
 ```
 
-`CreateImplementationWorkflow` は `$ClaudeModel`（実装担当）と `$ClaudeAdvisaryModel`（検証担当）が協調して仕様を実装し、実装完了後にワークフローの起動関数をセッションおよび promptrouter に自動登録します。進捗はウィンドウステータスバーにリアルタイム表示されます（実行モデル・フェーズ・ラウンド数）。
+`CreateImplementationWorkflow` の実装担当は、利用可能な場合にウルトラモデルクラス（`ClaudeUltraModelSpec` で解決、CLI 優先・有料 API ゲート付き）を使用し、`$ClaudeModel` はそのフォールバックとなります。`$ClaudeAdvisaryModel`（検証担当）との間で合意に達するまでラウンドを繰り返すほか、生成したテストを新規カーネルで実行して通過することを求める proven-code ゲートも課せられます。進捗はウィンドウステータスバーにリアルタイム表示されます（実行モデル・フェーズ・ラウンド数）。
+
+`$ClaudeUltraEnabled = False` に設定すると、ウルトラモデルへのアップグレードを抑制し、常に `$ClaudeModel` がそのまま使用されます。
 
 実装担当は、プロジェクト内 API や外部 API を実物のドキュメント／コードで検証できない場合、推測でコードを生成せずに実行を中断する fail-closed 方針で動作します。中断時は `ClaudeImplStatus[]` の結果が `FinalStatus -> "Blocked"` となり、ノートブックには次のような警告セルが書き込まれます：
 
@@ -502,7 +510,7 @@ SourceVaultListModels["chatgptcodex"]
 ClaudeResolveModel["chatgptcodex", "code-heavy"]
 ```
 
-claudecode のパレットで provider を `ChatGPTCodex` に切り替えると、`M:` ボタンのモデル候補はこの SourceVault レジストリから取得されます。SourceVault をロードしていない場合や、レジストリ更新前は、最小限のフォールバック候補（`Automatic`）のみが表示されます。
+claudecode のパレットで provider を `ChatGPTCodex` に切り替えると、`M:` ボタンのモデル候補はこの SourceVault レジストリから取得されます。SourceVault をロードしていない場合や、レジストリ更新前は、最小限のフォールバック候補（`Automatic`、`gpt-5.6-sol`）のみが表示されます。
 
 `Automatic` を選ぶと Codex CLI の既定モデルが使われます（`config.toml` の `model` キーを省略）。具体的なモデルを選ぶと、そのモデル名が Codex 実行時の設定に反映されます。
 
@@ -517,10 +525,33 @@ claudecode のパレットで provider を `ChatGPTCodex` に切り替えると�
 $ClaudeAdvisaryModel = {"chatgptcodex", "Automatic"}
 
 (* 具体的なモデルを指定する場合 *)
-$ClaudeAdvisaryModel = {"chatgptcodex", "gpt-5.5"}
+$ClaudeAdvisaryModel = {"chatgptcodex", "gpt-5.6-sol"}
 ```
 
 `$ClaudeAdvisaryModel` を明示的に設定しない場合、ワークフロー実行時に `{"chatgptcodex", "Automatic"}` が自動的に使用されます。なお、ベア文字列 `"chatgptcodex"` も後方互換のため引き続き受け付けます。
+
+#### ウルトラモデルクラスの設定（仕様実装ワークフロー用）
+
+`$ClaudeUltraEnabled` は、仕様生成・仕様実装ワークフローにおいて実装担当役を SourceVault モデルレジストリのウルトラモデルクラス（intent `"code-ultra"` / `"ultra"`、例: `claude-fable-5`）にアップグレードするかどうかを制御します（既定 `True`）。アドバイザリー役（`$ClaudeAdvisaryModel`）は影響を受けません。
+
+```mathematica
+(* ウルトラモデルへのアップグレードを有効（既定） *)
+$ClaudeUltraEnabled = True
+
+(* 無効化すると常に $ClaudeModel がそのまま使用される *)
+$ClaudeUltraEnabled = False
+```
+
+`ClaudeUltraModelSpec[]` は現在のウルトラクラスモデルを `{provider, modelId}` スペックとして解決します。provider 優先順位は CLI 優先（`{"claudecode", <id>}`）で、有料 API（`{"anthropic", <id>}`）はノートブックの有料 API 許可がある場合のみ考慮されます。ウルトラモデルが利用できない場合（レジストリエントリなし・CLI 利用不可・レート制限中・`$ClaudeUltraEnabled = False`）は `$Failed` を返し、呼び出し元は `$ClaudeModel` にフォールバックします。
+
+```mathematica
+(* ウルトラクラスモデルの解決確認 *)
+ClaudeUltraModelSpec[]
+(* 例: {"claudecode", "claude-fable-5"} または $Failed *)
+
+(* 特定のノートブックに対して解決 *)
+ClaudeUltraModelSpec[EvaluationNotebook[]]
+```
 
 ## トラブルシューティング
 
@@ -1069,7 +1100,7 @@ claudecode はタスクのクラスに応じて実行バックエンドを自動
 ```mathematica
 (* タスククラスに対応するバックエンドを解決 *)
 ClaudeResolveLLMTier["code"]
-(* 例: <|"Candidates" -> {{"claudecode", "opus"}, {"anthropic", "claude-opus-4-8"}}, "Rejected" -> {}|> *)
+(* 例: <|"Candidates" -> {{"claudecode", "opus"}, {"anthropic", "claude-opus-5"}}, "Rejected" -> {}|> *)
 
 ClaudeResolveLLMTier["classify"]
 (* ティア表の候補から preflight を通過したものが返る *)
@@ -1126,7 +1157,7 @@ ClaudeBackendAvailableQ[{"lmstudio", Automatic}, "Refresh" -> True]
 
 ### 仕様実装ワークフロー（CreateImplementationWorkflow）
 
-`CreateImplementationWorkflow` は、承認済み設計仕様から SourceVault 管理下の codified ワークフローパッケージ（`SVWorkflow_<Name>`）を自動的に実装する機能です。実装担当（`$ClaudeModel`）と検証担当（`$ClaudeAdvisaryModel`）が協調してコードを生成・検証し、合意に達するまでラウンドを繰り返します。
+`CreateImplementationWorkflow` は、承認済み設計仕様から SourceVault 管理下の codified ワークフローパッケージ（`SVWorkflow_<Name>`）を自動的に実装する機能です。実装担当は利用可能な場合にウルトラモデルクラス（`ClaudeUltraModelSpec` で解決、CLI 優先・有料 API ゲート付き）を使用し、`$ClaudeModel` はそのフォールバックとなります。検証担当（`$ClaudeAdvisaryModel`）との間で合意に達するまでラウンドを繰り返すほか、生成したテストを新規カーネルで実行して通過することを求める proven-code ゲートが課せられます。ウルトラクラスの実装担当は計画フェーズで実装スタイル（native / dag / petri）も選択します。
 
 ```mathematica
 (* 承認済み仕様から実装ワークフローを生成 *)
@@ -1142,14 +1173,14 @@ jobId = CreateImplementationWorkflow["myProcessor",
 
 (* モデルをジョブ単位でオーバーライドする場合 *)
 jobId = CreateImplementationWorkflow["myProcessor", specText,
-  "ClaudeModel"    -> {"claudecode", "claude-opus-4-8"},
-  "AdvisaryModel"  -> {"chatgptcodex", "gpt-5.5"},
+  "ClaudeModel"    -> {"claudecode", "claude-opus-5"},
+  "AdvisaryModel"  -> {"chatgptcodex", "gpt-5.6-sol"},
   "MaxRounds"      -> 5]
 ```
 
-実装が完了すると、生成されたワークフローの起動関数がセッションと promptrouter に自動登録されます。進捗はウィンドウステータスバーにリアルタイム表示されます（実行モデル・フェーズ・ラウンド数）。
+実装が完了すると、生成されたワークフローの起動関数がセッションと promptrouter に自動登録されます。進捗はウィンドウステータスバーにリアルタイム表示されます（実行モデル・フェーズ・ラウンド数）。`$ClaudeUltraEnabled = False` に設定するとウルトラモデルへのアップグレードを抑制し、常に `$ClaudeModel` がそのまま使用されます。
 
-実装担当は fail-closed 方針で動作します。実装に必要な API（プロジェクト内 API・外部 API を問わず）を実物のドキュメント／コードで検証できなかった場合、推測でコードを生成せず実行を中断します。この場合、生成される結果の `FinalStatus` は `"Blocked"` となり、ノートブックには以下のような警告セルが（強調表示で）書き込まれます：
+実装担当は fail-closed 方針で動作します。実装に必要な API を実物のドキュメント／コードで検証できなかった場合、推測でコードを生成せず実行を中断します。この場合、生成される結果の `FinalStatus` は `"Blocked"` となり、ノートブックには以下のような警告セルが（強調表示で）書き込まれます：
 
 ```
 ⚠ Implementation STOPPED (fail-closed): a required API could not be verified against ground truth, so nothing was generated on a guessed API.
@@ -1232,6 +1263,8 @@ ShowClaudePalette[]
 ?$ClaudeLastRuntimeId
 ?$ClaudeDocUpdateStaleSeconds
 ?$ClaudeAdvisaryModel
+?$ClaudeUltraEnabled
+?ClaudeUltraModelSpec
 ?$ClaudeStandardFont
 ?CreateImplementationWorkflow
 ?LaunchImplementationWorkflow

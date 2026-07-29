@@ -6,12 +6,16 @@ claudecode パッケージは Wolfram Language / Mathematica から Claude Code 
 
 ### $ClaudeModel
 型: {String, String} (tuple) | "", 初期値: "" (未設定)
-Claude CLI に渡すプロバイダーとモデル名のペア。形式: {provider, modelName}。provider は "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "lmstudio"。パッケージロード直後は "" (未設定) で、この場合 Claude Code CLI 自身の既定モデルが使われる。ShowClaudePalette でのプロバイダー/モデル選択操作が $ClaudeModel にタプル値を反映する (claudecode/anthropic の既定候補は SourceVault 経由で動的解決、フォールバックは claude-opus-4-8)。
-例: $ClaudeModel = {"claudecode", "claude-opus-4-8"}; $ClaudeModel = {"anthropic", "claude-sonnet-4-6"}
+Claude CLI に渡すプロバイダーとモデル名のペア。形式: {provider, modelName}。provider は "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio"。パッケージロード直後は "" (未設定) で、この場合 Claude Code CLI 自身の既定モデルが使われる。ShowClaudePalette でのプロバイダー/モデル選択操作が $ClaudeModel にタプル値を反映する (claudecode/anthropic の既定候補は SourceVault 経由で動的解決、フォールバックは claude-opus-5)。
+例: $ClaudeModel = {"claudecode", "claude-opus-5"}; $ClaudeModel = {"anthropic", "claude-sonnet-5"}
 
 ### $ClaudeAdvisaryModel
 型: {String, String} | String, 初期値: {"chatgptcodex", "Automatic"}
 仕様レビュー・合意形成ワークフローでのアドバイザリー役 (Codex) のモデル指定。$ClaudeModel と同形式。bare provider string "chatgptcodex" も受け付ける。例: {"chatgptcodex", "gpt-5.5"}
+
+### $ClaudeUltraEnabled
+型: Boolean, 初期値: True
+True のとき、仕様生成/仕様実装ワークフローが $ClaudeModel ロールを ultra モデルクラス (SourceVault モデルレジストリの "code-ultra"/"ultra" インテント、例: claude-fable-5) にアップグレードする (利用可能な場合)。False で常に $ClaudeModel をそのまま使用する。アドバイザリーロール ($ClaudeAdvisaryModel) には影響しない。
 
 ### $ClaudeTimeout
 型: Integer, 初期値: 1200
@@ -47,7 +51,7 @@ OpenAI / ChatGPT Codex CLI の作業ディレクトリ。$ChatgptWorkingDirector
 Claude Code に Read 許可する追加ディレクトリリスト。iPrepareClaudeProjectDirectory が一時 settings.json に Read 許可を注入する。ノートブックの TaggingRules に NBSetAccessibleDirs で永続化可能。$packageDirectory 配下以外の新規ディレクトリは初回使用時にダイアログで許可を確認する ("Allow"/"Deny" の2択、TaggingRules "claudeDirPermissions" に "read"/"denied" として永続化、$packageDirectory・$ClaudeWorkingDirectory 配下は自動許可)。
 
 ### $ClaudeFallbackModels
-型: List, 初期値: {{"chatgptcodex","gpt-5.5"},{"anthropic","claude-opus-4-8"},{"openai","gpt-5.5"}}
+型: List, 初期値: {{"chatgptcodex","gpt-5.6-sol"},{"anthropic","claude-opus-5"},{"openai","gpt-5.5"}}
 フォールバックモデル優先順位。各要素は {"provider", "modelName"} または {"provider", "modelName", "url"}。NBAccess`NBSetFallbackModels に自動同期される。
 
 ### $ClaudeMDPath
@@ -112,7 +116,7 @@ ClaudeEval の詳細ログ。
 
 ### $ClaudeEvalNaturalDispatch
 型: Boolean, 初期値: True
-自然言語ディスパッチの有効フラグ。True のとき、ClaudeEval["..."] のタスク文字列が「今日からの予定」「概要を更新」等の定型パターンにマッチしたら、LLM を経由せず SourceVault の高レベル API を直接呼ぶ。False で完全スキップし全タスクを従来の LLM 経路に流す。
+自然言語ディスパッチの有効フラグ。True のとき、ClaudeEval["..."] のタスク文字列が定型パターンにマッチしたら LLM を経由せず SourceVault の高レベル API を直接呼ぶ。False で完全スキップし全タスクを従来の LLM 経路に流す。
 
 ### $ClaudeEvalNaturalVerbose
 型: Boolean, 初期値: False
@@ -124,7 +128,7 @@ True で自然言語ディスパッチのマッチ・実行サマリを表示す
 
 ### $ClaudeEvalLastProposedExprString
 型: String
-最後に ClaudeEval が提案した式の文字列。ute の TargetExprString に保存され Replayable 判定・ToInput に使う。実行されていない場合は Missing["NotCaptured"]。デバッグ用。
+最後に ClaudeEval が提案した式の文字列。実行されていない場合は Missing["NotCaptured"]。デバッグ用。
 
 ### $claudecodeVersion
 型: String
@@ -154,11 +158,11 @@ Claude CLI ハーネス (.claude/) の生成方式。"Direct" (既定) は従来
 
 ### $ClaudeMailFetchAsync
 型: Boolean, 初期値: True
-新着メール取得 (SourceVaultMailFetchNew) を別プロセス (wolframscript) で非同期実行し FrontEnd を塞がないかどうか。決定論的な「新着メール」ルートで使用し、現在の一覧を即返ししてバックグラウンドで取得・完了時に通知する。False で従来の同期 fetch に戻す (ライセンス席が逼迫して別プロセス起動が不安定な環境向け)。
+新着メール取得 (SourceVaultMailFetchNew) を別プロセス (wolframscript) で非同期実行し FrontEnd を塞がないかどうか。False で従来の同期 fetch に戻す。
 
 ### $ClaudePriorityModeUntil
 型: AbsoluteTime
-高優先度モードの終了絶対時刻。ClaudeBeginHighPriority が設定する。現在時刻がこれより前なら、共有 polling tick のうち "Suppressible"->True 登録の tick はスキップされる。
+高優先度モードの終了絶対時刻。ClaudeBeginHighPriority が設定する。現在時刻がこれより前なら "Suppressible"->True 登録の polling tick はスキップされる。
 
 ### $ClaudeEditModesVersion
 型: String
@@ -226,7 +230,7 @@ $ClaudeCloudSendPreflightLog の最大エントリ数。超過時は古いエン
 
 ### $ClaudeCloudSendPreflightContextResolver
 型: Function | None
-プリフライト判定時のコンテキスト解決フック。外部パッケージ (SourceVault 等) がロード時に登録する。claudecode.wl 自体は SourceVault に依存しない。resolver が失敗しても送信可否には影響せず、フィールドが Missing["ResolverFailed"] になるだけ。
+プリフライト判定時のコンテキスト解決フック。外部パッケージ (SourceVault 等) がロード時に登録する。resolver が失敗しても送信可否には影響せず、フィールドが Missing["ResolverFailed"] になるだけ。
 
 ### $ClaudeCloudSendRoutePolicy
 型: Association | String
@@ -279,11 +283,11 @@ True で iQueryLMStudioChat の戻り値先頭に tool_call のトレース (ツ
 
 ### $ClaudeLMStudioToolNudge
 型: String | None
-LM Studio MCP (integrations) 有効時にプロンプト先頭に前置するツール使用促進文。LM Studio には tool_choice 強制が無いため、web 検索ツールの積極利用を促す既定文が入る。None/"" で前置しない。
+LM Studio MCP (integrations) 有効時にプロンプト先頭に前置するツール使用促進文。None/"" で前置しない。
 
 ### $ClaudeLMStudioPaletteLoadedOnly
 型: Boolean, 初期値: True
-パレットの LM Studio モデル選択の情報源。True: メモリにロード済み (state=="loaded") のモデルのみ提示。False: ダウンロード済みの chat 対応モデル全体 (llm/vlm、embeddings 除く) を提示。LM Studio に到達不可の場合は SourceVault カタログ/静的リストにフォールバック。
+パレットの LM Studio モデル選択の情報源。True: メモリにロード済み (state=="loaded") のモデルのみ提示。False: ダウンロード済みの chat 対応モデル全体を提示。LM Studio に到達不可の場合は SourceVault カタログ/静的リストにフォールバック。
 
 ## LLM ルーティング・使用量管理
 
@@ -302,7 +306,7 @@ TaskClass の属性を返す。未知の class は "general" に降格し warn �
 
 ### $ClaudeSpendLimit
 型: Association | None, 初期値: None
-課金 API の日次上限。<|"DailyUSD" -> 5.0|> の形式。当日の LLMCall CostUSD 合計が上限以上のとき、ティア解決から metered provider (anthropic/openai) を除外する。claudecode CLI (定額) と lmstudio (無料) は対象外。全候補除外時は Failure["SpendLimitExceeded"] を返す。kill-switch であって精密会計ではない (CostUSD は CLI 由来の実測のみ)。
+課金 API の日次上限。<|"DailyUSD" -> 5.0|> の形式。当日の LLMCall CostUSD 合計が上限以上のとき、ティア解決から metered provider (anthropic/openai) を除外する。claudecode CLI (定額) と lmstudio (無料) は対象外。全候補除外時は Failure["SpendLimitExceeded"] を返す。
 
 ### $ClaudeAutoCompactThresholdTokens
 型: Integer, 初期値: 60000
@@ -322,7 +326,7 @@ LLM backend の事前可用性チェック (preflight)。lmstudio は /api/v0/mo
 
 ### $ClaudeRoutingModelPolicy
 型: Automatic | "Local" | "Cloud" | "Off"
-プロンプトルーターが軽量 LLM 作業に使うモデル層を制御する。Automatic (既定) は電源状態に従う (AC→ローカル軽量モデル、バッテリー→クラウド軽量モデル)。"Local"/"Cloud" で固定、"Off" は軽量層ディスパッチを止める (リクエストは $ClaudeModel にフォールスルー、LLM 不使用のコンテキストプランナーは動作継続)。ShowClaudePalette から切替可能。
+プロンプトルーターが軽量 LLM 作業に使うモデル層を制御する。Automatic (既定) は電源状態に従う (AC→ローカル軽量モデル、バッテリー→クラウド軽量モデル)。"Local"/"Cloud" で固定、"Off" は軽量層ディスパッチを止める。ShowClaudePalette から切替可能。
 
 ### ClaudeRoutingModelClass[] → "Local" | "Cloud" | "Off"
 $ClaudeRoutingModelPolicy の Automatic を現在の電源状態 (Windows: BatteryStatus WMI、他 OS では常に "AC" とみなす) に対して解決した実効クラスを返す。
@@ -360,7 +364,7 @@ Options: Fallback -> False, Model -> Automatic, PrivacyLevel -> Automatic, Timeo
 notebook 引数なしで非同期に問い合わせる (hidden な評価用ノートブックを内部で確保し ClaudeQueryAsync に委譲)。Workflow handler 内から呼ぶ「Z 案」パターンの主要 API。ScheduledTask 内で直接 CreateNotebook すると不安定なため、メインスレッドで一度 ClaudeEnsureSilentNotebook[] を呼んでおくことを推奨。
 → Null
 Options: ClaudeQueryAsync と同じ
-例: ClaudeQueryAsyncSilent[prompt, callback]; ClaudeQueryAsyncSilent[prompt, callback, Model -> {"anthropic", "claude-opus-4-8"}]
+例: ClaudeQueryAsyncSilent[prompt, callback]; ClaudeQueryAsyncSilent[prompt, callback, Model -> {"anthropic", "claude-opus-5"}]
 
 ### ClaudeWriteResponse[nb, text, opts]
 テキストをノートブック nb のセルに書き込む。
@@ -423,6 +427,10 @@ Options: Fallback -> False, StartTime -> Now, "UpdateApiMd" -> False
 画像付きで仕様を生成する。
 → Null (セルに出力)
 
+### ClaudeUltraModelSpec[] → {String, String} | $Failed
+### ClaudeUltraModelSpec[nb] → {String, String} | $Failed
+ultra クラスモデル (SourceVault モデルレジストリの "code-ultra"/"ultra" インテント、例: claude-fable-5) を {provider, modelId} spec として解決する。利用不可 (レジストリエントリ未登録、CLI 不可、アクティブなレート制限、$ClaudeUltraEnabled = False) の場合は $Failed を返す。プロバイダー優先順: CLI 優先で {"claudecode", <id>} (Claude Code CLI 経由、サブスクリプション内、ノートブック課金 API 禁止下でも使用可); {"anthropic", <id>} (metered API) はノートブック nb が paid-API 許可 (NBGetNotebookPaidAPIAllowed) を持つ場合のみ考慮。呼び出し元は $Failed 時に $ClaudeModel にフォールバックする。
+
 ### ClaudeSpecStatus[]
 現在のノートブックのプロジェクト (TaggingRule SourceVaultSpecProjectId) の仕様/合意形成ドラフティングステータスを表示する。ノートブックプロジェクトがない場合は実行中のバックグラウンド合意形成ジョブを一覧表示する。SourceVault のみで完結し、ワークフローエンジンは不要。
 → Dataset | Null
@@ -432,7 +440,7 @@ Options: Fallback -> False, StartTime -> Now, "UpdateApiMd" -> False
 → Dataset
 
 ### ClaudeSpecVersions[]
-現在のノートブックのプロジェクトの全 spec/review バージョンを Dataset として一覧表示する。列: Role, Round, Verdict, Seq, CreatedAtUTC, URI。SourceVault のポインタチェーン orch/<project>/spec, orch/<project>/review から取得する (合意形成フロー・単一モデル仕様フロー両方が書き込む)。表示は sv:// URI のみ (内部 ref は非表示)。
+現在のノートブックのプロジェクトの全 spec/review バージョンを Dataset として一覧表示する。列: Role, Round, Verdict, Seq, CreatedAtUTC, URI。SourceVault のポインタチェーン orch/<project>/spec, orch/<project>/review から取得する。表示は sv:// URI のみ (内部 ref は非表示)。
 → Dataset
 
 ### ClaudeSpecVersions["project"]
@@ -452,7 +460,7 @@ sv:// スナップショット URI (spec/review/requirements) を解決し内容
 → NotebookObject | $Failed
 
 ### CreateImplementationWorkflow[name, approvedSpec, opts]
-承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。$ClaudeModel が実装担当、$ClaudeAdvisaryModel が検証担当で、仕様との整合性を確認しフィードバックを合意まで繰り返す。複雑な作業はステージ分割して補助仕様をレビューしてから実装する。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
+承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。実装担当ロールは ultra モデルクラス (ClaudeUltraModelSpec: CLI 優先、paid-API ゲート付き) を優先し、$ClaudeModel にフォールバックする。検証担当 ($ClaudeAdvisaryModel) が仕様との整合性を確認しフィードバックを合意まで繰り返す。テスト通過ゲート (proven-code gate) あり。複雑な作業はステージ分割して補助仕様をレビューしてから実装する。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
 → String (バックグラウンドジョブ id)
 Options: "Notes" -> "" (追加指示), "ClaudeModel" -> Automatic ($ClaudeModel に解決), "AdvisaryModel" -> Automatic ($ClaudeAdvisaryModel に解決), "MaxRounds" -> Automatic, "Nb" -> Automatic (ターゲットノートブック), "Launch" -> True (完了後自動起動), "Project" -> "", "SpecURI" -> "", "SourceNotebookURI" -> ""
 
@@ -601,7 +609,7 @@ Options: ClaudeAttach と同じ
 → Null
 
 ### ClaudeWebSearch[query] → String | $Failed
-Web 検索を実行し結果をテキストで返す。Anthropic API の web_search ツールを使用する (課金あり)。オプション引数はない。
+Web 検索を実行し結果をテキストで返す。Anthropic API の web_search ツールを使用する (課金あり)。
 
 ### ClaudeWebFetch[url] → String | $Failed
 指定 URL の内容を取得し要約・抽出して返す。
@@ -844,12 +852,12 @@ nb の LLMGraph キャッシュをフラッシュする。
 → Null
 
 ### iLLMGraphNode[opts]
-LLMGraph ノードを解決・生成する内部ヘルパー。外部パッケージ参照用に Public 化されている (BeginPackage の公開シンボルリストに登録済み)。
+LLMGraph ノードを解決・生成する内部ヘルパー。外部パッケージ参照用に Public 化されている。
 → Association
 
 ### $iLLMGraphCache
 型: Association
-LLMGraph のインメモリキャッシュ。ノートブックオブジェクトをキーとして LLMGraph Association を保持する。外部パッケージ (ClaudeStateGraph 等) から直接参照する場合は iLLMGraphGetCached / iSaveNotebookLLMGraph 経由を推奨。
+LLMGraph のインメモリキャッシュ。ノートブックオブジェクトをキーとして LLMGraph Association を保持する。外部パッケージから直接参照する場合は iLLMGraphGetCached / iSaveNotebookLLMGraph 経由を推奨。
 
 ### $iLLMGraphCacheNB
 型: Association
@@ -1059,11 +1067,11 @@ Automatic (既定): 登録済みプランナー $ClaudeEvalContextPlanner があ
 
 ### $ClaudeEvalContextPlanner
 型: Function | None, 初期値: None
-package-neutral なオプションフック。SourceVault がロード時に設定することを想定。claudecode.wl 自体は SourceVault に依存しない。将来のプランナー駆動コンテキストプラン用に予約。
+package-neutral なオプションフック。SourceVault がロード時に設定することを想定。claudecode.wl 自体は SourceVault に依存しない。
 
 ### $ClaudeEvalUnknownContextSoftLimit
 型: Integer, 初期値: 4096
-モデルの最大コンテキスト長が不明な場合に使うトークンソフトリミット。特定モデルのコンテキスト長を前提とした値ではない。
+モデルの最大コンテキスト長が不明な場合に使うトークンソフトリミット。
 
 ### $ClaudeEvalContextNotebookCharBudget
 型: Integer, 初期値: 8000
@@ -1079,11 +1087,11 @@ $ClaudeEvalContextPlanning が有効かつプランの History Mode が "Recent"
 
 ### $ClaudeEvalPromptRouterDispatch
 型: Automatic | True | False, 初期値: Automatic
-ClaudeEval の文字列タスクを、旧来の自然言語ディスパッチより前に SourceVault PromptRouter に通すかどうかを制御する。Automatic (既定): SourceVaultPromptRouterActiveQ["ClaudeEval"] に従う (ClaudeOrchestrator ロード後に True になる)。True: Order 2 では Automatic と同じ (活性ゲートは依然適用)。False: PromptRouter を完全にスキップし旧来の自然言語ディスパッチのみを使う。
+ClaudeEval の文字列タスクを、旧来の自然言語ディスパッチより前に SourceVault PromptRouter に通すかどうかを制御する。Automatic (既定): SourceVaultPromptRouterActiveQ["ClaudeEval"] に従う。True: Automatic と同じ (活性ゲートは依然適用)。False: PromptRouter を完全にスキップし旧来の自然言語ディスパッチのみを使う。
 
 ### $ClaudeEvalPromptRouterPreemptsNatural
 型: Boolean, 初期値: True
-順序制御。True (既定): PromptRouter が旧来の自然言語ディスパッチより先に実行され、PromptRouter のパラメータ抽出がバイパスされない。旧来のディスパッチは PromptRouter が NotDispatched を返した場合のみ発火する。False: 旧来のディスパッチが先に実行される (移行期間の安全弁)。
+順序制御。True (既定): PromptRouter が旧来の自然言語ディスパッチより先に実行される。False: 旧来のディスパッチが先に実行される (移行期間の安全弁)。
 
 ## ポーリング・スケジューリング
 
@@ -1108,7 +1116,7 @@ Options: NBAccess`NBEnqueueFinalAction のオプションを継承
 ## パレット・UI
 
 ### ShowClaudePalette[]
-Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → lmstudio。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-4-8/claude-sonnet-4-6/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
+Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/kimi/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。kimi は Moonshot AI Kimi シリーズ (kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
 → NotebookObject
 
 ### ClaudeRegisterPaletteServiceControl[spec]
@@ -1232,7 +1240,7 @@ LLM 出力テキストから不要なヘッダー・末尾空白等を除去す�
 → String
 
 ### iMakeBat[...]
-Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する内部ヘルパー。iMakeBatStreamJson (ストリーミング JSON 出力版) / iMakeBatVerbose (詳細ログ版) と対になる。外部パッケージ参照用に Public 化されている (BeginPackage の公開シンボルリストに登録済み)。
+Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する内部ヘルパー。iMakeBatStreamJson (ストリーミング JSON 出力版) / iMakeBatVerbose (詳細ログ版) と対になる。外部パッケージ参照用に Public 化されている。
 → String
 
 ### $iMediaMaxImageSize
@@ -1249,7 +1257,7 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `AutoCellize` → True (ClaudeQueryAsync): 応答を自動でノートブックセルに変換する
 - `Model` → Automatic ($ClaudeModel に解決): 使用モデルの {provider, modelName} tuple または String
 - `Timeout` → Automatic ($ClaudeTimeout に解決): タイムアウト秒数
-- `WebFetch` → ClaudeQuery は False、ClaudeEval は Automatic: True で必ず Web 検索 (URL フェッチ) を行う。Anthropic API 経由で課金が発生するため Fallback->True の場合のみ有効。Automatic は ClaudeEval のみで Claude がタスクを分析し必要なら自動実行。単なる「URLを自動フェッチする」フラグではない
+- `WebFetch` → ClaudeQuery は False、ClaudeEval は Automatic: True で必ず Web 検索 (URL フェッチ) を行う。Anthropic API 経由で課金が発生するため Fallback->True の場合のみ有効。Automatic は ClaudeEval のみで Claude がタスクを分析し必要なら自動実行
 - `WebSearch` → True (既定で有効): Claude Code CLI 組み込みの Web 検索ツールを許可する (API 経由の課金は発生しない)。False で無効化。WebFetch (課金あり) とは別機能
 - `PrivacySpec` → Automatic: プライバシー設定 (Automatic で AutoPrivate に従う)
 - `PrivacyLevel` → Automatic: ClaudeQuerySync/ClaudeQueryAsync のプライバシーレベル指定
@@ -1283,4 +1291,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl) と再度突き合わせて同期を確認した (2026-07-18 パス、2回目)。今回のチャンクは BeginPackage 直後の内部関数クリーンアップリスト、公開シンボルリスト、および主要変数 ($ClaudeModel, $ClaudeAdvisaryModel, $ClaudeStandardFont, $ClaudePrivateModel, $ClaudePackageKeywordMap, $ClaudePaletteServiceControls, $ClaudeCLIMCPServers, $ClaudeWorkingDirectory, $ClaudeSnapshots, $ClaudeAccessibleDirs, ディレクトリアクセス許可システム, $ClaudeFallbackModels, Fallback/Integrations/References/Demos/Disclaimer/License/Acknowledgments の usage 文字列, $ClaudeDocRetryDelay/$ClaudeDocMaxRetries/$ClaudeDocMaxChunkChars, $ClaudeDocModel, $ClaudeEvalMaxDepth, パッケージ更新排他ロック iAcquirePackageLock/iReleasePackageLock, ドキュメント更新ストール検出 iDocUpdateActiveQ, $ClaudeTestModel, 有料API許可 facade (NBGetNotebookPaidAPIAllowed/NBSetNotebookPaidAPIAllowed), ShowClaudePalette 内部テーブル ($iPaletteProviderOrder, $iPaletteModelsByProvider, $iPaletteHeavyIntent, $iPaletteDefaultClaudeModel, iPaletteSourceVaultModels, iPaletteResolveHeavyModel, iPaletteModelsFor, iPaletteShortenModelName の冒頭部分)) の定義行に及んだ。BeginPackage の公開シンボルリストと本ドキュメント記載シンボルを再照合したが、新規追加・削除は検出されなかった。すべての型・デフォルト値・オプション既定値は実ソースの定義行と一致することを再確認し、既存記述との矛盾は見つからなかった。ソースファイルは大容量のため、今回のチャンクも Public symbols 宣言ブロックと周辺初期化コードの範囲に限られており、後続の実装本体 (関数本体、Private セクションの残り) は今回のパスでは再検証できていない。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl) と再度突き合わせて同期を確認した (2026-07-29 パス、3回目)。今回のチャンクで新たに検出・追加した項目: $ClaudeUltraEnabled (新規公開変数)、ClaudeUltraModelSpec[] / ClaudeUltraModelSpec[nb] (新規公開関数)、"kimi" プロバイダー ($iPaletteProviderOrder および $iPaletteModelsByProvider に追加、候補モデル: kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)、ShowClaudePalette の Provider サイクル説明に "kimi" を追記、claudecode/anthropic モデル候補を claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 に更新、$ClaudeFallbackModels 既定値を {{"chatgptcodex","gpt-5.6-sol"}, {"anthropic","claude-opus-5"}, {"openai","gpt-5.5"}} に更新、CreateImplementationWorkflow の説明に ultra モデルクラス利用と TestGate/Proven ゲートを追記。BeginPackage の公開シンボルリストと本ドキュメント記載シンボルを再照合し、他の削除・追加は検出されなかった。

@@ -169,6 +169,7 @@ Quiet[Scan[
    "CreateClaudeSession","ClaudeRestoreSession","Inherit",
    "ClaudeListSessions","ClaudeDeleteSession","ClaudeShowHistory",
    "ClaudeAttach","ClaudeDetach","ClaudeAttachments","ClearAttachments",
+   "ClaudeAttachmentMetadata","ClaudeAttachmentCachedFile",
    "ClaudeRateLimitStatus","ClaudeRateLimitClear",
    "MarkConfidential","UnmarkConfidential","IsConfidential","Confidential","NonConfidential",
    "ScanConfidentialCells","ShowClaudePalette","ClaudeQueryShowContext",
@@ -262,6 +263,12 @@ $ClaudeModel::usage =
 $ClaudeAdvisaryModel::usage =
   "$ClaudeAdvisaryModel is the {provider, model} spec for the advisory (Codex) role in the spec review-and-revise orchestrator workflow, matching the form of $ClaudeModel. The Claude Code role uses $ClaudeModel; the Codex (advisory) role uses $ClaudeAdvisaryModel. Default: {\"chatgptcodex\", \"Automatic\"} (Automatic = the codex CLI default model). Example: {\"chatgptcodex\", \"gpt-5.5\"}. A bare provider string \"chatgptcodex\" is also accepted.";
 
+$ClaudeUltraEnabled::usage =
+  "$ClaudeUltraEnabled (default True) lets the spec-generation / spec-implementation workflows upgrade the $ClaudeModel role to the ultra model class (SourceVault model-registry intents \"code-ultra\" / \"ultra\", e.g. claude-fable-5) when it is available. Set to False to always use $ClaudeModel unchanged. The advisory role ($ClaudeAdvisaryModel) is never affected.";
+
+ClaudeUltraModelSpec::usage =
+  "ClaudeUltraModelSpec[] / ClaudeUltraModelSpec[nb] resolves the ultra-class model as a {provider, modelId} spec, or returns $Failed when no ultra model is usable (registry entry missing, CLI unavailable, an active rate limit, or $ClaudeUltraEnabled = False). Provider preference is CLI-first: {\"claudecode\", <id>} via the Claude Code CLI (subscription; allowed even under the notebook paid-API ban); {\"anthropic\", <id>} (metered API) is considered ONLY when the notebook nb has paid-API permission (NBGetNotebookPaidAPIAllowed). Callers fall back to $ClaudeModel on $Failed.";
+
 ClaudeSpecStatus::usage =
   "ClaudeSpecStatus[] shows the SourceVault spec/consensus drafting status for the current notebook's project (TaggingRule SourceVaultSpecProjectId), or lists running background consensus jobs if there is no notebook project. ClaudeSpecStatus[\"project\"] reports a specific project: spec/review version counts, latest verdict, latest spec sv:// URI, last update time, and whether a background consensus job is still running. Uses only SourceVault (no workflow engine needed).";
 
@@ -275,7 +282,7 @@ ClaudeOpenSourceVaultURI::usage =
   "ClaudeOpenSourceVaultURI[uri] resolves a sv:// snapshot URI (spec/review/requirements) and opens its stored content in a NEW notebook window (metadata grid + Text body, and Findings for reviews). This is the action behind the clickable sv:// links the spec/consensus flow writes into the notebook. Returns the new NotebookObject, or $Failed if the snapshot cannot be loaded.";
 
 CreateImplementationWorkflow::usage =
-  "CreateImplementationWorkflow[name, approvedSpec] implements an approved design spec AS a codified SVWorkflow_<Name> package under SourceVault_workflows/<name>/, using the spec-impl SourceVault workflow run in a background driver. approvedSpec may be an sv:// URI, a snapshot ref, or raw spec text. The implementer ($ClaudeModel) writes the package and the verifier ($ClaudeAdvisaryModel) checks it against the spec, feeding back until consensus; complex work is split into stages via an auxiliary spec reviewed first. Progress (running model + phase) is shown in the WindowStatusArea; on completion the generated workflow's launch function is registered (session + promptrouter) and a summary is written back to the notebook. Options: \"Notes\", \"ClaudeModel\", \"AdvisaryModel\", \"MaxRounds\", \"Nb\", \"Launch\". Returns a background job id.";
+  "CreateImplementationWorkflow[name, approvedSpec] implements an approved design spec AS a codified SVWorkflow_<Name> package under SourceVault_workflows/<name>/, using the spec-impl SourceVault workflow run in a background driver. approvedSpec may be an sv:// URI, a snapshot ref, or raw spec text. The implementer role prefers the ultra model class (ClaudeUltraModelSpec: CLI-first, paid-API-gated; falls back to $ClaudeModel) and writes the package incl. its test file; the verifier ($ClaudeAdvisaryModel) checks it against the spec, feeding back until consensus. Approval additionally requires the generated test to pass in a fresh kernel (proven-code gate; summary keys TestGate/Proven). Complex work is split into stages via an auxiliary spec reviewed first; an ultra-class implementer also chooses the implementation style (native/dag/petri) at planning. Progress (running model + phase) is shown in the WindowStatusArea; on completion the generated workflow's launch function is registered (session + promptrouter) and a summary is written back to the notebook. Options: \"Notes\", \"ClaudeModel\", \"AdvisaryModel\", \"MaxRounds\", \"Nb\", \"Launch\". Returns a background job id.";
 
 LaunchImplementationWorkflow::usage =
   "LaunchImplementationWorkflow[name, args] loads the generated codified workflow named name (SourceVault`SourceVaultLoadWorkflow[name]) and invokes its launch entry (WorkflowInfo[\"Launch\"]) with the given args. Returns an association with the launch context, entry, and result. Use this to (re)launch a workflow created by CreateImplementationWorkflow.";
@@ -562,7 +569,7 @@ Acknowledgments::usage =
 
 
 If[!ListQ[$ClaudeFallbackModels],
-  $ClaudeFallbackModels = {{"chatgptcodex","gpt-5.5"},{"anthropic", $iModelOpus}, {"openai", "gpt-5.5"}}];
+  $ClaudeFallbackModels = {{"chatgptcodex","gpt-5.6-sol"},{"anthropic", $iModelOpus}, {"openai", "gpt-5.5"}}];
 
 (* $ClaudeFallbackModels \:3092 NBAccess \:306b\:540c\:671f *)
 iSyncFallbackModelsToNBAccess[] :=
@@ -677,7 +684,7 @@ If[Quiet[DownValues[NBAccess`NBSetNotebookPaidAPIAllowed]] === {},
 
 (* Phase 28 (2026-05-12): \:30d1\:30ec\:30c3\:30c8\:30c7\:30b6\:30a4\:30f3\:3092 Provider + Model \:306e 2 \:30dc\:30bf\:30f3\:306b\:62e1\:5f35\:3002
    \:65e7 $iPaletteModel ("opus"/"sonnet"/"default") \:3068\:306f\:72ec\:7acb\:3057\:3066\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:3092\:7ba1\:7406\:3059\:308b\:3002 *)
-$iPaletteProvider  = "claudecode";    (* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "lmstudio" *)
+$iPaletteProvider  = "claudecode";    (* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio" *)
 
 (* claudecode/anthropic palette default model: the minor version is owned by
    SourceVault's model-registry. The palette resolves it via
@@ -685,30 +692,37 @@ $iPaletteProvider  = "claudecode";    (* "claudecode" | "chatgptcodex" | "anthro
    not hard-code a minor version. The static value below is only a fallback for
    environments where SourceVault is not loaded; bump it on a model release. *)
 $iPaletteHeavyIntent = <|"claudecode" -> "code-heavy", "anthropic" -> "heavy"|>;
-$iPaletteDefaultClaudeModel = "claude-opus-4-8";
+$iPaletteDefaultClaudeModel = "claude-opus-5";
 
 $iPaletteModelName = $iPaletteDefaultClaudeModel; (* \:73fe\:30d7\:30ed\:30d0\:30a4\:30c0\:5185\:306e\:30e2\:30c7\:30eb\:540d *)
 
 (* Provider \:5faa\:74b0\:9806\:5e8f\:3002Phase 5 (2026-05-26): chatgptcodex \:3092
    claudecode \:306e\:6b21\:306b\:8ffd\:52a0\:3002\:3069\:3061\:3089\:3082\:30b5\:30d6\:30b9\:30af\:30ea\:30d7\:30b7\:30e7\:30f3\:7d4c\:7531\:306e
    CLI \:306a\:306e\:3067\:8ab2\:91d1 API \:7981\:6b62\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3067\:3082\:5229\:7528\:53ef\:80fd\:3002 *)
-$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "lmstudio"};
+$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "kimi", "lmstudio"};
 
 (* \:5404 Provider \:306e\:5019\:88dc\:30e2\:30c7\:30eb\:4e00\:89a7 (Phase 28) \:3002
    \:30af\:30ea\:30c3\:30af\:3067\:3053\:306e\:5217\:3092\:5faa\:74b0\:9078\:629e\:3059\:308b\:3002 *)
 $iPaletteModelsByProvider = <|
-  "claudecode"   -> {"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"},
+  "claudecode"   -> {"claude-opus-5", "claude-fable-5", "claude-sonnet-5",
+                     "claude-haiku-4-5"},
   (* chatgptcodex: \:30e2\:30c7\:30eb\:5019\:88dc\:306f SourceVault \:304c\:4e00\:5143\:7ba1\:7406\:3059\:308b\:3002
      iPaletteModelsFor \:304c SourceVaultListModels \:7d4c\:7531\:3067\:53d6\:5f97\:3059\:308b\:3002
      \:3053\:306e\:9759\:7684\:30a8\:30f3\:30c8\:30ea\:306f SourceVault \:672a\:30ed\:30fc\:30c9\:6642\:306e\:6700\:5c0f\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3002 *)
-  "chatgptcodex" -> {"Automatic"},
-  "anthropic"    -> {"claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"},
+  "chatgptcodex" -> {"Automatic", "gpt-5.6-sol"},
+  "anthropic"    -> {"claude-opus-5", "claude-fable-5", "claude-sonnet-5",
+                     "claude-haiku-4-5"},
   "openai"       -> {"gpt-5.5", "gpt-5.5-pro", "gpt-5-mini", "gpt-5-nano"},
   (* z.ai (GLM \:30b7\:30ea\:30fc\:30ba)\:3002\:5019\:88dc\:306f\:3053\:3053\:3067\:5faa\:74b0\:3055\:308c\:308b\:3002id \:306f
      NBAccess`NBListProviderModels["zai"] \:306e\:30e9\:30a4\:30d6\:4e00\:89a7\:306b\:5408\:308f\:305b\:3066\:3042\:308b\:3002
      \:65b0\:30e2\:30c7\:30eb\:8ffd\:52a0\:6642\:306f\:3053\:306e\:30ea\:30b9\:30c8\:306b id \:3092\:8db3\:3059\:3002 *)
   "zai"          -> {"glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo",
                      "glm-4.7", "glm-4.6", "glm-4.5-air", "glm-4.5"},
+  (* Kimi (Moonshot AI)\:3002z.ai \:3068\:540c\:3058\:304f OpenAI \:4e92\:63db\:306e\:8ab2\:91d1\:30af\:30e9\:30a6\:30c9\:3002
+     id \:306f NBAccess`NBListProviderModels["kimi"] \:306e\:30e9\:30a4\:30d6\:4e00\:89a7\:306b\:5408\:308f\:305b\:3066\:3042\:308b\:3002
+     \:65b0\:30e2\:30c7\:30eb\:8ffd\:52a0\:6642\:306f\:3053\:306e\:30ea\:30b9\:30c8\:306b id \:3092\:8db3\:3059\:3002 *)
+  "kimi"         -> {"kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed",
+                     "kimi-k2.6"},
   "lmstudio"     -> {"qwen3.6-27b", "qwen3.5-27b", "qwen3-coder-30b", "gpt-oss-120b"}
 |>;
 
@@ -729,7 +743,7 @@ iPaletteSourceVaultModels[_] := {};
    Missing[] when SourceVault is unavailable / cannot resolve. This is what
    makes the palette's minor version track SourceVault's registry instead of a
    frozen hard-coded id: ClaudeResolveModel[provider, intent] returns the
-   currently registered best model for the intent (e.g. claude-opus-4-8). *)
+   currently registered best model for the intent (e.g. claude-opus-5). *)
 iPaletteResolveHeavyModel[provider_String] :=
   Module[{intent, res},
     intent = Lookup[$iPaletteHeavyIntent, provider, ""];
@@ -787,24 +801,42 @@ iPaletteModelsFor[_] := {$iPaletteDefaultClaudeModel};
 
 (* \:30e2\:30c7\:30eb\:540d\:3092\:30d1\:30ec\:30c3\:30c8\:30dc\:30bf\:30f3\:7528\:306b\:77ed\:304f\:30e9\:30d9\:30eb\:5316 *)
 iPaletteShortenModelName[mn_String] :=
-  Module[{caps, fam, maj, min},
+  Module[{caps, fam, maj, min, famLabel},
     If[mn === "", Return["default"]];
-    (* claude-<family>-<major>-<minor>[...] -> "Family major.minor", so the
-       displayed minor version follows the model id with no code edits on a
-       version bump (e.g. claude-opus-4-8 -> "Opus 4.8"). *)
+    famLabel = Switch[#,
+      "opus", "Opus", "sonnet", "Sonnet", "haiku", "Haiku", "fable", "Fable",
+      _, #] &;
+    (* claude-<family>-<major>[-<minor>][...] -> "Family major[.minor]", so the
+       displayed version follows the model id with no code edits on a
+       version bump (e.g. claude-opus-4-8 -> "Opus 4.8", claude-opus-5 ->
+       "Opus 5"). \:30de\:30a4\:30ca\:30fc\:7121\:3057 id (claude-opus-5 / claude-fable-5) \:3082
+       \:6271\:3046: \:7121\:3044\:3068 "Opus" \:3060\:3051\:306b\:306a\:308a\:4e16\:4ee3\:9055\:3044\:304c\:30d1\:30ec\:30c3\:30c8\:4e0a\:3067\:533a\:5225\:3067\:304d\:306a\:3044\:3002 *)
     caps = StringCases[mn,
-      StartOfString ~~ "claude-" ~~ f : ("opus" | "sonnet" | "haiku") ~~ "-" ~~
+      StartOfString ~~ "claude-" ~~
+        f : ("opus" | "sonnet" | "haiku" | "fable") ~~ "-" ~~
         a : (DigitCharacter ..) ~~ "-" ~~ b : (DigitCharacter ..) ~~ ___ :>
         {f, a, b}];
     If[caps =!= {},
       {fam, maj, min} = First[caps];
-      Return[
-        Switch[fam, "opus", "Opus", "sonnet", "Sonnet", "haiku", "Haiku",
-          _, fam] <> " " <> maj <> "." <> min]];
+      Return[famLabel[fam] <> " " <> maj <> "." <> min]];
+    caps = StringCases[mn,
+      StartOfString ~~ "claude-" ~~
+        f : ("opus" | "sonnet" | "haiku" | "fable") ~~ "-" ~~
+        a : (DigitCharacter ..) ~~ EndOfString :> {f, a}];
+    If[caps =!= {},
+      {fam, maj} = First[caps];
+      Return[famLabel[fam] <> " " <> maj]];
     Which[
       StringStartsQ[mn, "claude-opus"],   "Opus",
       StringStartsQ[mn, "claude-sonnet"], "Sonnet",
       StringStartsQ[mn, "claude-haiku"],  "Haiku",
+      StringStartsQ[mn, "claude-fable"],  "Fable",
+      (* kimi-*: \:7d20\:76f4\:306b 14 \:6587\:5b57\:5207\:308a\:8a70\:3081\:3059\:308b\:3068 kimi-k2.7-code \:3068
+         kimi-k2.7-code-highspeed \:304c\:540c\:3058\:30e9\:30d9\:30eb\:306b\:306a\:308a\:5faa\:74b0\:3067\:533a\:5225\:3067\:304d\:306a\:3044\:306e\:3067\:3001
+         \:5171\:901a\:63a5\:982d\:8f9e "kimi-" \:3092\:843d\:3068\:3057 "-highspeed" \:3092 "-hs" \:306b\:7e2e\:3081\:308b\:3002 *)
+      StringStartsQ[mn, "kimi-"],
+        StringTake[
+          StringReplace[StringDrop[mn, 5], "-highspeed" -> "-hs"], UpTo[14]],
       True, StringTake[mn, UpTo[14]]
     ]
   ];
@@ -818,6 +850,7 @@ iPaletteProviderLabel[p_String] :=
     "anthropic",    "Anthropic",
     "openai",       "OpenAI",
     "zai",          "Z.AI",
+    "kimi",         "Kimi",
     "lmstudio",     "LMStudio",
     _, p];
 iPaletteProviderLabel[_] := "ClaudeCode";
@@ -881,7 +914,7 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
       v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteModel"}]];
       Which[
         v === "opus",    ($iPaletteProvider = "claudecode"; $iPaletteModelName = $iPaletteDefaultClaudeModel),
-        v === "sonnet",  ($iPaletteProvider = "claudecode"; $iPaletteModelName = "claude-sonnet-4-6"),
+        v === "sonnet",  ($iPaletteProvider = "claudecode"; $iPaletteModelName = "claude-sonnet-5"),
         v === "default", ($iPaletteProvider = "claudecode"; $iPaletteModelName = $iPaletteDefaultClaudeModel),
         True,            ($iPaletteProvider = "claudecode"; $iPaletteModelName = $iPaletteDefaultClaudeModel)
       ];
@@ -1026,9 +1059,12 @@ ClaudeQuery::usage =
   "ClaudeShowHistory[\"name\"] \:306f\:6307\:5b9a\:540d\:306e\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\:3092\:8868\:793a\:3059\:308b\:3002";
 ClaudeAttach::usage =
   "ClaudeAttach[path] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306b\:53c2\:8003\:8cc7\:6599\:3092\:30a2\:30bf\:30c3\:30c1\:3059\:308b\:3002\n" <>
-  "ClaudeAttach[url] \:306f URL \:306e\:30da\:30fc\:30b8\:3092 PDF \:5316\:3057\:3066\:30ad\:30e3\:30c3\:30b7\:30e5\:3057\:30a2\:30bf\:30c3\:30c1\:3059\:308b\:3002\n" <>
+  "ClaudeAttach[url] \:306f URL \:3092 SourceVault \:306b ingest \:3057 (\:53ef\:80fd\:306a\:5834\:5408\:5fc5\:305a)\:3001\n" <>
+  "  raw \:304c PDF \:306a\:3089\:305d\:308c\:3092\:3001HTML \:306a\:3089 PDF \:5316\:3057\:3066\:30ad\:30e3\:30c3\:30b7\:30e5\:30fb\:30a2\:30bf\:30c3\:30c1\:3059\:308b\:3002\n" <>
+  "ClaudeAttach[\"sv://...\"] \:306f SourceVault URI \:3092\:89e3\:6c7a\:3057 raw snapshot \:3092\:30a2\:30bf\:30c3\:30c1\:3059\:308b\:3002\n" <>
   "ClaudeAttach[session, path] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:306b\:30a2\:30bf\:30c3\:30c1\:3059\:308b\:3002\n" <>
   "\:30a2\:30bf\:30c3\:30c1\:3055\:308c\:305f\:30d5\:30a1\:30a4\:30eb\:306f ClaudeQuery/ClaudeEval \:6642\:306b\:81ea\:52d5\:7684\:306b Read \:3055\:308c\:308b\:3002\n" <>
+  "URL/sv \:30a2\:30bf\:30c3\:30c1\:306e\:6b63\:6e96 URI \:306f\:30e1\:30bf\:30c7\:30fc\:30bf svURI \:306b\:8a18\:9332\:3055\:308c\:308b (ClaudeAttachmentMetadata)\:3002\n" <>
   "Options: Keywords -> {}, Title -> None, Refetch -> False\:3002\n" <>
   "Keywords \:3067\:767b\:9332\:3059\:308b\:3068\:30d7\:30ed\:30f3\:30d7\:30c8\:4e2d\:306e\:30ad\:30fc\:30ef\:30fc\:30c9\:306b\:5fdc\:3058\:3066\:81ea\:52d5\:6ce8\:5165\:3055\:308c\:308b\:3002";
 ClaudeDetach::usage =
@@ -1069,6 +1105,14 @@ ClaudeRateLimitClear::usage =
 ClaudeAttachments::usage =
   "ClaudeAttachments[] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:4e00\:89a7\:3092\:8fd4\:3059\:3002\n" <>
   "ClaudeAttachments[session] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:4e00\:89a7\:3092\:8fd4\:3059\:3002";
+ClaudeAttachmentMetadata::usage =
+  "ClaudeAttachmentMetadata[] \:306f\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:30e1\:30bf\:30c7\:30fc\:30bf DB (_meta.json) \:5168\:4f53\:3092\n" <>
+  "<|cachedPath -> <|source, svURI, title, keywords, cachedAt|>, ...|> \:3067\:8fd4\:3059\:3002\n" <>
+  "ClaudeAttachmentMetadata[cachedPath] \:306f\:6307\:5b9a\:30ad\:30e3\:30c3\:30b7\:30e5\:30d5\:30a1\:30a4\:30eb\:306e\:30a8\:30f3\:30c8\:30ea\:3092\:8fd4\:3059\:3002";
+ClaudeAttachmentCachedFile::usage =
+  "ClaudeAttachmentCachedFile[ref] \:306f\:53c2\:7167 (\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9 / URL / sv:// URI) \:306b\:5bfe\:5fdc\:3059\:308b\n" <>
+  "\:30ed\:30fc\:30ab\:30eb\:30ad\:30e3\:30c3\:30b7\:30e5\:30d5\:30a1\:30a4\:30eb\:306e\:30d1\:30b9\:3092\:8fd4\:3059\:3002\:672a\:30ad\:30e3\:30c3\:30b7\:30e5\:306a\:3089 $Failed\:3002\n" <>
+  "\:30e1\:30bf\:30c7\:30fc\:30bf source/svURI \:4e00\:81f4 \[RightArrow] \:30cf\:30c3\:30b7\:30e5\:540d\:898f\:5247 \:306e\:9806\:306b\:63a2\:3059\:3002";
 ClearAttachments::usage =
   "ClearAttachments[] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5168\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:3092\:30af\:30ea\:30a2\:3059\:308b\:3002\n" <>
   "ClearAttachments[session] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5168\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:3092\:30af\:30ea\:30a2\:3059\:308b\:3002";
@@ -1943,6 +1987,7 @@ Begin["`Private`"];(* ==========================================================
 
 If[!ValueQ[$ClaudeModel], $ClaudeModel = ""];
 If[!ValueQ[$ClaudeAdvisaryModel], $ClaudeAdvisaryModel = {"chatgptcodex", "Automatic"}];
+If[!ValueQ[$ClaudeUltraEnabled], $ClaudeUltraEnabled = True];
 If[!ValueQ[$ClaudeTimeout], $ClaudeTimeout = 1200];
 If[!ValueQ[$ClaudePrivateModel], $ClaudePrivateModel = {}];
 
@@ -2043,7 +2088,7 @@ If[!ValueQ[$iNBAccessOnKernelsReady], $iNBAccessOnKernelsReady = False];
    $ClaudeModel \:306e\:578b\:3082\:3053\:308c\:306b\:4f34\:3044 List \:3092\:30c7\:30d5\:30a9\:30eb\:30c8\:3068\:3059\:308b\:304c\:3001
    String \:4e92\:63db\:3068\:3057\:3066\:30e6\:30fc\:30b6\:304c "claude-opus-4-7" \:306e\:3088\:3046\:306b\:8a2d\:5b9a\:3057\:3066\:3082\:52d5\:304f\:3088\:3046
    CLI \:306e --model \:53c2\:7167\:7b87\:6240\:3084\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0\:306f List/String \:4e21\:578b\:3092\:30b5\:30dd\:30fc\:30c8\:3059\:308b\:3002 *)
-$iModelOpus   = {"claudecode", "claude-opus-4-8"};
+$iModelOpus   = {"claudecode", "claude-opus-5"};
 $iModelSonnet = {"claudecode", "claude-sonnet-4-6"};
 
 iL[ja_String, en_String] := If[$Language === "Japanese", ja, en];
@@ -2517,7 +2562,7 @@ iCloudSendRouteLabel[provider_, url_:Automatic] :=
         "ClaudeCodeCLI",
       prov === "anthropic",
         "CloudLLM",
-      prov === "openai" || prov === "zai",
+      prov === "openai" || prov === "zai" || prov === "kimi",
         If[localURLQ, "LocalOpenAICompatible", "CloudLLM"],
       MemberQ[{"lmstudio", "ollama", "llamacpp", "localai", "local",
                "koboldcpp", "textgenwebui"}, prov],
@@ -2549,14 +2594,14 @@ iCloudSendPreflightDecision[
     routePolicy = Lookup[$ClaudeCloudSendRoutePolicy,
       route, "Local"];
 
-    If[!MemberQ[{"anthropic", "openai", "zai"}, prov],
+    If[!MemberQ[{"anthropic", "openai", "zai", "kimi"}, prov],
       decision = <|"Decision" -> "Permit",
         "Reason" -> "ProviderNotExternalCloud",
         "Provider" -> prov,
         "Route" -> route, "RoutePolicy" -> routePolicy|>;
       Return[iCloudSendPreflightRecordLog[decision]]];
 
-    If[(prov === "openai" || prov === "zai") && StringQ[url] &&
+    If[(prov === "openai" || prov === "zai" || prov === "kimi") && StringQ[url] &&
         !iCloudExternalURLQ[url],
       decision = <|"Decision" -> "Permit",
         "Reason" -> "LocalOpenAICompatibleURL",
@@ -5129,18 +5174,31 @@ iClaudeActiveLLMJobCount[] :=
         Lookup[a, "phase", ""]]]];
 
 (* tick インスタンスの起動ラッパ: 開始/終了をフライトレコーダに記録し、
-   完了時に in-flight マーカーと stale カウンタをクリアする。 *)
+   完了時に in-flight マーカーと stale カウンタをクリアする。
+   2026-07-29 (freeze fix): 実行前に FE 応答性 probe を追加。tick handler
+   (DAG step の NBMakeContextPacket / NotebookWrite / CurrentValue 等) は
+   FE 同期呼び出しを含むため、FE が Dynamic 評価等で塞がっている瞬間に
+   走らせると相互待ちで永久ハングする (2026-07-29 19:14 の
+   "tick-start | dag-..." に tick-end が無い実例)。probe が通らなければ
+   この周回は諦めて in-flight マーカーを解き、次の共有 tick に委ねる。
+   headless ($FrontEnd === Null) は probe が常に True で挙動不変。 *)
 iClaudeScheduleTickInstance[kk_String, fn_] :=
   iScheduleAtAsync[
     Module[{t0 = AbsoluteTime[]},
-      iClaudeFreezeLog["tick-start", kk];
-      Quiet @ Check[fn[], Null];
-      iClaudeFreezeLog["tick-end",
-        kk <> " " <> ToString[Round[AbsoluteTime[] - t0, 0.1]] <> "s"];
-      If[AssociationQ[$claudeProgress] && KeyExistsQ[$claudeProgress, kk] &&
-         AssociationQ[$claudeProgress[kk]],
-        $claudeProgress[kk]["tickInFlightAt"] = None;
-        $claudeProgress[kk]["tickStaleCount"] = 0]],
+      If[! iClaudeFEResponsiveQ[],
+        iClaudeFreezeLog["tick-defer-febusy", kk];
+        If[AssociationQ[$claudeProgress] && KeyExistsQ[$claudeProgress, kk] &&
+           AssociationQ[$claudeProgress[kk]],
+          $claudeProgress[kk]["tickInFlightAt"] = None],
+        (* FE 応答あり: 通常実行 *)
+        iClaudeFreezeLog["tick-start", kk];
+        Quiet @ Check[fn[], Null];
+        iClaudeFreezeLog["tick-end",
+          kk <> " " <> ToString[Round[AbsoluteTime[] - t0, 0.1]] <> "s"];
+        If[AssociationQ[$claudeProgress] && KeyExistsQ[$claudeProgress, kk] &&
+           AssociationQ[$claudeProgress[kk]],
+          $claudeProgress[kk]["tickInFlightAt"] = None;
+          $claudeProgress[kk]["tickStaleCount"] = 0]]],
     Now];
 
 (* ════════════════════════════════════════════════════════
@@ -10167,6 +10225,16 @@ ClaudeWebFetch[url_String, instruction_String] :=
    ============================================================ *)
 $iZAIChatCompletionsURL = "https://api.z.ai/api/paas/v4/chat/completions";
 
+(* ============================================================
+   Kimi (Moonshot AI) \:3082 z.ai \:3068\:540c\:3058\:304f OpenAI \:4e92\:63db\:306e\:30af\:30e9\:30a6\:30c9 provider\:3002
+   \:65e2\:5b58\:306e OpenAI \:7d4c\:8def (iQueryOpenAIAPI / iPrepareAnthropicPS1 \:306e openai \:5f62\:5f0f) \:3092
+   \:305d\:306e\:307e\:307e\:6d41\:7528\:3057\:3001base URL \:3060\:3051\:5dee\:3057\:66ff\:3048\:308b\:3002API \:30ad\:30fc\:306f
+   NBGetAPIKey["kimi"] (SystemCredential KIMI_API_KEY) \:7d4c\:7531\:3067\:53d6\:5f97\:3059\:308b\:3002
+   \:30a8\:30f3\:30c9\:30dd\:30a4\:30f3\:30c8\:306f\:56fd\:969b\:7248 (api.moonshot.ai)\:3002\:4e2d\:56fd\:672c\:571f\:7248\:306e
+   api.moonshot.cn \:3092\:4f7f\:3046\:5834\:5408\:306f modelSpec \:306e\:7b2c 3 \:8981\:7d20\:3067 URL \:3092\:6307\:5b9a\:3059\:308b\:3002
+   ============================================================ *)
+$iKimiChatCompletionsURL = "https://api.moonshot.ai/v1/chat/completions";
+
 iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
     customURL_String:"https://api.openai.com/v1/chat/completions"] :=
   Module[{url, body, resp, bodyStr, json, choices, msg, preflight},
@@ -10652,7 +10720,7 @@ If[! AssociationQ[$ClaudeLLMTierTable],
     "summarize"     -> {{"lmstudio", Automatic}, {"claudecode", "sonnet"}},
     "securityjudge" -> {{"lmstudio", Automatic}},
     "mailtriage"    -> {{"lmstudio", Automatic}, {"claudecode", "sonnet"}},
-    "code"          -> {{"claudecode", "opus"}, {"anthropic", "claude-opus-4-8"}},
+    "code"          -> {{"claudecode", "opus"}, {"anthropic", "claude-opus-5"}},
     "design"        -> {{"claudecode", "opus"}},
     "general"       -> Automatic
   |>];
@@ -10897,8 +10965,10 @@ iClaudeTierNextCandidate[tcEff_String, current_] := Module[
 If[! ValueQ[$ClaudeSpendLimit], $ClaudeSpendLimit = None];
 If[! AssociationQ[$iClaudeSpendCache], $iClaudeSpendCache = <||>];
 
+(* zai (z.ai) / kimi (Moonshot) も従量課金のクラウド provider なので
+   SpendLimit の対象に含める (CLI 定額 / lmstudio 無料は対象外)。 *)
 iClaudeMeteredProviderQ[cand_List] :=
-  MemberQ[{"anthropic", "openai"},
+  MemberQ[{"anthropic", "openai", "zai", "kimi"},
     ToLowerCase[ToString[First[cand, ""]]]];
 
 iClaudeSpentTodayUSD[] := Module[{now = AbsoluteTime[], c, v},
@@ -11290,8 +11360,8 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
         AssociationQ[capEntry] && KeyExistsQ[capEntry, "Paid"],
           TrueQ[capEntry["Paid"]],
         True,
-          (* 未登録: provider 名で fallback (zai=z.ai も課金 API) *)
-          MemberQ[{"anthropic", "openai", "zai"}, prov]
+          (* 未登録: provider 名で fallback (zai=z.ai / kimi=Moonshot も課金 API) *)
+          MemberQ[{"anthropic", "openai", "zai", "kimi"}, prov]
       ];
       If[isPaid,
         Module[{targetNb, nbAllowed},
@@ -11328,6 +11398,13 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
           If[customURL =!= "",
             iEnsureChatCompletionsPath[customURL],
             $iZAIChatCompletionsURL]],
+      "kimi",
+        (* Kimi (Moonshot AI) \:3082 OpenAI \:4e92\:63db\:3002customURL \:6307\:5b9a\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:512a\:5148\:3057\:3001
+           \:306a\:3051\:308c\:3070 Kimi \:306e\:65e2\:5b9a\:30a8\:30f3\:30c9\:30dd\:30a4\:30f3\:30c8\:3092\:4f7f\:3046 *)
+        iQueryOpenAIAPI[apiKey, model, prompt,
+          If[customURL =!= "",
+            iEnsureChatCompletionsPath[customURL],
+            $iKimiChatCompletionsURL]],
       _,
         iL["Error: \:672a\:5bfe\:5fdc\:30d7\:30ed\:30d0\:30a4\:30c0: ", "Error: Unsupported provider: "] <> provider]
   ];
@@ -11876,6 +11953,10 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
         $iZAIChatCompletionsURL,
       ToLowerCase[provider] === "zai" && customURL =!= "",
         iEnsureChatCompletionsPath[customURL],
+      ToLowerCase[provider] === "kimi" && customURL === "",
+        $iKimiChatCompletionsURL,
+      ToLowerCase[provider] === "kimi" && customURL =!= "",
+        iEnsureChatCompletionsPath[customURL],
       customURL =!= "",
         customURL,
       True,
@@ -11907,10 +11988,12 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
           FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]],
       iFallbackNotifyAndLog[nb, noticeText, RGBColor[0.8, 0.4, 0]]]];
     (* \[HorizontalLine]\[HorizontalLine] PS1 \:6e96\:5099: lmstudio \:306f MCP \:5bfe\:5fdc\:7248 (/api/v1/chat), \:305d\:308c\:4ee5\:5916\:306f\:5f93\:6765\:7248 \[HorizontalLine]\[HorizontalLine] *)
-    prepared = If[ToLowerCase[provider] === "lmstudio",
+    prepared = If[ToLowerCase[provider] === "lmstudio" && Length[mediaFiles] === 0,
       (* LM Studio MCP \:7d4c\:8def: /api/v1/chat + integrations \:5bfe\:5fdc\:3002
          StartProcess / ScheduledTask \:306f\:65e2\:5b58\:30ed\:30b8\:30c3\:30af\:3092\:305d\:306e\:307e\:307e\:4f7f\:3046\:305f\:3081
-         \:623b\:308a\:5024\:306f iPrepareAnthropicPS1 \:3068\:540c\:5f62\:5f0f (promptFile \:306b body.json) *)
+         \:623b\:308a\:5024\:306f iPrepareAnthropicPS1 \:3068\:540c\:5f62\:5f0f (promptFile \:306b body.json)\:3002
+         2026-07-29: mediaFiles \:304c\:3042\:308b\:5834\:5408\:306f /api/v1/chat \:304c text-only \:306e\:305f\:3081
+         \:4e0b\:306e iPrepareAnthropicPS1 (openai \:5f62\:5f0f image_url) \:7d4c\:8def\:306b\:56de\:3059\:3002 *)
       iPrepareLMStudioMCPPS1[apiKey, model, prompt,
         iEnsureLMStudioV1ChatPath[If[customURL =!= "", customURL, "http://localhost:1234"]],
         resolvedTimeout],
@@ -11918,8 +12001,15 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
         Which[
           ToLowerCase[provider] === "anthropic" && customURL === "",
             "https://api.anthropic.com/v1/messages",
+          (* 2026-07-29: lmstudio + media \:306f OpenAI \:4e92\:63db chat/completions \:3078\:3002
+             customURL \:306f base URL (\:4f8b: http://127.0.0.1:1234) \:306e\:305f\:3081
+             \:5fc5\:305a path \:3092\:88dc\:5b8c\:3059\:308b\:3002 *)
+          ToLowerCase[provider] === "lmstudio",
+            iEnsureChatCompletionsPath[
+              If[customURL =!= "", customURL, "http://localhost:1234"]],
           customURL =!= "", customURL,
           ToLowerCase[provider] === "zai", $iZAIChatCompletionsURL,
+          ToLowerCase[provider] === "kimi", $iKimiChatCompletionsURL,
           True, "https://api.openai.com/v1/chat/completions"],
         provider,
         resolvedTimeout, mediaFiles]
@@ -13211,6 +13301,8 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
         "https://api.openai.com/v1/chat/completions",
       providerLower === "zai",
         $iZAIChatCompletionsURL,
+      providerLower === "kimi",
+        $iKimiChatCompletionsURL,
       providerLower === "anthropic",
         "https://api.anthropic.com/v1/messages",
       True,
@@ -13236,8 +13328,8 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
         AssociationQ[capEntry] && KeyExistsQ[capEntry, "Paid"],
           TrueQ[capEntry["Paid"]],
         True,
-          (* \:672a\:767b\:9332: provider \:540d\:3067 fallback (zai=z.ai \:3082\:8ab2\:91d1 API) *)
-          MemberQ[{"anthropic", "openai", "zai"}, providerLower]
+          (* \:672a\:767b\:9332: provider \:540d\:3067 fallback (zai=z.ai / kimi=Moonshot \:3082\:8ab2\:91d1 API) *)
+          MemberQ[{"anthropic", "openai", "zai", "kimi"}, providerLower]
       ];
       If[isPaid,
         Module[{targetNb, nbAllowed},
@@ -13291,7 +13383,8 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
     (* \[HorizontalLine]\[HorizontalLine] \:30a8\:30f3\:30c9\:30dd\:30a4\:30f3\:30c8 URL (provider \:5225) \[HorizontalLine]\[HorizontalLine] *)
     url = Which[
       ListQ[modelSpec] && Length[modelSpec] >= 3 && StringQ[modelSpec[[3]]] && modelSpec[[3]] =!= "",
-        If[providerLower === "openai" || providerLower === "zai" || providerLower === "lmstudio",
+        If[providerLower === "openai" || providerLower === "zai" ||
+           providerLower === "kimi" || providerLower === "lmstudio",
           iEnsureChatCompletionsPath[modelSpec[[3]]],
           modelSpec[[3]]],
       providerLower === "anthropic",
@@ -13300,6 +13393,8 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
         "https://api.openai.com/v1/chat/completions",
       providerLower === "zai",
         $iZAIChatCompletionsURL,
+      providerLower === "kimi",
+        $iKimiChatCompletionsURL,
       providerLower === "lmstudio",
         "http://localhost:1234/v1/chat/completions",
       True,
@@ -13310,7 +13405,8 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
        OpenAI / LM Studio \:306f iQueryOpenAIAPI \:3092\:6d41\:7528\:3067\:304d\:308b (\:65e2\:5b58\:3001\:540c\:671f\:578b)\:3002
        Anthropic \:306f\:4ee5\:524d\:901a\:308a URLRead \:7d4c\:7531\:3067 ByteArray \:9001\:53d7\:4fe1\:3002 *)
     Which[
-      providerLower === "openai" || providerLower === "zai" || providerLower === "lmstudio",
+      providerLower === "openai" || providerLower === "zai" ||
+          providerLower === "kimi" || providerLower === "lmstudio",
         Return @ iQueryOpenAIAPI[apiKey, model, prompt, url],
       providerLower === "anthropic",
         Null,  (* \:4ee5\:4e0b\:306e Anthropic \:8def\:7d50\:3092\:7d9a\:884c *)
@@ -15621,6 +15717,51 @@ iClaudeEvalExtractPeriod[task_String] :=
     None
   ];
 
+(* Access-level restriction from the task text, e.g.
+   "\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:30ec\:30d9\:30eb0.5\:672a\:6e80\:306e\:4eca\:65e5\:306e\:4e88\:5b9a" /
+   "\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb 0.7" / "PL0.5\:4ee5\:4e0b" / "\:6a5f\:5bc6\:306a\:3057".
+   Every downstream comparison is PL <= level, so the strict qualifier \:672a\:6e80
+   lowers the bound by a hair; \:4ee5\:4e0b (inclusive) passes it as-is. Phrase
+   forms ("\:6a5f\:5bc6\:306a\:3057" etc.) mean "cloud-safe only" = strictly below the
+   0.5 confidential threshold. Returns a machine real in [0,1], or None. *)
+$iClaudeEvalLevelStrictEps = 0.0001;
+iClaudeEvalExtractAccessLevel[task_String] := Module[
+  {m, v, qual},
+  If[StringContainsQ[task, "\:6a5f\:5bc6\:306a\:3057"] ||
+     StringContainsQ[task, "\:6a5f\:5bc6\:629c\:304d"] ||
+     StringContainsQ[task, "\:6a5f\:5bc6\:3092\:9664"] ||
+     StringContainsQ[task, "\:516c\:958b\:306e\:307f"] ||
+     StringContainsQ[task, "\:975e\:6a5f\:5bc6"],
+    Return[0.5 - $iClaudeEvalLevelStrictEps]];
+  (* keyword + number (+ optional qualifier) *)
+  m = Quiet @ Check[
+    StringCases[task,
+      ("\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:30ec\:30d9\:30eb" |
+       "\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb" | "\:6a5f\:5bc6\:30ec\:30d9\:30eb" |
+       "privacylevel" | "privacy level" | "accesslevel" | "access level" |
+       "PL") ~~ Whitespace ... ~~
+        v : (DigitCharacter .. ~~ (("." ~~ DigitCharacter ..) | "")) ~~
+        q : ("\:672a\:6e80" | "\:4ee5\:4e0b" | "") :> {v, q},
+      1, IgnoreCase -> True],
+    {}];
+  (* bare decimal + qualifier ("0.5\:672a\:6e80"): the decimal point is required
+     so an integer like "3\:65e5\:4ee5\:4e0b" never matches *)
+  If[!(ListQ[m] && Length[m] > 0),
+    m = Quiet @ Check[
+      StringCases[task,
+        v : (DigitCharacter .. ~~ "." ~~ DigitCharacter ..) ~~
+          q : ("\:672a\:6e80" | "\:4ee5\:4e0b") :> {v, q},
+        1],
+      {}]];
+  If[!(ListQ[m] && Length[m] > 0), Return[None]];
+  {v, qual} = First[m];
+  v = Quiet @ Check[ToExpression[v], None];
+  If[!NumberQ[v], Return[None]];
+  v = Clip[N[v], {0., 1.}];
+  If[qual === "\:672a\:6e80",
+    Max[0., v - $iClaudeEvalLevelStrictEps], v]];
+iClaudeEvalExtractAccessLevel[___] := None;
+
 (* \:30b9\:30b3\:30fc\:30d7\:3092\:30bf\:30b9\:30af\:6587\:5b57\:5217\:304b\:3089\:63a8\:5b9a\:3002\:30c7\:30d5\:30a9\:30eb\:30c8\:306f Automatic ($onWork) \:3002 *)
 iClaudeEvalExtractScope[task_String] :=
   Module[{},
@@ -15685,6 +15826,13 @@ $iClaudeEvalNaturalPatterns := {
      (SourceVaultUpcomingSchedule) \:3092\:4e00\:767a\:8d77\:52d5\:3059\:308b\:5165\:53e3 (R9) *)
   ("\:4e88\:5b9a" | "\:30b9\:30b1\:30b8\:30e5\:30fc\:30eb" | "\:30bf\:30b9\:30af" |
    "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30ea\:30b9\:30c8" | "notebook list" |
+   (* 2026-07-22: "\:65e5\:4ed8\:8a9e + \:30ce\:30fc\:30c8\:30d6\:30c3\:30af" (PromptRouter \:306e\:6b63\:898f\:5165\:53e3) \:3092
+      \:3053\:3053\:306b\:3082\:7f6e\:304f\:3002PromptRouter \:304c\:964d\:308a\:305f\:3068\:304d\:306b LLM \:8ee2\:843d = FE \:30c7\:30c3\:30c9
+      \:30ed\:30c3\:30af\:7d4c\:8def\:3078\:884c\:304b\:305a\:3001\:975e\:30a8\:30b9\:30ab\:30ec\:30fc\:30c8\:306e schedule \:5206\:5c90\:3067\:53d7\:3051\:6b62\:3081\:308b\:305f\:3081\:3002
+      \:5b9a\:578b\:53e5\:306e\:307f\:306a\:306e\:3067\:300c\:65b0\:898f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:300d\:7cfb\:3068\:306f\:885d\:7a81\:3057\:306a\:3044\:3002 *)
+   "\:4eca\:65e5\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af" | "\:660e\:65e5\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af" |
+   "\:4eca\:9031\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af" | "\:6765\:9031\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af" |
+   "\:4eca\:6708\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af" |
    "upcoming" | "schedule") -> "schedule",
 
   (* \:300c\:65b0\:7740\:30e1\:30fc\:30eb(\:306e\:30ea\:30b9\:30c8)\:300d\:7cfb: FetchNew + MailView \:3092 LLM \:629c\:304d\:3067\:5b9f\:884c\:3002
@@ -15697,36 +15845,90 @@ $iClaudeEvalNaturalPatterns := {
 (* \:5b9f\:884c\:30cf\:30f3\:30c9\:30e9\:3002\:5b8c\:5168\:306a\:30c7\:30a3\:30b9\:30d1\:30c3\:30c1\:7d50\:679c (\:5024) \:307e\:305f\:306f $iClaudeEvalNotDispatched \:3092\:8fd4\:3059\:3002 *)
 iClaudeEvalNaturalAct[action_String, task_String, optsList_List] :=
   Module[{verbose = TrueQ[$ClaudeEvalNaturalVerbose],
-          periodDays, scope, result, mbox},
+          periodDays, scope, accessLevel, agendaLoaded, result, mbox},
     Switch[action,
       "schedule",
         periodDays = iClaudeEvalExtractPeriod[task];
+        (* 2026-07-22: bare day word + "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af" -> the same window the
+           PromptRouter uses, so the fallback shows what the prompt asked for. *)
+        If[periodDays === None &&
+           (StringContainsQ[task, "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af"] ||
+            StringContainsQ[ToLowerCase[task], "notebook"]),
+          periodDays = Which[
+            StringContainsQ[task, "\:660e\:5f8c\:65e5"], 3,
+            StringContainsQ[task, "\:660e\:65e5"], 2,
+            StringContainsQ[task, "\:4eca\:65e5"] ||
+              StringContainsQ[task, "\:672c\:65e5"], 1,
+            StringContainsQ[task, "\:4eca\:9031"], 7,
+            StringContainsQ[task, "\:6765\:9031"], 14,
+            StringContainsQ[task, "\:4eca\:6708"], 31,
+            True, None]];
         If[periodDays === None, periodDays = 7];
         scope = iClaudeEvalExtractScope[task];
+        accessLevel = iClaudeEvalExtractAccessLevel[task];
         If[verbose,
           Print[Style[
             "[Natural Dispatch] schedule: Scope=" <> ToString[scope] <>
-            ", Period=" <> ToString[periodDays] <> " Days",
+            ", Period=" <> ToString[periodDays] <> " Days" <>
+            If[NumberQ[accessLevel],
+              ", AccessLevel=" <> ToString[accessLevel], ""],
             Italic, RGBColor[0.2, 0.5, 0.7]]]];
         (* R9 (2026-07-17): a plain schedule prompt opens the unified daily
            agenda (calendar + notebook deadlines + actionable mails). The
            notebook-list dashboard stays in charge when the prompt names
-           notebooks (\:30ce\:30fc\:30c8\:30d6\:30c3\:30af/notebook) or pins a scope. *)
-        result = Quiet @ Check[
-          If[!StringContainsQ[task, "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af"] &&
-             !StringContainsQ[ToLowerCase[task], "notebook"] &&
-             scope === Automatic &&
-             Length[DownValues[
-               Symbol["SourceVault`SourceVaultRoutineAgendaView"]]] > 0,
-            Symbol["SourceVault`SourceVaultRoutineAgendaView"][
-              Quantity[periodDays, "Days"]],
-            Symbol["SourceVault`SourceVaultUpcomingSchedule"][
-              "Scope" -> scope,
-              "Period" -> Quantity[periodDays, "Days"],
-              "IncludeOverdue" -> True,
-              "Refresh" -> "Never",
-              "FallbackToCloud" -> "Deny"]],
-          $Failed];
+           notebooks (\:30ce\:30fc\:30c8\:30d6\:30c3\:30af/notebook) or pins a scope -- EXCEPT when
+           the prompt restricts the access level: only the agenda honors
+           PrivacySpec (SourceVaultUpcomingSchedule has none), and a
+           requested restriction is NEVER silently dropped. *)
+        (* DownValues is HoldAll: DownValues[Symbol["..."]] does NOT evaluate
+           the Symbol call -> DownValues::sym every time and Length[held expr]
+           = 1 masquerading as "loaded" (2026-07-09 known trap; the previously
+           Quiet-masked stray message here). Inject the real symbol via With;
+           the Names guard also avoids creating it when SourceVault is absent
+           (promptrouter's forward declaration creates the name WITHOUT
+           definitions, so the DownValues check stays essential). *)
+        agendaLoaded =
+          Names["SourceVault`SourceVaultRoutineAgendaView"] =!= {} &&
+          With[{sym = Symbol["SourceVault`SourceVaultRoutineAgendaView"]},
+            Length[DownValues[sym]]] > 0;
+        result = Which[
+          (* fail-closed: no agenda -> refuse, never unrestricted data *)
+          NumberQ[accessLevel] && !agendaLoaded,
+            Failure["ScheduleAccessLevelUnavailable", <|
+              "MessageTemplate" ->
+                "An access-level-restricted schedule needs SourceVault" <>
+                "RoutineAgendaView, which is not loaded.",
+              "AccessLevel" -> accessLevel|>],
+          (NumberQ[accessLevel] ||
+           (!StringContainsQ[task, "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af"] &&
+            !StringContainsQ[ToLowerCase[task], "notebook"] &&
+            scope === Automatic)) && agendaLoaded,
+            (* judged by RESULT, not by Check: the live agenda pipeline can
+               emit stray (harmless) messages from calendar/onwork/mail
+               reads outside its internal Quiet@Check guards; a blanket
+               Check turned those into a spurious ScheduleUnavailable even
+               though the view had rendered fine. Quiet keeps the output
+               clean; only a genuinely failed VALUE degrades to $Failed. *)
+            Module[{v = Quiet[
+                Symbol["SourceVault`SourceVaultRoutineAgendaView"][
+                  Quantity[periodDays, "Days"],
+                  (* option symbols match by NAME across contexts (verified:
+                     OptionValue/FilterRules), so our own PrivacySpec symbol
+                     reaches the SourceVault-side option correctly *)
+                  Sequence @@ If[NumberQ[accessLevel],
+                    {PrivacySpec -> <|"AccessLevel" -> accessLevel|>},
+                    {}]]]},
+              If[v === $Failed || v === Null || v === $Aborted ||
+                 MatchQ[v, _Failure], $Failed, v]],
+          True,
+            Quiet @ Check[
+              Symbol["SourceVault`SourceVaultUpcomingSchedule"][
+                "Scope" -> scope,
+                "Period" -> Quantity[periodDays, "Days"],
+                "IncludeOverdue" -> True,
+                "Refresh" -> "Never",
+                "FallbackToCloud" -> "Deny"],
+              $Failed]];
         (* 2026-06-30 freeze fix (A): when the deterministic schedule lookup
            FAILS, do NOT escalate an unambiguous schedule prompt to the
            FE-coupled LLM runtime. The runtime's async completion callback
@@ -15943,6 +16145,9 @@ iClaudeRuntimeSubmitProposal[proposal_] :=
     (* head is allowlisted ReadOnly -> release and evaluate.
        The evaluated result (e.g. the decorated schedule Grid)
        is what ClaudeEval returns. *)
+    (* 2026-07-22 freeze breadcrumb: the released call is the last thing that
+       can block before ClaudeEval returns. *)
+    iClaudeFreezeLog["eval-release-start", headName];
     (* \:518d\:5b9f\:884c\:7528: \:5b9f\:884c\:3059\:308b\:63d0\:6848\:5f0f\:3092 InputForm \:6587\:5b57\:5217\:5316\:3057\:3066\:5171\:6709\:5909\:6570\:306b\:683c\:7d0d\:3002
        SaveLastPrompt \:304c\:3053\:308c\:3092\:62fe\:3063\:3066 PromptRoute.TargetExprString \:306b\:4fdd\:5b58\:3057\:3001
        ToInput \:30dc\:30bf\:30f3\:3084 Replayable \:5224\:5b9a\:306b\:4f7f\:3046\:3002held \:306f HoldComplete[expr]\:3002 *)
@@ -15950,15 +16155,30 @@ iClaudeRuntimeSubmitProposal[proposal_] :=
       ClaudeCode`$ClaudeEvalLastProposedExprString =
         iClaudeRuntimeHeldToInputString[held],
       ClaudeCode`$ClaudeEvalLastProposedExprString = Missing["NotCaptured"]];
-    Quiet @ Check[
-      ReleaseHold[held],
-      $iClaudeEvalNotDispatched]
+    Module[{relResult},
+      relResult = Quiet @ Check[
+        ReleaseHold[held],
+        $iClaudeEvalNotDispatched];
+      iClaudeFreezeLog["eval-release-end", ToString[Head[relResult]]];
+      relResult]
   ];
 iClaudeRuntimeSubmitProposal[___] := $iClaudeEvalNotDispatched;
 
 iClaudeEvalTryPromptRouter[task_String, optsList_List] :=
   Module[{activeName, proposeName, activeQ, proposal,
           savedName, savedProposal, decision, method},
+    (* Access-level-restricted SCHEDULE prompts bypass the router entirely:
+       router proposals (saved or dynamic agenda / notebook-list) carry no
+       PrivacySpec, so letting one fire would silently drop the requested
+       restriction. The natural schedule branch (iClaudeEvalNaturalAct)
+       parses the level and fail-closes. Scoped to schedule-classified
+       prompts so unrelated tasks that merely mention a level keep their
+       normal routing. *)
+    If[NumberQ[iClaudeEvalExtractAccessLevel[task]] &&
+       With[{m = SelectFirst[$iClaudeEvalNaturalPatterns,
+           Quiet @ Check[StringContainsQ[task, First[#]], False] &, None]},
+         m =!= None && Last[m] === "schedule"],
+      Return[$iClaudeEvalNotDispatched]];
     (* Order 9 saved-prompt proposer (weak call). This runs BEFORE the
        Orchestrator activity gate because saved-prompt proposals (exact
        match -> primary auto-execute, or the saved-versions UI) do not
@@ -16025,19 +16245,16 @@ iClaudeEvalTryDispatch[task_, optsList_List] :=
        task 文字列自体は汚さない (PromptRouter のルーティング判定を保つ)。
        仕様 claude_multi_agent_orchestration_spec §5「共有状態は明示的
        artifact で受け渡す」に準拠 (変数値を artifact 化して渡す)。 *)
-    If[StringQ[task],
-      Quiet @ Check[
-        Module[{nbCtx, nbObj, afterIdx},
-          nbObj   = EvaluationNotebook[];
-          afterIdx = Quiet @ Check[Length[Cells[nbObj]], 0];
-          If[!IntegerQ[afterIdx], afterIdx = 0];
-          nbCtx = If[Head[nbObj] === NotebookObject,
-            iCaptureNotebookContext[nbObj, afterIdx], ""];
-          If[!StringQ[nbCtx], nbCtx = ""];
-          (* Orchestrator が読む共有変数にセット (未ロードでも害なし) *)
-          ClaudeCode`$ClaudeEvalNotebookContext = nbCtx;
-        ],
-        (ClaudeCode`$ClaudeEvalNotebookContext = ""; Null)]];
+    (* 2026-07-22: the capture is DEFERRED to just before the worker-spawning
+       path below. It is the only front-end round trip on this entry (Cells /
+       NotebookRead), it grows with the notebook's accumulated output, and a
+       measured run took 33 s for it while every other step was instant --
+       with a blocked front end it never returns at all and the kernel hangs.
+       The deterministic paths (PromptRouter / natural dispatch) route on the
+       prompt text alone and never read it, so they must not pay for it.
+       Cleared here so nothing can read a STALE capture from an earlier run;
+       "" is the same value the failure fallback already produces. *)
+    If[StringQ[task], ClaudeCode`$ClaudeEvalNotebookContext = ""];
     (* Order 2: SourceVault PromptRouter dispatch.
        prDispatch =!= False means the PromptRouter path is considered;
        the final activity gate (ClaudeOrchestrator loaded, etc.) lives
@@ -16048,7 +16265,11 @@ iClaudeEvalTryDispatch[task_, optsList_List] :=
     prPreempts = TrueQ[ClaudeCode`$ClaudeEvalPromptRouterPreemptsNatural];
 
     If[StringQ[task] && prDispatch =!= False && prPreempts,
+      iClaudeFreezeLog["eval-router-start"];
       prRouterResult = iClaudeEvalTryPromptRouter[task, optsList];
+      iClaudeFreezeLog["eval-router-end",
+        If[prRouterResult =!= $iClaudeEvalNotDispatched,
+          "dispatched", "NotDispatched"]];
       If[prRouterResult =!= $iClaudeEvalNotDispatched,
         Return[prRouterResult]]];
 
@@ -16068,6 +16289,24 @@ iClaudeEvalTryDispatch[task_, optsList_List] :=
       If[prRouterResult =!= $iClaudeEvalNotDispatched,
         Return[prRouterResult]]];
 
+    (* deferred notebook-context capture (see the note at the top of this
+       function). Only the Orchestrator / CLI-worker hook below consumes
+       $ClaudeEvalNotebookContext, and only this branch can reach it. *)
+    If[StringQ[task],
+      iClaudeFreezeLog["eval-nbctx-start"];
+      Quiet @ Check[
+        Module[{nbCtx, nbObj, afterIdx},
+          nbObj   = EvaluationNotebook[];
+          afterIdx = Quiet @ Check[Length[Cells[nbObj]], 0];
+          If[!IntegerQ[afterIdx], afterIdx = 0];
+          nbCtx = If[Head[nbObj] === NotebookObject,
+            iCaptureNotebookContext[nbObj, afterIdx], ""];
+          If[!StringQ[nbCtx], nbCtx = ""];
+          (* Orchestrator が読む共有変数にセット (未ロードでも害なし) *)
+          ClaudeCode`$ClaudeEvalNotebookContext = nbCtx;
+        ],
+        (ClaudeCode`$ClaudeEvalNotebookContext = ""; Null)];
+      iClaudeFreezeLog["eval-nbctx-end"]];
     mode = ClaudeCode`$ClaudeEvalMode;
     If[mode === "Single", Return[$iClaudeEvalNotDispatched]];
     hook = ClaudeCode`$ClaudeEvalHook;
@@ -16192,8 +16431,13 @@ iClaudePaidModelGuard[modelSpec_] :=
   ];
 
 ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, singleResult, paidGuard, privGuard0},
+    (* 2026-07-22 freeze breadcrumbs: the FE-coupled entry guards run before
+       any dispatch, so a hang here leaves a "-start" with no "-end" in
+       claude_freeze_log.txt. ClaudeFreezeReport[] reads them back. *)
+    iClaudeFreezeLog["eval-entry", StringTake[task, UpTo[40]]];
     (* Phase 28 (2026-05-12): \:8ab2\:91d1 API \:30e2\:30c7\:30eb\:30ac\:30fc\:30c9 *)
     paidGuard = iClaudePaidModelGuard[OptionValue[Model]];
+    iClaudeFreezeLog["eval-paidguard-end"];
     If[StringQ[paidGuard], Return[paidGuard]];
     (* Stage 9 P1.5: Private \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30e2\:30c7\:30eb\:691c\:8a3c (\:6700\:65e9\:671f\:30fbdispatch \:524d)\:3002
        dispatch (PromptRouter/Orchestrator) \:3084 Runtime Bridge \:306a\:3069\:5168\:7d4c\:8def\:3092
@@ -16203,6 +16447,7 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, single
     privGuard0 = iClaudeEvalPrivacyGuard[
       EvaluationNotebook[],
       iResolveDefaultModelSpec[Replace[OptionValue[Model], Except[_List] -> Automatic]]];
+    iClaudeFreezeLog["eval-privguard-end"];
     If[Lookup[privGuard0, "Action", "Allow"] === "Deny",
       nbPrint[EvaluationNotebook[], iL[
         "\:26d4 \:3053\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306f Private \:5ba3\:8a00\:6e08\:307f\:3067\:3059\:3002\:6307\:5b9a\:30e2\:30c7\:30eb (",
@@ -16220,7 +16465,11 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, single
           "RateLimitType" ->
             Lookup[$iLastRateLimitInfo, "RateLimitType", None],
           "Message" -> "CLI call skipped: rate limit active."|>]]];
+    iClaudeFreezeLog["eval-ratelimit-end"];
     dispatchResult = iClaudeEvalTryDispatch[task, {opts}];
+    iClaudeFreezeLog["eval-dispatch-end",
+      If[dispatchResult =!= $iClaudeEvalNotDispatched,
+        "dispatched", "NOT-dispatched -> LLM path"]];
     If[dispatchResult =!= $iClaudeEvalNotDispatched, Return[dispatchResult]];
     (* Order 9: genuine LLM run (dispatch declined) -> mark the prompt
        and open a fresh auto-save turn. Each executed proposal of this
@@ -16291,6 +16540,11 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, single
 
 (* \:30ea\:30b9\:30c8\:5165\:529b\:7248: {"\:6307\:793a", data, Image, ...} *)
 ClaudeEval[items_List, opts:OptionsPattern[]] := Module[{dispatchResult, paidGuard},
+    (* 2026-07-29 freeze breadcrumbs: the list entry had NO flight-recorder
+       lines, so the 2026-07-29 image-eval freeze left zero trace from this
+       kernel (only the string entry logs "eval-entry"). Keep parity with
+       ClaudeEval[task_String]. *)
+    iClaudeFreezeLog["eval-entry-list", ToString[Length[items]] <> " items"];
     (* Phase 28: \:8ab2\:91d1 API \:30e2\:30c7\:30eb\:30ac\:30fc\:30c9 *)
     paidGuard = iClaudePaidModelGuard[OptionValue[Model]];
     If[StringQ[paidGuard], Return[paidGuard]];
@@ -16300,6 +16554,9 @@ ClaudeEval[items_List, opts:OptionsPattern[]] := Module[{dispatchResult, paidGua
         <|"ResetsAt" -> Lookup[$iLastRateLimitInfo, "ResetsAt", None],
           "Message" -> "CLI call skipped: rate limit active."|>]]];
     dispatchResult = iClaudeEvalTryDispatch[items, {opts}];
+    iClaudeFreezeLog["eval-list-dispatch-end",
+      If[dispatchResult =!= $iClaudeEvalNotDispatched,
+        "dispatched", "NOT-dispatched -> LLM path"]];
     If[dispatchResult =!= $iClaudeEvalNotDispatched, Return[dispatchResult]];
     iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
@@ -16311,6 +16568,8 @@ ClaudeEval[items_List, opts:OptionsPattern[]] := Module[{dispatchResult, paidGua
         fb = $currentUseFallback, tmo = OptionValue[Timeout]},
   Module[{norm},
     norm = iNormalizePrompt[items];
+    iClaudeFreezeLog["eval-list-norm-end",
+      ToString[Length[norm["mediaFiles"]]] <> " media"];
     (* \[HorizontalLine]\[HorizontalLine] $UseClaudeRuntime \:5206\:5c90: runtime \:7d4c\:7531 expression-proposal loop \[HorizontalLine]\[HorizontalLine] *)
     If[TrueQ[$UseClaudeRuntime] && ri === None,
       iScheduleAtAsync[
@@ -24172,6 +24431,11 @@ ClaudeShowHistory[name_String] := Module[{nb, tag},
 
 ClaudeAttach::notfound = "\:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: `1`";
 ClaudeAttach::urlfail = "URL \:306e\:53d6\:5f97\:306b\:5931\:6557\:3057\:307e\:3057\:305f: `1`";
+ClaudeAttach::svfail = "SourceVault URI \:3092\:89e3\:6c7a\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f: `1` (`2`)";
+ClaudeAttach::noingest =
+  "SourceVault \:304c\:672a\:30ed\:30fc\:30c9\:306e\:305f\:3081 URL \:3092 ingest \:3067\:304d\:307e\:305b\:3093 (\:30ed\:30fc\:30ab\:30eb\:30ad\:30e3\:30c3\:30b7\:30e5\:306e\:307f\:3067\:7d9a\:884c): `1`";
+ClaudeAttach::ingestfail =
+  "SourceVault ingest \:306b\:5931\:6557\:3057\:307e\:3057\:305f (\:30ed\:30fc\:30ab\:30eb\:30ad\:30e3\:30c3\:30b7\:30e5\:306e\:307f\:3067\:7d9a\:884c\:3001svURI \:672a\:8a18\:9332): `1` (`2`)";
 
 Options[ClaudeAttach] = {Keywords -> {}, Title -> None, Refetch -> False};
 
@@ -24220,6 +24484,19 @@ iGetAttachmentMeta[cachedPath_String] := Module[{meta},
 (* === URL \:5224\:5b9a === *)
 iIsURL[s_String] := StringMatchQ[s, ("http://" | "https://") ~~ __];
 iIsURL[_] := False;
+
+(* === SourceVault URI \:5224\:5b9a === *)
+iIsSVURI[s_String] := StringStartsQ[s, "sv://"];
+iIsSVURI[_] := False;
+
+(* === SourceVault \:9023\:643a (\:5f31\:7d50\:5408: \:672a\:30ed\:30fc\:30c9\:3067\:3082\:52d5\:4f5c) === *)
+iSVIngestAvailableQ[] :=
+  Length[Names["SourceVault`SourceVaultIngest"]] > 0 &&
+  Length[DownValues[SourceVault`SourceVaultIngest]] > 0;
+
+iSVResolveAvailableQ[] :=
+  Length[Names["SourceVault`SourceVaultResolveReference"]] > 0 &&
+  Length[DownValues[SourceVault`SourceVaultResolveReference]] > 0;
 
 (* === \:30d5\:30a1\:30a4\:30eb\:540d\:5b89\:5168\:5316 ===
    \:7279\:6b8a\:8a18\:53f7\:30fb\:30a8\:30b9\:30b1\:30fc\:30d7\:30b7\:30fc\:30b1\:30f3\:30b9\:30fb\:30d1\:30b9\:533a\:5207\:308a\:3092\:9664\:53bb\:3057\:3001\:5b89\:5168\:306a\:30d5\:30a1\:30a4\:30eb\:540d\:6587\:5b57\:5217\:3092\:8fd4\:3059\:3002
@@ -24289,6 +24566,38 @@ iFindCachedURLFileAny[url_String] := Module[{pdf, html},
   html = iFindCachedURLFile[url, "html"];
   Which[StringQ[pdf], pdf, StringQ[html], html, True, None]
 ];
+
+(* === \:6c4e\:7528: \:53c2\:7167\:6587\:5b57\:5217 (URL / sv URI) \:306e\:30cf\:30c3\:30b7\:30e5\:3067\:30ad\:30e3\:30c3\:30b7\:30e5\:6e08\:307f\:30d5\:30a1\:30a4\:30eb\:3092\:691c\:7d22 ===
+   \:62e1\:5f35\:5b50\:3092\:554f\:308f\:305a *.hash8.* \:3092\:63a2\:3059 (URL \:306e pdf/html \:30ad\:30e3\:30c3\:30b7\:30e5\:3082
+   sv raw snapshot \:30ad\:30e3\:30c3\:30b7\:30e5\:3082\:540c\:3058\:547d\:540d\:898f\:5247)\:3002 *)
+iFindCachedRefFileAny[ref_String] := Module[{dir, hashStr, found},
+  dir = iAttachmentCacheDir[];
+  hashStr = IntegerString[Hash[ref, "SHA256"], 16, 8];
+  found = FileNames["*." <> hashStr <> ".*", dir];
+  If[Length[found] > 0, Return[First[found]]];
+  found = FileNames["url_" <> hashStr <> ".*", dir];
+  If[Length[found] > 0, First[found], None]
+];
+
+(* === \:53c2\:7167\:5143 raw \:30d5\:30a1\:30a4\:30eb (SourceVault snapshot \:7b49) \:3092\:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:30b3\:30d4\:30fc ===
+   refKey: \:30ad\:30e3\:30c3\:30b7\:30e5\:540d\:306e\:30cf\:30c3\:30b7\:30e5\:30ad\:30fc (URL / sv URI)
+   rawFile: \:5b9f\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9
+   hint: \:8868\:793a\:540d\:306e\:30d2\:30f3\:30c8 (Title \:30aa\:30d7\:30b7\:30e7\:30f3 / \:30bd\:30fc\:30b9 Title)\:3002 *)
+iCacheRefRawFile[refKey_String, rawFile_String, hint_] :=
+  Module[{dir, hashStr, ext, base, cachedPath},
+    If[!FileExistsQ[rawFile], Return[$Failed]];
+    dir = iAttachmentCacheDir[];
+    hashStr = IntegerString[Hash[refKey, "SHA256"], 16, 8];
+    ext = ToLowerCase[FileExtension[rawFile]];
+    base = iSanitizeFileName[
+      If[StringQ[hint] && StringLength[hint] > 0, hint, FileBaseName[rawFile]]];
+    If[base === "", base = "ref"];
+    cachedPath = FileNameJoin[{dir,
+      base <> "." <> hashStr <> If[ext === "", "", "." <> ext]}];
+    If[FileExistsQ[cachedPath], Return[cachedPath]];
+    Quiet[CopyFile[rawFile, cachedPath, OverwriteTarget -> True]];
+    If[FileExistsQ[cachedPath], cachedPath, $Failed]
+  ];
 
 (* === URL \:30ad\:30e3\:30c3\:30b7\:30e5: WeasyPrint \:3067 PDF \:5316 ===
    URLRead \:3067 HTML \:3092\:53d6\:5f97\:3057\:3001WeasyPrint \:3067 PDF \:5909\:63db\:3002
@@ -24483,22 +24792,118 @@ iResolveAttachPath[path_String] := Module[{parts, resolved, i},
 iGetResolvedAttachments[nb_NotebookObject, tag_String] :=
   iResolveAttachPath /@ NBAccess`NBHistoryGetAttachments[nb, tag];
 
-(* === \:5185\:90e8\:5171\:901a: \:30a2\:30bf\:30c3\:30c1\:51e6\:7406 === *)
+(* === \:5185\:90e8\:5171\:901a: \:30a2\:30bf\:30c3\:30c1\:51e6\:7406 ===
+   \:5bfe\:5fdc\:3059\:308b\:53c2\:7167\:5f62\:5f0f:
+     - \:30ed\:30fc\:30ab\:30eb\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9
+     - http(s) URL: SourceVault \:304c\:5229\:7528\:53ef\:80fd\:306a\:3089\:5fc5\:305a\:5148\:306b ingest \:3057\:3066
+       \:6b63\:6e96 sv URI \:3092\:53d6\:5f97\:3002raw \:304c PDF \:306a\:3089\:305d\:308c\:3092\:30a2\:30bf\:30c3\:30c1\:3001
+       \:305d\:308c\:4ee5\:5916\:306f\:5f93\:6765\:306e HTML\[RightArrow]PDF \:5909\:63db\:30ad\:30e3\:30c3\:30b7\:30e5\:3002
+     - sv:// URI: SourceVaultResolveReference \:3067 raw snapshot \:3092\:89e3\:6c7a\:3057\:30a2\:30bf\:30c3\:30c1\:3002
+   URL / sv \:306e\:6b63\:6e96 URI \:306f\:30e1\:30bf\:30c7\:30fc\:30bf "svURI" \:306b\:8a18\:9332\:3055\:308c\:3001
+   documentation.wl \:306e <<cite:key>> \:53c2\:7167\:89e3\:6c7a\:304c\:5229\:7528\:3059\:308b\:3002 *)
 iClaudeAttachImpl[nb_NotebookObject, tag_String, pathOrURL_String, opts___?OptionQ] :=
-  Module[{kws, title, refetch, isUrl, cached, atts, displayName, metaUpdates, source},
+  Module[{kws, title, refetch, isUrl, isSv, cached, atts, displayName,
+          metaUpdates, source, svURI = None},
     kws     = OptionValue[ClaudeAttach, {opts}, Keywords];
     title   = OptionValue[ClaudeAttach, {opts}, Title];
     refetch = OptionValue[ClaudeAttach, {opts}, Refetch];
     If[!ListQ[kws], kws = {}];
     isUrl = iIsURL[pathOrURL];
+    isSv  = iIsSVURI[pathOrURL];
 
-    If[isUrl,
-      (* === URL \:30a2\:30bf\:30c3\:30c1 === *)
-      cached = iCacheURLAttachment[pathOrURL, TrueQ[refetch], title];
-      If[cached === $Failed,
-        Message[ClaudeAttach::urlfail, pathOrURL]; Return[$Failed]];
-      displayName = StringTake[pathOrURL, UpTo[60]];
-      source = pathOrURL,
+    Which[
+      isSv,
+      (* === SourceVault URI \:30a2\:30bf\:30c3\:30c1 === *)
+      Module[{existing, res, rawFile, svTitle},
+        svURI = pathOrURL;
+        source = pathOrURL;
+        cached = None;
+        (* \:30ad\:30e3\:30c3\:30b7\:30e5\:6e08\:307f\:306a\:3089\:518d\:89e3\:6c7a\:4e0d\:8981 *)
+        If[!TrueQ[refetch],
+          existing = iFindCachedRefFileAny[pathOrURL];
+          If[StringQ[existing], cached = existing]];
+        If[cached === None,
+          If[!iSVResolveAvailableQ[],
+            Message[ClaudeAttach::svfail, pathOrURL, "SourceVault not loaded"];
+            Return[$Failed]];
+          res = Quiet @ Check[
+            SourceVault`SourceVaultResolveReference[pathOrURL], $Failed];
+          If[!AssociationQ[res] || Lookup[res, "Status", ""] =!= "OK",
+            Message[ClaudeAttach::svfail, pathOrURL, "not found in source registry"];
+            Return[$Failed]];
+          rawFile = ToString @ Lookup[res, "File", ""];
+          If[rawFile === "" || !FileExistsQ[rawFile],
+            Message[ClaudeAttach::svfail, pathOrURL, "raw snapshot file not on this machine"];
+            Return[$Failed]];
+          svTitle = ToString @ Lookup[res, "Title", ""];
+          If[TrueQ[refetch],
+            Module[{old = iFindCachedRefFileAny[pathOrURL]},
+              If[StringQ[old] && FileExistsQ[old], Quiet @ DeleteFile[old]]]];
+          cached = iCacheRefRawFile[pathOrURL, rawFile,
+            If[StringQ[title] && title =!= "", title, svTitle]];
+          If[cached === $Failed,
+            Message[ClaudeAttach::svfail, pathOrURL, "cache copy failed"];
+            Return[$Failed]];
+          If[!StringQ[title] && svTitle =!= "", title = svTitle]];
+        displayName = StringTake[pathOrURL, UpTo[60]]],
+
+      isUrl,
+      (* === URL \:30a2\:30bf\:30c3\:30c1: SourceVault ingest \:512a\:5148 === *)
+      Module[{existing, existingMeta, ingestResult, rawPath},
+        source = pathOrURL;
+        cached = None;
+        (* \:30ad\:30e3\:30c3\:30b7\:30e5\:6e08\:307f + svURI \:8a18\:9332\:6e08\:307f\:306a\:3089\:518d fetch/ingest \:4e0d\:8981 *)
+        If[!TrueQ[refetch],
+          existing = iFindCachedRefFileAny[pathOrURL];
+          If[StringQ[existing],
+            existingMeta = iGetAttachmentMeta[existing];
+            svURI = Lookup[existingMeta, "svURI", None];
+            If[StringQ[svURI] || !iSVIngestAvailableQ[],
+              cached = existing]]];
+        If[cached === None,
+          (* 1. SourceVault ingest (\:5fc5\:9808\:7d4c\:8def\:3002\:672a\:30ed\:30fc\:30c9\:6642\:306e\:307f\:8b66\:544a\:3057\:3066\:7d9a\:884c) *)
+          rawPath = "";
+          If[iSVIngestAvailableQ[],
+            ingestResult = Quiet @ Check[
+              SourceVault`SourceVaultIngest[pathOrURL,
+                SourceVault`Topic -> "ClaudeAttach"], $Failed];
+            If[AssociationQ[ingestResult],
+              With[{u = Lookup[ingestResult, "URI", None]},
+                If[StringQ[u], svURI = u]];
+              rawPath = ToString @ Lookup[ingestResult, "RawPath", ""]];
+            (* ingest \:5931\:6557\:306f\:53ef\:8996\:5316 (svURI \:672a\:8a18\:9332\:306e\:307e\:307e\:7d9a\:884c\:3059\:308b\:3053\:3068\:3092\:660e\:793a) *)
+            If[!StringQ[svURI],
+              Message[ClaudeAttach::ingestfail, pathOrURL,
+                If[AssociationQ[ingestResult],
+                  ToString @ Lookup[ingestResult, "Reason",
+                    Lookup[ingestResult, "Status", "Unknown"]],
+                  "ingest error"]]],
+            Message[ClaudeAttach::noingest, pathOrURL]];
+          (* 1.5. Title \:672a\:6307\:5b9a\:306a\:3089 ingest \:6e08\:307f\:30bd\:30fc\:30b9\:306e Title \:3092\:63a1\:7528
+             (\:30ad\:30e3\:30c3\:30b7\:30e5\:540d\:3068\:30e1\:30bf\:30c7\:30fc\:30bf\:304c\:751f\:30cf\:30c3\:30b7\:30e5\:540d\:306b\:306a\:308b\:306e\:3092\:9632\:3050) *)
+          If[!StringQ[title] && StringQ[svURI] && iSVResolveAvailableQ[],
+            Module[{rr = Quiet @ Check[
+                SourceVault`SourceVaultResolveReference[svURI], $Failed]},
+              If[AssociationQ[rr] &&
+                 StringQ[Lookup[rr, "Title", None]] &&
+                 StringTrim[Lookup[rr, "Title", ""]] =!= "" &&
+                 rr["Title"] =!= pathOrURL &&
+                 rr["Title"] =!= Lookup[rr, "URL", ""],
+                title = rr["Title"]]]];
+          (* 2. raw \:304c PDF \:3067\:73fe PC \:306b\:5b9f\:5728 \[RightArrow] \:305d\:306e\:307e\:307e\:30a2\:30bf\:30c3\:30c1 *)
+          If[rawPath =!= "" && FileExistsQ[rawPath] &&
+             ToLowerCase[FileExtension[rawPath]] === "pdf",
+            cached = iCacheRefRawFile[pathOrURL, rawPath,
+              If[StringQ[title], title, iURLSlug[pathOrURL]]];
+            If[cached === $Failed, cached = None]];
+          (* 3. \:305d\:308c\:4ee5\:5916 \[RightArrow] \:5f93\:6765\:306e HTML \:53d6\:5f97 + WeasyPrint PDF \:5316 *)
+          If[cached === None,
+            cached = iCacheURLAttachment[pathOrURL, TrueQ[refetch], title];
+            If[cached === $Failed,
+              Message[ClaudeAttach::urlfail, pathOrURL]; Return[$Failed]]]];
+        displayName = StringTake[pathOrURL, UpTo[60]]],
+
+      True,
       (* === \:30d5\:30a1\:30a4\:30eb\:30a2\:30bf\:30c3\:30c1 === *)
       Module[{norm = ExpandFileName[pathOrURL]},
         If[!FileExistsQ[norm],
@@ -24512,12 +24917,17 @@ iClaudeAttachImpl[nb_NotebookObject, tag_String, pathOrURL_String, opts___?Optio
 
     (* \:30e1\:30bf\:30c7\:30fc\:30bf\:66f4\:65b0 *)
     metaUpdates = <|"source" -> source, "cachedAt" -> DateString[]|>;
+    If[StringQ[svURI], metaUpdates["svURI"] = svURI];
     If[Length[kws] > 0, metaUpdates["keywords"] = kws];
     If[StringQ[title], metaUpdates["title"] = title];
     iUpdateAttachmentMeta[cached, metaUpdates];
 
     Print[iL["\:30a2\:30bf\:30c3\:30c1: ", "Attached: "] <> displayName <>
-      If[isUrl, " (URL\[RightArrow]" <> ToUpperCase[FileExtension[cached]] <> ")", ""] <>
+      Which[
+        isSv, " (sv\[RightArrow]" <> ToUpperCase[FileExtension[cached]] <> ")",
+        isUrl, " (URL\[RightArrow]" <> ToUpperCase[FileExtension[cached]] <> ")",
+        True, ""] <>
+      If[isUrl && StringQ[svURI], "  [SourceVault \:767b\:9332\:6e08]", ""] <>
       If[Length[kws] > 0, "  Keywords:" <> ToString[kws], ""] <>
       If[StringQ[title], "  Title:" <> title, ""] <>
       "  (\:5408\:8a08 " <> ToString[Length[atts]] <> " \:30d5\:30a1\:30a4\:30eb)"];
@@ -24543,10 +24953,10 @@ iDetachCleanupIndex[cachedPath_String] :=
 ClaudeDetach[path_String] := Module[{nb, tag, norm, cached, atts, isUrl},
   nb = EvaluationNotebook[];
   tag = iSessionTag[];
-  isUrl = iIsURL[path];
+  isUrl = iIsURL[path] || iIsSVURI[path];
   If[isUrl,
-    (* URL \:306e\:5834\:5408: \:30cf\:30c3\:30b7\:30e5\:30d9\:30fc\:30b9\:306e glob \:3067\:30ad\:30e3\:30c3\:30b7\:30e5\:30d5\:30a1\:30a4\:30eb\:3092\:691c\:7d22 *)
-    cached = iFindCachedURLFileAny[path];
+    (* URL / sv URI \:306e\:5834\:5408: \:30cf\:30c3\:30b7\:30e5\:30d9\:30fc\:30b9\:306e glob \:3067\:30ad\:30e3\:30c3\:30b7\:30e5\:30d5\:30a1\:30a4\:30eb\:3092\:691c\:7d22 *)
+    cached = iFindCachedRefFileAny[path];
     If[!StringQ[cached], cached = ""],
     (* \:30d5\:30a1\:30a4\:30eb\:306e\:5834\:5408 *)
     norm = ExpandFileName[path];
@@ -24574,9 +24984,9 @@ ClaudeDetach[path_String] := Module[{nb, tag, norm, cached, atts, isUrl},
 ClaudeDetach[session_Association, path_String] := Module[{nb, tag, norm, cached, atts, isUrl},
   nb = session["Notebook"];
   tag = session["SessionTag"];
-  isUrl = iIsURL[path];
+  isUrl = iIsURL[path] || iIsSVURI[path];
   If[isUrl,
-    cached = iFindCachedURLFileAny[path];
+    cached = iFindCachedRefFileAny[path];
     If[!StringQ[cached], cached = ""],
     norm = ExpandFileName[path];
     cached = Module[{ext, base, h},
@@ -24603,6 +25013,28 @@ ClaudeAttachments[] :=
 
 ClaudeAttachments[session_Association] :=
   iGetResolvedAttachments[session["Notebook"], session["SessionTag"]];
+
+(* \:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:30e1\:30bf\:30c7\:30fc\:30bf\:516c\:958b\:30a2\:30af\:30bb\:30b5 (documentation.wl \:306e cite \:89e3\:6c7a\:7b49\:304c\:5229\:7528) *)
+ClaudeAttachmentMetadata[] := iLoadAttachmentMeta[];
+ClaudeAttachmentMetadata[cachedPath_String] := iGetAttachmentMeta[cachedPath];
+
+(* \:53c2\:7167 (\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9 / URL / sv URI) \[RightArrow] \:30ed\:30fc\:30ab\:30eb\:30ad\:30e3\:30c3\:30b7\:30e5\:30d5\:30a1\:30a4\:30eb\:89e3\:6c7a\:3002
+   1. \:30e1\:30bf\:30c7\:30fc\:30bf\:306e source / svURI \:5b8c\:5168\:4e00\:81f4
+   2. \:30cf\:30c3\:30b7\:30e5\:547d\:540d\:898f\:5247 (*.hash8.*)
+   3. ref \:81ea\:8eab\:304c\:5b9f\:5728\:30d5\:30a1\:30a4\:30eb
+   \:306e\:9806\:3002\:672a\:89e3\:6c7a\:306f $Failed\:3002 *)
+ClaudeAttachmentCachedFile[ref_String] := Module[{meta, hit, found},
+  meta = iLoadAttachmentMeta[];
+  hit = SelectFirst[Keys[meta],
+    Function[k, With[{e = meta[k]},
+      AssociationQ[e] &&
+      (Lookup[e, "source", ""] === ref || Lookup[e, "svURI", ""] === ref)]],
+    None];
+  If[StringQ[hit] && FileExistsQ[hit], Return[hit]];
+  found = iFindCachedRefFileAny[ref];
+  If[StringQ[found] && FileExistsQ[found], Return[found]];
+  If[FileExistsQ[ref], ref, $Failed]
+];
 
 (* \:5168\:30af\:30ea\:30a2 *)
 ClearAttachments[] := (
@@ -25631,6 +26063,65 @@ iOrchConsensusTick[] := (
 iOrchConsensusEnsurePoller[] :=
   Quiet @ ClaudeRegisterPollingTick["orchConsensus", iOrchConsensusTick];
 
+(* ============================================================
+   Ultra model class (above heavy): the preferred implementer model for the
+   spec-generation / spec-implementation workflows. Model ids are owned by
+   SourceVault's model-registry (intents below) and are never hardcoded here
+   (rule 02). CLI-first: the Claude Code CLI runs on the subscription, so it
+   stays usable under the notebook paid-API ban; the metered anthropic API is
+   considered only when the notebook explicitly allows paid APIs.
+   ============================================================ *)
+$iUltraIntent = <|"claudecode" -> "code-ultra", "anthropic" -> "ultra"|>;
+
+(* SourceVault-resolved ultra model id for a provider, or Missing[] when
+   SourceVault is unavailable / no ultra entry is registered (mirror of
+   iPaletteResolveHeavyModel). *)
+iUltraResolveFor[provider_String] :=
+  Module[{intent, res},
+    intent = Lookup[$iUltraIntent, provider, ""];
+    If[intent === "" ||
+       !TrueQ[Quiet @ Check[
+         ValueQ[SourceVault`ClaudeResolveModel] ||
+         MemberQ[$Packages, "SourceVault`"], False]],
+      Return[Missing["NoSourceVault"]]];
+    res = Quiet @ Check[
+      SourceVault`ClaudeResolveModel[provider, intent],
+      Missing["ResolveFailed"]];
+    If[AssociationQ[res] && StringQ[Lookup[res, "ModelId", Missing[]]],
+      Lookup[res, "ModelId"], Missing["NoModelId"]]];
+iUltraResolveFor[_] := Missing["BadProvider"];
+
+(* provider usability for the ultra role: the claudecode CLI binary must
+   exist, and the provider must not be inside an active rate-limit window
+   (a recorded limit whose ResetsAt is still in the future). *)
+iUltraProviderAvailableQ[provider_String] :=
+  Module[{info},
+    If[provider === "claudecode" && ! TrueQ[Quiet @ FileExistsQ[$ClaudeExe]],
+      Return[False]];
+    info = Lookup[$iRateLimitInfoByProvider, provider, None];
+    ! TrueQ[Quiet @ Check[iRateLimitInfoActiveQ[info], False]]];
+iUltraProviderAvailableQ[_] := False;
+
+ClaudeUltraModelSpec[] := ClaudeUltraModelSpec[None];
+ClaudeUltraModelSpec[nb_] :=
+  Module[{paidOK, candidates, hit},
+    If[! TrueQ[$ClaudeUltraEnabled], Return[$Failed]];
+    paidOK = Head[nb] === NotebookObject &&
+      TrueQ[Quiet @ Check[NBAccess`NBGetNotebookPaidAPIAllowed[nb], False]];
+    candidates = If[paidOK, {"claudecode", "anthropic"}, {"claudecode"}];
+    hit = SelectFirst[candidates,
+      Function[prov,
+        StringQ[iUltraResolveFor[prov]] && iUltraProviderAvailableQ[prov]],
+      None];
+    If[hit === None, $Failed, {hit, iUltraResolveFor[hit]}]];
+
+(* the implementer-role model for the spec workflows: ultra when usable,
+   otherwise $ClaudeModel unchanged. *)
+iSpecUltraOrDefaultModel[nb_] :=
+  With[{u = Quiet @ Check[ClaudeUltraModelSpec[nb], $Failed]},
+    If[ListQ[u] && Length[u] === 2, u,
+      If[ValueQ[$ClaudeModel], $ClaudeModel, ""]]];
+
 iRunOrchConsensusFromCells[] := Module[
   {nb, cellIndices, collected, items, norm, reqText, project, prev, version,
    reqRef, runDir, reqFile, cfgFile, resultFile, specOut, progressFile, advisary, claude, jobId, proc},
@@ -25670,7 +26161,9 @@ iRunOrchConsensusFromCells[] := Module[
   progressFile = FileNameJoin[{runDir, "progress.wl"}];
   iOrchWriteUTF8[reqFile, reqText];
   advisary = If[ValueQ[$ClaudeAdvisaryModel], $ClaudeAdvisaryModel, {"chatgptcodex", "Automatic"}];
-  claude = If[ValueQ[$ClaudeModel], $ClaudeModel, ""];
+  (* implementer/review role: prefer the ultra model class when usable
+     (CLI-first; paid-API-gated for anthropic); fall back to $ClaudeModel. *)
+  claude = iSpecUltraOrDefaultModel[nb];
   Put[<|"Project" -> project, "Version" -> version, "RequirementsFile" -> reqFile,
     "PrevSpecRef" -> Lookup[prev, "Ref", "none"], "AdvisaryModel" -> advisary,
     "ClaudeModel" -> claude, "MaxRounds" -> $iOrchConsensusMaxRounds,
@@ -25768,9 +26261,12 @@ iRunClaudeSpecFromCells[] := Module[{nb, choice},
 (* ============================================================
    Spec implementation flow (palette "Impl"): implement an APPROVED spec as a
    codified SVWorkflow_<Name> package via the spec-impl SourceVault workflow,
-   run in a background wolframscript driver. The implementer ($ClaudeModel)
-   writes the package; the verifier ($ClaudeAdvisaryModel) checks it against
-   the spec and feeds back; complex work is split into stages reviewed first.
+   run in a background wolframscript driver. The implementer role prefers the
+   ultra model class (iSpecUltraOrDefaultModel: CLI-first, paid-API-gated,
+   $ClaudeModel fallback) and writes the package; the verifier
+   ($ClaudeAdvisaryModel) checks it against the spec and feeds back; complex
+   work is split into stages reviewed first. Approval requires the generated
+   test to PASS in a fresh kernel (proven-code gate) plus verifier agreement.
    FE-safe: the multi-minute loop runs off the FE kernel; a progress file is
    polled to update the WindowStatusArea (running model + phase), and the result
    is written back via the $iJobActiveNb guard. On completion the generated
@@ -26711,7 +27207,10 @@ CreateImplementationWorkflow[name_String, approvedSpec_String, opts:OptionsPatte
   slug = iSpecImplUniqueSlug[iSVSpecSanitize[name]];
   notes = OptionValue["Notes"] /. (x_ /; ! StringQ[x]) -> "";
   maxRounds = OptionValue["MaxRounds"] /. Automatic -> $iSpecImplMaxRounds;
-  claude = If[ValueQ[$ClaudeModel], $ClaudeModel, ""];
+  (* implementer role: prefer the ultra model class when usable (CLI-first;
+     paid-API-gated for anthropic); fall back to $ClaudeModel. An explicit
+     "ClaudeModel" option always wins. *)
+  claude = iSpecUltraOrDefaultModel[nb];
   advisary = If[ValueQ[$ClaudeAdvisaryModel], $ClaudeAdvisaryModel, {"chatgptcodex", "Automatic"}];
   claude = OptionValue["ClaudeModel"] /. Automatic -> claude;
   advisary = OptionValue["AdvisaryModel"] /. Automatic -> advisary;
@@ -27352,28 +27851,33 @@ iPaletteServiceColor[ctrl_Association, running_] := Which[
   running === False, Lookup[ctrl, "StoppedColor", GrayLevel[0.5]],
   True,              GrayLevel[0.6]];
 
-iPaletteServiceToggleAction[ctrl_Association, running_] := (
+iPaletteServiceToggleAction[ctrl_Association, running_, refresh_:None] := (
   Which[
     running === True, With[{f = Lookup[ctrl, "Stop", None]},  If[f =!= None, Quiet @ Check[f[], Null]]],
     True,             With[{f = Lookup[ctrl, "Start", None]}, If[f =!= None, Quiet @ Check[f[], Null]]]];
   (* invalidate cache so the label re-probes the real new state, then force a re-render *)
   $iPaletteServiceStateCache = KeyDrop[$iPaletteServiceStateCache, Lookup[ctrl, "Id", "?"]];
   $iPaletteServiceToggleCounter++;
+  (* DynamicModule \:30ed\:30fc\:30ab\:30eb tick \:3067\:78ba\:5b9f\:306b\:518d\:63cf\:753b\:3059\:308b\:3002\:30b0\:30ed\:30fc\:30d0\:30eb TrackedSymbol +
+     SynchronousUpdating -> False \:3067\:306f\:518d\:63cf\:753b\:304c FE \:306b\:4f1d\:308f\:3089\:306a\:3044\:305f\:3081
+     ([[claudeprocesslist-manual-refresh]])\:3001\:30c8\:30b0\:30eb\:5b8c\:4e86\:6642\:306b\:3053\:306e\:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:3067
+     \:30ed\:30fc\:30ab\:30eb tick \:3092 ++ \:3059\:308b\:3002 *)
+  If[refresh =!= None, Quiet @ Check[refresh[], Null]];
   With[{inb = InputNotebook[]}, If[Head[inb] === NotebookObject, SetSelectedNotebook[inb]]]);
 
-iClaudePaletteServiceButton[ctrl_Association] := With[{running = iPaletteServiceRunningQ[ctrl]},
+iClaudePaletteServiceButton[ctrl_Association, refresh_:None] := With[{running = iPaletteServiceRunningQ[ctrl]},
   Button[
     Style[iPaletteServiceLabel[ctrl, running], Bold, 10, White],
-    iPaletteServiceToggleAction[ctrl, running],
+    iPaletteServiceToggleAction[ctrl, running, refresh],
     Appearance -> "Frameless",
     Background -> iPaletteServiceColor[ctrl, running],
     ImageSize -> {110, 18},
     FrameMargins -> {{4, 4}, {1, 1}},
     Method -> "Queued"]];
 
-iClaudePaletteServiceSection[] := If[
+iClaudePaletteServiceSection[refresh_:None] := If[
   ListQ[$ClaudePaletteServiceControls] && Length[$ClaudePaletteServiceControls] > 0,
-  Column[iClaudePaletteServiceButton /@ $ClaudePaletteServiceControls, Spacings -> 0.3],
+  Column[(iClaudePaletteServiceButton[#, refresh] &) /@ $ClaudePaletteServiceControls, Spacings -> 0.3],
   ""];
 
 ShowClaudePalette[] := (
@@ -27383,7 +27887,7 @@ ShowClaudePalette[] := (
   Quiet[iLoadPaletteSettings[InputNotebook[]]];
   Quiet[iSyncCloudPaletteState[]];   (* Stage 9 P1 Step 2: \:30af\:30e9\:30a6\:30c9\:516c\:958b\:5ba3\:8a00\:3082\:540c\:671f *)
   $claudePalette = CreatePalette[
-    DynamicModule[{lastNb = InputNotebook[]},
+    DynamicModule[{lastNb = InputNotebook[], svcTick = 0},
     Dynamic[
       (* \:30d5\:30a9\:30a2\:30b0\:30e9\:30a6\:30f3\:30c9\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304c\:5207\:308a\:66ff\:308f\:3063\:305f\:3089\:8a2d\:5b9a\:3092\:518d\:8aad\:8fbc *)
       Module[{curNb = InputNotebook[]},
@@ -27571,9 +28075,19 @@ ShowClaudePalette[] := (
          below the routing button. Empty when no external package has registered a control
          (rule 11: claudecode owns no package-specific logic). The label follows live RunningQ;
          re-run ShowClaudePalette[] after a new registration to add a button. *)
-      Dynamic[iClaudePaletteServiceSection[],
-        TrackedSymbols :> {$ClaudePaletteServiceControls, $iPaletteServiceToggleCounter},
-        UpdateInterval -> 15, SynchronousUpdating -> False],
+      (* 2026-07-21 \:30d5\:30ea\:30fc\:30ba\:4fee\:6b63: \:65e7\:5b9f\:88c5\:306f UpdateInterval -> 15 \:306e\:5e38\:99d0\:30bf\:30a4\:30de\:3067
+         iClaudePaletteServiceSection \:3092\:5b9a\:671f\:518d\:8a55\:4fa1\:3057\:3001\:305d\:306e\:305f\:3073\:306b RunningQ \:30d7\:30ed\:30fc\:30d6
+         (TimeConstrained 5s) \:3092 preemptive \:30ea\:30f3\:30af\:3078\:6295\:3052\:3066\:3044\:305f\:3002\:9577\:6642\:9593 ClaudeEval \:304c
+         \:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057\:3066\:3044\:308b\:9593\:306f\:3053\:306e\:80cc\:666f\:8a55\:4fa1\:304c\:6355\:3051\:305a\:3001\:30d1\:30ec\:30c3\:30c8\:306e\:30dc\:30bf\:30f3\:3092
+         \:62bc\:3057\:3066 FE \:304c\:518d\:540c\:671f\:3057\:305f\:77ac\:9593\:306b\:30d6\:30ed\:30c3\:30af\:5f85\:3061\:3078\:6607\:683c\:3057\:3001\:300c\:52d5\:7684\:8a55\:4fa1\:306e\:653e\:68c4\:300d
+         \[RightArrow] \:30d5\:30ea\:30fc\:30ba\:306b\:306a\:3063\:305f
+         ([[claudeprocesslist-manual-refresh]] / [[palette-dynamic-fe-freeze]])\:3002
+         \:5e38\:99d0\:30bf\:30a4\:30de\:3092\:5ec3\:6b62\:3057\:3001\:66f4\:65b0\:306f DynamicModule \:30ed\:30fc\:30ab\:30eb svcTick \:306e\:307f
+         (Start/Stop \:30c8\:30b0\:30eb\:6642\:306b refresh \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:304c svcTick++)\:3002\:5e38\:99d0\:80cc\:666f\:8a55\:4fa1\:30bc\:30ed\:3002
+         \:65b0\:898f\:30b3\:30f3\:30c8\:30ed\:30fc\:30eb\:767b\:9332\:5f8c\:306e\:30dc\:30bf\:30f3\:8ffd\:52a0\:306f\:5f93\:6765\:901a\:308a ShowClaudePalette[] \:518d\:5b9f\:884c\:3002 *)
+      Dynamic[svcTick; iClaudePaletteServiceSection[((svcTick++) &)],
+        TrackedSymbols :> {svcTick, $ClaudePaletteServiceControls},
+        SynchronousUpdating -> False],
       Spacer[2],
 
       (* \[HorizontalLine]\[HorizontalLine] \:30d7\:30ed\:30bb\:30b9 \[HorizontalLine]\[HorizontalLine] *)
@@ -30753,13 +31267,31 @@ iICollectChunkResult[runState_Association, timeout_: Automatic] :=
             If[iIsAPIErrorResponse[result],
               <|"status"->"Failed", "result"->None, "error"->result|>,
               <|"status"->"Done", "result"->result, "error"->None|>],
-            <|"status"->"Failed", "result"->None,
-              "error"->"Output file not found (exit=" <>
-                ToString[exitCode] <> ", exe=" <>
-                ToString[$ClaudeExe] <> ", exists=" <>
-                ToString[FileExistsQ[$ClaudeExe]] <>")" <>
-                If[StringLength[batContent] > 0,
-                  "\nbat: " <> StringTake[batContent, UpTo[200]], ""]|>]],
+            (* \:5931\:6557\:6642\:8a3a\:65ad: \:5f93\:6765\:306f provider \:306b\:95a2\:4fc2\:306a\:304f $ClaudeExe \:3092\:5831\:544a\:3057\:3066\:3044\:305f\:305f\:3081\:3001
+               codex \:5074\:306e\:5931\:6557\:3067\:3082 "exe=claude.cmd" \:3068\:51fa\:3066\:8aa4\:8a8d\:3092\:62db\:3044\:3066\:3044\:305f\:3002
+               \:5b9f\:969b\:306e\:539f\:56e0\:306f CLI \:304c errFile \:306b\:66f8\:304f (\:4f8b: codex \:306e
+               "The 'gpt-5.6-sol' model requires a newer version of Codex")\:306e\:3067\:3001
+               providerKind \:3068 stderr \:672b\:5c3e\:3092\:305d\:306e\:307e\:307e\:8f09\:305b\:308b\:3002 *)
+            Module[{pk, errFile, errTail},
+              pk = Lookup[runState, "providerKind",
+                Lookup[runState, "provider", "claudecode"]];
+              errFile = Lookup[runState, "errFile", ""];
+              errTail = If[StringQ[errFile] && FileExistsQ[errFile],
+                Module[{t = Quiet @ Check[
+                    Import[errFile, "Text", CharacterEncoding -> "UTF-8"], ""]},
+                  If[StringQ[t] && StringLength[t] > 0,
+                    StringTake[StringTrim[t], -Min[StringLength[StringTrim[t]], 800]],
+                    ""]],
+                ""];
+              <|"status"->"Failed", "result"->None,
+                "error"->"Output file not found (exit=" <>
+                  ToString[exitCode] <> ", provider=" <> ToString[pk] <>
+                  ", exe=" <> ToString[$ClaudeExe] <> ", exists=" <>
+                  ToString[FileExistsQ[$ClaudeExe]] <>")" <>
+                  If[StringLength[errTail] > 0,
+                    "\nstderr(tail): " <> errTail, ""] <>
+                  If[StringLength[batContent] > 0,
+                    "\nbat: " <> StringTake[batContent, UpTo[200]], ""]|>]]],
       (* \:307e\:3060\:5b9f\:884c\:4e2d *)
       True,
         <|"status"->"Running", "result"->None, "error"->None|>]
@@ -34262,12 +34794,48 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
      notebook_info     \[LongDash] \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30bb\:30eb\:60c5\:5831\:53d6\:5f97
    \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
 
+(* \[HorizontalLine]\[HorizontalLine] 2026-07-22: mathematica_eval \:306e\:5b89\:5168\:30dd\:30ea\:30b7\:30fc\:8981\:7d04 \[HorizontalLine]\[HorizontalLine]
+   \:7981\:6b62 head \:4e00\:89a7\:306f NBAccess`$NBDenyHeads \:304b\:3089\:6bce\:56de\:751f\:6210\:3059\:308b\:3002\:624b\:66f8\:304d\:306e
+   \:91cd\:8907\:30ea\:30b9\:30c8\:3092\:4f5c\:308b\:3068 deny \:30ea\:30b9\:30c8\:3092\:66f4\:65b0\:3057\:305f\:3068\:304d\:306b\:4e56\:96e2\:3059\:308b\:305f\:3081\:3002
+   \:7d4c\:7def: \:5f53\:521d\:3053\:3053\:306b "file content reads such as ReadString/Import ... require
+   human approval" \:3068\:66f8\:3044\:3066\:3044\:305f\:304c\:3001Import \:306f\:627f\:8a8d\:8981\:3067\:306f\:306a\:304f\:6052\:4e45 Deny \:3067
+   \:3042\:308a\:3001\:3057\:304b\:3082 ForbiddenHead \:306f ClaudeRuntime \:306e $fatalClasses \:306a\:306e\:3067
+   \:30bf\:30fc\:30f3\:5168\:4f53\:304c\:5373\:6b7b\:3059\:308b\:3002\:8aa4\:3063\:305f\:8aac\:660e\:306f\:30e2\:30c7\:30eb\:3092\:81f4\:547d\:7684\:306a\:9078\:629e\:3078
+   \:8a98\:5c0e\:3059\:308b\:306e\:3067\:3001\:3053\:3053\:306f\:5e38\:306b\:5b9f\:614b\:3068\:4e00\:81f4\:3055\:305b\:308b (result3.nb \:306e Import \:4e8b\:6545)\:3002 *)
+iMathEvalPolicyBlurb[] :=
+  Module[{deny},
+    deny = If[ListQ[NBAccess`$NBDenyHeads],
+      DeleteDuplicates[NBAccess`$NBDenyHeads], {}];
+    "SAFETY POLICY (enforced by NBAccess before evaluation):\n" <>
+    "1. These heads are PERMANENTLY FORBIDDEN. They can never be approved, and " <>
+      "using even one of them aborts the entire turn with no retry and no result:\n   " <>
+      StringRiffle[deny, ", "] <> "\n" <>
+    "2. To read a file, ALWAYS use NBImport -- never Import:\n" <>
+      "     NBImport[path]              (* same as Import[path] *)\n" <>
+      "     NBImport[path, \"Lines\"]     (* also \"Text\", \"CSV\", \"JSON\", ... *)\n" <>
+      "   NBImport is the NBAccess-mediated Import. It is an allowed head (no approval " <>
+      "prompt), returns exactly what Import returns, and reads only inside the " <>
+      "directories the user declared via NBSetAccessibleDirs -- outside them it " <>
+      "returns $Failed with a message. Calling Import or Export directly is in the " <>
+      "forbidden list above and aborts the turn.\n" <>
+    "3. ReadString / ReadList also work but need one-time human approval, so prefer " <>
+      "NBImport. Needing no approval at all: FileNames, FileByteCount, FileExistsQ, " <>
+      "DirectoryQ, FileNameTake, FileNameJoin, FileNameSplit, FileBaseName, " <>
+      "DirectoryName.\n" <>
+    "4. Assigning to a global symbol needs approval; keep assignments inside " <>
+      "Module[{...}, ...] instead.\n" <>
+    "5. If a call is refused with NeedsApproval, do NOT retry it here -- the tool " <>
+      "cannot show an approval prompt. Emit the same code as a fenced ```wl block " <>
+      "in your reply text (with no tool call in that reply); that shows the user " <>
+      "an approval button and runs once approved."];
+
 iDefaultToolDefinitions[accessLevel_:0.5] := {
   <|
     "Name"        -> "mathematica_eval",
     "Description" -> "Evaluate a Mathematica expression in the local kernel. " <>
                      "Use this for computation, data processing, and analysis. " <>
-                     "The expression runs locally where confidential data resides.",
+                     "The expression runs locally where confidential data resides.\n" <>
+                     iMathEvalPolicyBlurb[],
     "InputSchema" -> <|
       "type" -> "object",
       "properties" -> <|
@@ -34351,6 +34919,14 @@ iToolDefinitionsToPromptText[tools_List] :=
     "<tool_call name=\"tool_name\" id=\"unique_id\">\n",
     "{\"param\": \"value\"}\n",
     "</tool_call>\n\n",
+    (* 2026-07-28: qwen3.5 (LM Studio) emitted variants like
+       <tool_call> web_search name="label"> that never matched the parser,
+       so no tool ever ran. Spell the contract out with a concrete example
+       (the relaxed parser in iAdapterRelaxedToolCalls is the safety net). *)
+    "The name attribute MUST be one of the tool names listed below, e.g.\n",
+    "<tool_call name=\"web_search\" id=\"c1\">\n{\"query\": \"open campus 2026\"}\n</tool_call>\n",
+    "Do NOT write the tool name as a bare word after <tool_call>, and do NOT ",
+    "pass arguments as XML attributes -- all arguments go in the JSON body.\n",
     "Multiple tool calls can be made in a single response.\n",
     "When your task is complete and no more tools are needed, ",
     "respond with text only (no tool_call blocks) and include [DONE].\n\n"}},
@@ -34372,6 +34948,76 @@ iToolDefinitionsToPromptText[tools_List] :=
       {i, Length[tools]}];
     StringJoin[parts]
   ];
+
+(* \[HorizontalLine]\[HorizontalLine] Relaxed tool_call parsing (2026-07-28) \[HorizontalLine]\[HorizontalLine]
+   Some local models (LM Studio qwen3.5-122b, observed live) never emit the
+   canonical <tool_call name="TOOL" id="ID">JSON</tool_call> form, so the strict
+   regex in ParseProposal matched nothing, no tool ever ran, and the raw
+   tool_call text ended up verbatim in the notebook (Column cell). Observed
+   variants:
+     V1: <tool_call> web_search name="label" id="ws1"> {json} </tool_call>
+         (tool name as a bare word; name= is an invented label, not the tool)
+     V2: <tool_call> web_search query="..." maxResults=5</tool_call>
+         (arguments as XML attributes; opening tag never closed with >)
+     V3: <tool_call> {"name": "web_search", "arguments": {...}} </tool_call>
+         (qwen's native training format)
+   ParseProposal tries this relaxed extraction ONLY when the canonical form
+   yields zero matches. To avoid false positives on prose that merely mentions
+   <tool_call>, only calls whose tool name is in knownNames are accepted. *)
+
+(* XML-attribute style arguments: key="value" or key=value (number/boolean). *)
+iAdapterAttrArgs[attrs_String] := Association @ Map[
+  Function[p, p[[1]] -> Which[
+    p[[2]] =!= "", p[[2]],
+    StringMatchQ[p[[3]], RegularExpression["-?[0-9]+"]], ToExpression[p[[3]]],
+    StringMatchQ[p[[3]], RegularExpression["-?[0-9]*\\.[0-9]+"]], ToExpression[p[[3]]],
+    ToLowerCase[p[[3]]] === "true", True,
+    ToLowerCase[p[[3]]] === "false", False,
+    True, p[[3]]]],
+  StringCases[attrs, RegularExpression[
+    "([A-Za-z_][A-Za-z0-9_]*)=(?:\"([^\"]*)\"|([^\\s<>\"]+))"] :> {"$1", "$2", "$3"}]];
+
+iAdapterRelaxedToolCalls[raw_String, knownNames_List] := Module[{calls = {}},
+  (* V3: qwen-native JSON body *)
+  Scan[Function[body,
+    Module[{j = Quiet @ Check[Developer`ReadRawJSONString[body], $Failed], nm, argsIn},
+      If[AssociationQ[j],
+        nm = Lookup[j, "name", Lookup[j, "tool", Null]];
+        If[StringQ[nm] && MemberQ[knownNames, nm],
+          argsIn = Lookup[j, "arguments",
+            Lookup[j, "parameters", Lookup[j, "input", Missing["NoArgs"]]]];
+          AppendTo[calls, <|
+            "Name"  -> nm,
+            "Id"    -> ToString @ Lookup[j, "id", CreateUUID[]],
+            "Input" -> Which[
+              AssociationQ[argsIn], argsIn,
+              StringQ[argsIn], Quiet @ Check[
+                Developer`ReadRawJSONString[argsIn], <|"raw" -> argsIn|>],
+              True, KeyDrop[j, {"name", "tool", "id"}]]|>]]]]],
+    StringCases[raw, RegularExpression[
+      "(?s)<tool_call>\\s*(\\{[\\s\\S]*?\\})\\s*</tool_call>"] :> "$1"]];
+  (* V1/V2: bare-word tool name, optional attributes, optional JSON body *)
+  Scan[Function[m,
+    Module[{nm = m[[1]], attrs = iAdapterAttrArgs[m[[2]]],
+            body = StringTrim[m[[3]]], input},
+      If[MemberQ[knownNames, nm],
+        input = If[body =!= "",
+          Quiet @ Check[Developer`ReadRawJSONString[body], <|"raw" -> body|>],
+          KeyDrop[attrs, {"name", "id"}]];
+        (* non-Association JSON (list/scalar) -> fall back to attribute args *)
+        If[! AssociationQ[input], input = KeyDrop[attrs, {"name", "id"}]];
+        AppendTo[calls, <|
+          "Name"  -> nm,
+          "Id"    -> ToString @ Lookup[attrs, "id",
+            Lookup[attrs, "name", CreateUUID[]]],
+          "Input" -> input|>]]]],
+    (* [>\s] separator: the live qwen variants write "<tool_call> web_search ..."
+       (tag closed, bare word after), not "<tool_call web_search ...". Accept
+       both, but require SOME separator so "<tool_callback>" cannot match. *)
+    StringCases[raw, RegularExpression[
+      "(?s)<tool_call[>\\s]\\s*([A-Za-z_][A-Za-z0-9_]*)((?:\\s+[A-Za-z_][A-Za-z0-9_]*=(?:\"[^\"]*\"|[^\\s<>]+))*)\\s*(?:>\\s*([\\s\\S]*?))?\\s*</tool_call>"
+    ] :> {"$1", "$2", "$3"}]];
+  calls];
 
 (* \[HorizontalLine]\[HorizontalLine] \:30c4\:30fc\:30eb\:7d50\:679c\:3092 prompt \:7528\:30c6\:30ad\:30b9\:30c8\:306b\:5909\:63db \[HorizontalLine]\[HorizontalLine] *)
 iToolResultsToPromptText[toolCalls_List, toolResults_List] :=
@@ -34437,7 +35083,7 @@ iExecuteSingleTool[call_Association, accessSpec_Association,
         iToolExecFileRead[input, accessSpec],
       
       "notebook_info",
-        iToolExecNotebookInfo[input, nb],
+        iToolExecNotebookInfo[input, accessSpec, nb],
       
       _,
         <|"Success" -> False,
@@ -34451,7 +35097,8 @@ iExecuteSingleTool[call_Association, accessSpec_Association,
 iToolExecMathematica[input_Association, accessSpec_Association,
     adapter_] :=
   Module[{code, heldExpr, execResult, redacted, valResult, timeout,
-          expectedSeconds, defaultTimeout},
+          expectedSeconds, defaultTimeout,
+          valDecision, valReason, blockedHeads, blockedText},
     code = Lookup[input, "code", ""];
     If[!StringQ[code] || code === "",
       Return[<|"Success" -> False, "Error" -> "No code provided"|>]];
@@ -34466,7 +35113,28 @@ iToolExecMathematica[input_Association, accessSpec_Association,
     If[heldExpr === None,
       Return[<|"Success" -> False,
         "Error" -> "Failed to parse Mathematica expression"|>]];
-    
+
+    (* \[HorizontalLine]\[HorizontalLine] 2026-07-22: \:8907\:6570\:5f0f\:30b3\:30fc\:30c9\:306e\:6b63\:898f\:5316 \[HorizontalLine]\[HorizontalLine]
+       ToExpression[code, InputForm, HoldComplete] \:306f "a = 1;\n b = 2;\n a + b" \:306e\:3088\:3046\:306a
+       \:6539\:884c\:533a\:5207\:308a\:306e\:8907\:6570\:6587\:30b3\:30fc\:30c9\:3092 HoldComplete[e1, e2, e3] (\:5f15\:6570 3 \:500b) \:3067\:8fd4\:3059\:3002
+       NBValidateHeldExpr \:306f HoldComplete[_] (\:5f15\:6570 1 \:500b) \:3057\:304b\:53d7\:3051\:4ed8\:3051\:306a\:3044\:305f\:3081\:3001
+       \:3053\:308c\:304c Deny/ModelFormatError ("Expected HoldComplete[expr], got HoldComplete")
+       \:306b\:306a\:3063\:3066\:3044\:305f (result2.nb \:306e 1 \:56de\:76ee\:306e\:30c4\:30fc\:30eb\:547c\:3073\:51fa\:3057)\:3002
+       LLM \:304c\:6539\:884c + ";" \:533a\:5207\:308a\:3067\:66f8\:304f\:306e\:306f\:81ea\:7136\:306a\:306e\:3067\:3001\:3053\:3053\:3067
+       CompoundExpression 1 \:500b\:306b\:7573\:3093\:3067\:53d7\:3051\:4ed8\:3051\:308b (\:30e6\:30fc\:30b6\:30fc\:304c 1 \:30bb\:30eb\:306b
+       \:8cbc\:3063\:305f\:5834\:5408\:3068\:540c\:7fa9)\:3002CompoundExpression \:306f $NBAllowedHeads \:306e Control
+       \:30ab\:30c6\:30b4\:30ea\:306b\:3042\:308b\:305f\:3081\:3001head \:5224\:5b9a\:306e\:53b3\:3057\:3055\:306f\:5909\:308f\:3089\:306a\:3044\:3002
+       HoldComplete \:306e\:4e2d\:8eab\:306f\:8a55\:4fa1\:3055\:308c\:306a\:3044 (HoldAllComplete)\:3002 *)
+    If[MatchQ[heldExpr, HoldComplete[_, __]],
+      heldExpr = Replace[heldExpr,
+        HoldComplete[e__] :> HoldComplete[CompoundExpression[e]]]];
+    (* \:5f15\:6570 0 \:500b (\:7a7a / \:30b3\:30e1\:30f3\:30c8\:306e\:307f) \:306f\:7573\:3081\:3089\:308c\:306a\:3044\:306e\:3067\:660e\:793a\:30a8\:30e9\:30fc\:306b\:3059\:308b\:3002 *)
+    If[MatchQ[heldExpr, HoldComplete[]],
+      Return[<|"Success" -> False,
+        "Error" -> "The 'code' field parsed to no expression " <>
+          "(empty, whitespace-only, or comment-only). " <>
+          "Send an actual Mathematica expression."|>]];
+
     (* NBAccess \:691c\:8a3c: forbidden head / access level \:30c1\:30a7\:30c3\:30af *)
     valResult = Quiet @ Check[
       NBAccess`NBValidateHeldExpr[heldExpr, accessSpec], $Failed];
@@ -34477,7 +35145,65 @@ iToolExecMathematica[input_Association, accessSpec_Association,
         "Error" -> "Validation denied: " <>
           Lookup[valResult, "Reason",
             Lookup[valResult, "VisibleExplanation", "forbidden"]]|>]];
-    
+
+    (* \[HorizontalLine]\[HorizontalLine] 2026-07-22: NeedsApproval / Deny \:306e\:5148\:56de\:308a\:5224\:5b9a \[HorizontalLine]\[HorizontalLine]
+       \:3053\:306e\:30c4\:30fc\:30eb\:7d4c\:8def\:306f NBExecuteHeldExpr \:3092 ApprovalMode \:65e2\:5b9a ("None") \:3067\:547c\:3076\:305f\:3081\:3001
+       NeedsApproval / Deny \:306f fail-closed \:3067\:5fc5\:305a\:62d2\:5426\:3055\:308c\:308b\:3002\:30c4\:30fc\:30eb\:30eb\:30fc\:30d7\:306f\:975e\:540c\:671f\:3067
+       \:4eba\:9593\:306e\:5fdc\:7b54\:3092\:5f85\:3066\:306a\:3044\:305f\:3081\:3001\:627f\:8a8d UI \:3082\:51fa\:305b\:306a\:3044\:3002
+       \:5f93\:6765\:306f NBExecuteHeldExpr \:307e\:3067\:9032\:3093\:3067 "Execution refused: NeedsApproval (...)" \:3060\:3051\:3092
+       \:8fd4\:3057\:3066\:3044\:305f\:305f\:3081\:3001LLM \:306b\:306f\:300c\:4e00\:6642\:7684\:306a\:5931\:6557\:300d\:306b\:898b\:3048\:3066\:540c\:3058\:30c4\:30fc\:30eb\:3092\:518d\:8a66\:884c\:3057\:3001
+       2 \:56de\:7121\:99c4\:6253\:3061\:3057\:3066\:304b\:3089\:63d0\:6848\:7d4c\:8def\:306b\:843d\:3061\:308b\:3068\:3044\:3046\:52d5\:304d\:3092\:3057\:3066\:3044\:305f (result.nb)\:3002
+       \:3053\:3053\:3067\:5148\:56de\:308a\:3057\:3066\:300c\:518d\:8a66\:884c\:7981\:6b62 + \:4ee3\:66ff\:7d4c\:8def\:300d\:3092\:660e\:793a\:3059\:308b\:3002\:4ee3\:66ff\:7d4c\:8def\:306f
+       \:30b3\:30fc\:30c9\:3092 ```wl \:30d6\:30ed\:30c3\:30af\:3068\:3057\:3066\:672c\:6587\:306b\:51fa\:3059\:3053\:3068 (ParseProposal \[RightArrow]
+       ValidateProposal \:7d4c\:7531\:3067\:627f\:8a8d UI \:304c\:51fa\:308b)\:3002tool_call \:304c\:3042\:308b\:3068\:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:306f
+       \:7121\:8996\:3055\:308c\:308b\:306e\:3067\:3001\:305d\:306e\:70b9\:3082\:660e\:8a18\:3059\:308b\:3002
+       Committer \:81ea\:52d5\:627f\:8a8d\:306f approvalMode === "CommitterAutoApprove" \:304c\:5fc5\:9808\:3067\:3053\:306e\:7d4c\:8def\:3067\:306f
+       \:6210\:7acb\:3057\:306a\:3044\:305f\:3081 (iNBCommitterAutoApproveQ)\:3001\:5148\:56de\:308a\:306b\:3088\:308b\:6319\:52d5\:5909\:5316\:306f\:306a\:3044\:3002 *)
+    valDecision = If[AssociationQ[valResult],
+      Lookup[valResult, "Decision", None], None];
+    If[valDecision === "NeedsApproval" || valDecision === "Deny",
+      blockedHeads = Lookup[valResult, "ApprovalHeads", {}];
+      (* \:30e9\:30d9\:30eb\:8fbc\:307f\:306e 1 \:884c\:3002ApprovalHeads \:304c\:7121\:3044\:5206\:985e
+         (GlobalSetRequiresApproval / ExcessiveIterationRequiresApproval /
+          ForbiddenHead \:7b49) \:3067\:306f VisibleExplanation \:306b\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:3059\:308b\:3002 *)
+      blockedText = Which[
+        ListQ[blockedHeads] && Length[blockedHeads] > 0,
+          "Heads involved: " <> StringRiffle[blockedHeads, ", "],
+        StringQ[Lookup[valResult, "VisibleExplanation", None]] &&
+            valResult["VisibleExplanation"] =!= "",
+          "Reason: " <> valResult["VisibleExplanation"],
+        True, "Reason: (unspecified)"];
+      valReason = ToString[Lookup[valResult, "ReasonClass",
+        If[valDecision === "Deny", "Denied", "AccessEscalationRequired"]]];
+      Return[<|"Success" -> False,
+        "Error" -> Which[
+          (* \:30dd\:30ea\:30b7\:30fc\:5224\:65ad\:3067\:306f\:306a\:304f\:300c\:6e21\:3055\:308c\:305f code \:304c\:5f0f\:3068\:3057\:3066\:4e0d\:6b63\:300d\:30b1\:30fc\:30b9\:3002
+             \:3053\:308c\:3092\:6052\:4e45\:7684\:306a\:65b9\:91dd\:5224\:65ad\:3068\:3057\:3066\:4f1d\:3048\:308b\:3068 LLM \:304c\:8ac7\:3081\:3066\:3057\:307e\:3046\:306e\:3067\:3001
+             \:76f4\:3057\:3066\:518d\:8a66\:884c\:3059\:3079\:304d\:30a8\:30e9\:30fc\:3068\:3057\:3066\:533a\:5225\:3059\:308b (result2.nb \:306e\:8aa4\:6848\:5185)\:3002 *)
+          valDecision === "Deny" && valReason === "ModelFormatError",
+            "Malformed tool input: " <>
+            Lookup[valResult, "VisibleExplanation", "code is not a single expression"] <>
+            "\nThis is NOT a policy denial -- the 'code' field could not be read as one " <>
+            "Mathematica expression. Retry with corrected code: send a single expression " <>
+            "(wrap multiple statements in Module[{...}, stmt1; stmt2; result] or " <>
+            "CompoundExpression).",
+          valDecision === "Deny",
+            "Execution refused: Deny (" <> valReason <> ")\n" <>
+            blockedText <> "\n" <>
+            "This is a permanent policy decision, NOT a transient failure. " <>
+            "Do NOT call mathematica_eval again with this code. " <>
+            "Rewrite the code without the blocked operations, or answer without executing.",
+          True,
+          (* NeedsApproval *)
+          "Execution refused: NeedsApproval (" <> valReason <> ")\n" <>
+          blockedText <> " (human approval required)\n" <>
+          "The mathematica_eval tool cannot show an approval prompt, so retrying it " <>
+          "will fail identically. Do NOT call mathematica_eval again with this code.\n" <>
+          "Instead, emit the same code as a fenced ```wl code block in your reply text " <>
+          "(with no <tool_call> in that reply -- a tool call suppresses code-block " <>
+          "handling). That route shows the user an approval button, and the code runs " <>
+          "once they approve."]|>]];
+
     (* Phase 29 (2026-05-13): \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:5224\:5b9a
        \:512a\:5148\:5ea6: input[expectedSeconds] > adapter[DefaultTimeoutSeconds] > 30 (\:5f93\:6765\:30c7\:30d5\:30a9\:30eb\:30c8) *)
     defaultTimeout = If[AssociationQ[adapter],
@@ -34635,34 +35361,86 @@ iIsAccessiblePath[path_String] :=
 
 (* \[HorizontalLine]\[HorizontalLine] file_read \[HorizontalLine]\[HorizontalLine] *)
 iToolExecFileRead[input_Association, accessSpec_Association] :=
-  Module[{path, maxLines, fullPath, content, lines},
+  Module[{path, maxLines, baseDir, fullPath, content, lines,
+          spec, privLvl, accessLevel},
     path     = Lookup[input, "path", ""];
     maxLines = Lookup[input, "maxLines", 200];
     If[!StringQ[path] || path === "",
       Return[<|"Success" -> False, "Error" -> "No path provided"|>]];
     
-    (* \:30d1\:30b9\:89e3\:6c7a: \:76f8\:5bfe\:30d1\:30b9\:306f NotebookDirectory \:57fa\:6e96 *)
+    (* \:30d1\:30b9\:89e3\:6c7a: \:76f8\:5bfe\:30d1\:30b9\:306f NotebookDirectory \:57fa\:6e96\:3002
+       2026-07-22 \:4fee\:6b63: \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:304c\:88f8\:306e $packageDirectory \:3060\:3063\:305f\:305f\:3081\:3001
+       \:3053\:306e\:6587\:8108 (ClaudeCode`Private`) \:306e\:672a\:5b9a\:7fa9\:30b7\:30f3\:30dc\:30eb\:3092\:6307\:3057\:3066\:3044\:305f\:3002
+       FileNameJoin \:304c\:672a\:8a55\:4fa1\:306e\:307e\:307e\:6b8b\:308a\:3001\:5f8c\:6bb5\:306e "File not found: " <> fullPath \:3067
+       StringJoin::string \:3092\:51fa\:3059 (result7.nb)\:3002\:6b63\:3057\:304f\:306f Global`$packageDirectory\:3002 *)
+    baseDir = Quiet @ Check[NotebookDirectory[], $Failed];
+    If[!StringQ[baseDir],
+      baseDir = Quiet @ Check[
+        If[StringQ[Global`$packageDirectory], Global`$packageDirectory, Directory[]],
+        Directory[]]];
+    If[!StringQ[baseDir], baseDir = Directory[]];
     fullPath = If[FileNameDepth[path] > 1 || StringStartsQ[path, "/" | "\\"],
       path,
-      FileNameJoin[{
-        Quiet @ Check[NotebookDirectory[], $packageDirectory],
-        path}]];
-    
+      FileNameJoin[{baseDir, path}]];
+
+
     (* \:30a2\:30af\:30bb\:30b9\:53ef\:80fd\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306e\:78ba\:8a8d *)
     If[!iIsAccessiblePath[fullPath],
       Return[<|"Success" -> False,
         "Error" -> "Path not in accessible directories"|>]];
-    
+
     If[!FileExistsQ[fullPath],
       Return[<|"Success" -> False,
         "Error" -> "File not found: " <> fullPath|>]];
-    
-    content = Quiet @ Check[
-      ReadString[fullPath, CharacterEncoding -> "UTF-8"],
-      $Failed];
-    If[content === $Failed,
+
+    (* \[HorizontalLine]\[HorizontalLine] 2026-07-22: PrivacyLevel \:30c1\:30a7\:30c3\:30af\:3092\:8ffd\:52a0 \[HorizontalLine]\[HorizontalLine]
+       \:5f93\:6765\:306f iIsAccessiblePath (\:30d1\:30b9 scope) \:3060\:3051\:3092\:898b\:3066\:751f\:672c\:6587\:3092\:305d\:306e\:307e\:307e
+       LLM \:306b\:8fd4\:3057\:3066\:3044\:305f\:3002NBFileSpec \:306e\:898f\:5b9a\:306f
+         PrivacyLevel < 0.5 = \:30af\:30e9\:30a6\:30c9 LLM \:53ef / >= 0.5 = \:30ed\:30fc\:30ab\:30eb\:306e\:307f
+       \:306a\:306e\:3067\:3001\:30d1\:30b9\:304c\:8a31\:53ef\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:5185\:3067\:3082\:305d\:308c\:3060\:3051\:3067\:306f\:9001\:4fe1\:53ef\:5426\:306f\:6c7a\:307e\:3089\:306a\:3044\:3002
+       \:30bb\:30eb\:5074 (NBFileReadCells) \:3068\:540c\:3058\:898f\:5247 privLvl <= accessLevel \:3067\:63c3\:3048\:308b\:3002
+       .nb \:306f PrivacyLevel \:304c {0.5, 1.0} \:306e\:3088\:3046\:306a\:6df7\:5728\:30ec\:30f3\:30b8\:306b\:306a\:308b\:306e\:3067\:6700\:5927\:5024\:3092\:63a1\:308b\:3002
+       spec \:304c\:53d6\:308c\:306a\:3044\:5834\:5408\:306f 1.0 \:6271\:3044 (fail-closed)\:3002
+       \:6ce8: \:3053\:306e\:30c1\:30a7\:30c3\:30af\:3092\:5185\:5074 Module \:3067\:5305\:3080\:3068 Return \:304c\:305d\:306e Module \:304b\:3089\:629c\:3051\:308b\:3060\:3051\:3067
+       iToolExecFileRead \:306f\:6b62\:307e\:3089\:305a\:3001\:4e0b\:306e ReadString \:307e\:3067\:5230\:9054\:3057\:3066\:672c\:6587\:3092\:8fd4\:3057\:3066\:3057\:307e\:3046\:3002
+       \:5909\:6570\:306f\:5916\:5074 Module \:306b\:6301\:305f\:305b\:3001\:95a2\:6570\:672c\:4f53\:76f4\:4e0b\:3067 Return \:3059\:308b\:3053\:3068\:3002 *)
+    spec = Quiet @ Check[NBAccess`NBFileSpec[fullPath], <||>];
+    privLvl = If[AssociationQ[spec],
+      Lookup[spec, "PrivacyLevel", 1.0], 1.0];
+    privLvl = Which[
+      NumericQ[privLvl], N[privLvl],
+      ListQ[privLvl] && Length[privLvl] > 0 && AllTrue[privLvl, NumericQ],
+        N[Max[privLvl]],
+      True, 1.0];
+    (* iResolveAccessLevel \:306f Association \:3092\:53d7\:3051\:308b (\:6570\:5024\:3092\:6e21\:3059\:3068
+       \:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:5b9a\:7fa9\:306b\:843d\:3061\:3066 accessSpec \:306e\:5024\:304c\:7121\:8996\:3055\:308c\:308b)\:3002 *)
+    accessLevel = iResolveAccessLevel[accessSpec];
+    If[!NumericQ[accessLevel], accessLevel = 0.5];
+    If[privLvl > accessLevel,
       Return[<|"Success" -> False,
-        "Error" -> "Failed to read file"|>]];
+        "Error" -> "Refused: file PrivacyLevel " <> ToString[privLvl] <>
+          " exceeds this evaluation's access level " <> ToString[accessLevel] <>
+          ". Its content must not leave the local kernel. " <>
+          "Use FileByteCount / FileNames for metadata, or compute a reduction " <>
+          "over the file with NBImport inside mathematica_eval instead of " <>
+          "pulling the raw text into the conversation."|>]];
+
+
+    (* 2026-07-22 \:4fee\:6b63: \:65e7\:30b3\:30fc\:30c9\:306f ReadString[fullPath, CharacterEncoding -> "UTF-8"]\:3002
+       ReadString \:306e\:7b2c 2 \:5f15\:6570\:306f\:7d42\:7aef\:5b50\:3067\:3042\:308a CharacterEncoding \:30aa\:30d7\:30b7\:30e7\:30f3\:306f\:7121\:3044\:305f\:3081\:3001
+       \:30e1\:30c3\:30bb\:30fc\:30b8\:304c\:51fa\:3066 Check \:304c $Failed \:306b\:5909\:63db\:3057\:3001\:5e38\:306b "Failed to read file" \:306b
+       \:306a\:3063\:3066\:3044\:305f (Quiet \:304c\:30e1\:30c3\:30bb\:30fc\:30b8\:3092\:6d88\:3059\:306e\:3067\:539f\:56e0\:304c\:898b\:3048\:306a\:304b\:3063\:305f)\:3002
+       \:3064\:307e\:308a file_read \:306f\:672c\:6587\:3092\:8fd4\:305b\:3066\:3044\:306a\:304b\:3063\:305f (result7.nb \:3067\:767a\:899a)\:3002
+       \:30a8\:30f3\:30b3\:30fc\:30c7\:30a3\:30f3\:30b0\:3092\:660e\:793a\:3057\:305f\:3044\:306e\:3067 Import[..., "Text", CharacterEncoding -> ...] \:3092\:4f7f\:3046\:3002 *)
+    content = Quiet @ Check[
+      Import[fullPath, "Text", CharacterEncoding -> "UTF-8"],
+      $Failed];
+    (* UTF-8 \:3067\:8aad\:3081\:306a\:3044\:30d5\:30a1\:30a4\:30eb\:306f\:74b0\:5883\:65e2\:5b9a\:30a8\:30f3\:30b3\:30fc\:30c7\:30a3\:30f3\:30b0\:3067\:518d\:8a66\:884c *)
+    If[!StringQ[content],
+      content = Quiet @ Check[Import[fullPath, "Text"], $Failed]];
+    If[!StringQ[content],
+      Return[<|"Success" -> False,
+        "Error" -> "Failed to read file: " <> fullPath|>]];
     
     lines = StringSplit[content, "\n"];
     If[Length[lines] > maxLines,
@@ -34678,36 +35456,49 @@ iToolExecFileRead[input_Association, accessSpec_Association] :=
   ];
 
 (* \[HorizontalLine]\[HorizontalLine] notebook_info \[HorizontalLine]\[HorizontalLine] *)
-iToolExecNotebookInfo[input_Association, nb_] :=
-  Module[{cells, result},
+(* \[HorizontalLine]\[HorizontalLine] 2026-07-22 \:6f0f\:6d29\:4fee\:6b63 \[HorizontalLine]\[HorizontalLine]
+   \:65e7\:5b9f\:88c5\:306f NBFileReadAllCells[nb] \:3092\:7b2c\:4e00\:9078\:629e\:306b\:3057\:3066\:3044\:305f\:3002\:305d\:306e\:5b9f\:4f53\:306f
+     NBFileReadAllCells[nb] := NBFileReadCells[nb, PrivacySpec -> <|"AccessLevel" -> 1.0|>]
+   \:3067\:3001NBFileReadCells \:306f text = If[privLvl <= accessLevel, \:672c\:6587, "[CONFIDENTIAL]"]
+   \:306a\:306e\:3067\:3001AccessLevel 1.0 \:3067\:306f\:79d8\:533f\:30bb\:30eb\:306e\:672c\:6587\:307e\:3067\:7d20\:901a\:308a\:3059\:308b\:3002
+   \:5b9f\:969b\:306b\:672c\:6587\:304c LLM \:306b\:51fa\:3066\:3044\:306a\:304b\:3063\:305f\:306e\:306f\:3001\:751f\:6210\:5074\:306e\:30ad\:30fc ("Style"/"Text")
+   \:3068\:3053\:3053\:306e Lookup \:30ad\:30fc ("CellStyle"/"InputText") \:304c\:98df\:3044\:9055\:3063\:3066 "(binary)" \:306b
+   \:843d\:3061\:3066\:3044\:305f\:3068\:3044\:3046\:5076\:7136\:306b\:3059\:304e\:305a\:3001Lookup \:3092\:300c\:4fee\:6b63\:300d\:3057\:305f\:77ac\:9593\:306b
+   \:7121\:30d5\:30a3\:30eb\:30bf\:3067\:6d41\:51fa\:3059\:308b\:72b6\:614b\:3060\:3063\:305f (\:30bb\:30eb\:6570\:3068\:30b9\:30bf\:30a4\:30eb\:5217\:306f\:65e2\:306b\:6f0f\:308c\:3066\:3044\:305f)\:3002
+   \:5bfe\:7b56: \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:5225 redaction \:3092\:884c\:3046 NBMakeContextPacket \:306b\:4e00\:672c\:5316\:3057\:3001
+   accessSpec \:3092\:547c\:3073\:51fa\:3057\:5143\:304b\:3089\:53d7\:3051\:53d6\:308b (\:5f93\:6765\:306f 0.5 \:30cf\:30fc\:30c9\:30b3\:30fc\:30c9)\:3002 *)
+iToolExecNotebookInfo[input_Association, accessSpec_Association, nb_] :=
+  Module[{cells, result, txt},
     cells = Quiet @ Check[
-      NBAccess`NBFileReadAllCells[nb],
-      Quiet @ Check[
-        NBAccess`NBMakeContextPacket[nb,
-          <|"AccessLevel" -> 0.5|>]["Cells"],
-        {}]];
-    
+      NBAccess`NBMakeContextPacket[nb, accessSpec]["Cells"],
+      $Failed];
+
     If[!ListQ[cells],
       Return[<|"Success" -> False,
         "Error" -> "Failed to read notebook cells"|>]];
-    
+
+    (* NBMakeContextPacket \:306e\:30bb\:30eb\:30ad\:30fc\:306f "CellStyle" / "InputText"\:3002
+       \:79d8\:533f\:30bb\:30eb\:306e InputText \:306f\:3053\:306e\:6642\:70b9\:3067\:65e2\:306b\:300c\:6a5f\:5bc6\:30bb\:30eb: \:975e\:8868\:793a\:300d
+       \:306e\:30d7\:30ec\:30fc\:30b9\:30db\:30eb\:30c0\:306b\:7f6e\:63db\:6e08\:307f (NBAccess.wl \:53c2\:7167)\:3002\:3053\:3053\:3067\:306f\:6210\:5f62\:3059\:308b\:3060\:3051\:3002 *)
     result = StringJoin[
       "Total cells: " <> ToString[Length[cells]] <> "\n\n",
       StringJoin @ MapIndexed[
         Function[{c, idx},
+          txt = Lookup[c, "InputText", "(binary)"];
+          If[!StringQ[txt], txt = ToString[txt]];
           "Cell " <> ToString[idx[[1]]] <> " [" <>
-          Lookup[c, "CellStyle",
-            Lookup[c, "Style", "?"]] <> "]: " <>
-          StringTake[
-            Lookup[c, "InputText",
-              Lookup[c, "CellText", "(binary)"]], UpTo[120]] <>
-          "\n"],
+          ToString[Lookup[c, "CellStyle", "?"]] <> "]: " <>
+          StringTake[txt, UpTo[120]] <> "\n"],
         Take[cells, UpTo[50]]]];
-    
+
     <|"Success" -> True,
       "Result"  -> result,
       "Summary" -> ToString[Length[cells]] <> " cells"|>
   ];
+(* \:65e7 2 \:5f15\:6570\:5f62\:3067\:306e\:547c\:3073\:51fa\:3057\:304c\:6b8b\:3063\:3066\:3044\:3066\:3082\:7121\:30d5\:30a3\:30eb\:30bf\:306b\:623b\:3089\:306a\:3044\:3088\:3046\:3001
+   \:6700\:4f4e\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb (0.0) \:3067\:8ee2\:9001\:3059\:308b (fail-closed)\:3002 *)
+iToolExecNotebookInfo[input_Association, nb_] :=
+  iToolExecNotebookInfo[input, <|"AccessLevel" -> 0.0|>, nb];
 
 (* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
    ClaudeBuildRuntimeAdapter
@@ -34737,6 +35528,9 @@ Options[ClaudeBuildRuntimeAdapter] = {
   "Model"            -> Automatic,
   "Timeout"          -> Automatic,  (* Phase 31.0: per-job CLI \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8
                                        Automatic \[RightArrow] $ClaudeTimeout (1200s) *)
+  "MediaFiles"       -> {},         (* 2026-07-29: multimodal \:6dfb\:4ed8\:3002
+                                       {<|"path"->..., "mediaType"->...|>, ...}
+                                       (iNormalizePrompt \:306e mediaFiles \:5f62\:5f0f) *)
   "ExecutionTimeoutSeconds" -> 30   (* Phase 29 (2026-05-13): \:63d0\:6848\:30b3\:30fc\:30c9\:306e
                                        NBExecuteHeldExpr TimeConstraint \:30c7\:30d5\:30a9\:30eb\:30c8\:3002
                                        LLM proposal \:306b expectedSeconds: N \:304c\:3042\:308c\:3070\:305d\:3061\:3089\:3092\:512a\:5148\:3002 *)
@@ -34745,8 +35539,8 @@ Options[ClaudeBuildRuntimeAdapter] = {
 ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
   Module[{accessLevel, secrets, maxCont, syncProv, provider,
           useFallback, contCount = 0, prevSig = "", accessSpec, modelSpec,
-          timeoutOpt, execTimeout},
-    
+          timeoutOpt, execTimeout, mediaFiles},
+
     accessLevel = OptionValue["AccessLevel"];
     secrets     = OptionValue["Secrets"];
     maxCont     = OptionValue["MaxContinuations"];
@@ -34755,6 +35549,8 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
     useFallback = OptionValue["Fallback"];
     modelSpec   = OptionValue["Model"];
     timeoutOpt  = OptionValue["Timeout"];   (* Phase 31.0 *)
+    mediaFiles  = OptionValue["MediaFiles"];  (* 2026-07-29 *)
+    If[!ListQ[mediaFiles], mediaFiles = {}];
     execTimeout = OptionValue["ExecutionTimeoutSeconds"];  (* Phase 29 *)
     If[!IntegerQ[execTimeout] || execTimeout <= 0, execTimeout = 30];
     
@@ -34791,10 +35587,11 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
     If[ListQ[modelSpec] && Length[modelSpec] >= 2 && StringQ[modelSpec[[1]]],
       Module[{provLC = ToLowerCase[modelSpec[[1]]]},
         Which[
-          (* zai (z.ai/GLM) \:3082 QueryProviderAsync \:306b\:5c02\:7528\:5206\:5c90\:3092\:6301\:3064\:305f\:3081\:5f37\:5236 sync \:3057\:306a\:3044\:3002
+          (* zai (z.ai/GLM) \:3068 kimi (Moonshot) \:3082 QueryProviderAsync \:306b\:5c02\:7528\:5206\:5c90\:3092
+             \:6301\:3064\:305f\:3081\:5f37\:5236 sync \:3057\:306a\:3044\:3002
              \:540c\:671f URLRead \:3060\:3068 glm \:63a8\:8ad6\:30e2\:30c7\:30eb\:306e\:9577\:6642\:9593\:5fdc\:7b54\:4e2d\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057
              FE \:304c\:30d5\:30ea\:30fc\:30ba\:3059\:308b\:305f\:3081\:3001StartProcess \:7d4c\:8def\:306e async \:306b\:4e57\:305b\:308b\:3002 *)
-          provLC === "lmstudio" || provLC === "zai" ||
+          provLC === "lmstudio" || provLC === "zai" || provLC === "kimi" ||
               iCodexProviderQ[modelSpec[[1]]],
             syncProv = False,
           provLC === "claudecode",
@@ -34991,11 +35788,23 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
               
               apiKey2 = iResolveLMStudioAPIKey[customURL2];
               If[!StringQ[apiKey2], apiKey2 = "lm-studio"];
-              
-              prepared2 = iPrepareLMStudioMCPPS1[apiKey2, lmstudioModel2, prompt,
-                iEnsureLMStudioV1ChatPath[customURL2],
-                Replace[timeoutOpt, Automatic -> $iFallbackTimeout]];
-              
+
+              (* 2026-07-29: multimodal \:5bfe\:5fdc\:3002mediaFiles \:304c\:3042\:308b\:5834\:5408\:306f
+                 OpenAI \:4e92\:63db /v1/chat/completions + image_url (data URL) \:3067
+                 vision \:5165\:529b\:3059\:308b (iPrepareAnthropicPS1 \:306e openai \:5f62\:5f0f\:304c
+                 media manifest \:3092\:51e6\:7406\:6e08\:307f)\:3002/api/v1/chat (integrations=MCP)
+                 \:306f text-only \:306e\:305f\:3081 media \:3068\:306f\:4f75\:7528\:3057\:306a\:3044\:3002
+                 PS1 \:81ea\:8eab\:304c choices[0].message.content \:3092\:62bd\:51fa\:3057\:3066 outFile \:306b
+                 plain text \:3092\:66f8\:304f\:306e\:3067\:3001collectProvider \:5074\:306f\:305d\:306e\:307e\:307e\:901a\:308b\:3002 *)
+              prepared2 = If[Length[mediaFiles] > 0,
+                iPrepareAnthropicPS1[apiKey2, lmstudioModel2, prompt,
+                  iEnsureChatCompletionsPath[customURL2], "lmstudio",
+                  Replace[timeoutOpt, Automatic -> $iFallbackTimeout],
+                  mediaFiles],
+                iPrepareLMStudioMCPPS1[apiKey2, lmstudioModel2, prompt,
+                  iEnsureLMStudioV1ChatPath[customURL2],
+                  Replace[timeoutOpt, Automatic -> $iFallbackTimeout]]];
+
               If[prepared2 === $Failed,
                 Print["  [RT-Async] ERROR: iPrepareLMStudioMCPPS1 returned $Failed"];
                 Return[$Failed]];
@@ -35045,40 +35854,45 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
             ]
           ];
 
-          (* \[HorizontalLine]\[HorizontalLine] z.ai (GLM, OpenAI \:4e92\:63db\:30af\:30e9\:30a6\:30c9) \:5206\:5c90 \[HorizontalLine]\[HorizontalLine]
+          (* \[HorizontalLine]\[HorizontalLine] z.ai (GLM) / Kimi (Moonshot) = OpenAI \:4e92\:63db\:30af\:30e9\:30a6\:30c9 \:5206\:5c90 \[HorizontalLine]\[HorizontalLine]
              iPrepareAnthropicPS1 \:306e openai \:5f62\:5f0f PS1 \:3092 StartProcess \:3067\:975e\:540c\:671f\:8d77\:52d5\:3059\:308b\:3002
-             \:540c\:671f URLRead (iQueryViaAPI) \:3060\:3068 glm \:63a8\:8ad6\:30e2\:30c7\:30eb\:306e\:9577\:6642\:9593\:5fdc\:7b54\:4e2d\:306b
+             \:540c\:671f URLRead (iQueryViaAPI) \:3060\:3068 glm / kimi \:306e\:63a8\:8ad6\:30e2\:30c7\:30eb\:306e\:9577\:6642\:9593\:5fdc\:7b54\:4e2d\:306b
              \:30e1\:30a4\:30f3\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057 FE \:304c\:30d5\:30ea\:30fc\:30ba\:3059\:308b\:305f\:3081\:3001async \:7d4c\:8def\:3078\:9003\:3059\:3002
              PS1 \:306f .NET UTF8Encoding \:3067\:9001\:53d7\:4fe1\:3057\:3001choices[0].message.content \:3092
              \:62bd\:51fa\:3057\:3066 outFile \:306b UTF-8 \:3067\:66f8\:304f\:306e\:3067\:6587\:5b57\:5316\:3051\:3082\:9632\:3052\:308b\:3002
-             lmstudio \:5206\:5c90\:3068\:540c\:69d8\:306b\:6210\:529f\:6642\:306f\:65e9\:671f Return\:3001\:5931\:6557\:6642\:306f $Failed \:3092 Return\:3002 *)
+             lmstudio \:5206\:5c90\:3068\:540c\:69d8\:306b\:6210\:529f\:6642\:306f\:65e9\:671f Return\:3001\:5931\:6557\:6642\:306f $Failed \:3092 Return\:3002
+             \:4e21 provider \:306f\:65e2\:5b9a URL \:4ee5\:5916\:306f\:5b8c\:5168\:306b\:5171\:901a\:306a\:306e\:3067 1 \:5206\:5c90\:3067\:6271\:3046\:3002 *)
           If[ListQ[modelSpec] && Length[modelSpec] >= 2 &&
              StringQ[modelSpec[[1]]] &&
-             ToLowerCase[modelSpec[[1]]] === "zai",
-            Module[{zaiModel, customURL3, url3, label3, apiKey3, prepared3,
+             MemberQ[{"zai", "kimi"}, ToLowerCase[modelSpec[[1]]]],
+            Module[{prov3, oaiModel, customURL3, url3, label3, apiKey3, prepared3,
                     proc3, rto3},
-              zaiModel = modelSpec[[2]];
+              prov3 = ToLowerCase[modelSpec[[1]]];
+              oaiModel = modelSpec[[2]];
               customURL3 = If[Length[modelSpec] >= 3 && StringQ[modelSpec[[3]]] &&
                               modelSpec[[3]] =!= "", modelSpec[[3]], ""];
               url3 = If[customURL3 =!= "",
-                iEnsureChatCompletionsPath[customURL3], $iZAIChatCompletionsURL];
-              label3 = "zai/" <> zaiModel;
+                iEnsureChatCompletionsPath[customURL3],
+                If[prov3 === "kimi",
+                  $iKimiChatCompletionsURL, $iZAIChatCompletionsURL]];
+              label3 = prov3 <> "/" <> oaiModel;
               rto3 = Replace[timeoutOpt, Automatic -> $iFallbackTimeout];
 
               Quiet[CurrentValue[nb, WindowStatusArea] =
                 label3 <> " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s",
                                     " querying... 0s"]];
 
-              apiKey3 = Quiet[NBAccess`NBGetAPIKey["zai",
+              apiKey3 = Quiet[NBAccess`NBGetAPIKey[prov3,
                 PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
               If[!StringQ[apiKey3] || apiKey3 === "",
-                Print["  [RT-Async] ERROR: z.ai API key unavailable"];
+                Print["  [RT-Async] ERROR: " <> prov3 <> " API key unavailable"];
                 Return[$Failed]];
 
-              prepared3 = iPrepareAnthropicPS1[apiKey3, zaiModel, prompt,
-                url3, "zai", rto3];
+              prepared3 = iPrepareAnthropicPS1[apiKey3, oaiModel, prompt,
+                url3, prov3, rto3];
               If[prepared3 === $Failed,
-                Print["  [RT-Async] ERROR: iPrepareAnthropicPS1 (zai) returned $Failed"];
+                Print["  [RT-Async] ERROR: iPrepareAnthropicPS1 (" <> prov3 <>
+                  ") returned $Failed"];
                 Return[$Failed]];
 
               proc3 = StartProcess[{
@@ -35096,7 +35910,7 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                 "promptFile"   -> prepared3["promptFile"],
                 "startTime"    -> AbsoluteTime[],
                 "timeout"      -> rto3,
-                "providerKind" -> "zai"|>]
+                "providerKind" -> prov3|>]
             ]
           ];
 
@@ -35217,7 +36031,24 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
               "ToolCalls"    -> toolCalls,
               "TextResponse" -> rawResponse,
               "HeldExpr"     -> None|>, Module]];
-          
+
+          (* \[HorizontalLine]\[HorizontalLine] 1b. Relaxed tool_call variants (2026-07-28) \[HorizontalLine]\[HorizontalLine]
+             qwen3.5-style deviations from the canonical format (bare tool
+             word, attribute args, native JSON body). Without this, the tool
+             never runs and the raw tool_call text lands in the notebook as a
+             Column cell. Only known tool names are accepted; see
+             iAdapterRelaxedToolCalls for the variant catalog. *)
+          If[Length[toolCallMatches] === 0,
+            toolCalls = iAdapterRelaxedToolCalls[rawResponse,
+              Lookup[iDefaultToolDefinitions[accessLevel], "Name", {}]];
+            If[ListQ[toolCalls] && Length[toolCalls] > 0,
+              Return[<|
+                "HasToolUse"   -> True,
+                "HasProposal"  -> False,
+                "ToolCalls"    -> toolCalls,
+                "TextResponse" -> rawResponse,
+                "HeldExpr"     -> None|>, Module]]];
+
           (* \[HorizontalLine]\[HorizontalLine] 2. Mathematica \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:691c\:51fa (\:5f93\:6765\:52d5\:4f5c) \[HorizontalLine]\[HorizontalLine] *)
           (* Phase B-fix9: (?s) \:30d5\:30e9\:30b0\:3092\:4ed8\:3051\:3066\:8907\:6570\:884c\:30b3\:30fc\:30c9\:3092\:6b63\:3057\:304f\:6355\:7372\:3002
              \:4ee5\:524d\:306f \"```(?:mathematica)\\s*\
@@ -35846,6 +36677,7 @@ Options[ClaudeStartRuntime] = {
   "Fallback"         -> False,
   "Model"            -> Automatic,
   "Timeout"          -> Automatic,   (* Phase 31.0 *)
+  "MediaFiles"       -> {},          (* 2026-07-29: multimodal \:6dfb\:4ed8 (iNormalizePrompt \:306e mediaFiles) *)
   "Metadata"         -> <||>
 };
 
@@ -35859,7 +36691,8 @@ ClaudeStartRuntime[nb_, input_, opts:OptionsPattern[]] :=
       "Provider"         -> OptionValue["Provider"],
       "Fallback"         -> OptionValue["Fallback"],
       "Model"            -> OptionValue["Model"],
-      "Timeout"          -> OptionValue["Timeout"]];   (* Phase 31.0 *)
+      "Timeout"          -> OptionValue["Timeout"],   (* Phase 31.0 *)
+      "MediaFiles"       -> OptionValue["MediaFiles"]];
     
     meta = OptionValue["Metadata"];
     runtimeId = ClaudeRuntime`CreateClaudeRuntime[adapter,
@@ -36614,7 +37447,8 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
     mediaFiles_List:{}] :=
   Module[{accessLevel, result, runtimeId, useFallback, jobId, step,
           history, copts, meta},
-    
+    iClaudeFreezeLog["bridge-entry", StringTake[task, UpTo[40]]];
+
     (* Core integrity check: \:95a2\:6570\:4e0a\:66f8\:304d\:306e\:691c\:51fa *)
     If[!TrueQ[iGuardCoreIntegrity[nb]], Return[$Failed]];
 
@@ -36626,6 +37460,27 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
         "bridge active=" <> ToString[iClaudeActiveLLMJobCount[]]];
       iSafeSetWindowStatus[nb,
         iL["Claude: 他ジョブの完了待ち...", "Claude: waiting for other jobs..."]];
+      With[{nb1 = nb, tag1 = tag, task1 = task, img1 = imageDirs,
+            ae1 = autoEvaluate, ms1 = modelSpec, pv1 = privSpec,
+            ap1 = autoPrivate, to1 = timeout, mf1 = mediaFiles},
+        Quiet @ Check[
+          SessionSubmit[ScheduledTask[
+            iClaudeEvalViaRuntimeBridge[nb1, tag1, task1, img1, ae1,
+              ms1, pv1, ap1, to1, mf1],
+            {5, 1}]],
+          $Failed]];
+      Return[Null]];
+
+    (* 2026-07-29 (freeze fix): FE 応答性ゲート。この先の前段処理は
+       iSessionAppend / iBeginJobAtCapturedCell (NotebookWrite) /
+       NBCellCount 等の FE 同期呼び出しを ScheduledTask 文脈から行う。
+       FE が Dynamic 評価等で塞がっている瞬間に重なると
+       「kernel は FE 応答待ち・FE は kernel 応答待ち」の相互待ちで
+       完全フリーズする (hardening P1-5 と同型。2026-07-29 の
+       画像付き ClaudeEval フリーズの実例)。probe が通らない間は
+       5 秒後の再試行へ退避する。 *)
+    If[! iClaudeFEResponsiveQ[],
+      iClaudeFreezeLog["bridge-deferred-febusy"];
       With[{nb1 = nb, tag1 = tag, task1 = task, img1 = imageDirs,
             ae1 = autoEvaluate, ms1 = modelSpec, pv1 = privSpec,
             ap1 = autoPrivate, to1 = timeout, mf1 = mediaFiles},
@@ -36694,10 +37549,13 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
       "StartTime"     -> AbsoluteTime[]
     |>;
     
-    (* \[HorizontalLine]\[HorizontalLine] WindowStatusArea \:306b\:521d\:671f\:30b9\:30c6\:30fc\:30bf\:30b9\:8868\:793a \[HorizontalLine]\[HorizontalLine] *)
-    Quiet[CurrentValue[nb, WindowStatusArea] =
+    (* \[HorizontalLine]\[HorizontalLine] WindowStatusArea \:306b\:521d\:671f\:30b9\:30c6\:30fc\:30bf\:30b9\:8868\:793a \[HorizontalLine]\[HorizontalLine]
+       2026-07-29: \:7121\:4fdd\:8b77\:306e CurrentValue \:66f8\:304d\:8fbc\:307f\:306f FE \:304c\:585e\:304c\:3063\:3066\:3044\:308b\:3068
+       \:7121\:9650\:5f85\:3061\:306b\:306a\:308b\:305f\:3081 iSafeSetWindowStatus (TimeConstrained) \:306b\:5909\:66f4\:3002 *)
+    iSafeSetWindowStatus[nb,
       iL["ClaudeRuntime: \:6e96\:5099\:4e2d...", "ClaudeRuntime: Preparing..."]];
-    
+    iClaudeFreezeLog["bridge-prep-end"];
+
     result = ClaudeStartRuntime[nb, task,
       "Profile"          -> "Eval",
       "Fallback"         -> useFallback,
@@ -36714,8 +37572,14 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
       "SyncProvider"     -> False,
       "Provider"         -> Automatic,
       "Model"            -> modelSpec,
+      (* 2026-07-29: mediaFiles \:306f\:5f93\:6765\:3053\:3053\:3067\:6368\:3066\:3089\:308c\:3066\:3044\:305f (\:753b\:50cf\:304c LLM \:306b
+         \:5c4a\:304b\:305a\:3001prompt \:306e\:300cmultimodal \:3068\:3057\:3066\:6dfb\:4ed8\:6e08\:307f\:300d\:5ba3\:8a00\:3068\:77db\:76fe)\:3002
+         adapter \:307e\:3067\:914d\:7ba1\:3057 lmstudio vision \:7d4c\:8def\:3067\:5b9f\:9001\:4fe1\:3059\:308b\:3002 *)
+      "MediaFiles"       -> mediaFiles,
       "Metadata"         -> meta];
-    
+    iClaudeFreezeLog["bridge-startruntime-end",
+      ToString[Head[result["RuntimeId"]]]];
+
     runtimeId = result["RuntimeId"];
     If[!StringQ[runtimeId],
       NBAccess`NBWritePrintNotice[nb,

@@ -1,3 +1,5 @@
+---
+
 # claudecode — 設計思想と実装の概要
 
 Mathematica ノートブックから Claude Code CLI を呼び出し、コード生成・デバッグ・パッケージ管理・ドキュメント生成を対話的に行うパッケージです。
@@ -22,9 +24,9 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 実装面では、Claude Code CLI をバックエンドとして利用し、`--output-format stream-json` モードでリアルタイムにストリーミング出力を解析します。問い合わせ中は経過時間に加え、現在の状態（思考中・テキスト生成中・ツール実行中）やフラグメント数をリアルタイムで表示します。エラー出力は stderr 経由で分離処理され、stdout の JSON ストリームと干渉しない設計になっています。ファイルパス操作には `FileNameJoin` を一貫して使用し、OS 非依存のパス構築を徹底しています。
 
-作業ディレクトリ (`$ClaudeWorkingDirectory`) 配下の CLAUDE.md やディレクティブ (rules/skills) が Claude Code に自動的に読み込まれ、プロジェクト固有のガイドラインを反映した応答が得られます。プロジェクトディレクティブ機構により、NotebookDirectory ごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。Claude Code CLI が利用できない場合のフォールバック機構として、Anthropic API・OpenAI API・z.ai（GLM シリーズ）API への直接呼び出しに加え、LM Studio 等のローカル LLM サーバーへの接続もサポートしています。フォールバックモデルは `$ClaudeFallbackModels` で優先順位付きで設定でき、`{provider, model, url}` の3要素形式でカスタム URL を指定できます。アクセスレベルに基づいて利用可能なモデルのみが選択されるプライバシー対応ルーティングにより、機密データの処理をローカルモデルへ自動転送できます。
+作業ディレクトリ (`$ClaudeWorkingDirectory`) 配下の CLAUDE.md やディレクティブ (rules/skills) が Claude Code に自動的に読み込まれ、プロジェクト固有のガイドラインを反映した応答が得られます。プロジェクトディレクティブ機構により、NotebookDirectory ごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。Claude Code CLI が利用できない場合のフォールバック機構として、Anthropic API・OpenAI API・z.ai（GLM シリーズ）API・Kimi（Moonshot AI）API への直接呼び出しに加え、LM Studio 等のローカル LLM サーバーへの接続もサポートしています。フォールバックモデルは `$ClaudeFallbackModels` で優先順位付きで設定でき、`{provider, model, url}` の3要素形式でカスタム URL を指定できます。アクセスレベルに基づいて利用可能なモデルのみが選択されるプライバシー対応ルーティングにより、機密データの処理をローカルモデルへ自動転送できます。
 
-**LM Studio の主モデル利用と MCP ツール連携**: `$ClaudeModel` に LM Studio のエンドポイントを直接指定することで、すべての ClaudeEval/ClaudeQuery を LM Studio 経由で実行できます。さらに `$ClaudeLMStudioIntegrations` に MCP サーバー ID を指定すると、LM Studio がサーバー側で tool-call を自動実行し、Web 検索等の MCP ツールをローカル LLM から呼び出せます。これにより、プライバシーを優先しながら外部ツール統合を実現できます。
+**LM Studio の主モデル利用と MCP ツール連携**: `$ClaudeModel` に LM Studio のエンドポイントを直接指定することで、すべての ClaudeEval/ClaudeQuery を LM Studio 経由で実行できます。さらに `$ClaudeLMStudioIntegrations` に MCP サーバー ID を指定すると、LM Studio がサーバー側で tool-call を自動実行し、Web 検索等の MCP ツールをローカル LLM から呼び出せます。これにより、プライバシーを優先しながら外部ツール統合を実現できます。2026-07-29 より LM Studio プロバイダに対してもマルチモーダル入力（テキスト + 画像）が可能になり、OpenAI 互換の chat/completions エンドポイント経由で画像を含むクエリを送信できます。
 
 **ChatGPT Codex CLI の provider 利用**: Claude Code CLI に加えて、OpenAI の ChatGPT Codex CLI を provider として利用できます。`$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定すると、ClaudeEval/ClaudeQuery が Codex CLI 経由で実行されます。Codex provider は Claude CLI と同じ非同期実行経路で動作し、Codex 実行ごとに一時的な作業ディレクトリと CODEX_HOME を作成して `codex login` の認証情報を引き継ぎます。Codex のモデル名は SourceVault のモデルレジストリが一元管理し、具体的な LLM モデル ID をパッケージソースに直書きしない設計を採っています。**仕様レビュー合意ワークフロー**では `$ClaudeAdvisaryModel`（既定: `{"chatgptcodex", "Automatic"}`）が Codex アドバイザリーロールのモデルとして使用されます。
 
@@ -42,7 +44,7 @@ AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImag
 
 **非同期スケジューリング規約の自動注入**: `ClaudeUpdatePackage` のプロンプトに、非同期タスクのスケジューリング規約（claudecode/NBAccess 公開 API の使用義務・例外条件・根拠）を自動注入します。LLM が生成するパッケージコードが正しい非同期パターンに従うよう誘導します。
 
-**Windows エンコーディング安全な API 通信（マルチモーダル対応）**: Anthropic API 経由のフォールバック通信において、リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換（ShiftJIS 等）による日本語文字化けが発生しません。`ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力（マルチモーダル入力）に対応しており、CLI パスでは画像を PNG に変換して送信し、API フォールバックパスでは Anthropic API のマルチモーダル `content` 配列を構築して送信します。
+**Windows エンコーディング安全な API 通信（マルチモーダル対応）**: Anthropic API 経由のフォールバック通信において、リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換（ShiftJIS 等）による日本語文字化けが発生しません。`ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力（マルチモーダル入力）に対応しており、CLI パスでは画像を PNG に変換して送信し、API フォールバックパスでは Anthropic API のマルチモーダル `content` 配列を構築して送信します。LM Studio プロバイダに対してもマルチモーダル入力が可能（2026-07-29）で、OpenAI 互換の chat/completions エンドポイント経由で画像を含むクエリを送信します。
 
 **自然言語ディスパッチ**: `$ClaudeEvalNaturalDispatch`（既定 `True`）が有効なとき、`ClaudeEval["..."]` のタスク文字列が「今日からの予定」「概要を更新」等の定型パターンにマッチすると、LLM を経由せず SourceVault の高レベル API を直接呼び出します。頻出の定型指示を低コスト・決定論的に処理でき、マッチしないタスクは従来どおり LLM 経路に流れます。マッチ結果や実行サマリを確認したい場合は `$ClaudeEvalNaturalVerbose -> True` で詳細ログを表示できます。さらに「Auto」実行モードでは、タスク文字列が `$ClaudeEvalAutoLLMMinLength`（既定 500）文字未満かつ改行数が `$ClaudeEvalAutoLLMMinNewlines`（既定 3）未満の場合、LLM planner の起動自体を省略して即座に Single 実行に切り替えることで、短い定型タスクの応答をさらに軽量化します。
 
@@ -158,7 +160,7 @@ Block[{$CharacterEncoding = "UTF-8"},
 ClaudeRuntime を使用する場合も、claudecode のロード後に別途ロードしてください。ロード時に `$UseClaudeRuntime = True` が自動的に設定されます。
 
 ```mathematica
-(* ClaudeRuntime の読み込み(オプション) — \$UseClaudeRuntime = True が自動設定される *)
+(* ClaudeRuntime の読み込み(オプション) — $UseClaudeRuntime = True が自動設定される *)
 << ClaudeRuntime`
 ```
 
@@ -257,7 +259,7 @@ $LLMGraphMaxConcurrency["cli-vision"] = 1
 Block[{$CharacterEncoding = "UTF-8"},
   Needs["ClaudeCodeDirectives`", "claudecode_directives.wl"]];
 
-(* ClaudeRuntime を有効化して使用する(オプション) — ロード時に \$UseClaudeRuntime = True が自動設定される *)
+(* ClaudeRuntime を有効化して使用する(オプション) — ロード時に $UseClaudeRuntime = True が自動設定される *)
 << ClaudeRuntime`
 ClaudeEval["斜方投射のグラフを描いてください"]
 
@@ -297,8 +299,9 @@ ShowClaudePalette[]
 
 | 変数 | デフォルト | 説明 |
 |------|-----------|------|
-| `$ClaudeModel` | `""`（未設定） | Claude CLI に渡すプロバイダーとモデル名のペア。タプル `{provider, model}` 形式が標準。パッケージロード直後は `""`（未設定）で、この場合は Claude Code CLI 自身の既定モデルが使用される。`{"lmstudio", "モデル名", "http://host:port"}` 形式で LM Studio を主モデルとして直接指定することも可能。`{"chatgptcodex", Automatic}` 形式で ChatGPT Codex CLI を provider として指定することも可能。provider には `zai`（z.ai の GLM シリーズ API）も指定できる。`ShowClaudePalette[]` でのプロバイダー/モデル選択操作を行うと `$ClaudeModel` にタプル値が反映され、claudecode/anthropic の既定モデル候補は SourceVault 経由で動的に解決される（未解決時は `claude-opus-4-8` にフォールバック） |
+| `$ClaudeModel` | `""`（未設定） | Claude CLI に渡すプロバイダーとモデル名のペア。タプル `{provider, model}` 形式が標準。パッケージロード直後は `""`（未設定）で、この場合は Claude Code CLI 自身の既定モデルが使用される。`{"lmstudio", "モデル名", "http://host:port"}` 形式で LM Studio を主モデルとして直接指定することも可能。`{"chatgptcodex", Automatic}` 形式で ChatGPT Codex CLI を provider として指定することも可能。provider には `zai`（z.ai の GLM シリーズ API）や `kimi`（Moonshot AI）も指定できる。`ShowClaudePalette[]` でのプロバイダー/モデル選択操作を行うと `$ClaudeModel` にタプル値が反映され、claudecode/anthropic の既定モデル候補は SourceVault 経由で動的に解決される（未解決時は `claude-opus-5` にフォールバック） |
 | `$ClaudeAdvisaryModel` | `{"chatgptcodex", "Automatic"}` | 仕様レビュー合意ワークフローにおける Codex アドバイザリーロールのモデル指定。`$ClaudeModel` と同形式（bare provider 文字列 `"chatgptcodex"` も指定可能） |
+| `$ClaudeUltraEnabled` | `True` | `True` のとき、仕様生成/仕様実装ワークフローが `$ClaudeModel` ロールを ultra モデルクラス（SourceVault モデルレジストリの `"code-ultra"`/`"ultra"` インテント、例: claude-fable-5）にアップグレードする（利用可能な場合）。`False` で常に `$ClaudeModel` をそのまま使用。アドバイザリーロール（`$ClaudeAdvisaryModel`）には影響しない |
 | `$ClaudeStandardFont` | `"Yu Gothic UI"` | ClaudeEval が生成する出力コード（Grid/Column/Style/Button 等）で統一使用されるフォント名。ロード後に任意のフォント名を代入して変更可能 |
 | `$ClaudeTimeout` | `1200` | タイムアウト秒数 |
 | `$ClaudeVerbose` | `False` | `True` で履歴コンパクション等の詳細ログを出力 |
@@ -309,7 +312,7 @@ ShowClaudePalette[]
 | `$ClaudeMDContent` | `""` | 読み込まれた CLAUDE.md の内容。空の場合は未検出または内容なし |
 | `$ClaudeAccessibleDirs` | `{$packageDirectory}` | Claude Code に Read 許可する追加ディレクトリ。パスを見せないことがファイアウォールの本質であり、安易な追加は避けること。`$packageDirectory` 配下以外の新規ディレクトリを追加すると、初回使用時に許可確認ダイアログが表示される |
 | `$ClaudeNBDirAccess` | `"list"` | NotebookDirectory のアクセスレベル（`"list"` / `"read"` / `"readwrite"`） |
-| `$ClaudeFallbackModels` | `{{"chatgptcodex","gpt-5.5"},{"anthropic","claude-opus-4-8"},{"openai","gpt-5.5"}}` | フォールバックモデル優先順位。各要素は `{provider, model}` または `{provider, model, url}`。`"lmstudio"` プロバイダーでローカル LLM も、`"zai"` プロバイダーで z.ai（GLM シリーズ）の課金 API も指定可能 |
+| `$ClaudeFallbackModels` | `{{"chatgptcodex","gpt-5.6-sol"},{"anthropic","claude-opus-5"},{"openai","gpt-5.5"}}` | フォールバックモデル優先順位。各要素は `{provider, model}` または `{provider, model, url}`。`"lmstudio"` プロバイダーでローカル LLM も、`"zai"` プロバイダーで z.ai（GLM シリーズ）の課金 API も、`"kimi"` プロバイダーで Kimi（Moonshot AI）の課金 API も指定可能 |
 | `$ClaudePrivateModel` | `{}` | 秘密データ処理用のローカルモデル指定 |
 | `$ClaudeLMStudioIntegrations` | `{}` | LM Studio 使用時に有効にする MCP サーバー ID のリスト（例: `{"mcp/exa"}`）。mcp.json に登録済みのサーバーを指定すると、LM Studio がサーバー側で tool-call を自動実行する |
 | `$ClaudeTestModel` | `$ClaudeModel と同じ` | `ClaudeCheckSeparation` 等のテスト用モデル名。未設定の場合はロード時に `$ClaudeModel` と同じ値に初期化される |
@@ -345,7 +348,7 @@ ShowClaudePalette[]
 **クエリ・コード生成**
 - `ClaudeQuery[prompt]` — Claude に問い合わせ、テキスト応答を返す(同期)。`ClaudeQuery[{text, Image[...], File[path], ...}]` でマルチモーダル入力も可能。リッチレスポンスモードにより、安全なコード(プロット・計算等)は自動評価される
 - `ClaudeQuerySync[prompt]` — Claude に問い合わせ、応答文字列を同期的に返す軽量版。セッション履歴やノートブック書き込みは行わない
-- `ClaudeQueryBg[prompt]` — FrontEnd 操作・ScheduledTask 生成なしで同期問い合わせする軽量版。`{text, Image[...], File[path], ...}` のリスト形式によるマルチモーダル入力に対応。SocketListen ハンドラや ScheduledTask コールバック等の非同期コンテキストから安全に呼び出せる
+- `ClaudeQueryBg[prompt]` — FrontEnd 操作・ScheduledTask 生成なしで同期問い合わせする軽量版。`{text, Image[...], File[path], ...}` のリスト形式によるマルチモーダル入力に対応。SocketListen ハンドラや ScheduledTask コールバック等の非同期コンテキストから安全に呼び出せる。LM Studio プロバイダでもマルチモーダル入力が可能（2026-07-29）
 - `ClaudeMath[task]` — Mathematica コード生成に特化したクエリ
 - `ClaudeEval[task]` — コードを非同期生成し、ノートブックに挿入・自動実行。`Fallback`・`WebFetch`・`Model`・`AutoPrivate`・`RepeatInterval` オプションで柔軟に制御。「Auto」実行モードでは `$ClaudeEvalAutoLLMMinLength`/`$ClaudeEvalAutoLLMMinNewlines` のしきい値により LLM planner の起動要否が自動判定される。`$ClaudeEvalNaturalDispatch` が有効な場合、定型パターンにマッチするタスクは LLM を経由せず SourceVault の高レベル API に直接ディスパッチされる（`$ClaudeEvalNaturalVerbose` でマッチ・実行サマリを表示可能）。SourceVault ロード時は Order 2 ディスパッチの PromptRouter ブリッジで登録済みルートに照合され、適合する場合は LLM 呼び出しなしに直接評価される。ClaudeOrchestrator ロード時は呼び出しがジョブキューに追加されて即座に返り、カーネルをブロックしない非同期実行モードに切り替わる。禁止パターン（`NBAutoEvalProhibitedPatterns`）に該当するコードの自動実行を自動ブロック
 - `ContinueEval[instruction]` — 直前の ClaudeEval の続きを実行。エラー修正に便利
@@ -542,8 +545,8 @@ ClaudeEval["タスクの説明"]   (* 再び CLI 経由 *)
 | **モデル** | Opus / Sonnet / Default | 使用モデルを切り替え |
 | **エフォート** | Low / Medium / High / Max | Think トリガー強度（Low: 思考なし、Max: ultrathink） |
 | **課金API** | 禁止 / 許可 | `Fallback -> True/False` を制御 |
-| **P:** | provider 循環切替 | クリックのたびに登録済み provider（claudecode / chatgptcodex / anthropic / openai / zai / lmstudio 等）の順序で切り替え |
-| **M:** | モデル候補リスト | provider 別のモデルを選択。ChatGPTCodex 選択時は SourceVault のモデルレジストリから取得され、claudecode/anthropic 選択時も既定候補が SourceVault 経由で動的解決される（解決できない場合は `claude-opus-4-8` にフォールバック） |
+| **P:** | provider 循環切替 | クリックのたびに登録済み provider（claudecode / chatgptcodex / anthropic / openai / zai / kimi / lmstudio 等）の順序で切り替え |
+| **M:** | モデル候補リスト | provider 別のモデルを選択。ChatGPTCodex 選択時は SourceVault のモデルレジストリから取得され、claudecode/anthropic 選択時も既定候補が SourceVault 経由で動的解決される（解決できない場合は `claude-opus-5` にフォールバック） |
 
 #### セッション セクション
 
@@ -556,12 +559,12 @@ ClaudeEval["タスクの説明"]   (* 再び CLI 経由 *)
 
 ### LM Studio 対応
 
-ローカルで動作する LLM サーバー（LM Studio 等）を、フォールバックモデルとして使用するだけでなく、`$ClaudeModel` に直接指定して主モデルとして使用できます。API キーは不要で、OpenAI 互換の Chat Completions API エンドポイントに接続します。
+ローカルで動作する LLM サーバー（LM Studio 等）を、フォールバックモデルとして使用するだけでなく、`$ClaudeModel` に直接指定して主モデルとして使用できます。API キーは不要で、OpenAI 互換の Chat Completions API エンドポイントに接続します。2026-07-29 よりマルチモーダル入力（テキスト + 画像の混在）にも対応しており、`ClaudeQueryBg` 等から画像を含むクエリを直接 LM Studio へ送信できます。
 
 ```mathematica
 (* フォールバックモデルにローカルモデルを追加 *)
 $ClaudeFallbackModels = {
-  {"anthropic", "claude-opus-4-8"},
+  {"anthropic", "claude-opus-5"},
   {"openai", "gpt-5.5"},
   {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}
 };
@@ -624,7 +627,7 @@ $ClaudeModel = {"chatgptcodex", Automatic}
 ClaudeEval["1 から 100 までの和を求めてください"]
 
 (* provider を Claude Code に戻す *)
-$ClaudeModel = {"claudecode", "claude-opus-4-8"}
+$ClaudeModel = {"claudecode", "claude-opus-5"}
 ```
 
 Codex provider は Claude CLI と同じ非同期実行経路で動作します。Codex 実行ごとに一時的な作業ディレクトリと `CODEX_HOME` を作成し、`codex login` の認証情報（`auth.json`）を自動的に引き継いだうえで、`codex exec` をバックグラウンドで起動して結果をポーリングします。実行中にカーネルがブロックされることはありません。
@@ -746,7 +749,7 @@ ClaudeUpdateDocumentation["claudecode", "最新版に追従して",
 | `user_manual.md` | ユーザーマニュアル（機能別の詳細な使い方） |
 | `example.md` | 使用例集（代表的なユースケースとコード例） |
 
-各ドキュメントの詳細はリンク先を参照してください。README は概要のみを提供しており、すべての機能・オプションの網羅的な解説は `user_manual.md` および`api.md` に記載されています。
+各ドキュメントの詳細はリンク先を参照してください。README は概要のみを提供しており、すべての機能・オプションの網羅的な解説は `user_manual.md` および `api.md` に記載されています。
 
 ## 使用例・デモ
 

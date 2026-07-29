@@ -175,7 +175,10 @@ MCP サーバは **WL service (カーネル) + HTTP/MCP proxy (Python)** の二�
   soft-probe (`Names[...]`) で登録する形 (rule 11: claudecode は SourceVault を一切参照しない;
   `$ClaudePackageKeywordMap` と同じ流儀)。ラベル文字列・起動/停止/状態判定コールバックは全て
   SourceVault 側が供給する。トグルのラベルは `SourceVaultMCPRunningQ[]` の実状態に追従する
-  (TTL キャッシュ + UpdateInterval)。新規登録を既存パレットに反映するには `ShowClaudePalette[]` を再実行。
+  (TTL キャッシュ + トグルクリック時の DynamicModule ローカル tick 再描画。常駐 `UpdateInterval`
+  は FE フリーズ回避のため 2026-07-21 に廃止 — `skills/dynamic-panel-render-cost` 鉄則 4)。
+  ラベルはトグル操作/パレット開き直しで更新され、新規登録を既存パレットに反映するには
+  `ShowClaudePalette[]` を再実行。
 
 ### 8. 稼働中サービスはコード変更で自動更新されない
 
