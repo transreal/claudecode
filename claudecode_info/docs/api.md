@@ -338,6 +338,16 @@ $ClaudeRoutingModelPolicy の Automatic を現在の電源状態 (Windows: Batte
 $ClaudeRoutingModelPolicy を p (Automatic | "Local" | "Cloud" | "Off") に設定し、カーネル再起動後も残るようマシンにも永続化する。
 → p | $Failed (不正な値の場合)
 
+## LLM 呼び出しブレークポイント
+
+### $ClaudeLLMBreakpoint
+型: Boolean, 初期値: False
+LLM 呼び出しブレークポイントのスイッチ。True のとき、あらゆる LLM ディスパッチ (Claude CLI / 課金 API / LM Studio / Codex) が送信直前で一時停止し、フローティング break ウィンドウ (非モーダル + カーネル待機、Runtime アダプター経由の async タスクコンテキストからも動作) を表示する。Continue ボタンと、送信プロンプト全文・全マルチモーダルペイロード (画像・PDF・添付ファイル) を表示する Detail ウィンドウへのリンクを持つ。ShowClaudePalette の "BreakPtr" ボタンからトグルする (ノートブックごとに永続化)。ヘッドレスカーネル ($Notebooks =!= True) やプリエンプティブ評価 (Dynamic コンテキスト、モーダルダイアログがデッドロックする状況) では break はスキップされる。
+
+### ClaudeLLMBreakpointDetail[]
+直近の LLM ブレークポイントのペイロード (プロンプト + マルチモーダルデータ) の Detail ウィンドウを再度開く。直近数件分のペイロードがメモリに保持される。
+→ Null
+
 ## LLMクエリ関数
 
 ### ClaudeQuery[task, opts]
@@ -460,9 +470,9 @@ sv:// スナップショット URI (spec/review/requirements) を解決し内容
 → NotebookObject | $Failed
 
 ### CreateImplementationWorkflow[name, approvedSpec, opts]
-承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。実装担当ロールは ultra モデルクラス (ClaudeUltraModelSpec: CLI 優先、paid-API ゲート付き) を優先し、$ClaudeModel にフォールバックする。検証担当 ($ClaudeAdvisaryModel) が仕様との整合性を確認しフィードバックを合意まで繰り返す。テスト通過ゲート (proven-code gate) あり。複雑な作業はステージ分割して補助仕様をレビューしてから実装する。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
+承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。実装担当ロールは ultra モデルクラス (ClaudeUltraModelSpec: CLI 優先、paid-API ゲート付き) を優先し、$ClaudeModel にフォールバックする。検証担当 ($ClaudeAdvisaryModel) が仕様との整合性を確認しフィードバックを合意まで繰り返す。承認には生成したテストがフレッシュカーネルで通過することも必要 (proven-code gate、サマリーキー TestGate/Proven)。複雑な作業はステージ分割して補助仕様をレビューしてから実装する。ultra クラス実装者はプランニング時に実装スタイル (native/dag/petri) も選択する。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
 → String (バックグラウンドジョブ id)
-Options: "Notes" -> "" (追加指示), "ClaudeModel" -> Automatic ($ClaudeModel に解決), "AdvisaryModel" -> Automatic ($ClaudeAdvisaryModel に解決), "MaxRounds" -> Automatic, "Nb" -> Automatic (ターゲットノートブック), "Launch" -> True (完了後自動起動), "Project" -> "", "SpecURI" -> "", "SourceNotebookURI" -> ""
+Options: "Notes" -> "" (追加指示), "ClaudeModel" -> Automatic ($ClaudeModel に解決), "AdvisoryModel" -> Automatic ($ClaudeAdvisaryModel に解決), "MaxRounds" -> Automatic, "Nb" -> Automatic (ターゲットノートブック), "Launch" -> True (完了後自動起動), "Project" -> "", "SpecURI" -> "", "SourceNotebookURI" -> ""
 
 ### LaunchImplementationWorkflow[name, args]
 CreateImplementationWorkflow で生成したコード化ワークフロー name をロードして起動する。SourceVault`SourceVaultLoadWorkflow[name] でロードし WorkflowInfo["Launch"] を args で呼び出す。
@@ -575,7 +585,7 @@ Options: TaskTypes -> All
 ## 添付・Web
 
 ### ClaudeAttach[path, opts]
-URL またはファイルパスを現在のセッションに添付する。URL の場合はコンテンツをキャッシュしてコンテキストに含める。
+URL またはファイルパスを現在のセッションに添付する。URL の場合は SourceVault に ingest し (可能なら)、raw が PDF ならそのまま、HTML なら PDF 化してキャッシュ・添付する。"sv://..." は SourceVault URI を解決して raw snapshot を添付する。
 → String (添付 id) | $Failed
 Options: Keywords -> {}, Title -> None, Refetch -> False
 
@@ -599,6 +609,18 @@ Options: ClaudeAttach と同じ
 ### ClaudeAttachments[session]
 指定セッションの添付一覧を表示する。
 → Dataset
+
+### ClaudeAttachmentMetadata[]
+アタッチメントメタデータ DB (_meta.json) 全体を返す。
+→ Association (<|cachedPath -> <|source, svURI, title, keywords, cachedAt|>, ...|>)
+
+### ClaudeAttachmentMetadata[cachedPath]
+指定キャッシュファイルのメタデータエントリを返す。URL/sv:// 添付の正準 URI はここに svURI として記録される。
+→ Association | Missing
+
+### ClaudeAttachmentCachedFile[ref]
+参照 (ファイルパス / URL / sv:// URI) に対応するローカルキャッシュファイルのパスを返す。未キャッシュなら $Failed。メタデータ source/svURI 一致 → ハッシュ名規則 の順に探す。
+→ String | $Failed
 
 ### ClearAttachments[]
 現在のセッションの全添付をクリアする。
@@ -707,7 +729,7 @@ $ClaudeCloudSendPreflightLog をクリアする。
 → Null
 
 ### ClaudeCloudSendPreflightLogSummary[opts]
-$ClaudeCloudSendPreflightLog のサマリー (件数、ルート分布、失敗数) を返す。
+$ClaudeCloudSendPreflightLog のサマリー(件数、ルート分布、失敗数) を返す。
 → Association
 Options: "IncludeEntries" -> False
 
@@ -743,6 +765,39 @@ Git コミット用のメッセージを自動生成して表示する。変更�
 Options: Fallback -> False, Owner -> Automatic, Repository -> Automatic, Branch -> Automatic, BaseBranch -> Automatic, DryRun -> False
 
 補足: ClaudeUpdatePackage / ClaudeCreatePackage / ClaudeConvertToPaclet / ClaudeBackupDataset / ClaudeRestorePackage 等のパッケージ編集系関数は ClaudePackageManager.wl へ移管済み (エイリアス経由で claudecode からも引き続き呼び出し可能)。それらの詳細は ClaudePackageManager 側の api.md を参照する。
+
+## Markdown / Mermaid
+
+markdown 文字列をノートブックセル・新規ノートブック・インライン表示に変換する共通コンバータ群。spec-impl / workflow-catalog / commit-safety の各レンダラーが内部で共通利用する正準実装。
+
+### MarkdownToCells[md, opts]
+markdown 文字列をノートブック Cell 式のリストに変換する (見出し、箇条書き/番号リスト、コードフェンス、GFM パイプテーブル、画像、mermaid フローチャート)。markdown → cells 変換の正準実装。
+→ List[Cell]
+Options: "HeadingStyles" -> {"Subsection","Subsubsection","Subsubsubsection","Subsubsubsection"} (#/##/###/#### 用スタイル), "DefaultMode" -> "Para" ("Para" | "Code"; "Code" はフェンスなしテキストを単一 Input セルにする), "TeXMath" -> Automatic (True で $...$ をインライン数式に), "CleanInline" -> Automatic (True で **太字**/__下線__/`code` マーカーを除去), "MermaidGraphs" -> Automatic (True で ```mermaid``` ブロックを MermaidGraph 経由の Graph 出力セルに), "UntaggedCodeStyle" -> "Program" ("Program" | "Input"、タグなし ``` ブロック用), "Tables" -> Automatic (True で | a | b | 形式を Dataset 出力セルに), "TableStyle" -> "Dataset" ("Dataset" | "Grid" | "Text"), "Images" -> Automatic (True で ![alt](path) を埋め込み、末尾の pandoc 属性 {width=6.1in}/{height=7.0in} 等 (in/cm/mm/pt/px) に対応), "BaseDirectory" -> Automatic (相対画像パスの基準ディレクトリ。Automatic はソースファイルのディレクトリ、なければ NotebookDirectory[]), "MaxImageWidth" -> 600 (埋め込み画像の表示幅上限 (ポイント)。None で自然サイズ)
+
+### MarkdownToNotebook[md, opts]
+markdown ファイルまたは文字列を CreateDocument 経由で新規ノートブックに展開する。単一行文字列で既存の .md/.markdown/.txt ファイルを指す場合はファイルパスとして扱う (ノートブックディレクトリ基準でも解決)。相対画像パスはファイル自身のディレクトリを基準に解決する。
+→ NotebookObject | Notebook[...] (フロントエンドなし時)
+Options: MarkdownToCells と同じ + "WindowTitle" -> Automatic
+例: MarkdownToNotebook[File["report.md"]]
+
+### MarkdownDisplay[md, opts]
+markdown 文字列 (または File[path]) をインライン表示可能な式としてレンダリングする (パイプテーブルは Dataset に、画像・mermaid フローチャートは描画、見出し・リストはスタイル保持)。新規ノートブックを開かず現在のノートブック内で markdown を確認したい場合に使う。
+→ 表示可能な式
+Options: MarkdownToCells と同じ
+
+### MarkdownWriteCells[md, opts]
+markdown 文字列 (または File[path]) を MarkdownToCells で変換し、評価セルの直下に結果セルを書き込む。
+→ Integer (書き込んだセル数)
+Options: MarkdownToCells と同じ
+
+### MarkdownWriteCells[md, nb, opts]
+指定 NotebookObject nb に書き込む。
+→ Integer
+
+### MermaidGraph[src, opts]
+mermaid フローチャート ("flowchart TD", "graph LR" 等) をパースし、枠付きノードラベル・エッジラベル・宣言方向に従ったレイヤーレイアウトを持つ Graph を返す。src は生 mermaid テキスト、```mermaid フェンスブロック、または File[path]。対応ノード形状: [..], (..), ((..)), {..}, ([..]), [[..]], {{..}}, >..]。対応エッジ: -->, ---, -.->, ==>, <-->, -->|label|, A -- label --> B、A --> B --> C のチェーン、& による fan-in/out。ラベル中の \n や <br> は改行になる。%% コメントおよび subgraph/class/style/click 行は無視される。追加オプションは Graph に渡され既定値を上書きする。パース不能な場合は MermaidGraph::noparse を発行し $Failed を返す (MarkdownToCells はその場合プレーンな "Program" セルにフォールバックする)。
+→ Graph | $Failed
 
 ## NBFileTranslate / ClaudeProcessFile
 
@@ -1041,6 +1096,10 @@ spec (Association, 既定 <||>) は Metadata / AuxiliaryState として登録さ
 並列カーネル n 個を事前起動する。LLMGraphDAG の実行前に呼び出すと起動コストを節約できる。$ClaudeParallelKernelCount を設定する。
 → Null
 
+### $ClaudeParallelKernelCount
+型: Integer | Automatic
+ClaudeRuntime ロード時に前置起動する並列 subkernel の本数。既定 Automatic はマシン適応 (論理コア >= 12 なら 2、それ以外は 1)。wolframscript を主力とする現方針では、Wolfram ライセンスの同時カーネル席を wolframscript ジョブや SourceVault サービスカーネルに温存するため控えめにする。同時カーネルが潤沢なマシンは大きく、そうでないマシンは小さく。整数を明示指定するとマシン毎に固定できる (0 = 前置起動を無効化し synchronous fallback)。
+
 ### ClaudeBeginHighPriority[seconds]
 high priority モードを seconds 秒間有効にする。$ClaudePriorityModeUntil を現在時刻 + seconds に設定する。既定 30 秒。その間 "Suppressible"->True 登録の polling tick はスキップされる。
 → Null
@@ -1116,7 +1175,7 @@ Options: NBAccess`NBEnqueueFinalAction のオプションを継承
 ## パレット・UI
 
 ### ShowClaudePalette[]
-Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/kimi/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。kimi は Moonshot AI Kimi シリーズ (kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
+Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/kimi/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudeLLMBreakpoint トグル ("BreakPtr")、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。kimi は Moonshot AI Kimi シリーズ (kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
 → NotebookObject
 
 ### ClaudeRegisterPaletteServiceControl[spec]
@@ -1291,4 +1350,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl) と再度突き合わせて同期を確認した (2026-07-29 パス、3回目)。今回のチャンクで新たに検出・追加した項目: $ClaudeUltraEnabled (新規公開変数)、ClaudeUltraModelSpec[] / ClaudeUltraModelSpec[nb] (新規公開関数)、"kimi" プロバイダー ($iPaletteProviderOrder および $iPaletteModelsByProvider に追加、候補モデル: kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)、ShowClaudePalette の Provider サイクル説明に "kimi" を追記、claudecode/anthropic モデル候補を claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 に更新、$ClaudeFallbackModels 既定値を {{"chatgptcodex","gpt-5.6-sol"}, {"anthropic","claude-opus-5"}, {"openai","gpt-5.5"}} に更新、CreateImplementationWorkflow の説明に ultra モデルクラス利用と TestGate/Proven ゲートを追記。BeginPackage の公開シンボルリストと本ドキュメント記載シンボルを再照合し、他の削除・追加は検出されなかった。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-01 パス、4回目)。今回のチャンクで新たに検出・追加した項目: ClaudeAttachmentMetadata[]/[cachedPath]、ClaudeAttachmentCachedFile[ref] (添付キャッシュ DB 参照用の新規公開関数、添付・Web セクションに追加)、$ClaudeLLMBreakpoint / ClaudeLLMBreakpointDetail[] (LLM 呼び出しブレークポイント機能、新規セクション追加、ShowClaudePalette の説明にも "BreakPtr" ボタンとして追記)、$ClaudeParallelKernelCount (ClaudeBeginParallelKernels に付随する独立変数として明記)、MarkdownToCells / MarkdownToNotebook / MarkdownDisplay / MarkdownWriteCells / MermaidGraph (markdown → notebook cells / mermaid フローチャート変換の正準実装群、新規セクション "Markdown / Mermaid" として追加)。また CreateImplementationWorkflow の説明に「ultra クラス実装者は実装スタイル (native/dag/petri) も選択する」という実ソース記載を追記して同期した。BeginPackage の公開シンボルリスト (Begin["`Private`"] 以前で ::usage が定義されている全シンボル) を実ソースと再照合し、他の追加・削除は検出されなかった (iCloudSendRouteLabel::usage は Private コンテキスト内定義のため非公開と確認・除外)。

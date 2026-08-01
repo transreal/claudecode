@@ -222,6 +222,7 @@ Quiet[Scan[
    "$ClaudePackageAuxKeywordMap",
    "$ClaudePaletteServiceControls",
    "ClaudeRegisterPaletteServiceControl","ClaudeUnregisterPaletteServiceControl",
+   "$ClaudeLLMBreakpoint","ClaudeLLMBreakpointDetail",
    "$ClaudeCLIMCPServers","ClaudeRegisterCLIMCPServer",
    "$LLMGraphMaxConcurrency","$LLMGraphAutoStopThreshold",
    "$LLMGraphDAGStallSeconds","$LLMGraphDAGMaxJobSeconds",
@@ -333,6 +334,20 @@ ClaudeRegisterPaletteServiceControl::usage =
 
 ClaudeUnregisterPaletteServiceControl::usage =
   "ClaudeUnregisterPaletteServiceControl[id] removes the palette service toggle with that Id.";
+
+$ClaudeLLMBreakpoint::usage =
+  "$ClaudeLLMBreakpoint is the LLM call breakpoint switch (default False). " <>
+  "When True, every LLM dispatch (Claude CLI / paid API / LM Studio / Codex) pauses just before " <>
+  "sending and shows a floating break window (non-modal + kernel wait, so it also works from " <>
+  "async task contexts like the Runtime adapter path) with a Continue button and a Detail link that opens a window " <>
+  "showing the full prompt and all multimodal payloads (images, PDFs, attached files). " <>
+  "Toggled from the ShowClaudePalette \"BreakPtr\" button (persisted per notebook). " <>
+  "The break is skipped in headless kernels ($Notebooks =!= True) and in preemptive " <>
+  "evaluations (Dynamic contexts) where a modal dialog would deadlock the front end.";
+
+ClaudeLLMBreakpointDetail::usage =
+  "ClaudeLLMBreakpointDetail[] reopens the detail window for the most recent LLM breakpoint payload " <>
+  "(prompt + multimodal data). Payloads of the last few broken calls are kept in memory.";
 
 $ClaudeCLIMCPServers::usage =
   "$ClaudeCLIMCPServers is the registry (<|id -> spec|>) of MCP servers wired into headless " <>
@@ -939,6 +954,9 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
   $iPaletteFallback = TrueQ @ Quiet @ NBAccess`NBGetNotebookPaidAPIAllowed[nb];
   v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteUpdateApiMd"}]];
   $iPaletteUpdateApiMd = If[MatchQ[v, True | False], v, False];
+  (* LLM ブレークポイント (既定 Off) *)
+  v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteBreakPtr"}]];
+  $ClaudeLLMBreakpoint = TrueQ[v];
   (* $ClaudeModel \:3092 tuple \:3068\:3057\:3066\:540c\:671f *)
   iPaletteSyncClaudeModel[];
   (* migration \:3055\:308c\:305f\:306a\:3089\:4fdd\:5b58 *)
@@ -956,6 +974,7 @@ iSavePaletteSettings[nb_NotebookObject] := (
   (* Phase 27: paletteFallback \:306e\:6c38\:7d9a\:5316\:306f NBAccess \:7d4c\:7531 (absolute truth) \:3002 *)
   Quiet @ NBAccess`NBSetNotebookPaidAPIAllowed[nb, TrueQ[$iPaletteFallback]];
   Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteUpdateApiMd"}] = $iPaletteUpdateApiMd];
+  Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteBreakPtr"}] = TrueQ[$ClaudeLLMBreakpoint]];
 );
 
 iPaletteOptionsString[] := Module[{parts = {}},
@@ -2018,6 +2037,11 @@ If[!ValueQ[$ClaudeParallelKernelCount], $ClaudeParallelKernelCount = Automatic];
 If[!ListQ[$ClaudePaletteServiceControls], $ClaudePaletteServiceControls = {}];
 If[!AssociationQ[$iPaletteServiceStateCache], $iPaletteServiceStateCache = <||>];
 If[!IntegerQ[$iPaletteServiceToggleCounter], $iPaletteServiceToggleCounter = 0];
+(* LLM ブレークポイント (2026-07-30): On で全 LLM 呼び出しの送信直前にブレーク (既定 Off) *)
+If[!BooleanQ[$ClaudeLLMBreakpoint], $ClaudeLLMBreakpoint = False];
+If[!AssociationQ[$iLLMBreakpointPayloads], $iLLMBreakpointPayloads = <||>];
+If[!AssociationQ[$iLLMBreakpointResumeExprs], $iLLMBreakpointResumeExprs = <||>];
+If[!AssociationQ[$iLLMBreakpointResumedFlags], $iLLMBreakpointResumedFlags = <||>];
 
 (* --- LM Studio MCP \:7d71\:5408\:5909\:6570\:306e\:65e2\:5b9a\:5024 (2026-04-24 \:8ffd\:52a0) --- *)
 If[!ValueQ[$ClaudeLMStudioIntegrations],     $ClaudeLMStudioIntegrations     = None];
@@ -5841,7 +5865,11 @@ iEnsureSharedPollingTask[] :=
        FrontEnd \:3078\:306e\:5fdc\:7b54\:9045\:5ef6\:304c\:9855\:5728\:5316\:3059\:308b\:30023 \:79d2\:9593\:9694\:306b\:3059\:308b\:3053\:3068\:3067 tick \:9593\:306b
        \:5341\:5206\:306a FrontEnd \:5fdc\:7b54\:6642\:9593\:3092\:78ba\:4fdd\:3057\:300c\:52d5\:7684\:8a55\:4fa1\:306e\:653e\:68c4\:300d\:30c0\:30a4\:30a2\:30ed\:30b0\:3092\:9632\:3050\:3002
        \:30e6\:30fc\:30b6\:4f53\:611f\:306e\:9032\:6357\:66f4\:65b0\:9045\:308c\:306f\:5fae\:3005\:305f\:308b\:3082\:306e\:3002 *)
-    $iSharedPollingTask = CreateScheduledTask[iSharedPollingTick[], 3.0];
+    (* BreakPtr: レガシー CreateScheduledTask は preemptive リンクで走り、
+       tick 内で UI クリックを待つとクリック配送リンク自体を占有して
+       FE ごとフリーズする。$iClaudeInLegacyTask で対話ブレーク禁止を伝える *)
+    $iSharedPollingTask = CreateScheduledTask[
+      Block[{$iClaudeInLegacyTask = True}, iSharedPollingTick[]], 3.0];
     StartScheduledTask[$iSharedPollingTask];
     $iSharedPollingTasks = {$iSharedPollingTask};
     $iSharedPollingTask];
@@ -6058,7 +6086,12 @@ iClaudeTickFEBusyNote[k_String] := Module[{c},
     iClaudeDiagEmit["FEBusyDeferred",
       <|"HandlerKey" -> k, "Count" -> c|>, "info"]]];
 
-iSharedPollingTick[] := Module[{keys, tickFn, entry, suppressible,
+(* BreakPtr retrofit: 既存の共有タスクは reload 後も古い held 式
+   iSharedPollingTick[] を呼び続けるため、レガシー印は関数定義側で包む
+   (CreateScheduledTask 側の Block だけでは再作成まで反映されない) *)
+iSharedPollingTick[] :=
+  Block[{$iClaudeInLegacyTask = True}, iSharedPollingTickCore[]];
+iSharedPollingTickCore[] := Module[{keys, tickFn, entry, suppressible,
                                 highPrio, sortedKeys, nbList},
   keys = Keys[$claudeProgress];
   If[!ListQ[keys] || Length[keys] === 0,
@@ -6704,6 +6737,387 @@ iCLIPermissionFlags[excludeRead_:False] :=
     tools = Join[tools, mcpTools];
     " --allowedTools \"" <> StringRiffle[tools, ","] <> "\""];
 
+(* ============================================================
+   LLM ブレークポイント (BreakPtr, 2026-07-30)
+   $ClaudeLLMBreakpoint = True のとき、全 LLM 呼び出しの送信直前に
+   モーダルダイアログでブレークする。Continue で続行、Detail リンクで
+   プロンプト全文と画像/PDF 等の送信データを別ウインドウ表示。
+   ゲート挿入点 (最終ディスパッチ層):
+     CLI:      iMakeBat / iMakeBatStreamJson
+     PS1:      iPrepareAnthropicPS1 / iPrepareLMStudioMCPPS1 / iPrepareWebSearchPS1
+     同期API:  iQueryAnthropicAPI / iQueryOpenAIAPI / iQueryLMStudioChat
+     bg API:   iClaudeQueryBgAPI (anthropic 尾部) / iClaudeQueryBgAPIMultimodal
+     Codex:    iRunChatgptCodexCLI / iLaunchCodexExecAsync
+   委譲・リダイレクト経路 (iQueryViaAPI, multimodal→CLI 等) は委譲先の
+   ゲートで 1 回だけブレークするよう、ディスパッチャ自身には挿していない。
+   ガード: FE 不在 ($Notebooks =!= True) と preemptive 評価
+   ($SynchronousEvaluation === True: Dynamic 内等、モーダルが FE と
+   デッドロックする文脈) では素通しする。ゲート内の失敗は Quiet@Check で
+   握りつぶし、LLM 呼び出し自体は決して妨げない。
+   ============================================================ *)
+
+$iLLMBreakpointMaxPayloads = 10;
+
+iLLMBreakpointModelString[] := Which[
+  ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 2,
+    ToString[$ClaudeModel[[1]]] <> " / " <> ToString[$ClaudeModel[[2]]],
+  StringQ[$ClaudeModel] && StringTrim[$ClaudeModel] =!= "", $ClaudeModel,
+  True, "Automatic"];
+
+(* fresh kernel 対策 [2026-07-31 NB実機5巡目]: カーネル再起動直後は
+   $ClaudeLLMBreakpoint が既定 False のままで、パレットの非同期
+   設定ロードより先に評価が走るとブレークせず素通りする (tick 時点では
+   ロード済みで記録だけ残る)。評価入口 (main link) で notebook タグから
+   直接同期して閉じる。FE 多忙時に無限待ちしないよう TimeConstrained。 *)
+iLLMBreakpointSyncFromNotebook[nb_] := Quiet @ Check[
+  If[Head[nb] === NotebookObject,
+    Module[{v = TimeConstrained[
+        CurrentValue[nb, {TaggingRules, "claudecode", "paletteBreakPtr"}],
+        0.5, $TimedOut]},
+      If[MatchQ[v, True | False], $ClaudeLLMBreakpoint = v]]],
+  Null];
+
+(* CLI 経路: プロンプト本文の「添付ファイル: <path>」行 (iNormalizePrompt の
+   fileTag) から添付ファイルを復元する *)
+iLLMBreakpointCLIAttachments[promptText_String] :=
+  Module[{tag = "添付ファイル: ", lines, paths},
+    lines = Select[StringSplit[promptText, "\n"], StringStartsQ[#, tag] &];
+    paths = StringTrim[StringDrop[#, StringLength[tag]]] & /@ lines;
+    paths = Select[DeleteDuplicates[paths],
+      Quiet[TrueQ[FileExistsQ[#]]] &];
+    Map[<|"path" -> #,
+          "mediaType" -> ToString @ Quiet @ Check[
+            iMediaTypeForExt[FileExtension[#]], ""]|> &, paths]];
+
+iLLMBreakpointStore[payload_Association] := Module[{id},
+  If[!AssociationQ[$iLLMBreakpointPayloads], $iLLMBreakpointPayloads = <||>];
+  id = "bp" <> ToString[UnixTime[]] <> "n" <> ToString[RandomInteger[99999]];
+  $iLLMBreakpointPayloads[id] = payload;
+  While[Length[$iLLMBreakpointPayloads] > $iLLMBreakpointMaxPayloads,
+    $iLLMBreakpointPayloads = Rest[$iLLMBreakpointPayloads]];
+  $iLLMBreakpointLastId = id;
+  id];
+
+iLLMBreakpointThumb[img_?ImageQ] :=
+  If[First[ImageDimensions[img]] > 480, ImageResize[img, 480], img];
+
+(* 1 メディア項目 → Detail ウインドウ用セル列 *)
+iLLMBreakpointFileCells[path_String, mt_String] := Module[{cells, sz, img, pg},
+  sz = Quiet @ Check[FileByteCount[path], 0];
+  cells = {Cell[path <> "   (" <> If[mt === "", "?", mt] <> ", " <>
+    ToString[Round[sz/1024.]] <> " KB)", "Item"]};
+  Which[
+    StringStartsQ[mt, "image/"] && sz > 0 && sz < 30*1024^2,
+      (* preemptive 評価 (ブレークウインドウの Detail クリック) は FE の
+         時間制限があるため短い制約で諦め、info のみに退化させる *)
+      img = Quiet @ Check[TimeConstrained[Import[path],
+        If[TrueQ[$SynchronousEvaluation], 2, 8], None], None];
+      If[ImageQ[img],
+        AppendTo[cells,
+          Cell[BoxData[ToBoxes[iLLMBreakpointThumb[img]]], "Output"]]],
+    (mt === "application/pdf" ||
+       StringMatchQ[FileExtension[path], "pdf", IgnoreCase -> True]) &&
+      sz > 0 && sz < 50*1024^2,
+      pg = Quiet @ Check[TimeConstrained[
+        Import[path, {"PDF", "PageGraphics", 1}],
+        If[TrueQ[$SynchronousEvaluation], 3, 10], None], None];
+      If[pg =!= None && pg =!= $Failed,
+        AppendTo[cells, Cell[BoxData[ToBoxes[Show[pg, ImageSize -> 420]]], "Output"]];
+        AppendTo[cells, Cell[iL["PDF 1ページ目プレビュー (全 ",
+            "PDF page-1 preview (of "] <>
+          ToString[Quiet @ Check[Import[path, "PageCount"], "?"]] <>
+          iL[" ページ)", " pages)"], "Text"]]]
+  ];
+  cells];
+
+iLLMBreakpointMediaItemCell[item_] := Which[
+  AssociationQ[item] && KeyExistsQ[item, "path"],
+    iLLMBreakpointFileCells[ToString[item["path"]],
+      ToString[Lookup[item, "mediaType", ""]]],
+  ImageQ[item],
+    {Cell[iL["Image オブジェクト ", "Image object "] <>
+       ToString[ImageDimensions[item]], "Item"],
+     Cell[BoxData[ToBoxes[iLLMBreakpointThumb[item]]], "Output"]},
+  MatchQ[item, File[_String]],
+    iLLMBreakpointFileCells[item[[1]],
+      ToString @ Quiet @ Check[iMediaTypeForExt[FileExtension[item[[1]]]], ""]],
+  StringQ[item] && Quiet[TrueQ[FileExistsQ[item]]],
+    iLLMBreakpointFileCells[item,
+      ToString @ Quiet @ Check[iMediaTypeForExt[FileExtension[item]], ""]],
+  True,
+    {Cell[StringTake[ToString[item, InputForm], UpTo[500]], "Item"]}];
+
+(* Detail ウインドウ: プロンプト全文 + 送信メディア一覧 *)
+iLLMBreakpointDetailWindow[id_String] := Module[{p, prompt, media, metaGrid, cells},
+  p = Lookup[If[AssociationQ[$iLLMBreakpointPayloads],
+    $iLLMBreakpointPayloads, <||>], id, None];
+  If[!AssociationQ[p], Return[Null]];
+  prompt = ToString @ Lookup[p, "Prompt", ""];
+  media = Lookup[p, "Media", {}];
+  If[!ListQ[media], media = {}];
+  metaGrid = Grid[{
+    {Style["Route", Bold],    ToString @ Lookup[p, "Route", ""]},
+    {Style["Provider", Bold], ToString @ Lookup[p, "Provider", ""]},
+    {Style["Model", Bold],    ToString @ Lookup[p, "Model", ""]},
+    {Style["URL", Bold],      ToString @ Lookup[p, "URL", "-"]},
+    {Style["Time", Bold],     DateString[Lookup[p, "Time", Now]]},
+    {Style["Break", Bold],    ToString @ Lookup[p, "BreakMode", "-"]},
+    {Style["Prompt", Bold],   ToString[StringLength[prompt]] <>
+       iL[" 文字", " chars"]},
+    {Style["Media", Bold],    ToString[Length[media]] <> iL[" 件", " items"]}},
+    Alignment -> {{Right, Left}}, Frame -> All,
+    FrameStyle -> GrayLevel[0.85],
+    Background -> {{GrayLevel[0.95], None}}, Spacings -> {1, 0.6}];
+  cells = Join[
+    {Cell["LLM Call Detail", "Subsection"],
+     Cell[BoxData[ToBoxes[metaGrid]], "Output"],
+     Cell["Prompt", "Subsubsection"],
+     Cell[If[StringLength[prompt] > 200000,
+       StringTake[prompt, 200000] <> "\n\n... (truncated, total " <>
+         ToString[StringLength[prompt]] <> " chars)",
+       prompt], "Program"]},
+    If[Length[media] > 0,
+      Join[
+        {Cell["Media (" <> ToString[Length[media]] <> ")", "Subsubsection"]},
+        Flatten[iLLMBreakpointMediaItemCell /@ Take[media, UpTo[16]]],
+        If[Length[media] > 16,
+          {Cell[iL["... 他 ", "... "] <> ToString[Length[media] - 16] <>
+             iL[" 件は省略", " more items omitted"], "Text"]}, {}]],
+      {}]];
+  NotebookPut[Notebook[cells,
+    WindowTitle -> "LLM Call Detail (" <> ToString @ Lookup[p, "Route", ""] <> ")",
+    WindowSize -> {780, 860},
+    WindowMargins -> Automatic,
+    Saveable -> False]];
+  Null];
+
+(* ブレークダイアログ: Continue で続行、Detail は閉じずに別ウインドウ。
+   [2026-07-30 NB実機3巡目で確定した機構ルール]
+   - preemptive 評価 (ボタンクリック等) はカーネルがアイドルか
+     DialogInput のネストされたダイアログセッション内でしか処理されない。
+     メインリンク評価中の While+Pause 待機ループでは Continue クリックが
+     永遠に処理されず「カーネルの応答がありません」→FE フリーズになった
+     (CreateDialog+Pause 方式は不可)。
+   - 従って対話ブレークは DialogInput (ネストセッションがイベントを処理)
+     一択。DialogInput はレガシー preemptive タスク内では即返るが、その
+     文脈は iLLMBreakpointBreak の $iClaudeInLegacyTask ガードで既に
+     記録のみに落としており、ここに来るのはメインリンク文脈だけ。
+   - X 閉じは $Canceled が返り Continue 扱い。 *)
+iLLMBreakpointDialog[id_String] := Module[{p, prompt, media, preview},
+  p = Lookup[If[AssociationQ[$iLLMBreakpointPayloads],
+    $iLLMBreakpointPayloads, <||>], id, None];
+  If[!AssociationQ[p], Return["Continue"]];
+  prompt = ToString @ Lookup[p, "Prompt", ""];
+  media = Lookup[p, "Media", {}];
+  If[!ListQ[media], media = {}];
+  preview = If[StringLength[prompt] > 1200,
+    StringTake[prompt, 1200] <> " ...", prompt];
+  (* With で id の文字列値をボタン式へ焼き込む。Module 一時シンボルのまま
+     だと FE 往復後に値が消え、クリックが無反応になる
+     ([[sourcevault-mailagenda-r9-impl]] と同族の罠) *)
+  With[{bpid = id},
+    DialogInput[
+      Pane[
+        Column[{
+          Style[iL["\[DoubleVerticalBar] LLM ブレークポイント",
+                   "\[DoubleVerticalBar] LLM Breakpoint"], Bold, 14,
+            RGBColor[0.75, 0.35, 0.1]],
+          Spacer[4],
+          Grid[{
+            {Style["Route", Bold],    ToString @ Lookup[p, "Route", ""]},
+            {Style["Provider", Bold], ToString @ Lookup[p, "Provider", ""]},
+            {Style["Model", Bold],    ToString @ Lookup[p, "Model", ""]},
+            {Style["Prompt", Bold],   ToString[StringLength[prompt]] <>
+               iL[" 文字", " chars"]},
+            {Style["Media", Bold],    ToString[Length[media]] <>
+               iL[" 件", " items"]}},
+            Alignment -> {{Right, Left}}, Spacings -> {1, 0.6},
+            Frame -> All, FrameStyle -> GrayLevel[0.85],
+            Background -> {{GrayLevel[0.95], None}}],
+          Spacer[4],
+          Framed[
+            Pane[Style[preview, FontFamily -> "Courier", FontSize -> 9],
+              ImageSize -> {430, {60, 180}}, Scrollbars -> {False, Automatic}],
+            FrameStyle -> GrayLevel[0.8], Background -> GrayLevel[0.97]],
+          Spacer[6],
+          Row[{
+            Button[Style["Continue", Bold], DialogReturn["Continue"],
+              ImageSize -> {110, 32}, Background -> Darker[Green, 0.3],
+              DefaultButtonStyle -> "DialogButton"],
+            Spacer[16],
+            (* Detail はダイアログを閉じずに別ウインドウを開く。
+               ダイアログのネストセッション内なので preemptive 評価が通る *)
+            Button[Style["Detail", Underlined, 11, RGBColor[0.2, 0.35, 0.75]],
+              ClaudeCode`Private`iLLMBreakpointDetailWindow[bpid],
+              Appearance -> "Frameless"]
+          }]
+        }, Spacings -> 0.3],
+        ImageSize -> {470, Automatic}, ImageSizeAction -> "ShrinkToFit"],
+      WindowTitle -> "LLM Breakpoint",
+      WindowMargins -> Automatic]];
+  "Continue"];
+
+(* ─── bridge 用 deferral break (2026-07-31 NB実機6巡目で最終形) ───
+   adapter 経路の bridge は iScheduleAtAsync 経由の非対話タスク文脈で走る。
+   そこでは DialogInput はダイアログセッションに入れず即返り (6巡目の
+   BreakMode=Dialog 記録で実証)、Pause 待機は preemptive クリックを
+   飢餓させ FE ごとフリーズする (2-3巡目)。唯一成立する形は
+   「非モーダル break ウインドウを開いて評価自体を返す (=カーネルを
+    アイドルに戻す) → Continue (Method->"Queued") が保存済み resume 式を
+    実行して承認付きで再入する」deferral break。X 閉じは中止扱い。 *)
+
+iLLMBreakpointResume[bid_String, win_:None] := Module[{r},
+  If[!AssociationQ[$iLLMBreakpointResumedFlags],
+    $iLLMBreakpointResumedFlags = <||>];
+  If[TrueQ[$iLLMBreakpointResumedFlags[bid]], Return[Null]];
+  (* WindowClose イベントの cancel より先にフラグを立てる *)
+  $iLLMBreakpointResumedFlags[bid] = True;
+  If[Head[win] === NotebookObject, Quiet[NotebookClose[win]]];
+  r = Lookup[If[AssociationQ[$iLLMBreakpointResumeExprs],
+    $iLLMBreakpointResumeExprs, <||>], bid, None];
+  If[AssociationQ[$iLLMBreakpointResumeExprs],
+    KeyDropFrom[$iLLMBreakpointResumeExprs, bid]];
+  If[MatchQ[r, _Hold], ReleaseHold[r]];
+  Null];
+
+iLLMBreakpointCancel[bid_String] := (
+  If[!AssociationQ[$iLLMBreakpointResumedFlags],
+    $iLLMBreakpointResumedFlags = <||>];
+  If[!TrueQ[$iLLMBreakpointResumedFlags[bid]],
+    $iLLMBreakpointResumedFlags[bid] = True;
+    If[AssociationQ[$iLLMBreakpointResumeExprs],
+      KeyDropFrom[$iLLMBreakpointResumeExprs, bid]];
+    Print[iL[
+      "LLM ブレークポイント: Continue されずにウインドウが閉じられたため、この呼び出しは中止しました。",
+      "LLM breakpoint: window closed without Continue; the call was cancelled."]]];
+  Null);
+
+iLLMBreakpointBridgeBreakWindow[bid_String, resume_Hold] :=
+ Module[{p, prompt, media, preview},
+  p = Lookup[If[AssociationQ[$iLLMBreakpointPayloads],
+    $iLLMBreakpointPayloads, <||>], bid, None];
+  If[!AssociationQ[p], Return[Null]];
+  If[!AssociationQ[$iLLMBreakpointResumeExprs],
+    $iLLMBreakpointResumeExprs = <||>];
+  If[!AssociationQ[$iLLMBreakpointResumedFlags],
+    $iLLMBreakpointResumedFlags = <||>];
+  $iLLMBreakpointResumeExprs[bid] = resume;
+  $iLLMBreakpointResumedFlags[bid] = False;
+  While[Length[$iLLMBreakpointResumeExprs] > 20,
+    $iLLMBreakpointResumeExprs = Rest[$iLLMBreakpointResumeExprs]];
+  prompt = ToString @ Lookup[p, "Prompt", ""];
+  media = Lookup[p, "Media", {}];
+  If[!ListQ[media], media = {}];
+  preview = If[StringLength[prompt] > 1200,
+    StringTake[prompt, 1200] <> " ...", prompt];
+  With[{bpid = bid},
+    CreateDialog[
+      Pane[
+        Column[{
+          Style[iL["\[DoubleVerticalBar] LLM ブレークポイント",
+                   "\[DoubleVerticalBar] LLM Breakpoint"], Bold, 14,
+            RGBColor[0.75, 0.35, 0.1]],
+          Spacer[4],
+          Grid[{
+            {Style["Route", Bold],    ToString @ Lookup[p, "Route", ""]},
+            {Style["Provider", Bold], ToString @ Lookup[p, "Provider", ""]},
+            {Style["Model", Bold],    ToString @ Lookup[p, "Model", ""]},
+            {Style["Prompt", Bold],   ToString[StringLength[prompt]] <>
+               iL[" 文字", " chars"]},
+            {Style["Media", Bold],    ToString[Length[media]] <>
+               iL[" 件", " items"]}},
+            Alignment -> {{Right, Left}}, Spacings -> {1, 0.6},
+            Frame -> All, FrameStyle -> GrayLevel[0.85],
+            Background -> {{GrayLevel[0.95], None}}],
+          Spacer[4],
+          Framed[
+            Pane[Style[preview, FontFamily -> "Courier", FontSize -> 9],
+              ImageSize -> {430, {60, 180}}, Scrollbars -> {False, Automatic}],
+            FrameStyle -> GrayLevel[0.8], Background -> GrayLevel[0.97]],
+          Spacer[6],
+          Row[{
+            (* Queued: この break でカーネルはアイドルに戻っているため、
+               クリック時に resume がメインリンクの通常評価として走る *)
+            Button[Style["Continue", Bold],
+              ClaudeCode`Private`iLLMBreakpointResume[bpid, ButtonNotebook[]],
+              ImageSize -> {110, 32}, Background -> Darker[Green, 0.3],
+              Method -> "Queued"],
+            Spacer[16],
+            Button[Style["Detail", Underlined, 11, RGBColor[0.2, 0.35, 0.75]],
+              ClaudeCode`Private`iLLMBreakpointDetailWindow[bpid],
+              Appearance -> "Frameless"]
+          }]
+        }, Spacings -> 0.3],
+        ImageSize -> {470, Automatic}, ImageSizeAction -> "ShrinkToFit"],
+      WindowTitle -> "LLM Breakpoint",
+      WindowFloating -> True,
+      WindowMargins -> Automatic,
+      NotebookEventActions -> {"WindowClose" :>
+        ClaudeCode`Private`iLLMBreakpointCancel[bpid]}]];
+  Null];
+
+iLLMBreakpointBreak[route_String, meta_Association] :=
+  Module[{prompt, media, payload, id, t0},
+    (* FE 不在 (headless / service カーネル) では UI も記録閲覧もできない *)
+    If[!TrueQ[$Notebooks], Return[Null]];
+    prompt = Lookup[meta, "Prompt", None];
+    If[!StringQ[prompt],
+      prompt = With[{pf = Lookup[meta, "PromptFile", None]},
+        If[StringQ[pf] && FileExistsQ[pf],
+          Quiet @ Check[Import[pf, "Text", CharacterEncoding -> "UTF-8"], ""],
+          ""]]];
+    If[!StringQ[prompt], prompt = ""];
+    media = Lookup[meta, "Media", {}];
+    If[!ListQ[media], media = {}];
+    (* CLI 経路: 添付はプロンプト本文の fileTag 行から復元 *)
+    If[Length[media] === 0 && StringContainsQ[prompt, "添付ファイル: "],
+      media = Quiet @ Check[iLLMBreakpointCLIAttachments[prompt], {}]];
+    payload = Join[meta, <|"Route" -> route, "Prompt" -> prompt,
+      "Media" -> media, "Time" -> Now,
+      (* 自己診断用: この呼び出しが対話ブレークだったか記録のみだったか *)
+      "BreakMode" -> Which[
+        TrueQ[$SynchronousEvaluation], "RecordOnly (preemptive)",
+        TrueQ[$iClaudeInLegacyTask],  "RecordOnly (legacy task)",
+        True, "Dialog"]|>];
+    (* 記録は常時 (Detail / ClaudeLLMBreakpointDetail[] で閲覧可) *)
+    id = iLLMBreakpointStore[payload];
+    (* 対話ブレーク (DialogInput) はメインリンク文脈のみ:
+       - preemptive 評価 (Dynamic 内) とレガシー preemptive タスク
+         (共有 poll tick / $fbTask / $cxTask = $iClaudeInLegacyTask) では
+         DialogInput がダイアログセッションに入れず即返る (対話不可)。
+       adapter 経路 ClaudeEval の対話ブレークは bridge 入口 (メインリンク)
+       のゲートが担い、これらの文脈は全送信データの記録に徹する。 *)
+    If[TrueQ[$SynchronousEvaluation] || TrueQ[$iClaudeInLegacyTask],
+      Return[Null]];
+    t0 = AbsoluteTime[];
+    iLLMBreakpointDialog[id];
+    (* DialogInput は非対話タスク文脈 (SessionSubmit 等) ではダイアログを
+       出せず即返る (実害なし)。実際に表示されたかを経過時間で事後判定し、
+       記録の BreakMode を正直な値に更新 (NB実機7巡目: session task 文脈の
+       CLI ターン起動が "Dialog" と誤記録されていた) *)
+    If[AssociationQ[$iLLMBreakpointPayloads] &&
+       KeyExistsQ[$iLLMBreakpointPayloads, id],
+      $iLLMBreakpointPayloads[id] = Append[$iLLMBreakpointPayloads[id],
+        "BreakMode" -> If[AbsoluteTime[] - t0 < 0.2,
+          "RecordOnly (non-interactive)", "Dialog (shown)"]]];
+    Null];
+
+(* ゲート本体: Off なら単一 If の no-op。ゲート内失敗は呼び出しを妨げない *)
+iLLMBreakpointGate[route_String, meta_Association] :=
+  If[TrueQ[$ClaudeLLMBreakpoint],
+    Quiet @ Check[iLLMBreakpointBreak[route, meta], Null],
+    Null];
+iLLMBreakpointGate[___] := Null;
+
+ClaudeLLMBreakpointDetail[] :=
+  If[StringQ[$iLLMBreakpointLastId] &&
+     AssociationQ[$iLLMBreakpointPayloads] &&
+     KeyExistsQ[$iLLMBreakpointPayloads, $iLLMBreakpointLastId],
+    iLLMBreakpointDetailWindow[$iLLMBreakpointLastId],
+    Print[iL[
+      "ブレークポイント記録がありません ($ClaudeLLMBreakpoint = True で LLM 呼び出しを行うと記録されます)。",
+      "No breakpoint payload recorded ($ClaudeLLMBreakpoint = True records one on each LLM call)."]]];
+
 iMakeBat[promptFile_String, outFile_String, imageDirs_List:{},
          excludeRead_:False, excludeDirs_List:{}] :=
   Module[{batFile, bc, strm, addDirFlags, permFlags, workDir, allDirs,
@@ -6716,6 +7130,11 @@ iMakeBat[promptFile_String, outFile_String, imageDirs_List:{},
       Import[promptFile, "Text", CharacterEncoding -> "UTF-8"], ""];
     detectedNBPath = If[StringQ[promptText],
       iLLMGraphDetectFilePath[promptText], None];
+    (* BreakPtr: 送信直前ブレーク (CLI 同期系) *)
+    iLLMBreakpointGate["CLI (bat)", <|"Provider" -> "claudecode",
+      "Model" -> iLLMBreakpointModelString[],
+      "Prompt" -> If[StringQ[promptText], promptText, ""],
+      "PromptFile" -> promptFile|>];
     autoExcludeRead = excludeRead ||
       iNBDetectedNBReadExcludedQ[detectedNBPath] || (
         StringQ[detectedNBPath] &&
@@ -6787,6 +7206,11 @@ iMakeBatStreamJson[promptFile_String, outFile_String, imageDirs_List:{},
       Import[promptFile, "Text", CharacterEncoding -> "UTF-8"], ""];
     detectedNBPath = If[StringQ[promptText],
       iLLMGraphDetectFilePath[promptText], None];
+    (* BreakPtr: 送信直前ブレーク (CLI 非同期 stream-json 系) *)
+    iLLMBreakpointGate["CLI (stream-json)", <|"Provider" -> "claudecode",
+      "Model" -> iLLMBreakpointModelString[],
+      "Prompt" -> If[StringQ[promptText], promptText, ""],
+      "PromptFile" -> promptFile|>];
     (* \:691c\:51fa\:3057\:305f\:30d1\:30b9\:304c $ClaudeAccessibleDirs / $packageDirectory \:5916\:306a\:3089\:81ea\:52d5\:9664\:5916 *)
     autoExcludeRead = excludeRead ||
       iNBDetectedNBReadExcludedQ[detectedNBPath] || (
@@ -9735,6 +10159,10 @@ iQueryAnthropicAPI[apiKey_String, model_String, prompt_String] :=
     If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
       Return[iCloudSendPreflightFailure[preflight]]];
 
+    (* BreakPtr: 送信直前ブレーク (同期 Anthropic API) *)
+    iLLMBreakpointGate["API sync (anthropic)", <|"Provider" -> "anthropic",
+      "Model" -> model, "URL" -> url, "Prompt" -> prompt|>];
+
     psExe = iResolvePowerShellExe[];
 
     If[!StringQ[psExe] || StringTrim[psExe] === "",
@@ -9965,6 +10393,10 @@ iPrepareWebSearchPS1[tmpDir_String, apiKey_String, model_String,
     prompt_String] :=
   Module[{promptFile, ps1File, keyFile, outFile, errFile, url,
           script, strm},
+    (* BreakPtr: 送信直前ブレーク (Anthropic web_search PS1) *)
+    iLLMBreakpointGate["WebSearch (PS1)", <|"Provider" -> "anthropic",
+      "Model" -> model, "URL" -> "https://api.anthropic.com/v1/messages",
+      "Prompt" -> prompt|>];
     promptFile = FileNameJoin[{tmpDir, "prompt.txt"}];
     keyFile    = FileNameJoin[{tmpDir, "apikey.txt"}];
     ps1File    = FileNameJoin[{tmpDir, "websearch.ps1"}];
@@ -10242,6 +10674,10 @@ iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
     preflight = iCloudSendPreflightDecision["openai", prompt, url];
     If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
       Return[iCloudSendPreflightFailure[preflight]]];
+
+    (* BreakPtr: 送信直前ブレーク (同期 openai 互換 API) *)
+    iLLMBreakpointGate["API sync (openai-compat)", <|"Provider" -> "openai-compat",
+      "Model" -> model, "URL" -> url, "Prompt" -> prompt|>];
 
     body = "{\"model\":\"" <> model <>
       "\",\"messages\":[{\"role\":\"user\",\"content\":" <>
@@ -11131,6 +11567,9 @@ iQueryLMStudioChat[model_String, prompt_String, baseURL_String,
             "ロード済み: " <> StringRiffle[
               ToString /@ Lookup[pre, "LoadedModels", {}], ", "],
           True, "モデルがロードされていません。"]]];
+    (* BreakPtr: 送信直前ブレーク (LM Studio /api/v1/chat 同期) *)
+    iLLMBreakpointGate["LM Studio chat", <|"Provider" -> "lmstudio",
+      "Model" -> model, "URL" -> url, "Prompt" -> prompt|>];
     integrations = OptionValue["Integrations"];
     (* 2026-06-01: integrations \:89e3\:6c7a\:3092\:4e00\:5143\:5316\:3002Automatic \:306a\:3089
        override / \:30b0\:30ed\:30fc\:30d0\:30eb / SourceVault \:306e\:9806\:3067\:89e3\:6c7a\:3001\:660e\:793a\:30ea\:30b9\:30c8\:306f\:5c0a\:91cd\:3002 *)
@@ -11499,6 +11938,10 @@ iPrepareAnthropicPS1[apiKey_String, model_String, prompt_String,
     provider_String:"anthropic", psTimeout_Integer:300, mediaFiles_List:{}] :=
   Module[{psExe, tmpDir, promptFile, outFile, errFile, ps1File, script, strm,
           manifestFile, isAnthropic = ToLowerCase[provider] === "anthropic"},
+    (* BreakPtr: 送信直前ブレーク (PS1 API 系、マルチモーダル含む) *)
+    iLLMBreakpointGate["API (PS1)", <|"Provider" -> provider,
+      "Model" -> model, "URL" -> url, "Prompt" -> prompt,
+      "Media" -> mediaFiles|>];
     psExe = iResolvePowerShellExe[];
     If[!StringQ[psExe], Return[$Failed]];
     tmpDir = iMakeTempDir[];
@@ -11696,6 +12139,7 @@ iCodexQueryAsyncBridge[prompt_, callback_, nb_NotebookObject] :=
     iSafeSetWindowStatus[nb, label <> " querying... 0s"];
     With[{gSym = Symbol["ClaudeCode`Private`$cxTask" <> ts]},
       gSym = CreateScheduledTask[
+        Block[{$iClaudeInLegacyTask = True},   (* BreakPtr: preemptive タスク印 *)
         With[{p = run["proc"], oFile = run["outFile"], eFile = run["errFile"],
               cb = callback, pNb = nb, t0 = startTime, sym = gSym,
               to = rto, lbl = label},
@@ -11717,7 +12161,7 @@ iCodexQueryAsyncBridge[prompt_, callback_, nb_NotebookObject] :=
                 If[StringQ[text], text = StringTrim[text]]];
               queue = cb[text];
               If[ListQ[queue], Scan[Function[thk, Quiet[thk[]]], queue]]]
-          ]],
+          ]]],
         1];
       StartScheduledTask[gSym]];
     Null
@@ -11736,6 +12180,9 @@ iPrepareLMStudioMCPPS1[apiKey_String, model_String, prompt_String,
     url_String:"http://localhost:1234/api/v1/chat", psTimeout_Integer:300] :=
   Module[{psExe, tmpDir, bodyFile, outFile, errFile, ps1File, strm, script,
           bodyAssoc, bodyText, integrations, ctxLen, temp, reasoning},
+    (* BreakPtr: 送信直前ブレーク (LM Studio MCP PS1) *)
+    iLLMBreakpointGate["LM Studio MCP (PS1)", <|"Provider" -> "lmstudio",
+      "Model" -> model, "URL" -> url, "Prompt" -> prompt|>];
     psExe = iResolvePowerShellExe[];
     If[!StringQ[psExe], Return[$Failed]];
     tmpDir = iMakeTempDir[];
@@ -12035,6 +12482,7 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
       iFallbackInsertProgress[nb, progKey, provider, model]];
     With[{gSym = Symbol["ClaudeCode`Private`$fbTask" <> ts]},
     gSym = CreateScheduledTask[
+      Block[{$iClaudeInLegacyTask = True},   (* BreakPtr: preemptive タスク印 *)
       With[{p = proc, oFile = prepared["outFile"], eFile = prepared["errFile"],
             td = prepared["tmpDir"], cb = callback, pmt = prompt, pNb = nb,
             mods = models, mIdx = modelIdx, sym = gSym, t0 = startTime,
@@ -12115,7 +12563,7 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
             ]
           ]
         ]
-      ],
+      ]],
       1
     ];
     AppendTo[$iFallbackActiveTasks, gSym];
@@ -13041,6 +13489,8 @@ ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
     modelSpec = iClaudeApplyTaskClassToModel[
       OptionValue["TaskClass"], OptionValue[Model]];
     If[FailureQ[modelSpec], Return[modelSpec, Module]];
+    (* BreakPtr: fresh kernel でも notebook タグから同期 *)
+    iLLMBreakpointSyncFromNotebook[Quiet @ EvaluationNotebook[]];
     modelSpec = iResolveDefaultModelSpec[modelSpec];
     privLevel = Replace[OptionValue[PrivacyLevel], Automatic -> 0.0];
     useFallback = TrueQ[OptionValue[Fallback]];
@@ -13415,6 +13865,10 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
     ];
 
     (* \[HorizontalLine]\[HorizontalLine] Anthropic \:7d4c\:8def: \:30ea\:30af\:30a8\:30b9\:30c8\:30dc\:30c7\:30a3 (SKILL \:6e96\:62e0: ByteArray \:3067\:9001\:4fe1) \[HorizontalLine]\[HorizontalLine] *)
+    (* BreakPtr: 送信直前ブレーク (bg Anthropic URLRead。openai 互換系は
+       上の iQueryOpenAIAPI 委譲先でブレーク済みのためここには来ない) *)
+    iLLMBreakpointGate["API bg (anthropic)", <|"Provider" -> "anthropic",
+      "Model" -> model, "URL" -> url, "Prompt" -> prompt|>];
     bodyBytes = Quiet @ Check[
       ExportByteArray[<|
         "model"      -> model,
@@ -13589,6 +14043,16 @@ iClaudeQueryBgAPIMultimodal[items_List, modelSpec_, timeoutSpec_] :=
       Return["Error: Anthropic API \:30ad\:30fc\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002"]];
     url = If[ListQ[modelSpec] && Length[modelSpec] >= 3 && StringQ[modelSpec[[3]]],
       modelSpec[[3]], "https://api.anthropic.com/v1/messages"];
+    (* BreakPtr: 送信直前ブレーク (bg multimodal Anthropic。テキスト項目を
+       Prompt、Image/File/メディアパス項目を Media として渡す。
+       provider=claudecode は上でリダイレクト済み → CLI 側ゲートで 1 回) *)
+    iLLMBreakpointGate["API bg multimodal (anthropic)", <|
+      "Provider" -> "anthropic", "Model" -> model, "URL" -> url,
+      "Prompt" -> StringRiffle[
+        Select[items, StringQ[#] &&
+          !(Quiet[TrueQ[FileExistsQ[#]]] && iIsMediaFile[#]) &], "\n\n"],
+      "Media" -> Select[items, (!StringQ[#]) ||
+        (Quiet[TrueQ[FileExistsQ[#]]] && iIsMediaFile[#]) &]|>];
     tmpDir = FileNameJoin[{$ClaudeWorkingDirectory,
       "claude_mm_" <> ToString[UnixTime[]]}];
     (* content \:914d\:5217\:3092\:69cb\:7bc9 *)
@@ -14935,6 +15399,8 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
           lastEntry, cellCountAfter, notebookCtx},
     (* Core integrity check: \:95a2\:6570\:4e0a\:66f8\:304d\:306e\:691c\:51fa *)
     If[!TrueQ[iGuardCoreIntegrity[nb]], Return[$Failed]];
+    (* BreakPtr: fresh kernel でも notebook タグから同期 *)
+    iLLMBreakpointSyncFromNotebook[nb];
     (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306e\:89e3\:6c7a: PrivacySpec \:3068 Model \:306e\:4e21\:65b9\:3092\:8003\:616e *)
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
     (* Stage 9 P1.5: Private \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30e2\:30c7\:30eb\:691c\:8a3c (NBAccess \:7ba1\:8f44)\:3002
@@ -16798,6 +17264,8 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
   Module[{history, lastEntry, cellCountAfter, notebookCtx,
           contextPrompt, step, entry, anchorTag, continueCallback,
           accessLevel, availModels, useClaudeCode},
+    (* BreakPtr: fresh kernel でも notebook タグから同期 *)
+    iLLMBreakpointSyncFromNotebook[nb];
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
     (* LLM \:9001\:4fe1\:76f4\:524d\:306e\:7cbe\:5bc6\:30c1\:30a7\:30c3\:30af (\:7b2c2\:5c64) *)
     iPrecisionConfidentialCheck[nb];
@@ -20735,6 +21203,30 @@ iAuxApiKeywordMatchedQ[pkg_String, apiFile_String, task_String] :=
   ];
 iAuxApiKeywordMatchedQ[___] := False;
 
+(* iAuxApiKeywordMatchPos: earliest position in the task where this
+   registered aux api's name or any of its keywords hits (Infinity if
+   none). Used to order keyword-matched aux by first mention in the task,
+   mirroring mentionedPos for packages (2026-07-13 redesign): when several
+   matched aux compete for the docs budget, the one the task mentions
+   first wins. 2026-07-30: the task "oops\:306e\:30e1\:30fc\:30eb\:3067..."
+   matched both api_maildb.md (23K chars) and api_oopsseed.md (22K chars);
+   the previous alphabetical order injected maildb, exhausted the 24K
+   budget, and dropped oopsseed entirely -- so the model never saw the
+   OOPS archive layer and mis-routed to the live univ mail store. *)
+iAuxApiKeywordMatchPos[pkg_String, apiFile_String, task_String] :=
+  Module[{aux, auxMap, kws, hits},
+    aux = StringDrop[FileBaseName[apiFile], 4];
+    auxMap = If[AssociationQ[$ClaudePackageAuxKeywordMap],
+      Lookup[$ClaudePackageAuxKeywordMap, pkg, <||>], <||>];
+    If[!AssociationQ[auxMap] || !KeyExistsQ[auxMap, aux], Return[Infinity]];
+    kws = Select[Flatten[{Lookup[auxMap, aux, {}]}], StringQ];
+    hits = Join[
+      StringPosition[task, aux, IgnoreCase -> True],
+      Flatten[StringPosition[task, #, IgnoreCase -> True] & /@ kws, 1]];
+    If[hits === {}, Infinity, Min[First /@ hits]]
+  ];
+iAuxApiKeywordMatchPos[___] := Infinity;
+
 (* iAuxApiDefaultInjectQ: the aux api is NOT registered, so it keeps the
    backward-compatible always-inject behaviour. It is not task-specific, so
    it is injected last (after api.md) and is the first to be dropped under
@@ -20852,8 +21344,14 @@ iPackageDocsContext[task_String] :=
              aux). Per-package priority (matched aux > api.md > default aux)
              is preserved from the 2026-06-12 fix; see the redesign comment
              above the loop. Registered-but-unmatched aux stays excluded. *)
-          matchedAux = Select[Sort @ FileNames["api_*.md", docsDir],
-            iAuxApiKeywordMatchedQ[pkg, #, task] &];
+          (* 2026-07-30: order matched aux by first mention in the task
+             (was alphabetical), so the budget keeps the aux the task
+             leads with -- see iAuxApiKeywordMatchPos. Ties keep the
+             alphabetical file order. *)
+          matchedAux = SortBy[
+            Select[Sort @ FileNames["api_*.md", docsDir],
+              iAuxApiKeywordMatchedQ[pkg, #, task] &],
+            iAuxApiKeywordMatchPos[pkg, #, task] &];
           mainApi = Select[{FileNameJoin[{docsDir, "api.md"}]}, FileExistsQ];
           defaultAux = Select[Sort @ FileNames["api_*.md", docsDir],
             iAuxApiDefaultInjectQ[pkg, #] &];
@@ -28054,6 +28552,18 @@ ShowClaudePalette[] := (
               iL["\:624b\:52d5\:66f4\:65b0", "Manual"]],
             9, Bold, GrayLevel[0.2]],
           ($iPaletteUpdateApiMd = !TrueQ[$iPaletteUpdateApiMd];
+           iSavePaletteSettings[InputNotebook[]]),
+          Appearance -> "Frameless"], SynchronousUpdating -> False],
+      (* LLM ブレークポイント (2026-07-30): On で全 LLM 呼び出しの送信直前に
+         ブレークし Continue/Detail ダイアログを表示 (既定 Off) *)
+      Dynamic[
+        Button[
+          Style["BreakPtr: " <>
+            If[TrueQ[$ClaudeLLMBreakpoint], "On", "Off"],
+            9, Bold,
+            If[TrueQ[$ClaudeLLMBreakpoint],
+              RGBColor[0.75, 0.3, 0.1], GrayLevel[0.2]]],
+          ($ClaudeLLMBreakpoint = !TrueQ[$ClaudeLLMBreakpoint];
            iSavePaletteSettings[InputNotebook[]]),
           Appearance -> "Frameless"], SynchronousUpdating -> False],
       (* \[HorizontalLine] routing model policy (power-aware light routing) \[HorizontalLine]
@@ -37448,6 +37958,8 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
   Module[{accessLevel, result, runtimeId, useFallback, jobId, step,
           history, copts, meta},
     iClaudeFreezeLog["bridge-entry", StringTake[task, UpTo[40]]];
+    (* BreakPtr: fresh kernel でも notebook タグから同期 *)
+    iLLMBreakpointSyncFromNotebook[nb];
 
     (* Core integrity check: \:95a2\:6570\:4e0a\:66f8\:304d\:306e\:691c\:51fa *)
     If[!TrueQ[iGuardCoreIntegrity[nb]], Return[$Failed]];
@@ -37462,11 +37974,14 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
         iL["Claude: 他ジョブの完了待ち...", "Claude: waiting for other jobs..."]];
       With[{nb1 = nb, tag1 = tag, task1 = task, img1 = imageDirs,
             ae1 = autoEvaluate, ms1 = modelSpec, pv1 = privSpec,
-            ap1 = autoPrivate, to1 = timeout, mf1 = mediaFiles},
+            ap1 = autoPrivate, to1 = timeout, mf1 = mediaFiles,
+            bpap1 = TrueQ[$iLLMBreakpointBridgeApproved]},
         Quiet @ Check[
           SessionSubmit[ScheduledTask[
-            iClaudeEvalViaRuntimeBridge[nb1, tag1, task1, img1, ae1,
-              ms1, pv1, ap1, to1, mf1],
+            (* BreakPtr: 承認済みなら再入にも伝搬 (二重ブレーク防止) *)
+            Block[{$iLLMBreakpointBridgeApproved = bpap1},
+              iClaudeEvalViaRuntimeBridge[nb1, tag1, task1, img1, ae1,
+                ms1, pv1, ap1, to1, mf1]],
             {5, 1}]],
           $Failed]];
       Return[Null]];
@@ -37483,13 +37998,45 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
       iClaudeFreezeLog["bridge-deferred-febusy"];
       With[{nb1 = nb, tag1 = tag, task1 = task, img1 = imageDirs,
             ae1 = autoEvaluate, ms1 = modelSpec, pv1 = privSpec,
-            ap1 = autoPrivate, to1 = timeout, mf1 = mediaFiles},
+            ap1 = autoPrivate, to1 = timeout, mf1 = mediaFiles,
+            bpap1 = TrueQ[$iLLMBreakpointBridgeApproved]},
         Quiet @ Check[
           SessionSubmit[ScheduledTask[
-            iClaudeEvalViaRuntimeBridge[nb1, tag1, task1, img1, ae1,
-              ms1, pv1, ap1, to1, mf1],
+            (* BreakPtr: 承認済みなら再入にも伝搬 (二重ブレーク防止) *)
+            Block[{$iLLMBreakpointBridgeApproved = bpap1},
+              iClaudeEvalViaRuntimeBridge[nb1, tag1, task1, img1, ae1,
+                ms1, pv1, ap1, to1, mf1]],
             {5, 1}]],
           $Failed]];
+      Return[Null]];
+
+    (* BreakPtr (deferral break): bridge は iScheduleAtAsync 経由の非対話
+       タスク文脈のため、ここでブロック待ちは不可能 (DialogInput 即返り/
+       Pause 待機はフリーズ)。break ウインドウを開いてこの評価自体を返し、
+       Continue (Queued) が Block[$iLLMBreakpointBridgeApproved=True] 付き
+       resume で再入して続行する。実 CLI 起動側は記録のみ
+       (完全プロンプトは ClaudeLLMBreakpointDetail[] で閲覧)。 *)
+    (* 生成失敗時は False → ブレークせず素通し (fail-open)。成功時のみ
+       Return[Null] で評価を返す (Return は If 直下=関数 Module から返る) *)
+    If[TrueQ[$ClaudeLLMBreakpoint] &&
+       !TrueQ[$iLLMBreakpointBridgeApproved] && TrueQ[$Notebooks] &&
+       TrueQ @ Quiet @ Check[
+         With[{bpId = iLLMBreakpointStore[<|
+             "Route" -> "ClaudeEval (runtime bridge)",
+             "Provider" -> "claudecode",
+             "Model" -> If[modelSpec === Automatic,
+               iLLMBreakpointModelString[], ToString[modelSpec]],
+             "Prompt" -> task, "Media" -> mediaFiles,
+             "Time" -> Now, "BreakMode" -> "DeferredBreak (bridge)"|>]},
+           With[{nb1 = nb, tag1 = tag, task1 = task, img1 = imageDirs,
+                 ae1 = autoEvaluate, ms1 = modelSpec, pv1 = privSpec,
+                 ap1 = autoPrivate, to1 = timeout, mf1 = mediaFiles},
+             iLLMBreakpointBridgeBreakWindow[bpId,
+               Hold[Block[{ClaudeCode`Private`$iLLMBreakpointBridgeApproved = True},
+                 ClaudeCode`Private`iClaudeEvalViaRuntimeBridge[nb1, tag1, task1,
+                   img1, ae1, ms1, pv1, ap1, to1, mf1]]]];
+             True]],
+         False],
       Return[Null]];
 
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
@@ -37604,6 +38151,8 @@ iContinueEvalViaRuntimeBridge[nb_NotebookObject, tag_String,
     (* Core integrity check: \:95a2\:6570\:4e0a\:66f8\:304d\:306e\:691c\:51fa *)
     If[!TrueQ[iGuardCoreIntegrity[nb]], Return[$Failed]];
     
+    (* BreakPtr: fresh kernel でも notebook タグから同期 *)
+    iLLMBreakpointSyncFromNotebook[nb];
     runtimeId = Lookup[$iSessionRuntimeIds, tag, None];
     
     (* \:524d\:56de runtime \:304c\:306a\:3051\:308c\:3070\:65b0\:898f\:8d77\:52d5 *)
@@ -37618,7 +38167,30 @@ iContinueEvalViaRuntimeBridge[nb_NotebookObject, tag_String,
       (* \:4f7f\:3044\:56de\:305b\:306a\:3044\:306e\:3067\:65b0\:898f *)
       Return[iClaudeEvalViaRuntimeBridge[nb, tag, instruction,
         {}, autoEvaluate, modelSpec, privSpec, autoPrivate, timeout]]];
-    
+
+    (* BreakPtr (deferral break): 継続ターン版。新規委譲 2 分岐は委譲先の
+       eval bridge がブレークするためここには来ない。仕組みは eval 側と同一 *)
+    If[TrueQ[$ClaudeLLMBreakpoint] &&
+       !TrueQ[$iLLMBreakpointBridgeApproved] && TrueQ[$Notebooks] &&
+       TrueQ @ Quiet @ Check[
+         With[{bpId = iLLMBreakpointStore[<|
+             "Route" -> "ContinueEval (runtime bridge)",
+             "Provider" -> "claudecode",
+             "Model" -> If[modelSpec === Automatic,
+               iLLMBreakpointModelString[], ToString[modelSpec]],
+             "Prompt" -> instruction,
+             "Time" -> Now, "BreakMode" -> "DeferredBreak (bridge)"|>]},
+           With[{nb1 = nb, tag1 = tag, in1 = instruction,
+                 ae1 = autoEvaluate, ms1 = modelSpec, pv1 = privSpec,
+                 ap1 = autoPrivate, to1 = timeout},
+             iLLMBreakpointBridgeBreakWindow[bpId,
+               Hold[Block[{ClaudeCode`Private`$iLLMBreakpointBridgeApproved = True},
+                 ClaudeCode`Private`iContinueEvalViaRuntimeBridge[nb1, tag1, in1,
+                   ae1, ms1, pv1, ap1, to1]]]];
+             True]],
+         False],
+      Return[Null]];
+
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
     $iActiveQueryModelLabel = iModelStatusLabel[modelSpec];
     step = Length[iSessionHistory[nb, tag]];
@@ -40458,6 +41030,10 @@ iRunChatgptCodexCLI[prompt_String, opts : OptionsPattern[]] :=
      execCmd, cmdList, env, fullEnv, runResult, exitCode, stdout,
      stderr, model, profileHash, envHash, bundleReg, bundleId},
 
+    (* BreakPtr: 送信直前ブレーク (Codex CLI 同期) *)
+    iLLMBreakpointGate["Codex CLI (sync)", <|"Provider" -> "chatgptcodex",
+      "Model" -> "(codex)", "Prompt" -> prompt|>];
+
     (* steps 1-7 *)
     prep = iPrepareCodexRun[opts];
     If[FailureQ[prep], Return[prep]];
@@ -40618,6 +41194,10 @@ iLaunchCodexExecAsync[prompt_String, opts : OptionsPattern[]] :=
      profileHash, timeoutOpt, prepOpts},
     prepOpts = FilterRules[{opts}, Options[iPrepareCodexRun]];
     timeoutOpt = OptionValue["Timeout"];
+
+    (* BreakPtr: 送信直前ブレーク (Codex CLI 非同期) *)
+    iLLMBreakpointGate["Codex CLI (async)", <|"Provider" -> "chatgptcodex",
+      "Model" -> "(codex)", "Prompt" -> prompt|>];
 
     (* steps 1-7: shared with the sync runner *)
     prep = iPrepareCodexRun[Sequence @@ prepOpts];
