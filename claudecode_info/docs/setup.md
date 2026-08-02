@@ -1283,3 +1283,4 @@ ShowClaudePalette[]
 ?ClaudeResolveLLMTier
 ?ClaudeTaskClassAttributes
 ?ClaudeDiagEvents
+```
