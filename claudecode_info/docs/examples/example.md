@@ -1,5 +1,3 @@
----
-
 # claudecode 使用例集
 
 このドキュメントでは、[claudecode](https://github.com/transreal/claudecode) パッケージの代表的な使用例を紹介します。

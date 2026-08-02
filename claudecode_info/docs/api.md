@@ -1,7 +1,3 @@
-# claudecode API Reference
-
-claudecode パッケージは Wolfram Language / Mathematica から Claude Code CLI および各種 LLM プロバイダーを呼び出すための統合インターフェースを提供する。依存: [NBAccess](https://github.com/transreal/NBAccess), [github](https://github.com/transreal/github) (GitHubREST`)。
-
 ## 基本設定変数
 
 ### $ClaudeModel
@@ -85,6 +81,10 @@ LLMGraphDAG スナップショットの保存ディレクトリ。
 ### $ClaudeDocUpdateStaleSeconds
 型: Number, 初期値: 1800
 ClaudeUpdateDocumentation の非同期ドキュメント更新チェーンのストール検出秒数。タイムスタンプ方式 ($iDocUpdateActive に各ステップの時刻を記録) でチェーンが異常終了しても、このタイムアウトを超えたロックは自動解放される。
+
+### $ClaudeDocUpdateExternal
+型: Boolean, 初期値: True
+True のとき ClaudeUpdateDocumentation の生成パイプライン全体を外部 wolframscript ワーカープロセスで実行し、FrontEnd の中心カーネルを塞がない (claim ファイル + heartbeat で FE 再起動後の二重ワーカー起動を防止、stale 120秒で自動失効)。False で従来のカーネル内非同期経路に戻る。ライセンス席の枯渇・画像添付タスク・非 claude CLI モデル使用時は自動的に従来経路にフォールバックする。
 
 ### $ClaudeEvalMaxDepth
 型: Integer, 初期値: 5
@@ -470,9 +470,13 @@ sv:// スナップショット URI (spec/review/requirements) を解決し内容
 → NotebookObject | $Failed
 
 ### CreateImplementationWorkflow[name, approvedSpec, opts]
-承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。実装担当ロールは ultra モデルクラス (ClaudeUltraModelSpec: CLI 優先、paid-API ゲート付き) を優先し、$ClaudeModel にフォールバックする。検証担当 ($ClaudeAdvisaryModel) が仕様との整合性を確認しフィードバックを合意まで繰り返す。承認には生成したテストがフレッシュカーネルで通過することも必要 (proven-code gate、サマリーキー TestGate/Proven)。複雑な作業はステージ分割して補助仕様をレビューしてから実装する。ultra クラス実装者はプランニング時に実装スタイル (native/dag/petri) も選択する。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
+承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。実装担当ロールは ultra モデルクラス (ClaudeUltraModelSpec: CLI 優先、paid-API ゲート付き) を優先し、$ClaudeModel にフォールバックする。検証担当 ($ClaudeAdvisaryModel) が仕様との整合性を確認しフィードバックを合意まで繰り返す。承認には生成したテストがフレッシュカーネルで通過することも必要 (proven-code gate、サマリーキー TestGate/Proven)。複雑な作業はステージ分割して補助仕様をレビューしてから実装する。ultra クラス実装者はプランニング時に実装スタイル (native/dag/petri) も選択する。$ClaudeSpecImplUseSession が Automatic (既定) かつセッション基盤モジュール (ClaudeOrchestrator_session/ClaudeRuntime_sessionrunner) がロード済みなら RuntimeSession episode 経路で実行し、失敗時は従来の wolframscript driver 経路に自動フォールバックする。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
 → String (バックグラウンドジョブ id)
 Options: "Notes" -> "" (追加指示), "ClaudeModel" -> Automatic ($ClaudeModel に解決), "AdvisoryModel" -> Automatic ($ClaudeAdvisaryModel に解決), "MaxRounds" -> Automatic, "Nb" -> Automatic (ターゲットノートブック), "Launch" -> True (完了後自動起動), "Project" -> "", "SpecURI" -> "", "SourceNotebookURI" -> ""
+
+### $ClaudeSpecImplUseSession
+型: Boolean | Automatic, 初期値: Automatic
+spec-impl (パレット Impl / CreateImplementationWorkflow) を RuntimeSession episode 基盤で実行するかのトグル。Automatic (既定): ClaudeOrchestrator_session / ClaudeRuntime_sessionrunner がロード済みなら session 経路、そうでなければ従来の wolframscript driver 経路。False: 常に従来の driver 経路に固定。session 起動に失敗した場合は自動的に従来経路へフォールバックする。
 
 ### LaunchImplementationWorkflow[name, args]
 CreateImplementationWorkflow で生成したコード化ワークフロー name をロードして起動する。SourceVault`SourceVaultLoadWorkflow[name] でロードし WorkflowInfo["Launch"] を args で呼び出す。
@@ -653,7 +657,7 @@ Web 検索を実行し結果をテキストで返す。Anthropic API の web_sea
 Options: Fallback -> False, References -> {} (URL/書籍リスト。README.md 参照文献セクションに追加), Demos -> {} (デモ URL リスト。README.md に反映), Disclaimer -> {} (免責事項テキストリスト。README.md のみ), License -> "" (ライセンス文字列。空で GitHubREST`$GitHubLicenseHolder 非空なら MIT 自動挿入), Acknowledgments -> {} (謝辞テキストリスト。README.md のみ), IncludeAuxiliaryAPIs -> Automatic
 
 ### ClaudeUpdateDocumentation[packageName, instruction, opts]
-既存ドキュメントを instruction に従って部分更新する。非同期連鎖で進行するため $ClaudeDocUpdateStaleSeconds 超のロックは自動解放される。
+既存ドキュメントを instruction に従って部分更新する。既定では生成パイプライン全体を外部 wolframscript ワーカーで実行し FrontEnd を塞がない ($ClaudeDocUpdateExternal を参照)。非同期連鎖で進行するため $ClaudeDocUpdateStaleSeconds 超のロックは自動解放される。
 → True | $Failed
 Options: Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, Acknowledgments -> {}, License -> "", TargetFiles -> Automatic, Mode -> "Update", Baseline -> "LastDocUpdate"
 
@@ -1350,4 +1354,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-01 パス、4回目)。今回のチャンクで新たに検出・追加した項目: ClaudeAttachmentMetadata[]/[cachedPath]、ClaudeAttachmentCachedFile[ref] (添付キャッシュ DB 参照用の新規公開関数、添付・Web セクションに追加)、$ClaudeLLMBreakpoint / ClaudeLLMBreakpointDetail[] (LLM 呼び出しブレークポイント機能、新規セクション追加、ShowClaudePalette の説明にも "BreakPtr" ボタンとして追記)、$ClaudeParallelKernelCount (ClaudeBeginParallelKernels に付随する独立変数として明記)、MarkdownToCells / MarkdownToNotebook / MarkdownDisplay / MarkdownWriteCells / MermaidGraph (markdown → notebook cells / mermaid フローチャート変換の正準実装群、新規セクション "Markdown / Mermaid" として追加)。また CreateImplementationWorkflow の説明に「ultra クラス実装者は実装スタイル (native/dag/petri) も選択する」という実ソース記載を追記して同期した。BeginPackage の公開シンボルリスト (Begin["`Private`"] 以前で ::usage が定義されている全シンボル) を実ソースと再照合し、他の追加・削除は検出されなかった (iCloudSendRouteLabel::usage は Private コンテキスト内定義のため非公開と確認・除外)。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-02 パス、5回目)。今回は全 ::usage 宣言 (約260件、複数シンボルが同一行に連結される非標準レイアウトも含めて grep -o で網羅的に抽出) をソースファイル全体 (41694 行) から機械的に列挙し、既存ドキュメントの記載と突き合わせる方式で検証した。新たに検出・追加した項目: $ClaudeDocUpdateExternal (ClaudeUpdateDocumentation を外部 wolframscript ワーカーで実行するトグル、既定 True。基本設定変数セクションに追加し ClaudeUpdateDocumentation の説明にも反映)、$ClaudeSpecImplUseSession (spec-impl を RuntimeSession episode 基盤で実行するトグル、既定 Automatic。仕様・設計ワークフローセクションに追加し CreateImplementationWorkflow の説明にも反映)。他の全シンボル (基本設定変数、LLMクエリ関数、ClaudeEval、仕様・設計ワークフロー、セッション管理、添付・Web、ドキュメント生成、ディレクティブ管理、クラウド送信プリフライト、パッケージ操作補助、Markdown/Mermaid、LLMGraph 系、ランタイム、ClaudeEval コンテキストプランニング、ポーリング・スケジューリング、パレット・UI、CLI MCP サーバー、機密管理、編集モード、診断、メール連携補助、ユーティリティ) は完全に一致しており、削除・変更対象は検出されなかった。

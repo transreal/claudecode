@@ -20150,9 +20150,37 @@ $iDocQueue := {
     "SPECIAL_README_WITH_OVERVIEW"}
 };
 
+(* === 先頭 --- 行の正規化 (2026-08-01) ===
+   GitHub は Markdown ファイルの 1 行目が --- だと、そこから次の --- までを
+   YAML front matter とみなしてパースする。README には法的節 (謝辞/免責事項/
+   ライセンス) の前に必ず --- 区切りが append されるため、先頭に --- が 1 行
+   残るだけで「1 行目 〜 謝辞直前」が front matter 扱いになり、GitHub 上で
+   "Error in user YAML" となって本文全体が生テキスト表示になる (README 破損)。
+   先頭 --- は LLM の前置き区切り線が iCleanDocResponse の前置き除去
+   (^(#|---) までを削る) で残ったものであり、生成ドキュメントは front matter を
+   使わない。よって「真の front matter」以外の先頭 --- は決定的に除去する。 *)
+
+(* 真の YAML front matter か: --- の直後の最初の非空行が key: 形式で、
+   かつ閉じ --- 行が存在する場合のみ True (skill の .md 等を壊さないため)。 *)
+iDocRealFrontMatterQ[content_String] :=
+  StringMatchQ[content,
+    RegularExpression[
+      "(?sm)[ \t]*-{3,}[ \t]*\r?\n(?:[ \t]*\r?\n)*[ \t]*[A-Za-z_][-A-Za-z0-9_.]*[ \t]*:" <>
+      "[^\r\n]*\r?\n.*?^-{3,}[ \t]*$.*"]];
+iDocRealFrontMatterQ[_] := False;
+
+iNormalizeDocHead[content_String] :=
+  Module[{s = StringReplace[content, RegularExpression["\\A\\s*"] -> "", 1]},
+    If[!StringStartsQ[s, RegularExpression["-{3,}[ \t]*\r?\n"]], Return[content]];
+    If[iDocRealFrontMatterQ[s], Return[content]];
+    StringReplace[s, RegularExpression["\\A-{3,}[ \t]*\r?\n\\s*"] -> "", 1]
+  ];
+iNormalizeDocHead[other_] := other;
+
 (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:5fdc\:7b54\:306e\:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7:
    1. \:30b3\:30fc\:30c9\:30d5\:30a7\:30f3\:30b9\:3092\:9664\:53bb
-   2. LLM \:304c\:4ed8\:3051\:308b\:524d\:7f6e\:304d\:30c6\:30ad\:30b9\:30c8\:ff08\:300c\:4ee5\:4e0b\:304c setup.md \:306e\:5185\:5bb9\:3067\:3059\:300d\:7b49\:ff09\:3092\:9664\:53bb *)
+   2. LLM \:304c\:4ed8\:3051\:308b\:524d\:7f6e\:304d\:30c6\:30ad\:30b9\:30c8\:ff08\:300c\:4ee5\:4e0b\:304c setup.md \:306e\:5185\:5bb9\:3067\:3059\:300d\:7b49\:ff09\:3092\:9664\:53bb
+   3. \:5148\:982d\:306e --- (front matter \:8aa4\:8a8d\:539f\:56e0) \:3092\:9664\:53bb *)
 iCleanDocResponse[response_String] :=
   Module[{s = response, pos},
     (* コードフェンス除去: 全体が ```markdown ... ``` で囲まれた場合のみ両端を外す。
@@ -20165,10 +20193,20 @@ iCleanDocResponse[response_String] :=
         StringReplace[stripped, RegularExpression["\n```\\s*$"] -> ""],
         stripped]];
     (* \:524d\:7f6e\:304d\:9664\:53bb: \:6700\:521d\:306e # \:307e\:305f\:306f --- \:306e\:524d\:306e\:30c6\:30ad\:30b9\:30c8\:3092\:524a\:9664 *)
-    If[!StringStartsQ[StringTrim[s], "#" | "---"],
-      pos = StringPosition[s, RegularExpression["(?m)^(#|---)"], 1];
+    (* 2026-08-02: 前置き除去アンカーの厳格化。
+       従来の "^(#|---)" は Markdown 表の区切り行 ("--- | --- | ---") にもマッチした。
+       このため見出しを持たず表から始まるドキュメントでは、表ヘッダ行より前 (= 実際には
+       本文の冒頭全部) が「前置き」として削除され、1 行目が表区切り行という壊れた .md が
+       生成された (実例: SourceVault_info/docs/api_autotrigger.md)。
+       アンカーは (a) ATX 見出し = # の直後に空白、(b) 行全体が --- のみ、に限定する。 *)
+    If[!StringStartsQ[StringTrim[s],
+        RegularExpression["#{1,6}[ \t]|-{3,}[ \t]*(\r?\n|\\z)"]],
+      pos = StringPosition[s, RegularExpression["(?m)^(#{1,6}[ \t]|-{3,}[ \t]*\r?$)"], 1];
       If[Length[pos] > 0,
         s = StringDrop[s, pos[[1, 1]] - 1]]];
+    (* 前置き除去が --- で止まった場合や LLM が先頭に --- を置いた場合、
+       そのまま書くと GitHub が YAML front matter とみなして README が壊れる *)
+    s = iNormalizeDocHead[s];
     s
   ];
 
@@ -20191,8 +20229,11 @@ iIsValidDocContent[response_String] :=
     trimmed = StringTrim[cleaned];
     (* \:6700\:4f4e\:9650\:306e\:30b5\:30a4\:30ba\:8981\:4ef6: \:6b63\:5e38\:306a\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:5c11\:306a\:304f\:3068\:3082 100 \:6587\:5b57 *)
     If[StringLength[trimmed] < 100, Return[False]];
-    (* Markdown \:30d8\:30c3\:30c0\:30fc\:307e\:305f\:306f\:30d5\:30ed\:30f3\:30c8\:30de\:30bf\:30fc(---) \:3067\:59cb\:307e\:308b *)
-    If[StringStartsQ[trimmed, "#" | "---"], Return[True]];
+    (* Markdown \:30d8\:30c3\:30c0\:30fc\:307e\:305f\:306f\:30d5\:30ed\:30f3\:30c8\:30de\:30bf\:30fc(---) \:3067\:59cb\:307e\:308b
+       (2026-08-02: iCleanDocResponse \:3068\:540c\:3058\:53b3\:683c\:30a2\:30f3\:30ab\:30fc\:3002\:8868\:306e\:533a\:5207\:308a\:884c
+       "--- | --- | ---" \:3092\:898b\:51fa\:3057\:6271\:3044\:3057\:306a\:3044) *)
+    If[StringStartsQ[trimmed,
+        RegularExpression["#{1,6}[ \t]|-{3,}[ \t]*(\r?\n|\\z)"]], Return[True]];
     (* Markdown \:30d8\:30c3\:30c0\:30fc\:3092\:542b\:3080 (\:5148\:982d\:4ee5\:5916\:306b\:3042\:308b\:5834\:5408) *)
     If[StringContainsQ[cleaned, RegularExpression["(?m)^#{1,3} "]], Return[True]];
     (* \:3044\:305a\:308c\:306b\:3082\:8a72\:5f53\:3057\:306a\:3044 \[RightArrow] \:7121\:52b9 (\:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8\:306e\:53ef\:80fd\:6027\:5927) *)
@@ -20261,7 +20302,7 @@ iSafeWriteDoc[destPath_String, response_String] :=
   Module[{cleaned},
     If[!iIsValidDocContent[response],
       Return[$Failed]];
-    cleaned = iCleanDocResponse[response];
+    cleaned = iNormalizeDocHead[iCleanDocResponse[response]];
     Export[destPath, cleaned, "Text", CharacterEncoding -> "UTF-8"];
     destPath
   ];
@@ -20374,6 +20415,10 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
         cleaned = iAppendCanonicalReadmeLegalTail[body, packageName];
       ]
     ];
+    (* 最終ガード: 書き込み直前に先頭 --- を再度正規化する。法的節 append で
+       末尾に --- 区切りが必ず入るため、先頭 --- が 1 行でも残ると GitHub が
+       front matter とみなして README 全体が壊れる (2026-08-01) *)
+    cleaned = iNormalizeDocHead[cleaned];
     Export[destPath, cleaned, "Text", CharacterEncoding -> "UTF-8"];
     destPath
   ];
@@ -20681,8 +20726,10 @@ iBuildReadmePrompt[sourceCode_String, packageName_String, outDir_String] :=
   Module[{docFiles, docsContent, docSummaries},
     docFiles = Select[FileNames["*.md", {outDir, FileNameJoin[{outDir, "examples"}]}],
       FileNameTake[#] =!= "README.md" &];
+    (* 区切りに --- を使わない: LLM が体裁を真似て出力先頭に --- を置くと
+       GitHub が YAML front matter とみなして README が壊れる (2026-08-01) *)
     docsContent = StringJoin[
-      ("--- " <> FileNameTake[#] <> " ---\n" <>
+      ("===== " <> FileNameTake[#] <> " =====\n" <>
        StringTake[Import[#, "Text"], UpTo[3000]] <> "\n\n") & /@ docFiles];
     "You are an expert Wolfram Language / Mathematica documentation writer.\n" <>
     "CRITICAL: Do NOT write any files. Do NOT use file-writing tools. Output to stdout ONLY.\n" <>
@@ -20730,7 +20777,10 @@ iBuildReadmePrompt[sourceCode_String, packageName_String, outDir_String] :=
     "Use ONLY the exact URLs provided in the 'GITHUB REPOSITORY URLs' section below.\n" <>
     "If a package URL is not listed there, mention the package name as plain text without a link.\n\n" <>
     "Output ONLY the Markdown content directly as your response text.\n" <>
-    "Do NOT wrap in code fences. Do NOT ask for file permissions.\n\n" <>
+    "Do NOT wrap in code fences. Do NOT ask for file permissions.\n" <>
+    "CRITICAL: The VERY FIRST line of your output MUST be the '# " <> packageName <> "' heading.\n" <>
+    "Do NOT start the output with a horizontal rule (---) or a YAML front matter block;\n" <>
+    "GitHub would parse it as front matter and the whole README would fail to render.\n\n" <>
     "=== EXISTING DOCUMENTATION (for overview synthesis) ===\n" <>
     docsContent <> "\n" <>
     iDocBuildRefSection[packageName] <>
@@ -20897,7 +20947,9 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       "=== OUTPUT INSTRUCTION (generate " <> outFile <> " now) ===\n" <>
       "Output ONLY the Markdown content directly as your response text.\n" <>
       "Do NOT wrap in code fences. Do NOT ask for file permissions.\n" <>
-      "Do NOT include ===BEGIN=== / ===END=== markers.\n"
+      "Do NOT include ===BEGIN=== / ===END=== markers.\n" <>
+      "Do NOT start the output with a horizontal rule (---) or a YAML front matter block;\n" <>
+      "the first line must be a Markdown heading.\n"
     ];
     (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:7528\:30e2\:30c7\:30eb\:3067\:30af\:30a8\:30ea\:5b9f\:884c\:3002
        $ClaudeModel \:306f\:30d0\:30c3\:30c1\:30d5\:30a1\:30a4\:30eb\:751f\:6210\:6642\:306b\:306e\:307f\:53c2\:7167\:3055\:308c\:308b\:305f\:3081\:3001
