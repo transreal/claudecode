@@ -1,5 +1,3 @@
-## 基本設定変数
-
 ### $ClaudeModel
 型: {String, String} (tuple) | "", 初期値: "" (未設定)
 Claude CLI に渡すプロバイダーとモデル名のペア。形式: {provider, modelName}。provider は "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio"。パッケージロード直後は "" (未設定) で、この場合 Claude Code CLI 自身の既定モデルが使われる。ShowClaudePalette でのプロバイダー/モデル選択操作が $ClaudeModel にタプル値を反映する (claudecode/anthropic の既定候補は SourceVault 経由で動的解決、フォールバックは claude-opus-5)。
@@ -10,8 +8,8 @@ Claude CLI に渡すプロバイダーとモデル名のペア。形式: {provid
 仕様レビュー・合意形成ワークフローでのアドバイザリー役 (Codex) のモデル指定。$ClaudeModel と同形式。bare provider string "chatgptcodex" も受け付ける。例: {"chatgptcodex", "gpt-5.5"}
 
 ### $ClaudeUltraEnabled
-型: Boolean, 初期値: True
-True のとき、仕様生成/仕様実装ワークフローが $ClaudeModel ロールを ultra モデルクラス (SourceVault モデルレジストリの "code-ultra"/"ultra" インテント、例: claude-fable-5) にアップグレードする (利用可能な場合)。False で常に $ClaudeModel をそのまま使用する。アドバイザリーロール ($ClaudeAdvisaryModel) には影響しない。
+型: Boolean, 初期値: False
+仕様生成/仕様実装ワークフローが $ClaudeModel ロールを ultra モデルクラス (SourceVault モデルレジストリの "code-ultra"/"ultra" インテント、例: claude-fable-5) にアップグレードするかどうか。既定 False では常に $ClaudeModel / $ClaudeAdvisaryModel をそのまま使う (オーナー指示 2026-08-03: 暗黙の fable 昇格が対話セッションと共有の fable session limit を消費してしまう問題を受けて既定を False に変更)。True に明示設定した場合のみ利用可能なら ultra へ昇格する。アドバイザリーロール ($ClaudeAdvisaryModel) には影響しない。
 
 ### $ClaudeTimeout
 型: Integer, 初期値: 1200
@@ -470,7 +468,7 @@ sv:// スナップショット URI (spec/review/requirements) を解決し内容
 → NotebookObject | $Failed
 
 ### CreateImplementationWorkflow[name, approvedSpec, opts]
-承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。実装担当ロールは ultra モデルクラス (ClaudeUltraModelSpec: CLI 優先、paid-API ゲート付き) を優先し、$ClaudeModel にフォールバックする。検証担当 ($ClaudeAdvisaryModel) が仕様との整合性を確認しフィードバックを合意まで繰り返す。承認には生成したテストがフレッシュカーネルで通過することも必要 (proven-code gate、サマリーキー TestGate/Proven)。複雑な作業はステージ分割して補助仕様をレビューしてから実装する。ultra クラス実装者はプランニング時に実装スタイル (native/dag/petri) も選択する。$ClaudeSpecImplUseSession が Automatic (既定) かつセッション基盤モジュール (ClaudeOrchestrator_session/ClaudeRuntime_sessionrunner) がロード済みなら RuntimeSession episode 経路で実行し、失敗時は従来の wolframscript driver 経路に自動フォールバックする。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
+承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。実装担当ロールは ultra モデルクラス (ClaudeUltraModelSpec: CLI 優先、paid-API ゲート付き、$ClaudeUltraEnabled が True の場合のみ利用) を優先し、$ClaudeModel にフォールバックする ($ClaudeUltraEnabled の既定は False なので、明示的に True にしない限り常に $ClaudeModel が使われる)。検証担当 ($ClaudeAdvisaryModel) が仕様との整合性を確認しフィードバックを合意まで繰り返す。承認には生成したテストがフレッシュカーネルで通過することも必要 (proven-code gate、サマリーキー TestGate/Proven)。複雑な作業はステージ分割して補助仕様をレビューしてから実装する。ultra クラス実装者はプランニング時に実装スタイル (native/dag/petri) も選択する。$ClaudeSpecImplUseSession が Automatic (既定) かつセッション基盤モジュール (ClaudeOrchestrator_session/ClaudeRuntime_sessionrunner) がロード済みなら RuntimeSession episode 経路で実行し、失敗時は従来の wolframscript driver 経路に自動フォールバックする。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
 → String (バックグラウンドジョブ id)
 Options: "Notes" -> "" (追加指示), "ClaudeModel" -> Automatic ($ClaudeModel に解決), "AdvisoryModel" -> Automatic ($ClaudeAdvisaryModel に解決), "MaxRounds" -> Automatic, "Nb" -> Automatic (ターゲットノートブック), "Launch" -> True (完了後自動起動), "Project" -> "", "SpecURI" -> "", "SourceNotebookURI" -> ""
 
@@ -1354,4 +1352,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-02 パス、5回目)。今回は全 ::usage 宣言 (約260件、複数シンボルが同一行に連結される非標準レイアウトも含めて grep -o で網羅的に抽出) をソースファイル全体 (41694 行) から機械的に列挙し、既存ドキュメントの記載と突き合わせる方式で検証した。新たに検出・追加した項目: $ClaudeDocUpdateExternal (ClaudeUpdateDocumentation を外部 wolframscript ワーカーで実行するトグル、既定 True。基本設定変数セクションに追加し ClaudeUpdateDocumentation の説明にも反映)、$ClaudeSpecImplUseSession (spec-impl を RuntimeSession episode 基盤で実行するトグル、既定 Automatic。仕様・設計ワークフローセクションに追加し CreateImplementationWorkflow の説明にも反映)。他の全シンボル (基本設定変数、LLMクエリ関数、ClaudeEval、仕様・設計ワークフロー、セッション管理、添付・Web、ドキュメント生成、ディレクティブ管理、クラウド送信プリフライト、パッケージ操作補助、Markdown/Mermaid、LLMGraph 系、ランタイム、ClaudeEval コンテキストプランニング、ポーリング・スケジューリング、パレット・UI、CLI MCP サーバー、機密管理、編集モード、診断、メール連携補助、ユーティリティ) は完全に一致しており、削除・変更対象は検出されなかった。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-04 パス、6回目)。前回 (2026-08-02) の全 ::usage 網羅抽出に加え、今回は変更頻度の高い直近日付コメント (2026-08-01〜04) をソース全体から機械的に検索し、そこに紐づく設定値を個別に確認する方式で検証した。新たに検出・修正した項目: $ClaudeUltraEnabled の初期値が True から False に変更されていた (claudecode.wl 267行目・2011-2013行目、オーナー指示 2026-08-03: 仕様生成/仕様実装ワークフローでの暗黙の fable 昇格が対話セッションと共有の fable session limit を消費してしまう問題を受けての変更)。該当箇所を修正し、CreateImplementationWorkflow の説明にも既定 False である旨を追記した。他の全シンボル (基本設定変数、LLM ルーティング・使用量管理、LLMクエリ関数、ClaudeEval、仕様・設計ワークフロー、セッション管理、添付・Web、ドキュメント生成、ディレクティブ管理、クラウド送信プリフライト、パッケージ操作補助、Markdown/Mermaid、LLMGraph 系、ランタイム、ClaudeEval コンテキストプランニング、ポーリング・スケジューリング、パレット・UI、CLI MCP サーバー、機密管理、編集モード、診断、メール連携補助、ユーティリティ) は $ClaudeMailFetchAsync や $ClaudeDocUpdateStaleSeconds のような ::usage 文字列を持たない補助変数も含め値を再確認したが、追加の乖離は検出されなかった。

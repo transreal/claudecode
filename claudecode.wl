@@ -265,7 +265,7 @@ $ClaudeAdvisaryModel::usage =
   "$ClaudeAdvisaryModel is the {provider, model} spec for the advisory (Codex) role in the spec review-and-revise orchestrator workflow, matching the form of $ClaudeModel. The Claude Code role uses $ClaudeModel; the Codex (advisory) role uses $ClaudeAdvisaryModel. Default: {\"chatgptcodex\", \"Automatic\"} (Automatic = the codex CLI default model). Example: {\"chatgptcodex\", \"gpt-5.5\"}. A bare provider string \"chatgptcodex\" is also accepted.";
 
 $ClaudeUltraEnabled::usage =
-  "$ClaudeUltraEnabled (default True) lets the spec-generation / spec-implementation workflows upgrade the $ClaudeModel role to the ultra model class (SourceVault model-registry intents \"code-ultra\" / \"ultra\", e.g. claude-fable-5) when it is available. Set to False to always use $ClaudeModel unchanged. The advisory role ($ClaudeAdvisaryModel) is never affected.";
+  "$ClaudeUltraEnabled (default False) lets the spec-generation / spec-implementation workflows upgrade the $ClaudeModel role to the ultra model class (SourceVault model-registry intents \"code-ultra\" / \"ultra\", e.g. claude-fable-5) when it is available. The DEFAULT is False: the workflows honor $ClaudeModel / $ClaudeAdvisaryModel exactly as set (owner mandate 2026-08-03 -- the implicit fable upgrade surprised the owner and burns the shared fable session-usage window). Set to True explicitly to opt in to the ultra upgrade. The advisory role ($ClaudeAdvisaryModel) is never affected either way.";
 
 ClaudeUltraModelSpec::usage =
   "ClaudeUltraModelSpec[] / ClaudeUltraModelSpec[nb] resolves the ultra-class model as a {provider, modelId} spec, or returns $Failed when no ultra model is usable (registry entry missing, CLI unavailable, an active rate limit, or $ClaudeUltraEnabled = False). Provider preference is CLI-first: {\"claudecode\", <id>} via the Claude Code CLI (subscription; allowed even under the notebook paid-API ban); {\"anthropic\", <id>} (metered API) is considered ONLY when the notebook nb has paid-API permission (NBGetNotebookPaidAPIAllowed). Callers fall back to $ClaudeModel on $Failed.";
@@ -2006,7 +2006,11 @@ Begin["`Private`"];(* ==========================================================
 
 If[!ValueQ[$ClaudeModel], $ClaudeModel = ""];
 If[!ValueQ[$ClaudeAdvisaryModel], $ClaudeAdvisaryModel = {"chatgptcodex", "Automatic"}];
-If[!ValueQ[$ClaudeUltraEnabled], $ClaudeUltraEnabled = True];
+(* 既定 False: spec 系ワークフローは $ClaudeModel / $ClaudeAdvisaryModel を
+   そのまま使う。ultra (fable) への昇格は明示 opt-in ($ClaudeUltraEnabled=True)
+   のみ (オーナー指示 2026-08-03: 暗黙の fable 昇格は想定外で、対話セッションと
+   共有の fable session limit も消費してしまう)。 *)
+If[!ValueQ[$ClaudeUltraEnabled], $ClaudeUltraEnabled = False];
 If[!ValueQ[$ClaudeTimeout], $ClaudeTimeout = 1200];
 If[!ValueQ[$ClaudePrivateModel], $ClaudePrivateModel = {}];
 
@@ -3270,59 +3274,184 @@ iTrustedAncestorQ[projects_Association, dir_String] :=
           (nk === nd || StringStartsQ[nd, nk <> "/"]) &&
           TrueQ[Lookup[ent, "hasTrustDialogAccepted", False]]]]]];
 
-iEnsureClaudeProjectTrust[tempDir_String] :=
-  Module[{cfg = iClaudeCliConfigPath[], raw, json, projects, need,
-          workRoot, staleKeys, tmpFile, outStr, strm, reparsed},
-    If[$ClaudeProjectTrustInjection === False, Return[Null]];
-    (* CLI 未初期化の環境では新規作成しない (CLI 側の初期化に任せる) *)
-    If[!FileExistsQ[cfg], Return[Null]];
-    raw = Quiet @ Check[
-      Import[cfg, "Text", CharacterEncoding -> "UTF-8"], $Failed];
-    If[!StringQ[raw] || StringTrim[raw] === "", Return[Null]];
-    json = Quiet @ Check[Developer`ReadRawJSONString[raw], $Failed];
-    (* パースできない/壊れているファイルには触らない *)
-    If[!AssociationQ[json], Return[Null]];
+(* ------------------------------------------------------------------
+   2026-08-03 trust JSON bloat fix (spec 20260803-1).
+   Replacement for the whole trust-injection definition region (the
+   tempDir_String down-value through the catch-all). NOTE: the anchor
+   expressions themselves must NOT appear verbatim in this comment --
+   the patch workflow's svRegion/svDiagnose anchor on their first
+   occurrence, and a literal mention here would make them match the
+   comment instead of the code (observed: post-apply diagnose
+   "Unknown" 2026-08-03).
+
+   Fixes:
+     * ExportString[json, "RawJSON"] + ExportString[..., "Text",
+       CharacterEncoding -> "UTF-8"] applied UTF-8 twice, so every write
+       expanded non-ASCII bytes -> exponential growth of ~/.claude.json.
+       The raw JSON bytes are now written directly, encoded exactly once.
+     * Read / modify / replace is now guarded by a per-file inter-process
+       lock (atomic CreateDirectory), the temp file is verified before the
+       single rename, and nothing is written when trust is already applied.
+   Reuses iClaudeCliConfigPath / iTrustNormalizePath / iTrustedAncestorQ
+   defined above this block. Public behaviour is unchanged: the function
+   still returns Null and never creates ~/.claude.json.
+   ------------------------------------------------------------------ *)
+
+If[! ValueQ[$iTrustJSONMode], $iTrustJSONMode = None];
+
+iEnsureClaudeProjectTrust::stage =
+  "Claude trust injection aborted at stage `1` for `2`; the file was left unchanged.";
+
+iTrustJSONMode[] :=
+  Module[{s, codes},
+    If[StringQ[$iTrustJSONMode], Return[$iTrustJSONMode]];
+    s = Quiet @ Check[Developer`WriteRawJSONString[<|"p" -> "\:4eca"|>], $Failed];
+    $iTrustJSONMode =
+      If[! StringQ[s], "Unicode",
+        codes = ToCharacterCode[s];
+        If[codes =!= {} && Max[codes] <= 255 &&
+            SequencePosition[codes, {228, 187, 138}, 1] =!= {},
+          "RawBytes", "Unicode"]];
+    $iTrustJSONMode];
+
+iTrustJSONBytes[expr_] :=
+  Module[{s, codes},
+    s = Quiet @ Check[Developer`WriteRawJSONString[expr, "Compact" -> True], $Failed];
+    If[! StringQ[s], s = Quiet @ Check[Developer`WriteRawJSONString[expr], $Failed]];
+    If[! StringQ[s] || StringTrim[s] === "", Return[$Failed]];
+    codes = ToCharacterCode[s];
+    If[codes === {}, Return[$Failed]];
+    If[iTrustJSONMode[] === "RawBytes" && Max[codes] <= 255,
+      Quiet @ Check[ByteArray[codes], $Failed],
+      Quiet @ Check[StringToByteArray[s, "UTF-8"], $Failed]]];
+
+iTrustSameBytesQ[a_, b_] :=
+  ByteArrayQ[a] && ByteArrayQ[b] && Length[a] === Length[b] &&
+    (a === b || Hash[a] === Hash[b]);
+
+iTrustJSONFromBytes[ba_] :=
+  Module[{s, back, json},
+    If[! ByteArrayQ[ba] || Length[ba] === 0, Return[$Failed]];
+    s = Quiet @ Check[ByteArrayToString[ba, "UTF-8"], $Failed];
+    If[! StringQ[s], Return[$Failed]];
+    back = Quiet @ Check[StringToByteArray[s, "UTF-8"], $Failed];
+    If[! iTrustSameBytesQ[back, ba], Return[$Failed]];
+    If[StringStartsQ[s, "\:feff"], s = StringDrop[s, 1]];
+    If[StringTrim[s] === "", Return[$Failed]];
+    json = Quiet @ Check[Developer`ReadRawJSONString[s], $Failed];
+    If[! AssociationQ[json], Return[$Failed]];
+    json];
+
+iTrustUniqueTag[] :=
+  StringJoin[ToString[$ProcessID], "-", ToString[$KernelID], "-",
+    StringTake[StringDelete[CreateUUID[], "-"], 8]];
+
+iTrustLockAcquire[lockDir_String, timeout_, interval_, stale_] :=
+  Module[{t0 = AbsoluteTime[], r, age},
+    While[True,
+      r = Quiet @ Check[CreateDirectory[lockDir], $Failed];
+      If[StringQ[r], Return[lockDir]];
+      If[DirectoryQ[lockDir],
+        age = Quiet @ Check[AbsoluteTime[] - AbsoluteTime[FileDate[lockDir]], 0];
+        If[NumericQ[age] && age > stale,
+          Quiet @ Check[DeleteDirectory[lockDir, DeleteContents -> True], Null]]];
+      If[AbsoluteTime[] - t0 > timeout, Return[$Failed]];
+      Pause[interval]];
+    $Failed];
+
+iTrustLockRelease[lockDir_String, lock_] :=
+  (If[lock === lockDir && DirectoryQ[lockDir],
+     Quiet @ Check[DeleteDirectory[lockDir, DeleteContents -> True], Null]];
+   Null);
+
+iTrustApplyEntry[json_Association, dir_String, force_] :=
+  Module[{projects, need, workRoot, staleKeys, entry, out},
     projects = Lookup[json, "projects", <||>];
-    If[!AssociationQ[projects], projects = <||>];
-    need = $ClaudeProjectTrustInjection === True ||
-      !iTrustedAncestorQ[projects, tempDir];
-    If[!need, Return[Null]];
-    (* 実体が消滅した旧 claude_project_* エントリの掃除
-       (自パッケージが生成した dir のみ対象、肥大化防止) *)
-    If[StringQ[$ClaudeWorkingDirectory] && $ClaudeWorkingDirectory =!= "",
-      workRoot = iTrustNormalizePath[$ClaudeWorkingDirectory];
+    If[! AssociationQ[projects], Return[$Failed]];
+    need = TrueQ[force] || ! iTrustedAncestorQ[projects, dir];
+    If[! need, Return[json]];
+    workRoot =
+      If[StringQ[$ClaudeWorkingDirectory] && $ClaudeWorkingDirectory =!= "",
+        iTrustNormalizePath[$ClaudeWorkingDirectory], None];
+    If[StringQ[workRoot],
       staleKeys = Select[Keys[projects],
         Function[k,
           StringQ[k] &&
           StringStartsQ[iTrustNormalizePath[k], workRoot <> "/"] &&
           StringContainsQ[k, "claude_project_"] &&
-          !DirectoryQ[k]]];
-      projects = KeyDrop[projects, staleKeys]];
-    projects[tempDir] = <|
-      If[AssociationQ[Lookup[projects, tempDir, None]],
-        projects[tempDir], <||>],
+          ! DirectoryQ[k]]];
+      If[staleKeys =!= {}, projects = KeyDrop[projects, staleKeys]]];
+    entry = Lookup[projects, dir, None];
+    projects[dir] = <|
+      If[AssociationQ[entry], entry, <||>],
       "hasTrustDialogAccepted" -> True,
       "hasCompletedProjectOnboarding" -> True|>;
-    json["projects"] = projects;
-    (* 一時ファイルへ書き出し→再パース検証→上書き (設定破損防止) *)
-    tmpFile = cfg <> ".wlwrite.tmp";
-    Quiet @ Check[
-      (outStr = ExportString[json, "RawJSON"];
-       If[!StringQ[outStr] || StringTrim[outStr] === "",
-         Return[Null, Module]];
-       strm = OpenWrite[tmpFile, BinaryFormat -> True];
-       BinaryWrite[strm, ExportString[
-         outStr, "Text", CharacterEncoding -> "UTF-8"]];
-       Close[strm];
-       reparsed = Quiet @ Check[
-         Developer`ReadRawJSONString[
-           Import[tmpFile, "Text", CharacterEncoding -> "UTF-8"]],
-         $Failed];
-       If[AssociationQ[reparsed] && KeyExistsQ[reparsed, "projects"],
-         CopyFile[tmpFile, cfg, OverwriteTarget -> True]];
-       If[FileExistsQ[tmpFile], DeleteFile[tmpFile]]),
-      $Failed];
+    out = json;
+    out["projects"] = projects;
+    out];
+
+iTrustSemanticOkQ[back_, expected_, dir_String] :=
+  AssociationQ[back] && AssociationQ[expected] && Keys[back] === Keys[expected] &&
+    Module[{p = Lookup[back, "projects", None], e},
+      AssociationQ[p] &&
+        (e = Lookup[p, dir, None];
+         AssociationQ[e] && TrueQ[Lookup[e, "hasTrustDialogAccepted", False]])];
+
+iTrustWriteReplace[cfg_String, bytes_, json2_, dir_String] :=
+  Module[{tmp},
+    tmp = cfg <> ".wlwrite-" <> iTrustUniqueTag[] <> ".tmp";
+    Internal`WithLocalSettings[
+      Null,
+      Catch[
+        Module[{strm, ba2, back, r, ba3},
+          strm = Quiet @ Check[OpenWrite[tmp, BinaryFormat -> True], $Failed];
+          If[Head[strm] =!= OutputStream, Throw["WriteFailed", "iTrustWrite"]];
+          Quiet @ Check[BinaryWrite[strm, bytes], Null];
+          Quiet @ Check[Close[strm], Null];
+          ba2 = Quiet @ Check[ReadByteArray[tmp], $Failed];
+          If[! iTrustSameBytesQ[ba2, bytes], Throw["VerifyFailed", "iTrustWrite"]];
+          back = iTrustJSONFromBytes[ba2];
+          If[! iTrustSemanticOkQ[back, json2, dir], Throw["VerifyFailed", "iTrustWrite"]];
+          r = Quiet @ Check[RenameFile[tmp, cfg, OverwriteTarget -> True], $Failed];
+          If[! StringQ[r],
+            r = Quiet @ Check[CopyFile[tmp, cfg, OverwriteTarget -> True], $Failed]];
+          ba3 = Quiet @ Check[ReadByteArray[cfg], $Failed];
+          If[! iTrustSameBytesQ[ba3, bytes], Throw["ReplaceFailed", "iTrustWrite"]];
+          "Updated"],
+        "iTrustWrite"],
+      If[FileExistsQ[tmp], Quiet @ Check[DeleteFile[tmp], Null]]]];
+
+iTrustEnsureLocked[cfg_String, dir_String, force_] :=
+  Module[{ba, json, json2, bytes},
+    ba = Quiet @ Check[ReadByteArray[cfg], $Failed];
+    If[! ByteArrayQ[ba], Return["ReadFailed"]];
+    json = iTrustJSONFromBytes[ba];
+    If[! AssociationQ[json], Return["InvalidConfig"]];
+    json2 = iTrustApplyEntry[json, dir, force];
+    If[! AssociationQ[json2], Return["StructureInvalid"]];
+    If[json2 === json, Return["Unchanged"]];
+    bytes = iTrustJSONBytes[json2];
+    If[! ByteArrayQ[bytes], Return["SerializeFailed"]];
+    iTrustWriteReplace[cfg, bytes, json2, dir]];
+
+iEnsureClaudeProjectTrust[tempDir_String] :=
+  Module[{cfg = iClaudeCliConfigPath[], lockDir, lock, r},
+    (* byte-safe writer: Developer`WriteRawJSONString based (iTrustJSONBytes)
+       -- this WriteRawJSONString mention doubles as the patch workflow's
+       svDiagnose "Fixed" marker (its anchored region is exactly this
+       down-value, which otherwise only calls the helpers above). *)
+    If[$ClaudeProjectTrustInjection === False, Return[Null]];
+    If[! FileExistsQ[cfg], Return[Null]];
+    lockDir = cfg <> ".lock";
+    r = Internal`WithLocalSettings[
+      lock = iTrustLockAcquire[lockDir, 30, 0.1, 60],
+      If[lock =!= lockDir, "LockTimeout",
+        iTrustEnsureLocked[cfg, tempDir, $ClaudeProjectTrustInjection === True]],
+      iTrustLockRelease[lockDir, lock]];
+    If[StringQ[r] && ! MemberQ[{"Updated", "Unchanged"}, r],
+      Message[iEnsureClaudeProjectTrust::stage, r, FileNameTake[cfg]]];
     Null];
+
 iEnsureClaudeProjectTrust[___] := Null;
 
 (* ------------------------------------------------------------------
@@ -20246,10 +20375,35 @@ iIsValidDocContent[_] := False;
    \:5fdc\:7b54\:304c\:9014\:4e2d\:3067\:5207\:308c\:305f\:5834\:5408 (\:30b5\:30a4\:30ba 40% \:30ac\:30fc\:30c9\:3092\:901a\:904e\:3057\:3066\:3082\:7834\:640d) \:3092\:691c\:51fa\:3059\:308b\:3002
    \:4fdd\:5b88\:7684\:306b\:78ba\:5b9f\:306a\:5146\:5019\:306e\:307f: (1) \:672a\:9589\:30b3\:30fc\:30c9\:30d5\:30a7\:30f3\:30b9 (``` \:304c\:5947\:6570)
    (2) \:6587\:30fb\:69cb\:6587\:306e\:9014\:4e2d\:3067\:7d42\:7aef (\:8aad\:70b9\:30fb\:958b\:304d\:62ec\:5f27\:3067\:7d42\:308f\:308b)\:3002 *)
+(* 2026-08-02: 未閉フェンス判定を「``` の出現数の偶奇」から「行頭フェンスの開閉追跡」へ。
+   旧実装 OddQ[StringCount[content, "```"]] は文中に現れる ``` も数えたため、
+   Markdown 自体を説明する doc (例: WebServer api.md の「コードブロック (```lang)」) が
+   常に「切り詰め」と誤判定され、再生成しても同じ本文が返るので永久にスキップされた。
+   CommonMark 準拠で (a) 行頭 (インデント 3 まで) の ``` / ~~~ のみをフェンスとみなし、
+   (b) 閉じフェンスは開きと同種・同長以上・info string 無しのものに限る
+   (```` で囲んだ中の ``` を閉じと誤認しない)。 *)
+iDocFenceUnclosedQ[content_String] :=
+  Module[{openMark = None, s, mark, rest},
+    Do[
+      s = StringReplace[line, RegularExpression["^[ ]{0,3}"] -> "", 1];
+      If[!StringStartsQ[s, "```" | "~~~"], Continue[]];
+      mark = First @ StringCases[s, RegularExpression["^(`{3,}|~{3,})"]];
+      rest = StringTrim @ StringDrop[s, StringLength[mark]];
+      If[openMark === None,
+        openMark = mark,                       (* 開き: info string 可 *)
+        If[StringTake[mark, 1] === StringTake[openMark, 1] &&
+           StringLength[mark] >= StringLength[openMark] && rest === "",
+          openMark = None]],                   (* 閉じ *)
+      {line, StringSplit[content, {"\r\n", "\n", "\r"}]}
+    ];
+    openMark =!= None
+  ];
+iDocFenceUnclosedQ[_] := False;
+
 iDocLooksTruncated[content_String] :=
   Module[{trimmed = StringTrim[content]},
     If[trimmed === "", Return[True]];
-    If[OddQ[StringCount[content, "```"]], Return[True]];
+    If[iDocFenceUnclosedQ[content], Return[True]];
     MemberQ[{",", "\:3001", "\:ff0c", "(", "\:ff08", "\:300c", "\:ff5b"}, StringTake[trimmed, -1]]
   ];
 iDocLooksTruncated[_] := True;
@@ -20351,7 +20505,7 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
       $iDocLastFailReason = "\:5207\:308a\:8a70\:3081(" <>
         Which[
           StringTrim[cleaned] === "", "\:7a7a",
-          OddQ[StringCount[cleaned, "```"]], "``` \:5947\:6570(\:30b3\:30fc\:30c9\:67f5\:672a\:9589)",
+          iDocFenceUnclosedQ[cleaned], "\:30b3\:30fc\:30c9\:67f5\:672a\:9589(\:884c\:982d ``` \:306e\:958b\:9589\:4e0d\:4e00\:81f4)",
           True, "\:672b\:5c3e=\"" <> StringTake[StringTrim[cleaned], -Min[12, StringLength[StringTrim[cleaned]]]] <> "\""] <> ")";
       Print[iL["\:26a0 iSafeWriteDoc: \:5207\:308a\:8a70\:3081(\:672a\:5b8c\:4e86\:5fdc\:7b54)\:3092\:691c\:51fa (", "\:26a0 iSafeWriteDoc: Truncation detected ("] <> docFileName <>
         ")\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
@@ -26830,8 +26984,11 @@ If[! ValueQ[$iSpecImplMaxRounds], $iSpecImplMaxRounds = 3];
 (* implement<->verify ループの MaxWait (cfg で driver/worker へ供給)。
    実測で 1 round (implement+verify) ≈ 13-15 分なので、MaxRounds=3 が
    40 分 (旧既定 2400s) に収まらず抜け殻 summary で終わる事例があった
-   (20260622-株価推移ワークフロー3, 2026-07-12)。90 分に引き上げ。 *)
-If[! ValueQ[$iSpecImplMaxWaitSeconds], $iSpecImplMaxWaitSeconds = 5400];
+   (20260622-株価推移ワークフロー3, 2026-07-12)。90 分に引き上げ。
+   [2026-08-03] ultra (fable-5) の implement 呼び出しは 1 回で 20 分超に
+   なり得るため per-call 上限を 3000 s に拡大 ($iOrchClaudeCallTimeout,
+   SVWorkflow_SpecImpl.wl)。round ~60 分 x 2 が収まるよう 150 分へ。 *)
+If[! ValueQ[$iSpecImplMaxWaitSeconds], $iSpecImplMaxWaitSeconds = 9000];
 (* FE poll backstop, measured in WALL-CLOCK SECONDS -- NOT tick count. The shared
    poll tick can fire faster than its nominal 3.0s (extra/orphaned scheduled
    tasks, or a burst right after an FE freeze), so a tick-count budget can expire
@@ -27484,10 +27641,24 @@ iSpecImplWriteBack[jid_, job_, res_] := Module[{nb = job["Nb"], slug = job["Slug
   Quiet[CurrentValue[nb, WindowStatusArea] = ""];
 ];
 
+(* running Wolfram-family processes (incl. this FE's own kernels) -- shown in
+   seat-exhaustion reports so the user can see what to kill. fail-soft "". *)
+iOrchWolframProcessList[] := Quiet @ Check[
+  Module[{out, lines},
+    out = TimeConstrained[
+      RunProcess[{"tasklist", "/FO", "CSV"}, "StandardOutput"], 10, ""];
+    If[!StringQ[out], out = ""];
+    lines = Select[StringSplit[out, "\n"],
+      StringContainsQ[#, "wolfram", IgnoreCase -> True] &];
+    StringRiffle[StringTrim /@ lines, "\n"]], ""];
+
 (* build the error result for a driver that exited without writing result.wl:
    surface the exit code and any captured stdout/stderr so the cause (e.g. the
-   background kernel failing to start / acquire a license) is visible. *)
-iSpecImplDeadProcResult[job_] := Module[{p = Lookup[job, "Proc", None], code, diag},
+   background kernel failing to start / acquire a license) is visible.
+   ライセンス席数 (独立プロセス上限) 枯渇による起動失敗はあらゆる背景起動で
+   起き得るため、「kill して席を空けてから再実行」の対処指示と現在の Wolfram
+   プロセス一覧を必ず併記する (ユーザー明示指示 2026-08-03)。 *)
+iSpecImplDeadProcResult[job_] := Module[{p = Lookup[job, "Proc", None], code, diag, procs},
   code = Quiet @ Check[ProcessInformation[p, "ExitCode"], "?"];
   diag = Quiet @ Check[
     TimeConstrained[
@@ -27499,12 +27670,24 @@ iSpecImplDeadProcResult[job_] := Module[{p = Lookup[job, "Proc", None], code, di
         "\n"],
       3, ""],
     ""];
+  procs = iOrchWolframProcessList[];
   <|"Status" -> "Error",
     "Error" -> ("the background driver exited without producing a result (exit code " <>
       ToString[code] <> "). The background kernel likely failed to start -- e.g. a Wolfram " <>
       "license / kernel seat was unavailable (are parallel kernels running?) -- or it crashed " <>
       "at launch." <>
-      If[StringQ[diag] && diag =!= "", "\n--- driver output ---\n" <> StringTake[diag, UpTo[800]], ""])|>];
+      If[StringQ[diag] && diag =!= "", "\n--- driver output ---\n" <> StringTake[diag, UpTo[800]], ""] <>
+      "\n" <> iL[
+        "【対処】背景カーネルが起動できませんでした。ライセンス席数 (独立プロセス上限) の" <>
+        "枯渇の可能性が高いです (wolfram.exe の「未activation」表示は席数枯渇でも出ます)。" <>
+        "残留している WolframKernel.exe / wolframscript.exe (孤児カーネル) を kill して" <>
+        "席を空けてから、もう一度実行してください。",
+        "[Action] The background kernel could not start. Most likely the Wolfram license " <>
+        "seat limit (independent process cap) is exhausted (the wolfram.exe 'not activated' " <>
+        "message also appears on seat exhaustion). Kill leftover WolframKernel.exe / " <>
+        "wolframscript.exe (orphan kernels) to free a seat, then retry."] <>
+      If[StringQ[procs] && procs =!= "",
+        "\n--- Wolfram processes now (incl. this FE) ---\n" <> procs, ""])|>];
 
 iSpecImplTick[] := (
   Scan[
