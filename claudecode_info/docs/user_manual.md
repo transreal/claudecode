@@ -1045,7 +1045,3 @@ ClaudeEval["監視タスク", RepeatInterval -> Quantity[2, "Hours"]]
 (* 最大5回まで1時間ごとに実行 *)
 ClaudeEval["チェック", RepeatInterval -> {Quantity[1, "Hours"], 5}]
 ```
-
----
-
-以上が更新後の完全なドキュメントです。今回の変更点は、OpenAI 互換 chat/completions API(openai / zai / kimi プロバイダ)のリクエスト本文構築を文字列連結から Association ベースの `ExportByteArray` 直列化へ変更した Windows エンコーディング対策(内部関数、公開 API の追加なし)で、概要リストの該当箇所と「高度な非同期処理システム」内に新設した「OpenAI 互換 API 通信の Windows エンコーディング対応」節に反映しました。

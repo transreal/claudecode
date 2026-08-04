@@ -1347,4 +1347,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-04 パス、9回目)。今回は全 ::usage 宣言 (280超) を行番号付きで機械的に列挙し、ファイル末尾付近 (28642行、ClaudeSetRoutingPolicy が最後の Public 宣言) までドキュメント未収載の新規公開シンボルが無いことを確認、加えて Options[ClaudeQuerySync] (13667行) と Options[ClaudeEval] (16011行) を実ソースの定義行と1字1句突き合わせて完全一致を確認した。乖離は検出されなかった。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-04 パス、10回目)。今回は全 `::usage` 宣言をパターン `^\s*[A-Za-z$][A-Za-z0-9$]*::usage` および `[A-Za-z][A-Za-z0-9$]*::usage\s*=` の2通りで機械的に列挙し (ファイル内出現数274件、行頭以外での連結宣言を含めユニークシンボル274件、ファイル末尾28642行目の ClaudeSetRoutingPolicy まで)、全件が本ドキュメントに記載済みであることを確認した。乖離は検出されなかった。
