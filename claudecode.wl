@@ -10857,9 +10857,24 @@ $iZAIChatCompletionsURL = "https://api.z.ai/api/paas/v4/chat/completions";
    ============================================================ *)
 $iKimiChatCompletionsURL = "https://api.moonshot.ai/v1/chat/completions";
 
+(* ------------------------------------------------------------
+   OpenAI \:4e92\:63db chat/completions \:306e\:9001\:4fe1\:672c\:6587\:3092\:751f\:6210\:3059\:308b\:3002
+   JSON \:3092\:6587\:5b57\:5217\:9023\:7d50\:3067\:7d44\:307f\:7acb\:3066\:305a\:3001Association \:304b\:3089\:76f4\:63a5
+   \:30d0\:30a4\:30c8\:5217\:3078\:5909\:63db\:3059\:308b\:3002\:3053\:308c\:306b\:3088\:308a\:9001\:4fe1\:5c64\:3067\:306e
+   \:518d\:7b26\:53f7\:5316 (\:4e8c\:91cd\:30a8\:30f3\:30b3\:30fc\:30c9) \:304c\:8d77\:304d\:306a\:3044\:3002
+   model \:5074\:306e JSON \:30a8\:30b9\:30b1\:30fc\:30d7\:3082\:6b63\:3057\:304f\:884c\:308f\:308c\:308b\:3002
+   ------------------------------------------------------------ *)
+iOpenAIChatBodyBytes[model_String, prompt_String] :=
+  Quiet @ Check[
+    ExportByteArray[
+      <|"model" -> model,
+        "messages" -> {<|"role" -> "user", "content" -> prompt|>}|>,
+      "RawJSON", "Compact" -> True],
+    $Failed];
+
 iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
     customURL_String:"https://api.openai.com/v1/chat/completions"] :=
-  Module[{url, body, resp, bodyStr, json, choices, msg, preflight},
+  Module[{url, bodyBytes, resp, bodyStr, json, choices, msg, preflight},
     url = customURL;
     preflight = iCloudSendPreflightDecision["openai", prompt, url];
     If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
@@ -10869,16 +10884,17 @@ iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
     iLLMBreakpointGate["API sync (openai-compat)", <|"Provider" -> "openai-compat",
       "Model" -> model, "URL" -> url, "Prompt" -> prompt|>];
 
-    body = "{\"model\":\"" <> model <>
-      "\",\"messages\":[{\"role\":\"user\",\"content\":" <>
-      ExportString[prompt, "RawJSON"] <> "}]}";
+    bodyBytes = iOpenAIChatBodyBytes[model, prompt];
+    If[!ByteArrayQ[bodyBytes],
+      Return[iL["Error: OpenAI API \:30ea\:30af\:30a8\:30b9\:30c8 JSON \:306e\:76f4\:5217\:5316\:306b\:5931\:6557\:3057\:307e\:3057\:305f",
+        "Error: OpenAI API request JSON serialization failed"]]];
     resp = Quiet[URLRead[
       HTTPRequest[url, <|
         "Method"  -> "POST",
         "Headers" -> {
           "Authorization" -> "Bearer " <> apiKey,
           "Content-Type"  -> "application/json"},
-        "Body" -> body|>]]];
+        "Body" -> bodyBytes|>]]];
     If[!MatchQ[resp, _HTTPResponse],
       Return[iL["Error: OpenAI API \:63a5\:7d9a\:5931\:6557", "Error: OpenAI API connection failed"]]];
     bodyStr = iHTTPResponseBodyUTF8[resp];

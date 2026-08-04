@@ -20,7 +20,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **自動実行安全ガード**: `ClaudeEval` の `AutoEvaluate -> True` で生成コードを自動実行する際、`NBAutoEvalProhibitedPatterns` に定義された禁止パターンに該当するコードの自動実行をブロックします。これにより、ファイル削除や危険なシステム操作などを含むコードが意図せず実行されることを防止します。
 - **共有ポーリングタスク**: 複数の非同期ジョブが実行中の場合、すべてのジョブが単一の共有ポーリングタスクを利用します。旧実装のようにジョブごとに個別の `ScheduledTask` を作成しないため、多数のジョブを並列実行した際のオーバーヘッドが大幅に削減されます。`iEnsureSharedPollingTask` により共有タスクのライフサイクルが管理され、パッケージリロード時には旧タスクが自動的に停止されます。フリーズ(数十秒単位でメインカーネルをブロックする不具合)を根絶するため、FE 応答性プローブと handler 個別タイムアウトの二段構えの防御も導入されています(詳細は「高度な非同期処理システム」を参照)。
 - **非同期スケジューリング規約の自動注入**: `ClaudeUpdatePackage` のプロンプトに、非同期タスクのスケジューリング規約(claudecode/NBAccess 公開 API の使用義務・例外条件・根拠)を自動注入します。LLM が生成するパッケージコードが正しい非同期パターンに従うよう誘導します。
-- **Windows エンコーディング安全な API 通信(マルチモーダル対応)**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス(`Fallback -> True`)では Anthropic API のマルチモーダル `content` 配列を構築して送信します。LM Studio プロバイダに対してもマルチモーダル入力が可能になり(2026-07-29)、OpenAI 互換の chat/completions エンドポイント経由で画像を含むクエリを送信します。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換(ShiftJIS 等)による日本語文字化けが発生しません。
+- **Windows エンコーディング安全な API 通信(マルチモーダル対応)**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス(`Fallback -> True`)では Anthropic API のマルチモーダル `content` 配列を構築して送信します。LM Studio プロバイダに対してもマルチモーダル入力が可能になり(2026-07-29)、OpenAI 互換の chat/completions エンドポイント経由で画像を含むクエリを送信します。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換(ShiftJIS 等)による日本語文字化けが発生しません。2026-08-04 の改訂では、OpenAI 互換 chat/completions API(openai / zai / kimi プロバイダ)のリクエスト本文生成にも同様の対策が適用され、文字列連結による手組み JSON ではなく Association から `ExportByteArray["RawJSON"]` で直接 UTF-8 ByteArray を生成する方式に統一されました(詳細は「OpenAI 互換 API 通信の Windows エンコーディング対応」を参照)。
 - **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすると、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、危険な操作に対して承認フロー(`NeedsApproval`)を提供します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、`ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode 単独ロード時はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。
 - **ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすると、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。rate-limit 検出・自動待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断します。
 - **SourceVault 連携(PromptRouter ブリッジ)**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`(`HoldComplete`)の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず(rule 11)、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター(spec 5.3 / 24.3)にフォールバックします。SourceVault をロードすると、仕様書の審査・実装ワークフロー化 API(`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`・`ClaudeImplStatus`・`ClaudeImplMonitor`)も利用可能になります。`CreateImplementationWorkflow` が完了すると、生成されたワークフローの起動関数がスラッグ・表示名をキーワードとして PromptRouter に自動登録されるため、以降は `ClaudeEval` でスラッグ名を呼び出すだけでワークフローを起動できます。`CreateImplementationWorkflow` の実装者ロールは、`$ClaudeUltraEnabled`(デフォルト `False`)を `True` に設定した場合に限り ultra モデルクラス(`ClaudeUltraModelSpec` で解決; CLI 優先・paid-API ゲート付き)を優先し、利用できない場合は `$ClaudeModel` にフォールバックします。既定(`$ClaudeUltraEnabled = False`)では `$ClaudeModel` / `$ClaudeAdvisaryModel` の指定がそのまま尊重され、ultra への暗黙アップグレードは行われません(2026-08-03: 暗黙アップグレードが共有 fable セッション使用枠を消費してしまう事故が発生したための方針変更)。検証者ロールには `$ClaudeAdvisaryModel` が使われます。承認にはパッケージのテストが新規カーネルで合格すること(proven-code ゲート)も条件となります(サマリーキー: `TestGate` / `Proven`)。`MaxRounds` オプションは既定で 3 に設定されています。実装(implement)と検証(verify)を 1 ラウンドとすると実測で概ね 13〜15 分を要するため、既定値 3 で妥当な運用時間に収まるよう調整されています。また実行全体には約 90 分の全体デッドラインが設けられており、超過した場合は残りのラウンドを打ち切って失敗として扱います。また、claudecode/anthropic プロバイダのパレット既定モデル(いわゆる「ヒープモデル」)や lmstudio プロバイダのモデル候補一覧も、SourceVault のモデルレジストリからの動的解決を優先します(詳細は「操作パレット」を参照)。
@@ -921,6 +921,19 @@ Anthropic API 経由のフォールバック通信(`ClaudeQueryBg`)では、Wind
 
 この実装により、Windows 11 の `$CharacterEncoding` が ShiftJIS 等に設定されている環境でも、Anthropic API との通信で日本語テキストが正しく送受信されます。
 
+#### OpenAI 互換 API 通信の Windows エンコーディング対応(2026-08-04)
+
+`openai` / `zai` / `kimi` プロバイダが使用する OpenAI 互換 chat/completions リクエストの本文構築についても、Anthropic API 経路と同様の Windows エンコーディング対策が適用されました。
+
+従来はリクエスト本文を `"{\"model\":\"" <> model <> "\",\"messages\":[{\"role\":\"user\",\"content\":" <> ExportString[prompt, "RawJSON"] <> "}]}"` のような文字列連結で手組みし、String として `Body` に渡していました。この方式には次の 2 つの問題がありました。
+
+- `model` 変数がそのまま JSON 文字列に埋め込まれるため、モデル名に JSON エスケープが必要な文字が含まれていた場合に不正な JSON が生成され得る。
+- 手組みした JSON 文字列を String として `Body` に渡すため、送信層で再度エンコード処理が行われ、Windows 環境で ShiftJIS 等への暗黙変換(送信層での再符号化 = 二重エンコード)が発生し得る。
+
+現在は内部関数 `iOpenAIChatBodyBytes[model, prompt]` が、文字列連結ではなく Association(`<|"model" -> model, "messages" -> {<|"role" -> "user", "content" -> prompt|>}|>`)から直接 `ExportByteArray["RawJSON", "Compact" -> True]` で UTF-8 ByteArray を生成し、それを `Body` に渡すよう変更されました。これにより、`model` 側の JSON エスケープも正しく行われ、送信層での再符号化(二重エンコード)も発生しなくなりました。JSON の直列化自体が失敗した場合は `"Error: OpenAI API リクエスト JSON の直列化に失敗しました"` が返されます。
+
+この変更は内部的な信頼性強化であり、新しい公開 API の追加はありません。
+
 #### CLI 警告行の自動除去(プレーンテキスト応答、2026-07-16〜)
 
 Claude Code CLI は、未 trust のワークスペースで実行された場合や `.claude/settings.json` の一部 `permissions.allow` エントリが無視された場合などに、stderr へ以下のような警告・通知行を出力することがあります。
@@ -1032,3 +1045,7 @@ ClaudeEval["監視タスク", RepeatInterval -> Quantity[2, "Hours"]]
 (* 最大5回まで1時間ごとに実行 *)
 ClaudeEval["チェック", RepeatInterval -> {Quantity[1, "Hours"], 5}]
 ```
+
+---
+
+以上が更新後の完全なドキュメントです。今回の変更点は、OpenAI 互換 chat/completions API(openai / zai / kimi プロバイダ)のリクエスト本文構築を文字列連結から Association ベースの `ExportByteArray` 直列化へ変更した Windows エンコーディング対策(内部関数、公開 API の追加なし)で、概要リストの該当箇所と「高度な非同期処理システム」内に新設した「OpenAI 互換 API 通信の Windows エンコーディング対応」節に反映しました。

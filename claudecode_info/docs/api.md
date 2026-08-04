@@ -1,8 +1,3 @@
-### $ClaudeModel
-型: {String, String} (tuple) | "", 初期値: "" (未設定)
-Claude CLI に渡すプロバイダーとモデル名のペア。形式: {provider, modelName}。provider は "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio"。パッケージロード直後は "" (未設定) で、この場合 Claude Code CLI 自身の既定モデルが使われる。ShowClaudePalette でのプロバイダー/モデル選択操作が $ClaudeModel にタプル値を反映する (claudecode/anthropic の既定候補は SourceVault 経由で動的解決、フォールバックは claude-opus-5)。
-例: $ClaudeModel = {"claudecode", "claude-opus-5"}; $ClaudeModel = {"anthropic", "claude-sonnet-5"}
-
 ### $ClaudeAdvisaryModel
 型: {String, String} | String, 初期値: {"chatgptcodex", "Automatic"}
 仕様レビュー・合意形成ワークフローでのアドバイザリー役 (Codex) のモデル指定。$ClaudeModel と同形式。bare provider string "chatgptcodex" も受け付ける。例: {"chatgptcodex", "gpt-5.5"}
@@ -1352,4 +1347,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-04 パス、8回目)。今回は $ClaudeUltraEnabled・$ClaudeDocUpdateExternal・$ClaudeAutoCompactThresholdTokens・$ClaudeEvalContextNotebookCharBudget・$ClaudeEvalContextHistoryTurns・$ClaudeEvalUnknownContextSoftLimit・$ClaudeLMStudioPaletteLoadedOnly・$ClaudeSpecImplUseSession の各既定値、Options[ClaudeQuerySync]・Options[ClaudeEval] の完全一致、$ClaudeLLMTierTable/$ClaudeTaskClassTable の TaskClass 名一致、およびファイル末尾付近 (LLM ルーティングセクションの $ClaudeRoutingModelPolicy 系が最後の Public 宣言) に未文書化の新規公開シンボルが無いことを実ソース照合で確認した。乖離は検出されなかった。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-04 パス、9回目)。今回は全 ::usage 宣言 (280超) を行番号付きで機械的に列挙し、ファイル末尾付近 (28642行、ClaudeSetRoutingPolicy が最後の Public 宣言) までドキュメント未収載の新規公開シンボルが無いことを確認、加えて Options[ClaudeQuerySync] (13667行) と Options[ClaudeEval] (16011行) を実ソースの定義行と1字1句突き合わせて完全一致を確認した。乖離は検出されなかった。
