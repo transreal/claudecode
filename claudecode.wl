@@ -86,6 +86,7 @@ Quiet[ClearAll[
   iDocBuildAcknowledgmentsPrompt, iDocBuildDisclaimerPrompt, iDocBuildLicensePrompt,
   ClaudePrepareCommit, iCollectChangeSummaries, iFormatCommitMessage, iWrapCommitBodyLines,
   iClearAllClaudeHistory, iForceAccessLevelLiterals,
+  iEnsurePtyRunnerPackageRoot, iEnsureNodePty,
   iNBFileSpecWithProjections, iNBFileCloudSendAllowedQ,
   iNBFileRoutesFromSpec, iNBDetectedNBReadExcludedQ,
   iCloudExternalURLQ, iCloudSendPayloadNBPaths, iCloudSendPayloadNBPath,
@@ -7984,17 +7985,77 @@ If[!DirectoryQ[$BaseDir],
 (* JS \:30d5\:30a1\:30a4\:30eb\:3092\:66f8\:304d\:51fa\:3059\:ff08\:5e38\:306b\:6700\:65b0\:3092\:5c55\:958b\:ff09 *)
 Export[$JSPath, $JSSource, "String"];
 
-(* node-pty \:304c\:672a\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\:306a\:3089 npm install *)
-If[!DirectoryQ[FileNameJoin[{$BaseDir, "node_modules", "node-pty"}]],
-  Print["node-pty \:3092\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\:4e2d..."];
-  RunProcess[{"cmd", "/c", "npm install node-pty"},
-    ProcessDirectory -> $BaseDir];
-  Print["node-pty \:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\:5b8c\:4e86"]
-];
+(* ------------------------------------------------------------
+   pty_runner as a self contained npm package root.
+
+   npm walks up from its working directory and adopts the first
+   ancestor that owns a package.json or a node_modules folder as its
+   local prefix.  Without a marker of its own the runner directory
+   never receives the module, so the local presence test stays false
+   and npm is re-run on every load while the home directory collects
+   the files.  Writing an empty JSON object first pins the prefix.
+   ------------------------------------------------------------ *)
+iPtyRunnerJSONObjectQ[json_] := AssociationQ[json] || json === {};
+
+iEnsurePtyRunnerPackageRoot[baseDir_String] :=
+  Module[{packageJSON, json},
+    packageJSON = FileNameJoin[{baseDir, "package.json"}];
+    If[! DirectoryQ[baseDir],
+      Quiet[CreateDirectory[baseDir, CreateIntermediateDirectories -> True]];
+      If[! DirectoryQ[baseDir],
+        Return[Failure["PtyRunnerDirectory", <|
+          "MessageTemplate" -> "pty_runner directory `1` could not be created.",
+          "MessageParameters" -> {baseDir}, "Path" -> baseDir|>]]]];
+    If[! FileExistsQ[packageJSON],
+      Quiet[Export[packageJSON, <||>, "RawJSON"]];
+      json = If[FileExistsQ[packageJSON],
+        Quiet[Import[packageJSON, "RawJSON"]], $Failed];
+      If[! iPtyRunnerJSONObjectQ[json],
+        Quiet[Export[packageJSON, "{}", "Text"]]];
+      If[! FileExistsQ[packageJSON],
+        Return[Failure["PtyRunnerPackageJSON", <|
+          "MessageTemplate" -> "pty_runner package.json `1` could not be written.",
+          "MessageParameters" -> {packageJSON}, "Path" -> packageJSON|>]]]];
+    json = Quiet[Import[packageJSON, "RawJSON"]];
+    If[! iPtyRunnerJSONObjectQ[json],
+      Return[Failure["InvalidPtyRunnerPackageJSON", <|
+        "MessageTemplate" -> "pty_runner package.json `1` is not a valid JSON object.",
+        "MessageParameters" -> {packageJSON}, "Path" -> packageJSON|>]]];
+    packageJSON];
+
+(* Install the module into the runner directory only when it is really
+   missing there, and only after the package root has been pinned.  The
+   completion message is printed after both the exit code and the local
+   module directory have been confirmed; a failure is returned to the
+   caller but never aborts the load of this package.  The optional
+   second / third arguments let the regression tests inject a process
+   runner and a printer. *)
+iEnsureNodePty[baseDir_String, runner_: RunProcess, printer_: Print] :=
+  Module[{packageJSON, nodePtyDirectory, result, exitCode, stderr},
+    packageJSON = iEnsurePtyRunnerPackageRoot[baseDir];
+    If[FailureQ[packageJSON], Return[packageJSON]];
+    nodePtyDirectory = FileNameJoin[{baseDir, "node_modules", "node-pty"}];
+    If[DirectoryQ[nodePtyDirectory], Return[True]];
+    printer["node-pty \:3092\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\:4e2d..."];
+    result = Quiet[runner[{"cmd", "/c", "npm install node-pty"},
+       ProcessDirectory -> baseDir]];
+    exitCode = If[AssociationQ[result], Lookup[result, "ExitCode", 1], 1];
+    stderr = If[AssociationQ[result], Lookup[result, "StandardError", ""], ""];
+    If[exitCode =!= 0 || ! DirectoryQ[nodePtyDirectory],
+      Return[Failure["NodePtyInstall", <|
+        "MessageTemplate" -> "npm install node-pty failed in `1` (exit code `2`).",
+        "MessageParameters" -> {baseDir, exitCode},
+        "Path" -> baseDir, "ExitCode" -> exitCode,
+        "LocalModule" -> DirectoryQ[nodePtyDirectory],
+        "StandardError" -> If[StringQ[stderr], stderr, ""]|>]]];
+    printer["node-pty \:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\:5b8c\:4e86"];
+    True];
+
+iEnsureNodePty[$BaseDir];
 
 (* \:30ed\:30fc\:30c9\:6642\:30d8\:30eb\:30d7\:8868\:793a *)
 
-(* $packageDirectory \:786e\:5b9a\:5f8c\:306b CLAUDE.md \:3092\:518d\:691c\:7d22 *)
+(* $packageDirectory \:78ba\:5b9a\:5f8c\:306b CLAUDE.md \:3092\:518d\:691c\:7d22 *)
 If[$ClaudeMDContent === "", iLoadClaudeMD[]];
 
 (* ============================================================
@@ -27332,6 +27393,30 @@ iSpecImplRegisterLaunch[slug_String, displayName_String] := Module[{ctx, info, l
   <|"Slug" -> slug, "Context" -> ctx, "Launch" -> launch, "ApiDoc" -> apiDoc|>];
 
 (* clickable launch button + summary boxes for the write-back cell *)
+(* proven-code ゲートの読み取り: 生成物が「コミットしてよい水準」かを 1 行で
+   判定する。判定基準 = 最終 verdict Approved かつ TestGate "Passed"
+   (= 生成テストがフレッシュカーネルで実際に実行され exit 0)。
+   TestGate "NotRun" は「テストが走っていない」(wolframscript 不可等) であって
+   合格ではないので、コミット可とはしない。実装役の step log の
+   RUN: NOT-RUN は自己申告であり、この判定には使わない。 *)
+iSpecImplCommitReadiness[res_Association] := Module[{gate, proven, verdict, st},
+  gate = ToString @ Lookup[res, "TestGate", "NotRun"];
+  verdict = ToString @ Lookup[res, "FinalVerdict", Lookup[res, "FinalStatus", "?"]];
+  st = ToString @ Lookup[res, "FinalStatus", "?"];
+  proven = TrueQ[Lookup[res, "Proven", False]] || (verdict === "Approved" && gate === "Passed");
+  <|"TestGate" -> gate, "Proven" -> proven,
+    "CommitReady" -> (proven && st === "Approved"),
+    "Reason" -> Which[
+      st =!= "Approved", iL["\:6700\:7d42\:72b6\:614b\:304c Approved \:3067\:306f\:3042\:308a\:307e\:305b\:3093 (" <> st <> ")\:3002",
+        "final status is not Approved (" <> st <> ")."],
+      gate === "Passed", iL["\:751f\:6210\:30c6\:30b9\:30c8\:304c\:65b0\:898f\:30ab\:30fc\:30cd\:30eb\:3067\:5b9f\:884c\:3055\:308c exit 0\:3001\:691c\:8a3c\:5f79\:3082 Approved\:3002",
+        "the generated test actually ran (exit 0) and the verifier approved."],
+      gate === "Missing", iL["\:751f\:6210\:30c6\:30b9\:30c8\:304c\:3042\:308a\:307e\:305b\:3093\:3002",
+        "no generated test file."],
+      gate === "Failed", iL["\:751f\:6210\:30c6\:30b9\:30c8\:304c\:5931\:6557\:3057\:307e\:3057\:305f\:3002", "the generated test failed."],
+      True, iL["\:30c6\:30b9\:30c8\:304c\:5b9f\:884c\:3055\:308c\:3066\:3044\:307e\:305b\:3093 (TestGate: " <> gate <> ")\:3002\:30c6\:30b9\:30c8\:3092\:624b\:52d5\:5b9f\:884c\:3057\:3066\:78ba\:8a8d\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+        "the test was not executed (TestGate: " <> gate <> "); run it manually before committing."]]|>];
+
 iSpecImplSummaryBoxes[slug_String, res_Association] := With[
   {st = ToString @ Lookup[res, "FinalStatus", "?"],
    rounds = ToString @ Lookup[res, "Rounds", "?"],
@@ -27339,10 +27424,28 @@ iSpecImplSummaryBoxes[slug_String, res_Association] := With[
    aURI = ToString @ Lookup[res, "ArtifactURI", ""],
    vURI = ToString @ Lookup[res, "VerifyURI", ""],
    pURI = ToString @ Lookup[res, "PlanURI", ""],
+   rdy = iSpecImplCommitReadiness[res],
    s = slug},
   ToBoxes @ Column[Flatten[{
     Row[{Style[iL["\:5b9f\:88c5\:30ef\:30fc\:30af\:30d5\:30ed\:30fc: ", "Impl workflow: "], Bold], s}],
     Row[{Style["status: ", Bold], st, "   rounds: ", rounds}],
+    (* コミット可否の一行判定 (proven-code ゲート) *)
+    Row[{Style[iL["\:30c6\:30b9\:30c8: ", "test: "], Bold],
+      Style[Switch[rdy["TestGate"],
+          "Passed", iL["\:5408\:683c (\:5b9f\:884c\:6e08\:307f exit 0)", "passed (actually run, exit 0)"],
+          "Failed", iL["\:4e0d\:5408\:683c", "failed"],
+          "Missing", iL["\:30c6\:30b9\:30c8\:7121\:3057", "missing"],
+          _, iL["\:672a\:5b9f\:884c", "not run"]],
+        If[rdy["TestGate"] === "Passed", Darker[Green], Darker[Orange]]],
+      "   ", Style["Proven: ", Bold],
+      Style[ToString[TrueQ[rdy["Proven"]]],
+        If[TrueQ[rdy["Proven"]], Darker[Green], Darker[Orange]]]}],
+    Row[{Style[iL["\:30b3\:30df\:30c3\:30c8\:53ef\:5426: ", "commit-ready: "], Bold],
+      Style[If[TrueQ[rdy["CommitReady"]],
+          iL["\:53ef (\:30b3\:30df\:30c3\:30c8\:3057\:3066\:3088\:3044\:6c34\:6e96)", "YES"],
+          iL["\:4e0d\:53ef (\:8981\:78ba\:8a8d)", "NO (needs review)"]],
+        Bold, If[TrueQ[rdy["CommitReady"]], Darker[Green], Darker[Red]]],
+      "  ", Style[rdy["Reason"], FontSize -> 11, Gray]}],
     If[gen =!= {},
       Column[Prepend[gen, Style[iL["\:751f\:6210\:30d5\:30a1\:30a4\:30eb", "Generated files"], Bold]]],
       Nothing],
@@ -27432,9 +27535,18 @@ iSpecImplStepsBoxes[name_String] := Module[{rows},
   ToBoxes @ Column[Flatten[{
     Style[iL["\:5b9f\:88c5\:30b9\:30c6\:30c3\:30d7 (\:30b3\:30fc\:30c9\:4f5c\:6210 / \:30c6\:30b9\:30c8\:4f5c\:6210 / \:30c6\:30b9\:30c8\:5b9f\:884c / \:7d50\:679c\:691c\:8a3c)",
       "Implementation steps (code / tests / run / verify)"], Bold, 13],
+    (* [run: ...] は実装役モデルの自己申告であって合否ではない。実際の合否は
+       上のサマリーの「テスト / コミット可否」(検証段のテストハードゲートが
+       新規カーネルで実行した結果) を見る。混同されたため凡例を追加 (2026-08-04)。 *)
+    Style[iL[
+      "[run: ...] \:306f\:5b9f\:88c5\:5f79\:30e2\:30c7\:30eb\:306e\:81ea\:5df1\:7533\:544a (NOT-RUN = \:30e2\:30c7\:30eb\:81ea\:8eab\:306f\:30c6\:30b9\:30c8\:3092\:5b9f\:884c\:3057\:3066\:3044\:306a\:3044) \:3067\:3042\:308a\:3001\:5408\:5426\:3067\:306f\:306a\:3044\:3002\n\:5b9f\:969b\:306e\:5408\:5426\:306f\:4e0a\:306e\:30b5\:30de\:30ea\:30fc\:306e\:300c\:30c6\:30b9\:30c8 / \:30b3\:30df\:30c3\:30c8\:53ef\:5426\:300d(\:691c\:8a3c\:6bb5\:304c\:65b0\:898f\:30ab\:30fc\:30cd\:30eb\:3067\:5b9f\:884c\:3057\:305f\:7d50\:679c) \:3092\:53c2\:7167\:3002",
+      "[run: ...] is the implementer model's SELF-REPORT (NOT-RUN = the model did not run the tests itself), not a pass/fail. The authoritative result is the summary's test / commit-ready line (the verifier's hard gate actually runs the test in a fresh kernel)."],
+      FontSize -> 10, Gray],
     Function[r, {
       Style[iL["\:30b9\:30c6\:30fc\:30b8 ", "Stage "] <> ToString[Lookup[r, "Stage", ""]] <>
-        " / round " <> ToString[Lookup[r, "Round", ""]] <> "   [run: " <> ToString[Lookup[r, "Status", ""]] <> "]",
+        " / round " <> ToString[Lookup[r, "Round", ""]] <>
+        iL["   [\:5b9f\:88c5\:5f79\:306e\:81ea\:5df1\:7533\:544a run: ", "   [self-reported run: "] <>
+        ToString[Lookup[r, "Status", ""]] <> "]",
         Bold, 11],
       Style[Lookup[r, "Steps", ""], FontFamily -> "Courier", FontSize -> 11]}] /@ rows}],
     Alignment -> Left, Spacings -> 0.6]];
@@ -27590,9 +27702,24 @@ iSpecImplWriteBack[jid_, job_, res_] := Module[{nb = job["Nb"], slug = job["Slug
         "\n" <> ToString @ Lookup[res, "BlockReason", ""],
         "Text", Sequence @@ $specCellOpts,
         Background -> RGBColor[1., 0.94, 0.85], FontWeight -> Bold,
-        CellTags -> {"sourcevault-impl-blocked"}]]];
+        CellTags -> {"sourcevault-impl-blocked"}]];
+      (* SourceVault イシューノートで、かつ停止理由が provider limit 等の
+         「時間をおけば再開できる」種類なら、再開ボタン (手動 / 予約) を
+         書き出す (弱結合。SourceVault_issues 未ロードなら no-op)。 *)
+      Quiet @ Check[
+        If[Length[Names["SourceVault`SourceVaultIssueEmitResumeControls"]] > 0,
+          SourceVault`SourceVaultIssueEmitResumeControls[nb,
+            ToString @ Lookup[res, "BlockReason", ""]]], Null]];
     NBAccess`NBWriteCell[nb, Cell[BoxData @ iSpecImplSummaryBoxes[slug, res],
       "Output", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-impl-summary"}]];
+    (* イシューノートなら、コミット可否判定 (proven-code ゲート) をイシュー
+       レコードへ記録する (弱結合。コミットボタンの確認ダイアログで再掲される) *)
+    Quiet @ Check[
+      If[Length[Names["SourceVault`SourceVaultIssueRecordImplResult"]] > 0,
+        SourceVault`SourceVaultIssueRecordImplResult[nb,
+          Join[<|"Slug" -> slug|>,
+            KeyTake[res, {"FinalStatus", "FinalVerdict", "Rounds", "GeneratedFiles"}],
+            iSpecImplCommitReadiness[res]]]], Null];
     (* implementation & review process (plan/artifact/verify chains, URI links)
        + per-stage step log: code -> tests -> run -> verify *)
     iSpecImplWriteProcessCells[nb, slug];
