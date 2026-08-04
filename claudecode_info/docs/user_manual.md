@@ -23,7 +23,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **Windows エンコーディング安全な API 通信(マルチモーダル対応)**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス(`Fallback -> True`)では Anthropic API のマルチモーダル `content` 配列を構築して送信します。LM Studio プロバイダに対してもマルチモーダル入力が可能になり(2026-07-29)、OpenAI 互換の chat/completions エンドポイント経由で画像を含むクエリを送信します。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換(ShiftJIS 等)による日本語文字化けが発生しません。
 - **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすると、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、危険な操作に対して承認フロー(`NeedsApproval`)を提供します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、`ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode 単独ロード時はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。
 - **ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすると、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。rate-limit 検出・自動待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断します。
-- **SourceVault 連携(PromptRouter ブリッジ)**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`(`HoldComplete`)の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず(rule 11)、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター(spec 5.3 / 24.3)にフォールバックします。SourceVault をロードすると、仕様書の審査・実装ワークフロー化 API(`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`・`ClaudeImplStatus`・`ClaudeImplMonitor`)も利用可能になります。`CreateImplementationWorkflow` が完了すると、生成されたワークフローの起動関数がスラッグ・表示名をキーワードとして PromptRouter に自動登録されるため、以降は `ClaudeEval` でスラッグ名を呼び出すだけでワークフローを起動できます。`CreateImplementationWorkflow` の実装者ロールはまず ultra モデルクラス(`ClaudeUltraModelSpec` で解決; CLI 優先・paid-API ゲート付き)を優先し、利用できない場合は `$ClaudeModel` にフォールバックします。検証者ロールには `$ClaudeAdvisaryModel` が使われます。承認にはパッケージのテストが新規カーネルで合格すること(proven-code ゲート)も条件となります(サマリーキー: `TestGate` / `Proven`)。`$ClaudeUltraEnabled`(デフォルト `True`)を `False` にすると、ultra モデルへのアップグレードを抑制し常に `$ClaudeModel` を使用します。`MaxRounds` オプションは既定で 3 に設定されています。実装(implement)と検証(verify)を 1 ラウンドとすると実測で概ね 13〜15 分を要するため、既定値 3 で妥当な運用時間に収まるよう調整されています。また実行全体には約 90 分の全体デッドラインが設けられており、超過した場合は残りのラウンドを打ち切って失敗として扱います。また、claudecode/anthropic プロバイダのパレット既定モデル(いわゆる「ヒープモデル」)や lmstudio プロバイダのモデル候補一覧も、SourceVault のモデルレジストリからの動的解決を優先します(詳細は「操作パレット」を参照)。
+- **SourceVault 連携(PromptRouter ブリッジ)**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`(`HoldComplete`)の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず(rule 11)、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター(spec 5.3 / 24.3)にフォールバックします。SourceVault をロードすると、仕様書の審査・実装ワークフロー化 API(`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`・`ClaudeImplStatus`・`ClaudeImplMonitor`)も利用可能になります。`CreateImplementationWorkflow` が完了すると、生成されたワークフローの起動関数がスラッグ・表示名をキーワードとして PromptRouter に自動登録されるため、以降は `ClaudeEval` でスラッグ名を呼び出すだけでワークフローを起動できます。`CreateImplementationWorkflow` の実装者ロールは、`$ClaudeUltraEnabled`(デフォルト `False`)を `True` に設定した場合に限り ultra モデルクラス(`ClaudeUltraModelSpec` で解決; CLI 優先・paid-API ゲート付き)を優先し、利用できない場合は `$ClaudeModel` にフォールバックします。既定(`$ClaudeUltraEnabled = False`)では `$ClaudeModel` / `$ClaudeAdvisaryModel` の指定がそのまま尊重され、ultra への暗黙アップグレードは行われません(2026-08-03: 暗黙アップグレードが共有 fable セッション使用枠を消費してしまう事故が発生したための方針変更)。検証者ロールには `$ClaudeAdvisaryModel` が使われます。承認にはパッケージのテストが新規カーネルで合格すること(proven-code ゲート)も条件となります(サマリーキー: `TestGate` / `Proven`)。`MaxRounds` オプションは既定で 3 に設定されています。実装(implement)と検証(verify)を 1 ラウンドとすると実測で概ね 13〜15 分を要するため、既定値 3 で妥当な運用時間に収まるよう調整されています。また実行全体には約 90 分の全体デッドラインが設けられており、超過した場合は残りのラウンドを打ち切って失敗として扱います。また、claudecode/anthropic プロバイダのパレット既定モデル(いわゆる「ヒープモデル」)や lmstudio プロバイダのモデル候補一覧も、SourceVault のモデルレジストリからの動的解決を優先します(詳細は「操作パレット」を参照)。
 - **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG(有向非巡回グラフ)として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。`$LLMGraphMaxConcurrency` によりカテゴリ別の並列度を制御でき、DAG ジョブの作成・実行・キャンセル・再構築を行う `LLMGraphDAGCreate` / `LLMGraphDAGRebuild` 系の API も提供されます。なお `$LLMGraphMaxConcurrency["cli"]` は並列ドキュメント更新(20+ ファイル時)の並列度制御にも使用されます。
 - **[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージする機能を提供します。
 
@@ -144,7 +144,7 @@ $ClaudeEvalPromptRouterDispatch = Automatic
 $ClaudeEvalPromptRouterPreemptsNatural = True
 
 (* 仕様審査ワークフローのアドバイザリーロール用モデル
-   実装者ロール: $ClaudeModel (ultra 利用可能なら ClaudeUltraModelSpec で解決)
+   実装者ロール: $ClaudeModel (ultra 利用可能かつ $ClaudeUltraEnabled = True の場合のみ ClaudeUltraModelSpec で解決)
    審査者(アドバイザリー)ロール: $ClaudeAdvisaryModel
    $ClaudeModel と同じ {provider, model} タプル形式で指定する
    デフォルト: {"chatgptcodex", Automatic}(Codex CLI の既定モデルを使用)
@@ -152,13 +152,15 @@ $ClaudeEvalPromptRouterPreemptsNatural = True
    例: $ClaudeAdvisaryModel = {"chatgptcodex", "gpt-5.6-sol"} *)
 $ClaudeAdvisaryModel = {"chatgptcodex", Automatic}
 
-(* ultra モデルクラスへのアップグレード制御 (デフォルト True)
+(* ultra モデルクラスへのアップグレード制御 (デフォルト False)
    True:  仕様生成・実装ワークフローで $ClaudeModel を ultra モデルクラス
           (SourceVault モデルレジストリの "code-ultra"/"ultra" インテント、例: claude-fable-5)
           に自動アップグレードする。
-   False: 常に $ClaudeModel をそのまま使用し、ultra へのアップグレードを行わない。
+   False (デフォルト): 常に $ClaudeModel をそのまま使用し、ultra へのアップグレードを行わない。
+          2026-08-03: 暗黙のアップグレードが共有 fable セッションの使用枠を意図せず消費してしまう
+          事故が発生したため、既定を無効化する方針に変更された(オーナー指示)。
    アドバイザリーロール ($ClaudeAdvisaryModel) は常に影響を受けない。 *)
-$ClaudeUltraEnabled = True
+$ClaudeUltraEnabled = False
 
 (* パレットのプロバイダ循環順序 *)
 (* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio" *)
@@ -308,13 +310,13 @@ ClaudePrepareCommit["MyPackage"]
 | **SourceVault 連携** | `$ClaudeEvalPromptRouterDispatch` | PromptRouter ブリッジの有効/無効 |
 | | `$ClaudeEvalPromptRouterPreemptsNatural` | 自然言語ルーターとの実行順序制御 |
 | | `$ClaudeAdvisaryModel` | 仕様審査アドバイザリーロールのモデル指定 |
-| | `$ClaudeUltraEnabled` | ultra モデルクラスへの自動アップグレード制御フラグ |
+| | `$ClaudeUltraEnabled` | ultra モデルクラスへの自動アップグレード制御フラグ(デフォルト False) |
 | | `ClaudeUltraModelSpec` | ultra クラスモデルの {provider, modelId} 解決 |
 | | `ClaudeSpecStatus` | spec/consensus 状態の確認 |
 | | `ClaudeSpecVersions` | spec/review バージョン一覧 |
 | | `ClaudeSpecText` | sv:// URI から spec/review 本文を取得 |
 | | `ClaudeOpenSourceVaultURI` | sv:// URI を新規ノートブックで開く |
-| | `CreateImplementationWorkflow` | 承認済み仕様からワークフローを実装(ultra モデル + proven-code ゲート) |
+| | `CreateImplementationWorkflow` | 承認済み仕様からワークフローを実装(proven-code ゲート付き) |
 | | `LaunchImplementationWorkflow` | 生成ワークフローの起動 |
 | | `ClaudeImplStatus` | spec-impl ワークフロー実行状況の確認 |
 | | `ClaudeImplMonitor` | 実行状況の自動更新パネル |
@@ -862,7 +864,7 @@ ClaudeCode は書き込みキュー方式を採用し、各セル書き込みを
 
 複数のジョブが同時実行中の場合、すべてのジョブが **共有ポーリングタスク** を利用します。旧実装ではジョブごとに個別の `ScheduledTask` を作成していましたが、現在は `iEnsureSharedPollingTask` によって管理される単一の共有タスクがすべてのジョブのキューを一括処理します。これにより、多数の並列ジョブ実行時のスケジューラーへの負荷を大幅に削減しています。パッケージリロード時には旧タスクが自動的に停止されます。
 
-#### フリーズ対策(2026-07-08〜09、2026-07-29 強化)
+#### フリーズ対策(2026-07-08〜09、2026-07-29 強化、2026-08-04 追加対策)
 
 数十秒単位でメインカーネルをブロックしてしまうフリーズループの再発防止として、以下の二段構えの防御が組み込まれています。
 
@@ -870,6 +872,14 @@ ClaudeCode は書き込みキュー方式を採用し、各セル書き込みを
 2. **handler 個別 TimeConstrained**: 各コールバック handler の処理に個別の `TimeConstrained` を適用し、1 つの handler が hang してもメインカーネル全体を巻き込まないようにします。
 
 これらはいずれも内部的な信頼性強化であり、ユーザーが意識して呼び出す新しい公開 API はありません。通常の `ClaudeEval` / `ClaudeQuery` / `ClaudeUpdateDocumentation` の利用フローの中で自動的に適用されます。フリーズが発生していた間もジョブの実体(子プロセスや出力ファイル)はディスク側で処理が進行しているため、フリーズはあくまで UI 応答性の一時停止であり、実行中のタスクの結果が失われるものではありません。ドキュメント更新については、この対策に加えて 2026-07-10 の外部プロセス化(`$ClaudeDocUpdateExternal`、詳細は「ドキュメント更新の外部プロセス実行」を参照)により、複数の並列更新でメインカーネルが飽和すること自体を防ぐ、より根本的な対策が導入されています。
+
+**Wolfram プロセス一覧取得の既定無効化(2026-08-04)**: seat-exhaustion(Claude Code CLI のライセンス席枯渇)を診断するための残留 `WolframKernel.exe` プロセス一覧取得(`tasklist` コマンドまたは `SystemProcesses` 経由)は、共有ポーリング tick の書き戻し経路から呼ばれ得る内部処理でしたが、実測により共有カーネル環境では `tasklist` 呼び出しと `SystemProcesses` 呼び出しの双方が tick 内で戻ってこないことが確認されました。`RunProcess` / `SystemProcesses` はこの状況で `TimeConstrained` によっても強制的に打ち切ることができず、FrontEnd がブロックされ続けてしまいます。この対策として、プロセス一覧取得は内部フラグ(既定 `False`)により既定で無効化され、共有ポーリング tick からの自動実行は行われなくなりました。残留する `WolframKernel.exe` プロセスを確認したい場合(seat-exhaustion のレポートでどのプロセスを終了すべきか確認したい場合など)は、端末で以下を直接実行してください。
+
+```
+tasklist /FI "IMAGENAME eq WolframKernel.exe"
+```
+
+一覧取得を明示的に再度有効化したい場合は内部フラグを `True` に設定できますが、上記のブロッキングリスクがあるため、通常は端末での確認を推奨します。この変更は内部的な信頼性強化であり、新しい公開 API の追加はありません。
 
 なお、フォールバックモデルへの切替(多段フォールバック)についても、429(レート制限)やサーバー過負荷エラーが短時間に連続した際にモデル切替そのものが負荷を増大させないよう、次候補の起動を指数バックオフ(1秒→2秒→4秒を上限とする遅延)で行うよう改善されています。
 
@@ -928,19 +938,19 @@ SourceVault パッケージをロードすると、以下の追加 API が利用
 
 #### ultra モデルクラスの制御
 
-`CreateImplementationWorkflow` の実装者ロールは、ultra モデルクラス(`ClaudeUltraModelSpec` で解決)を優先的に使用します。このクラスは SourceVault モデルレジストリの `"code-ultra"` / `"ultra"` インテントで管理され、`claude-fable-5` などが該当します。
+`CreateImplementationWorkflow` の実装者ロールは、`$ClaudeUltraEnabled` を `True` に設定した場合に限り ultra モデルクラス(`ClaudeUltraModelSpec` で解決)を優先的に使用します。このクラスは SourceVault モデルレジストリの `"code-ultra"` / `"ultra"` インテントで管理され、`claude-fable-5` などが該当します。
 
 **`$ClaudeUltraEnabled`**
 
 ```mathematica
-(* True (デフォルト): 仕様生成・実装ワークフローで ultra モデルへ自動アップグレード *)
-$ClaudeUltraEnabled = True
-
-(* False: 常に $ClaudeModel をそのまま使用し ultra へのアップグレードを行わない *)
+(* False (デフォルト): 常に $ClaudeModel をそのまま使用し ultra へのアップグレードを行わない *)
 $ClaudeUltraEnabled = False
+
+(* True: 仕様生成・実装ワークフローで ultra モデルへ自動アップグレード *)
+$ClaudeUltraEnabled = True
 ```
 
-アドバイザリーロール(`$ClaudeAdvisaryModel`)はこの設定の影響を受けません。
+デフォルトが `False` になっているのは、以前の既定 `True` では実装者ロールが暗黙のうちに ultra モデルへアップグレードされ、共有 fable セッションの使用枠を意図せず消費してしまう事故が 2026-08-03 に発生したためです(オーナー指示による方針変更)。ultra モデルを積極的に使いたい場合は明示的に `True` を設定してください。アドバイザリーロール(`$ClaudeAdvisaryModel`)はこの設定の影響を受けません。
 
 **`ClaudeUltraModelSpec[]` / `ClaudeUltraModelSpec[nb]`**
 
@@ -949,12 +959,13 @@ ultra クラスモデルを `{provider, modelId}` 形式で解決します。以
 - SourceVault のモデルレジストリにエントリが存在しない
 - CLI が利用不可
 - アクティブなレート制限がある
-- `$ClaudeUltraEnabled = False`
+- `$ClaudeUltraEnabled = False`(デフォルト)
 
 プロバイダ優先順位は CLI 優先です。`{"claudecode", <id>}` 経由の Claude Code CLI が最優先され(サブスクリプション内; ノートブックの paid-API 禁止設定下でも許可)、`{"anthropic", <id>}` のメーター制 API は当該ノートブックが paid-API 許可(`NBGetNotebookPaidAPIAllowed`)の場合のみ候補になります。
 
 ```mathematica
-(* ultra モデルを解決する例 *)
+(* ultra モデルを解決する例(事前に $ClaudeUltraEnabled = True が必要) *)
+$ClaudeUltraEnabled = True;
 spec = ClaudeUltraModelSpec[]
 (* → {"claudecode", "claude-fable-5"} または $Failed *)
 
@@ -967,11 +978,11 @@ spec = ClaudeUltraModelSpec[EvaluationNotebook[]]
 `CreateImplementationWorkflow` は 2026-07 の改訂により、承認条件として**実装コードのテストが新規カーネルで合格すること**が追加されました(proven-code ゲート)。
 
 ```mathematica
-(* 仕様を実装ワークフローとして構築 *)
+(* 仕様を実装ワークフローとして構築(既定では $ClaudeModel で実装される) *)
 CreateImplementationWorkflow["my-feature", "sv://snapshot/Spec/abc123"]
 
-(* ultra モデルを無効化して $ClaudeModel で実装する場合 *)
-$ClaudeUltraEnabled = False
+(* ultra モデルを明示的に有効化して実装する場合 *)
+$ClaudeUltraEnabled = True
 CreateImplementationWorkflow["my-feature", specText,
   "Notes" -> "performance is critical",
   "MaxRounds" -> 5]
@@ -979,7 +990,7 @@ CreateImplementationWorkflow["my-feature", specText,
 
 実装フローの概要:
 
-1. **計画フェーズ**: ultra クラスの実装者が仕様を読み込み、複雑な場合は実装を段階(stages)に分割するための補助仕様を作成します。ultra クラス実装者は実装スタイル(native / dag / petri)も計画フェーズで選択します。
+1. **計画フェーズ**: 実装者(`$ClaudeUltraEnabled = True` の場合は ultra クラス)が仕様を読み込み、複雑な場合は実装を段階(stages)に分割するための補助仕様を作成します。ultra クラス実装者は実装スタイル(native / dag / petri)も計画フェーズで選択します。
 2. **実装フェーズ**: 実装者がパッケージ本体とテストファイルを生成します。
 3. **proven-code ゲート**: 生成されたテストが新規カーネルで実行され、合格するかどうかを確認します(サマリーキー: `TestGate` / `Proven`)。
 4. **検証フェーズ**: アドバイザリーロール(`$ClaudeAdvisaryModel`)が仕様との照合を行い、フィードバックを返します。
@@ -994,13 +1005,13 @@ CreateImplementationWorkflow["my-feature", specText,
 | `$ClaudeEvalPromptRouterDispatch` | PromptRouter ブリッジの有効/無効。`Automatic`(デフォルト)で PromptRouter を試行し `NotDispatched` なら自然言語ルーターへ。`False` で常に自然言語ルーター。 |
 | `$ClaudeEvalPromptRouterPreemptsNatural` | `True`(デフォルト): PromptRouter が先に走る。`False`: 自然言語ルーターを先に試す。 |
 | `$ClaudeAdvisaryModel` | アドバイザリーロールのモデル指定。`{"chatgptcodex", Automatic}` がデフォルト。 |
-| `$ClaudeUltraEnabled` | ultra モデルへの自動アップグレード制御(デフォルト `True`)。 |
+| `$ClaudeUltraEnabled` | ultra モデルへの自動アップグレード制御(デフォルト `False`)。 |
 | `ClaudeUltraModelSpec[]` | ultra クラスモデルの `{provider, modelId}` 解決。解決不可時は `$Failed`。 |
 | `ClaudeSpecStatus[]` | spec/consensus 状態の確認。 |
 | `ClaudeSpecVersions[]` | spec/review バージョン一覧(Dataset)。 |
 | `ClaudeSpecText[uri]` | sv:// URI から spec/review 本文を取得。 |
 | `ClaudeOpenSourceVaultURI[uri]` | sv:// URI を新規ノートブックで開く。 |
-| `CreateImplementationWorkflow[name, spec]` | 承認済み仕様からワークフローを実装(ultra モデル + proven-code ゲート)。 |
+| `CreateImplementationWorkflow[name, spec]` | 承認済み仕様からワークフローを実装(proven-code ゲート; `$ClaudeUltraEnabled = True` の場合は ultra モデル)。 |
 | `LaunchImplementationWorkflow[name, args]` | 生成ワークフローの起動。 |
 | `ClaudeImplStatus[]` | spec-impl ワークフロー実行状況の確認。 |
 | `ClaudeImplMonitor[]` | 実行状況の自動更新パネル。 |

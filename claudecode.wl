@@ -25711,8 +25711,10 @@ ClaudeAttach[session_Association, path_String, opts:OptionsPattern[ClaudeAttach]
 iDetachCleanupIndex[cachedPath_String] :=
   If[StringQ[cachedPath] &&
      StringMatchQ[cachedPath, __ ~~ ".pdf", IgnoreCase -> True] &&
+     MemberQ[$Packages, "PDFIndex`"] &&
      Length[Names["PDFIndex`pdfDeleteIndex"]] > 0,
-    Quiet @ PDFIndex`pdfDeleteIndex[cachedPath]];
+    With[{deleteIndex = Symbol["PDFIndex`pdfDeleteIndex"]},
+      Quiet @ deleteIndex[cachedPath]]];
 
 (* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:304b\:3089\:30c7\:30bf\:30c3\:30c1 *)
 ClaudeDetach[path_String] := Module[{nb, tag, norm, cached, atts, isUrl},
@@ -27769,15 +27771,23 @@ iSpecImplWriteBack[jid_, job_, res_] := Module[{nb = job["Nb"], slug = job["Slug
 ];
 
 (* running Wolfram-family processes (incl. this FE's own kernels) -- shown in
-   seat-exhaustion reports so the user can see what to kill. fail-soft "". *)
-iOrchWolframProcessList[] := Quiet @ Check[
-  Module[{out, lines},
-    out = TimeConstrained[
-      RunProcess[{"tasklist", "/FO", "CSV"}, "StandardOutput"], 10, ""];
-    If[!StringQ[out], out = ""];
-    lines = Select[StringSplit[out, "\n"],
-      StringContainsQ[#, "wolfram", IgnoreCase -> True] &];
-    StringRiffle[StringTrim /@ lines, "\n"]], ""];
+   seat-exhaustion reports so the user can see what to kill.
+   既定 OFF: この関数は書き戻し経路 (共有ポーリング tick) から呼ばれ得るが、
+   RunProcess / SystemProcesses は tick 内で戻らないことがあり FE を固める
+   (2026-08-04 実測: 共有カーネルで tasklist・SystemProcesses とも
+   TimeConstrained でも打ち切れずブロック)。一覧が要るときだけ
+   $iOrchListProcessesOnBlock = True にするか、端末で tasklist を実行する。 *)
+If[! ValueQ[$iOrchListProcessesOnBlock], $iOrchListProcessesOnBlock = False];
+
+iOrchWolframProcessList[] := If[! TrueQ[$iOrchListProcessesOnBlock], "",
+  Quiet @ Check[
+    Module[{out, lines},
+      out = TimeConstrained[
+        RunProcess[{"tasklist", "/FO", "CSV"}, "StandardOutput"], 10, ""];
+      If[!StringQ[out], out = ""];
+      lines = Select[StringSplit[out, "\n"],
+        StringContainsQ[#, "wolfram", IgnoreCase -> True] &];
+      StringRiffle[StringTrim /@ lines, "\n"]], ""]];
 
 (* build the error result for a driver that exited without writing result.wl:
    surface the exit code and any captured stdout/stderr so the cause (e.g. the
@@ -27814,7 +27824,10 @@ iSpecImplDeadProcResult[job_] := Module[{p = Lookup[job, "Proc", None], code, di
         "message also appears on seat exhaustion). Kill leftover WolframKernel.exe / " <>
         "wolframscript.exe (orphan kernels) to free a seat, then retry."] <>
       If[StringQ[procs] && procs =!= "",
-        "\n--- Wolfram processes now (incl. this FE) ---\n" <> procs, ""])|>];
+        "\n--- Wolfram processes now (incl. this FE) ---\n" <> procs,
+        "\n" <> iL[
+          "\:6b8b\:7559\:30d7\:30ed\:30bb\:30b9\:306e\:78ba\:8a8d: \:7aef\:672b\:3067 tasklist /FI \"IMAGENAME eq WolframKernel.exe\" \:3092\:5b9f\:884c (\:30d7\:30ed\:30bb\:30b9\:5217\:6319\:306f FE \:3092\:56fa\:3081\:308b\:305f\:3081\:81ea\:52d5\:3067\:306f\:884c\:3044\:307e\:305b\:3093)\:3002",
+          "To list leftover kernels run tasklist /FI \"IMAGENAME eq WolframKernel.exe\" in a terminal (process enumeration is not done automatically: it can freeze the front end)."]])|>];
 
 iSpecImplTick[] := (
   Scan[
