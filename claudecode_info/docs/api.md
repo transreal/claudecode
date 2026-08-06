@@ -1,3 +1,8 @@
+### $ClaudeModel
+型: {String, String} | String, 初期値: ""
+LLM 呼び出しに使うモデル指定。{provider, modelName} タプル形式が正準 (provider: "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio"、lmstudio は {provider, model, url} の3要素も可)。文字列単体はモデル名のみの指定で Claude CLI の --model に渡される。初期値 "" は Claude Code CLI 自身の既定モデルを使う。ShowClaudePalette の Provider/Model ボタン操作でタプルが代入される。
+例: $ClaudeModel = {"claudecode", "claude-opus-5"};
+
 ### $ClaudeAdvisaryModel
 型: {String, String} | String, 初期値: {"chatgptcodex", "Automatic"}
 仕様レビュー・合意形成ワークフローでのアドバイザリー役 (Codex) のモデル指定。$ClaudeModel と同形式。bare provider string "chatgptcodex" も受け付ける。例: {"chatgptcodex", "gpt-5.5"}
@@ -23,7 +28,7 @@ ClaudeCheckSeparation / ClaudeFixSeparation などの分離検証で使用する
 ClaudeEval が生成する出力コード (Grid/Column/Style/Button 等) で統一的に使用するフォント名。プロンプトに埋め込まれ FontFamily 指定を強制する。
 
 ### $ClaudePrivateModel
-型: {String, String} | {String, String, String}, 初期値: なし
+型: String, 初期値: なし
 秘密データ処理用ローカルモデル指定。AutoPrivate -> True 時に機密変数を含むタスクに使用される。
 例: $ClaudePrivateModel = {"lmstudio", "openai/gpt-oss-120b", "http://127.0.0.1:1234"}
 
@@ -134,12 +139,12 @@ True で自然言語ディスパッチのマッチ・実行サマリを表示す
 
 ### $ClaudePackageAuxKeywordMap
 型: Association, 初期値: <||>
-補助 api_<aux>.md の注入条件を登録する Association。形式: <|pkg -> <|aux -> {キーワード...}|>|>。未登録の補助 api は常に注入される (後方互換)。
+補助 api_<aux>.md の注入条件を登録する Association。形式: <|pkg -> <|aux -> {キーワード...}|>|>。キーワードが task に含まれるとパッケージ docs 注入のトリガになり、登録済み aux の api_<aux>.md は aux 名またはキーワードが task に一致する場合のみ注入される。未登録の補助 api は常に注入される (後方互換)。
 例: $ClaudePackageAuxKeywordMap["SourceVault"] = <|"eagle" -> {"Eagle", "Exif"}|>;
 
 ### $ClaudePaletteServiceControls
 型: List, 初期値: {}
-ShowClaudePalette の Privacy セクション下に表示するサービストグルのレジストリ。外部パッケージが登録する。各エントリは <|"Id"->id, "RunningQ"->(Function[]->True|False|Missing[]), "Start"->Function[], "Stop"->Function[], "RunningLabel"->label, "StoppedLabel"->label, "UnknownLabel"->label, (opt)"RunningColor"->color, "StoppedColor"->color|>。各 *Label は String または 0 引数 Function。
+ShowClaudePalette の Privacy セクション下に表示するサービストグルのレジストリ。外部パッケージが登録する。各エントリは <|"Id"->id, "RunningQ"->(Function[]->True|False|Missing[]), "Start"->Function[], "Stop"->Function[], "RunningLabel"->label, "StoppedLabel"->label, "UnknownLabel"->label, (opt)"RunningColor"->color, "StoppedColor"->color|>。各 *Label は String または 0 引数 Function (レンダリング時に評価、$Language 対応ラベル用)。
 
 ### $ClaudeCLIMCPServers
 型: Association, 初期値: <||>
@@ -443,7 +448,7 @@ ultra クラスモデル (SourceVault モデルレジストリの "code-ultra"/"
 → Dataset
 
 ### ClaudeSpecVersions[]
-現在のノートブックのプロジェクトの全 spec/review バージョンを Dataset として一覧表示する。列: Role, Round, Verdict, Seq, CreatedAtUTC, URI。SourceVault のポインタチェーン orch/<project>/spec, orch/<project>/review から取得する。表示は sv:// URI のみ (内部 ref は非表示)。
+現在のノートブックのプロジェクトの全 spec/review バージョンを Dataset として一覧表示する。列: Role, Round, Verdict, Seq, CreatedAtUTC, URI。SourceVault のポインタチェーン orch/<project>/spec, orch/<project>/review から取得する (合意形成 Codex<->Claude フローと単一モデル spec フローの双方が書き込む)。表示は sv:// URI のみ (内部 ref は非表示)。
 → Dataset
 
 ### ClaudeSpecVersions["project"]
@@ -463,7 +468,7 @@ sv:// スナップショット URI (spec/review/requirements) を解決し内容
 → NotebookObject | $Failed
 
 ### CreateImplementationWorkflow[name, approvedSpec, opts]
-承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。実装担当ロールは ultra モデルクラス (ClaudeUltraModelSpec: CLI 優先、paid-API ゲート付き、$ClaudeUltraEnabled が True の場合のみ利用) を優先し、$ClaudeModel にフォールバックする ($ClaudeUltraEnabled の既定は False なので、明示的に True にしない限り常に $ClaudeModel が使われる)。検証担当 ($ClaudeAdvisaryModel) が仕様との整合性を確認しフィードバックを合意まで繰り返す。承認には生成したテストがフレッシュカーネルで通過することも必要 (proven-code gate、サマリーキー TestGate/Proven)。複雑な作業はステージ分割して補助仕様をレビューしてから実装する。ultra クラス実装者はプランニング時に実装スタイル (native/dag/petri) も選択する。$ClaudeSpecImplUseSession が Automatic (既定) かつセッション基盤モジュール (ClaudeOrchestrator_session/ClaudeRuntime_sessionrunner) がロード済みなら RuntimeSession episode 経路で実行し、失敗時は従来の wolframscript driver 経路に自動フォールバックする。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
+承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。実装担当ロールは ultra モデルクラス (ClaudeUltraModelSpec: CLI 優先、paid-API ゲート付き、$ClaudeUltraEnabled が True の場合のみ利用) を優先し、$ClaudeModel にフォールバックする ($ClaudeUltraEnabled の既定は False なので、明示的に True にしない限り常に $ClaudeModel が使われる)。テストファイル込みでパッケージを書き、検証担当 ($ClaudeAdvisaryModel) が仕様との整合性を確認しフィードバックを合意まで繰り返す。承認には生成したテストがフレッシュカーネルで通過することも必要 (proven-code gate、サマリーキー TestGate/Proven)。複雑な作業は補助仕様をレビューしてからステージ分割して実装する。ultra クラス実装者はプランニング時に実装スタイル (native/dag/petri) も選択する。$ClaudeSpecImplUseSession が Automatic (既定) かつセッション基盤モジュール (ClaudeOrchestrator_session/ClaudeRuntime_sessionrunner) がロード済みなら RuntimeSession episode 経路で実行し、失敗時は従来の wolframscript driver 経路に自動フォールバックする。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
 → String (バックグラウンドジョブ id)
 Options: "Notes" -> "" (追加指示), "ClaudeModel" -> Automatic ($ClaudeModel に解決), "AdvisoryModel" -> Automatic ($ClaudeAdvisaryModel に解決), "MaxRounds" -> Automatic, "Nb" -> Automatic (ターゲットノートブック), "Launch" -> True (完了後自動起動), "Project" -> "", "SpecURI" -> "", "SourceNotebookURI" -> ""
 
@@ -761,7 +766,7 @@ Git コミット用のメッセージを自動生成して表示する。変更�
 → String (コミットメッセージ)
 Options: Fallback -> False, Owner -> Automatic, Repository -> Automatic, Branch -> Automatic, BaseBranch -> Automatic, DryRun -> False
 
-補足: ClaudeUpdatePackage / ClaudeCreatePackage / ClaudeConvertToPaclet / ClaudeBackupDataset / ClaudeRestorePackage 等のパッケージ編集系関数は ClaudePackageManager.wl へ移管済み (エイリアス経由で claudecode からも引き続き呼び出し可能)。それらの詳細は ClaudePackageManager 側の api.md を参照する。
+補足: ClaudeUpdatePackage / ClaudeCreatePackage / ClaudeConvertToPaclet / ClaudeBackupDataset / ClaudeRestorePackage / ClaudeUpdatePackageHistory / ClaudeMigrateBackupHistory / ClaudeBuildTransactionAdapter / ClaudeUpdatePackageViaRuntime 等のパッケージ編集系関数は ClaudePackageManager.wl へ移管済み (エイリアス経由で claudecode からも引き続き呼び出し可能)。それらの詳細は ClaudePackageManager 側の api.md を参照する。
 
 ## Markdown / Mermaid
 
@@ -1052,7 +1057,7 @@ $ClaudeRuntimeAsyncExecution の判定に関わらず非同期実行を強制す
 ### ClaudeBuildRuntimeAdapter[nb, opts]
 ノートブック nb 用のランタイムアダプター Association を構築する。ClaudeStartRuntime / ClaudeEvalViaRuntime で内部使用する。
 → Association
-Options: "AccessLevel" -> 0.5, "Secrets" -> {}, "MaxContinuations" -> 3, "SyncProvider" -> True, "Provider" -> Automatic, "Fallback" -> False, "Model" -> Automatic, "Timeout" -> Automatic ($ClaudeTimeout に解決), "ExecutionTimeoutSeconds" -> 30 (NBExecuteHeldExpr の TimeConstraint 既定値。LLM proposal に expectedSeconds があればそちらを優先)
+Options: "AccessLevel" -> 0.5, "Secrets" -> {}, "MaxContinuations" -> 3, "SyncProvider" -> True, "Provider" -> Automatic, "Fallback" -> False, "Model" -> Automatic, "Timeout" -> Automatic ($ClaudeTimeout に解決), "ExecutionTimeoutSeconds" -> 30 (NBExecuteHeldExpr の TimeConstraint 既定値。adapter の "DefaultTimeoutSeconds" キーに保持。LLM proposal に ExpectedSeconds があればそちらを優先)
 
 ### ClaudeStartRuntime[nb, input, opts]
 ノートブック nb 上でランタイムを起動し input で最初のターンを実行する。
@@ -1172,11 +1177,11 @@ Options: NBAccess`NBEnqueueFinalAction のオプションを継承
 ## パレット・UI
 
 ### ShowClaudePalette[]
-Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/kimi/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudeLLMBreakpoint トグル ("BreakPtr")、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。kimi は Moonshot AI Kimi シリーズ (kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
+Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/kimi/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudeLLMBreakpoint トグル ("BreakPtr")、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。kimi は Moonshot AI Kimi シリーズ (kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する (静的フォールバックは Automatic/gpt-5.6-sol)。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
 → NotebookObject
 
 ### ClaudeRegisterPaletteServiceControl[spec]
-パレットサービスコントロールを $ClaudePaletteServiceControls に登録する。同じ Id を再登録すると置換される。ShowClaudePalette[] を再実行すると反映される。
+パレットサービスコントロールを $ClaudePaletteServiceControls に登録する (キーは spec["Id"])。同じ Id を再登録すると置換される。ShowClaudePalette[] を再実行すると反映される。
 → String (Id)
 
 ### ClaudeUnregisterPaletteServiceControl[id]
@@ -1188,7 +1193,7 @@ Claude Code コントロールパレットを表示する。Provider 選択 (cla
 ### ClaudeRegisterCLIMCPServer[id, spec]
 ヘッドレス claude CLI 実行 (ClaudeQueryBg 等) に組み込む MCP サーバーを $ClaudeCLIMCPServers に登録する。同じ id を再登録すると置換される。
 → id (String)
-spec キー: "ConfigFn" -> Function[] (サーバー到達可能時は <|"Url"->..., ("Headers"-><|...|>)|>、停止時は None を返す)、"AllowedTools" -> {ツール名...} (--allowedTools に mcp__\<id\>__\<tool\> 形式で追加。--print モードは対話承認できないため事前許可が必須)、"PromptDirective" -> String | Function[] (サーバー起動中にクエリプロンプトへ注入するポリシーテキスト)。
+spec キー: "ConfigFn" -> Function[] (サーバー到達可能時は <|"Url"->..., ("Headers"-><|...|>)|>、停止時は None を返す)、"AllowedTools" -> {ツール名...} (--allowedTools に mcp__\<id\>__\<tool\> 形式で追加。--print モードは対話承認できないため事前許可が必須)、"PromptDirective" -> String | Function[] (サーバー起動中にクエリプロンプトへ注入する MCP 優先ポリシーテキスト)。
 
 ## 機密管理
 
@@ -1347,4 +1352,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-06 パス、12回目)。今回は全 `::usage` 宣言 249 件を grep で機械的に再列挙し (前回の215/261件パターンから抽出方式を刷新、行頭・行中双方の宣言を1パスで捕捉)、`$ClaudeTaskClassTable` の8種類の TaskClass 定義・`$ClaudeSpecImplUseSession` の usage 文言をソース該当行 (それぞれ L11531-11548, L27386-27391) と一字一句照合、ファイル末尾 (42473行目、claudecode_editmodes.wl マージ済み・claudecode_directives.wl 自動ロードのみ) まで新規公開シンボルが無いことを確認した。乖離は検出されなかった。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-06 パス、13回目)。今回は公開シンボル宣言ブロック (BeginPackage 直後の Remove/cleanup リストと `::usage` 宣言群) を先頭から機械的に走査し、api.md に本文エントリの無い公開シンボルを差分抽出したところ `$ClaudeModel` (パッケージの中心設定変数でありながら他エントリから参照されるだけで未定義だった) のみが検出されたため、型・初期値・provider タプル形式・パレット連動を明記した項目を冒頭に追加した。$ClaudeAdvisaryModel / $ClaudeUltraEnabled / ClaudeUltraModelSpec / CreateImplementationWorkflow / $ClaudeSpecImplUseSession / $ClaudePackageAuxKeywordMap / $ClaudePaletteServiceControls / ClaudeRegisterCLIMCPServer の usage 文言はソース該当行と一字一句照合し、パレットの provider 循環順・静的モデル候補 ($iPaletteProviderOrder, $iPaletteModelsByProvider) と $ClaudeFallbackModels / $ClaudeDocModel / $ClaudeAccessibleDirs / $ClaudeSnapshots / $ClaudeDocUpdateStaleSeconds の既定値も初期化コードと一致することを確認した。ClaudePackageManager へ移管済み関数群 (ClaudeUpdatePackage 系・Paclet 変換・トランザクションアダプター) は本文に列挙せず移管注記のみとする方針を維持している。

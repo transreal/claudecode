@@ -35540,7 +35540,9 @@ iNBLLMQueryFuncImpl[prompt_String, callback_, nb_NotebookObject, opts:OptionsPat
     AutoCellize -> False,
     Sequence @@ FilterRules[{opts}, Except[AutoCellize]]];
 
-NBAccess`$NBLLMQueryFunc = iNBLLMQueryFuncImpl;
+(* 2026-08-06: NBAccess \:7ba1\:7406\:5909\:6570\:3078\:306e\:76f4\:63a5\:4ee3\:5165\:3092\:3084\:3081\:3001\:767b\:9332 API \:3092\:901a\:3059 *)
+Quiet @ Check[
+  NBAccess`NBRegisterLLMQueryFunc[iNBLLMQueryFuncImpl], Null];
 
 (* ============================================================
    NBAccess AutoEvaluate \:7981\:6b62\:30d1\:30bf\:30fc\:30f3\:767b\:9332
@@ -35548,7 +35550,9 @@ NBAccess`$NBLLMQueryFunc = iNBLLMQueryFuncImpl;
    \:3053\:3053\:3067\:767b\:9332\:3057\:305f\:30d1\:30bf\:30fc\:30f3\:306b\:30de\:30c3\:30c1\:3059\:308b\:30bb\:30eb\:306f\:81ea\:52d5\:5b9f\:884c\:3092\:30d6\:30ed\:30c3\:30af\:3059\:308b\:3002
    rules/00-autoeval-prohibited.md \:53c2\:7167\:3002
    ============================================================ *)
-NBAccess`$NBAutoEvalProhibitedPatterns = $iAutoEvalProhibitedPatterns;
+Quiet @ Check[
+  NBAccess`NBRegisterAutoEvalProhibitedPatterns[$iAutoEvalProhibitedPatterns],
+  Null];
 
 
 (* ============================================================
