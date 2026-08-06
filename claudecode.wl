@@ -4726,6 +4726,19 @@ iBoundedNotebookContext[s_, _] := If[StringQ[s], s, ""];
 
 (* X0b: history bounding (was pass-through in X0a). Mode "None" drops history,
    "Recent" keeps the last n turns, anything else (e.g. "Full") passes through. *)
+(* \:5c65\:6b74\:306e privacy \:30d5\:30a3\:30eb\:30bf (2026-08-06)\:3002
+   \:30bb\:30eb\:306f NBGetContext \:304c accessLevel \:3067\:9664\:5916\:3057\:3066\:3044\:305f\:304c\:3001\:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:306f
+   turn \:6570\:3067\:3057\:304b\:5207\:3089\:308c\:3066\:304a\:3089\:305a\:3001PL 1.0 \:306e\:30bf\:30fc\:30f3 (\:6a5f\:5bc6\:30bb\:30eb\:304b\:3089\:306e
+   \:30d7\:30ed\:30f3\:30d7\:30c8) \:304c\:6b21\:306e\:975e\:6a5f\:5bc6\:30bf\:30fc\:30f3\:3067\:30af\:30e9\:30a6\:30c9\:30e2\:30c7\:30eb\:3078\:518d\:9001\:3055\:308c\:5f97\:305f\:3002
+   "accessLevel" \:30ad\:30fc\:3092\:6301\:305f\:306a\:3044\:65e7\:30a8\:30f3\:30c8\:30ea\:306f 0.5 (\:30af\:30e9\:30a6\:30c9\:5b89\:5168) \:6271\:3044\:3002
+   \:3053\:306e\:30d5\:30a3\:30fc\:30eb\:30c9\:3092\:66f8\:304d\:59cb\:3081\:308b\:524d\:306e\:5c65\:6b74\:306b PL 1.0 \:306e\:30bf\:30fc\:30f3\:306f\:5b58\:5728\:3057\:306a\:3044
+   (\:30ed\:30fc\:30ab\:30eb\:4ee3\:66ff\:81ea\:4f53\:304c\:767a\:706b\:3057\:3066\:3044\:306a\:304b\:3063\:305f\:305f\:3081)\:3002 *)
+iFilterHistoryByAccessLevel[h_List, accessLevel_?NumericQ] :=
+  Select[h, Function[e,
+    With[{al = If[AssociationQ[e], Lookup[e, "accessLevel", 0.5], 0.5]},
+      ! NumericQ[al] || al <= accessLevel]]];
+iFilterHistoryByAccessLevel[h_, _] := If[ListQ[h], h, {}];
+
 iBoundedHistory[h_List, "None", _] := {};
 iBoundedHistory[h_List, "Recent", n_Integer] :=
   Which[n <= 0, {}, Length[h] <= n, h, True, Take[h, -n]];
@@ -4755,7 +4768,8 @@ iAssembleContextForPlan[nb_, afterIdx_Integer, rawHistory_List,
     nbCtx = With[{r = Quiet[iCaptureNotebookContext[nb, afterIdx, accessLevel]]},
       If[StringQ[r], r, ""]];
     If[mode === "LegacyFull" || mode === False,
-      Return[<|"History" -> rawHistory, "NotebookContext" -> nbCtx,
+      Return[<|"History" -> iFilterHistoryByAccessLevel[rawHistory, accessLevel],
+        "NotebookContext" -> nbCtx,
         "EstimatedTokens" -> iEstimateContextTokens[nbCtx],
         "Mode" -> "LegacyFull"|>, Module]];
     (* a registered SourceVault planner may refine the plan per prompt *)
@@ -4773,13 +4787,19 @@ iAssembleContextForPlan[nb_, afterIdx_Integer, rawHistory_List,
     hPlan  = Lookup[plan, "History", <||>];
     hMode  = Lookup[hPlan, "Mode", "Recent"];
     hTurns = Lookup[hPlan, "MaxTurns", ClaudeCode`$ClaudeEvalContextHistoryTurns];
-    hist   = iBoundedHistory[rawHistory, hMode,
+    (* privacy \:30d5\:30a3\:30eb\:30bf\:3092\:5148\:306b\:304b\:3051\:3066\:304b\:3089 turn \:6570\:3067\:5207\:308b *)
+    hist   = iBoundedHistory[
+      iFilterHistoryByAccessLevel[rawHistory, accessLevel], hMode,
       If[IntegerQ[hTurns], hTurns, 12]];
     <|"History" -> hist, "NotebookContext" -> nbCtx,
       "EstimatedTokens" -> iEstimateContextTokens[nbCtx], "Mode" -> "Bounded"|>
   ];
+(* plan \:304c Association \:3067\:306a\:3044\:7b49\:306e fallback\:3002accessLevel \:3092\:540d\:524d\:3067\:53d7\:3051\:3089\:308c\:306a\:3044\:306e\:3067\:3001
+   \:30bb\:30eb\:5074\:3068\:540c\:3058\:304f 0.5 (\:30af\:30e9\:30a6\:30c9\:5b89\:5168) \:3067\:5207\:308b\:3002\:30ed\:30fc\:30ab\:30eb\:30e2\:30c7\:30eb\:6642\:306b\:5c65\:6b74\:304c
+   \:5c11\:306a\:304f\:306a\:308b\:5074\:306e\:640d\:5931\:306f\:8a31\:5bb9\:3057\:3001\:6f0f\:308c\:308b\:5074\:306f\:8a31\:5bb9\:3057\:306a\:3044\:3002 *)
 iAssembleContextForPlan[nb_, afterIdx_Integer, rawHistory_, ___] :=
-  <|"History" -> If[ListQ[rawHistory], rawHistory, {}],
+  <|"History" -> iFilterHistoryByAccessLevel[
+      If[ListQ[rawHistory], rawHistory, {}], 0.5],
     "NotebookContext" -> With[{r = Quiet[iCaptureNotebookContext[nb, afterIdx]]},
       If[StringQ[r], r, ""]], "Mode" -> "Fallback"|>;
 
@@ -13723,6 +13743,15 @@ iTaskDetailBlock[label_String, task_String] :=
    nb: \:30ce\:30fc\:30c8\:30d6\:30c3\:30af
    ============================================================ *)
 
+(* \:81ea\:52d5\:6a5f\:5bc6\:30de\:30fc\:30af\:5bfe\:8c61\:306e\:30bb\:30eb\:30b9\:30bf\:30a4\:30eb (2026-08-06)\:3002
+   "Text" \:3092\:8ffd\:52a0: LLM \:306e\:5fdc\:7b54\:672c\:6587\:306f Text \:30bb\:30eb\:306b\:66f8\:304b\:308c\:308b\:3002NBGetContext \:306f
+   Input/Code/Output \:3057\:304b\:8aad\:307e\:306a\:3044\:305f\:3081\:5f93\:6765\:306f\:9664\:5916\:3057\:3066\:3044\:305f\:304c\:3001notebook_info
+   \:30c4\:30fc\:30eb (NBMakeContextPacket) \:306f\:5168\:30b9\:30bf\:30a4\:30eb\:306e\:30bb\:30eb\:3092\:8aad\:3080\:3002\:6a5f\:5bc6\:30bf\:30fc\:30f3\:306e\:5fdc\:7b54\:672c\:6587\:306f
+   \:79d8\:5bc6\:3092\:5fa9\:5531\:3057\:3066\:3044\:308b\:3053\:3068\:304c\:591a\:304f\:3001\:672a\:30de\:30fc\:30af\:3060\:3068\:6b21\:306e\:30af\:30e9\:30a6\:30c9\:30bf\:30fc\:30f3\:304c\:305d\:306e\:30c4\:30fc\:30eb\:3067
+   \:8aad\:307f\:51fa\:305b\:3066\:3057\:307e\:3046\:3002Print/Subsection (\:30d8\:30c3\:30c0\:30fb\:30ec\:30b9\:30dd\:30f3\:30b9\:5916\:306e\:544a\:77e5) \:306f\:5f15\:304d\:7d9a\:304d\:9664\:5916\:3002
+   \:5909\:6570\:3092\:5b9a\:7fa9\:3057\:306a\:3044\:30b9\:30bf\:30a4\:30eb\:306a\:306e\:3067\:3001\:4f9d\:5b58\:8d70\:67fb\:306e\:9023\:9396\:30de\:30fc\:30af (result16b) \:306b\:306f\:5f71\:97ff\:3057\:306a\:3044\:3002 *)
+$iAutoMarkCellStyles = {"Input", "Output", "Code", "ExternalLanguage", "Text"};
+
 iAutoMarkNewCellsConfidential[nb_NotebookObject, cellCountBefore_Integer] :=
   Module[{nAfter, newIndices, style},
     nAfter = NBAccess`NBCellCount[nb];
@@ -13730,8 +13759,7 @@ iAutoMarkNewCellsConfidential[nb_NotebookObject, cellCountBefore_Integer] :=
     newIndices = Range[cellCountBefore + 1, nAfter];
     Do[
       style = NBAccess`NBCellStyle[nb, idx];
-      (* Input/Output/Code \:30bb\:30eb\:306e\:307f\:30de\:30fc\:30af\:3002Text/Print/Subsection \:7b49\:306f\:30b9\:30ad\:30c3\:30d7 *)
-      If[MemberQ[{"Input", "Output", "Code", "ExternalLanguage"}, style] &&
+      If[MemberQ[$iAutoMarkCellStyles, style] &&
          !TrueQ[NBAccess`NBGetConfidentialTag[nb, idx]],
         NBAccess`NBMarkCellConfidential[nb, idx]],
       {idx, newIndices}]
@@ -13755,7 +13783,7 @@ iAutoMarkCellsAddedSince[nb_NotebookObject, beforeCells_List] :=
     Do[
       If[!MemberQ[beforeCells, allCells[[idx]]],
         style = Quiet @ NBAccess`NBCellStyle[nb, idx];
-        If[MemberQ[{"Input", "Output", "Code", "ExternalLanguage"}, style] &&
+        If[MemberQ[$iAutoMarkCellStyles, style] &&
            !TrueQ[NBAccess`NBGetConfidentialTag[nb, idx]],
           NBAccess`NBMarkCellConfidential[nb, idx]]],
       {idx, Length[allCells]}]
@@ -13778,11 +13806,49 @@ iSessionHasConfidentialContent[] :=
    confidential content, OR the eval is explicitly high-privacy (privSpec
    AccessLevel > 0.5). iResponseTaintedQ (response references a known confidential
    variable) still marks independently of this gate. *)
+(* 2026-08-06 \:8ffd\:52a0\:6761\:4ef6: \:30d7\:30ed\:30f3\:30d7\:30c8\:30bb\:30eb\:81ea\:8eab\:304c\:6a5f\:5bc6\:30de\:30fc\:30af\:6e08\:307f\:306e\:5834\:5408\:3002
+   \:65e7\:5b9f\:88c5\:306f\:6a5f\:5bc6\:300c\:5909\:6570\:300d(iSessionHasConfidentialContent) \:3068 privSpec \:3057\:304b\:898b\:3066\:304a\:3089\:305a\:3001
+   \:6a5f\:5bc6 ChatCell \:304b\:3089\:306e\:30bf\:30fc\:30f3\:306f\:5909\:6570\:3092 1 \:3064\:3082\:767b\:9332\:3057\:306a\:3051\:308c\:3070 AutoMark=False \:3060\:3063\:305f\:3002
+   \:305d\:306e\:305f\:3081\:30ed\:30fc\:30ab\:30eb\:30e2\:30c7\:30eb\:304c\:63d0\:6848\:3057\:305f\:30b3\:30fc\:30c9\:30bb\:30eb\:3068 Output (\:6a5f\:5bc6\:5185\:5bb9\:305d\:306e\:3082\:306e) \:304c
+   \:5e73\:6587\:30bb\:30eb\:3068\:3057\:3066\:30ce\:30fc\:30c8\:306b\:6b8b\:308a\:3001\:6b21\:306e\:30af\:30e9\:30a6\:30c9\:30bf\:30fc\:30f3\:306e NBGetContext (Input/Output \:3092\:53ce\:96c6)
+   \:7d4c\:7531\:3067\:4e38\:3054\:3068\:9001\:3089\:308c\:3066\:3044\:305f\:3002\:30e6\:30fc\:30b6\:30fc\:304c\:660e\:793a\:7684\:306b\:30de\:30fc\:30af\:3057\:305f\:3068\:304d\:3060\:3051\:7acb\:3064\:6761\:4ef6\:306a\:306e\:3067\:3001
+   \:516c\:958b\:30ce\:30fc\:30c8\:3067\:306e\:5e73\:5e38\:306e\:30ed\:30fc\:30ab\:30eb eval \:3092\:904e\:5270\:30de\:30fc\:30af\:3059\:308b\:56de\:5e30 (result16b) \:306f\:518d\:73fe\:3057\:306a\:3044\:3002 *)
+iClaudeEvalPromptCellConfidentialQ[] :=
+  NumericQ[$iClaudeEvalPromptPrivacyLevel] &&
+  TrueQ[$iClaudeEvalPromptPrivacyLevel > 0.5];
+
 iShouldBlanketMarkConfidential[accessLevel_, privSpec_] :=
   TrueQ[iShouldAutoMarkConfidential[accessLevel]] &&
   (iSessionHasConfidentialContent[] ||
-   (AssociationQ[privSpec] && TrueQ[Lookup[privSpec, "AccessLevel", 0] > 0.5]));
+   (AssociationQ[privSpec] && TrueQ[Lookup[privSpec, "AccessLevel", 0] > 0.5]) ||
+   iClaudeEvalPromptCellConfidentialQ[]);
 iShouldBlanketMarkConfidential[___] := False;
+
+(* \[HorizontalLine]\[HorizontalLine] \:66f8\:304d\:8fbc\:307f\:95a2\:6240\:306e\:958b\:9589 (2026-08-06) \[HorizontalLine]\[HorizontalLine]
+   \:30bf\:30fc\:30f3\:5165\:53e3\:3067\:5fc5\:305a\:3069\:3061\:3089\:304b\:3092\:547c\:3076\:3053\:3068\:3002\:975e\:6a5f\:5bc6\:30bf\:30fc\:30f3\:3067\:3082\:660e\:793a\:7684\:306b\:9589\:3058\:308b\:306e\:3067\:3001
+   \:524d\:306e\:30bf\:30fc\:30f3\:306e\:30d5\:30e9\:30b0\:304c\:6b8b\:308a\:7d9a\:3051\:3066\:7121\:95a2\:4fc2\:306a\:30bb\:30eb\:3092\:6a5f\:5bc6\:5316\:3059\:308b\:4e8b\:6545\:304c\:8d77\:304d\:306a\:3044\:3002 *)
+iOpenConfidentialWriteGate[nb_, accessLevel_, privSpec_] :=
+  Quiet @ Check[
+    If[Head[nb] === NotebookObject,
+      NBAccess`NBSetWriteConfidential[nb,
+        If[TrueQ[iShouldBlanketMarkConfidential[accessLevel, privSpec]], 1.0, False]]],
+    Null];
+
+iCloseConfidentialWriteGate[nb_] :=
+  Quiet @ Check[
+    If[Head[nb] === NotebookObject,
+      NBAccess`NBSetWriteConfidential[nb, False]],
+    Null];
+
+(* runtime \:304c\:307e\:3060\:627f\:8a8d\:5f85\:3061\:304b\:3002\:627f\:8a8d\:5f85\:3061\:306e\:9593\:306f\:95a2\:6240\:3092\:9589\:3058\:3066\:306f\:306a\:3089\:306a\:3044:
+   \:627f\:8a8d\:306f\:4eba\:9593\:306e\:64cd\:4f5c\:5f85\:3061\:3067\:6570\:79d2\:3092\:5f53\:7136\:8d85\:3048\:308b\:305f\:3081\:3001\:6642\:9593\:3067\:9589\:3058\:308b\:3068
+   \:627f\:8a8d\:5f8c\:306b\:66f8\:304b\:308c\:308b\:5b9f\:884c\:7d50\:679c\:30bb\:30eb\:3068\:6700\:7d42\:5fdc\:7b54\:304c\:7d20\:306e\:307e\:307e\:6b8b\:308b (result4.nb \:306e cell 10/12)\:3002 *)
+iRuntimeAwaitingApprovalQ[rid_String] :=
+  TrueQ @ Quiet @ Check[
+    With[{st = ClaudeRuntime`Private`$iClaudeRuntimes[rid]},
+      AssociationQ[st] && Lookup[st, "Status", ""] === "AwaitingApproval"],
+    False];
+iRuntimeAwaitingApprovalQ[___] := False;
 
 (* LLM 応答/生成コードが機密ソースを参照しているかの判定。
    機密ソース = NBAccess の機密生成ヘッド表 (SourceVault 等がロード時登録) と
@@ -14842,8 +14908,13 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
     (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306e\:89e3\:6c7a: PrivacySpec \:3068 Model \:306e\:4e21\:65b9\:3092\:8003\:616e *)
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
     $iCurrentSessionAttachments = iGetResolvedAttachments[nb, tag];
+    (* 2026-08-06: \:5c65\:6b74\:3082 accessLevel \:3067\:9664\:5916\:3059\:308b (\:30bb\:30eb\:3068\:540c\:3058\:898f\:5247)\:3002
+       cellCountAfter \:306e\:7b97\:51fa\:306f\:9664\:5916\:524d\:306e\:6700\:7d42\:30a8\:30f3\:30c8\:30ea\:3092\:4f7f\:3046 (\:4f4d\:7f6e\:60c5\:5831\:306e\:307f)\:3002 *)
     history = iSessionHistoryWithInherit[nb, tag];
     lastEntry      = If[Length[history] > 0, Last[history], <||>];
+    history = iFilterHistoryByAccessLevel[history, accessLevel];
+    (* \:66f8\:304d\:8fbc\:307f\:95a2\:6240 (2026-08-06) *)
+    iOpenConfidentialWriteGate[nb, accessLevel, privSpec];
     cellCountAfter = Replace[Lookup[lastEntry, "cellCountAfter",
                        Lookup[lastEntry, "cellCount", 0]], Except[_Integer] -> 0];
     (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:57fa\:3065\:3044\:3066\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3092\:69cb\:7bc9 *)
@@ -14874,7 +14945,8 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
       "fullPrompt"  -> iCompressForHistory[fullPrompt],
       "cellCount"   -> NBAccess`NBCellCount[nb],
       "response"    -> "(\:51e6\:7406\:4e2d)",
-      "code"        -> ""
+      "code"        -> "",
+      "accessLevel" -> accessLevel
     |>;
     iSessionAppend[nb, tag, entry];
 
@@ -14948,6 +15020,7 @@ iClaudeQueryImpl[nb_NotebookObject, tag_String, prompt_, useFallback_, useWebFet
             AppendTo[cellThunks, Function[
               If[TrueQ[autoMark] || iResponseTaintedQ[response],
                 iAutoMarkNewCellsConfidential[nb2, ccBefore]];
+              iCloseConfidentialWriteGate[nb2];
               NBAccess`NBJobResetSlotWritten[jid, 1];
               $iJobActiveNb = None;
               NBAccess`NBEndJob[jid];
@@ -15814,6 +15887,8 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
           accessLevel = iResolveAccessLevel[privSpec, modelSpec],
         _, Null]
     ];
+    (* \:66f8\:304d\:8fbc\:307f\:95a2\:6240 (2026-08-06): \:30ec\:30ac\:30b7\:7d4c\:8def\:3082\:30bf\:30fc\:30f3\:5165\:53e3\:3067\:958b\:9589\:3092\:5ba3\:8a00\:3059\:308b *)
+    iOpenConfidentialWriteGate[nb, accessLevel, privSpec];
     $iClaudeEvalCurrentDepth++;
     (* LLM \:9001\:4fe1\:76f4\:524d\:306e\:7cbe\:5bc6\:30c1\:30a7\:30c3\:30af (\:7b2c2\:5c64):
        \:518d\:5e30\:547c\:3073\:51fa\:3057\:3067\:306f\:89aa\:304c\:65e2\:306b\:30c1\:30a7\:30c3\:30af\:6e08\:307f\:306a\:306e\:3067\:3001\:30c8\:30c3\:30d7\:30ec\:30d9\:30eb\:306e\:307f\:5b9f\:884c *)
@@ -15966,7 +16041,10 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
       "fullPrompt"  -> iCompressForHistory[contextPrompt],
       "cellCount"   -> NBAccess`NBCellCount[nb],
       "response"    -> "\:ff08\:51e6\:7406\:4e2d\:ff09",
-      "code"        -> ""
+      "code"        -> "",
+      (* 2026-08-06: \:5c65\:6b74\:306e privacy \:30d5\:30a3\:30eb\:30bf\:7528\:3002\:3053\:308c\:304c\:7121\:3044\:3068 PL 1.0 \:306e\:30bf\:30fc\:30f3\:304c
+         \:6b21\:306e\:30af\:30e9\:30a6\:30c9\:30bf\:30fc\:30f3\:306e\:5c65\:6b74\:3068\:3057\:3066\:518d\:9001\:3055\:308c\:308b *)
+      "accessLevel" -> accessLevel
     |>;
     iSessionAppend[nb, tag, entry];
 
@@ -16121,6 +16199,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
           If[TrueQ[autoMark] || iResponseTaintedQ[blocks, textOnly],
             AppendTo[queue, Function[
               iAutoMarkNewCellsConfidential[nb2, ccBefore]]]];
+          AppendTo[queue, Function[iCloseConfidentialWriteGate[nb2]]];
           AppendTo[queue, Function[
             iWriteContinueEvalButton[nb2, ae, copts]]];
           (* Order 9: \:81ea\:52d5\:4fdd\:5b58 (async \:7d4c\:8def) *)
@@ -17571,9 +17650,13 @@ If[! ListQ[$specCellOpts],
 
 iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :=
   Module[{step, entry, jobId, history, contextPrompt,
-          nbFilePath, nbFileCtx = ""},
+          nbFilePath, nbFileCtx = "", accessLevel},
     $iCurrentSessionAttachments = iGetResolvedAttachments[nb, tag];
-    history = iSessionHistoryWithInherit[nb, tag];
+    (* 2026-08-06: \:5c65\:6b74\:3092 privacy \:30d5\:30a3\:30eb\:30bf\:3059\:308b\:3002\:3053\:306e\:7d4c\:8def\:306f modelSpec \:3092
+       \:53d7\:3051\:53d6\:3089\:306a\:3044\:306e\:3067\:3001\:65e2\:5b9a\:30e2\:30c7\:30eb\:306e\:6271\:3048\:308b\:30ec\:30d9\:30eb\:3092\:4f7f\:3046\:3002 *)
+    accessLevel = iResolveAccessLevel[Automatic, iResolveDefaultModelSpec[Automatic]];
+    history = iFilterHistoryByAccessLevel[
+      iSessionHistoryWithInherit[nb, tag], accessLevel];
     step    = Length[iSessionHistory[nb, tag]];
 
     (* .nb \:30d5\:30a1\:30a4\:30eb\:691c\:51fa *)
@@ -17606,7 +17689,8 @@ iClaudeSpecImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{}] :
       "fullPrompt"  -> iCompressForHistory[contextPrompt],
       "cellCount"   -> NBAccess`NBCellCount[nb],
       "response"    -> "(\:51e6\:7406\:4e2d)",
-      "code"        -> ""
+      "code"        -> "",
+      "accessLevel" -> accessLevel
     |>;
     iSessionAppend[nb, tag, entry];
 
@@ -17678,6 +17762,10 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
     lastEntry      = Last[history];
     cellCountAfter = Replace[Lookup[lastEntry, "cellCountAfter",
                        Lookup[lastEntry, "cellCount", 0]], Except[_Integer] -> 0];
+    (* 2026-08-06: \:4f4d\:7f6e\:60c5\:5831 (cellCountAfter) \:3092\:53d6\:3063\:305f\:5f8c\:3067 privacy \:30d5\:30a3\:30eb\:30bf\:3002
+       ContinueEval \:306f\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:7d9a\:304d\:306a\:306e\:3067\:3001PL 1.0 \:306e\:30bf\:30fc\:30f3\:3092\:305d\:306e\:307e\:307e
+       \:30af\:30e9\:30a6\:30c9\:30e2\:30c7\:30eb\:3078\:518d\:9001\:3057\:3066\:3044\:305f\:3002 *)
+    history        = iFilterHistoryByAccessLevel[history, accessLevel];
     step           = Length[iSessionHistory[nb, tag]];
     notebookCtx    = With[{r = Quiet[iCaptureNotebookContext[nb, cellCountAfter, accessLevel]]}, If[StringQ[r], r, ""]];
 
@@ -17712,7 +17800,8 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
       "fullPrompt"  -> iCompressForHistory[contextPrompt],
       "cellCount"   -> NBAccess`NBCellCount[nb],
       "response"    -> "\:ff08\:51e6\:7406\:4e2d\:ff09",
-      "code"        -> ""
+      "code"        -> "",
+      "accessLevel" -> accessLevel
     |>;
     iSessionAppend[nb, tag, entry];
     ]; (* End nbFilePath3 Module *)
@@ -17763,6 +17852,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
           (* \:9ad8 AccessLevel \:306e\:5834\:5408\:3001\:65b0\:898f\:30bb\:30eb\:3092\:81ea\:52d5\:79d8\:5bc6\:30de\:30fc\:30af *)
           If[TrueQ[autoMark] || iResponseTaintedQ[response],
             iAutoMarkNewCellsConfidential[nb2, ccBefore]];
+          iCloseConfidentialWriteGate[nb2];
           NBAccess`NBDeleteCellsByTag[nb2, tag2];
           iSessionUpdateLast[nb2, stag2, <|
             "response"       -> response,
@@ -38803,6 +38893,9 @@ iClaudeEvalViaRuntimeBridge[nb_NotebookObject, tag_String, task_String,
       "AutoMark"      -> iShouldBlanketMarkConfidential[accessLevel, privSpec],
       "StartTime"     -> AbsoluteTime[]
     |>;
+    (* \:66f8\:304d\:8fbc\:307f\:95a2\:6240\:3092\:958b\:304f\:3002\:3053\:308c\:4ee5\:964d\:3053\:306e\:30bf\:30fc\:30f3\:304c\:751f\:6210\:3059\:308b\:30bb\:30eb\:306f
+       \:751f\:6210\:6642\:70b9\:3067 privacy \:30bf\:30b0\:3092\:6301\:3064 (\:4e8b\:5f8c\:30b9\:30a4\:30fc\:30d7\:306b\:4f9d\:5b58\:3057\:306a\:3044)\:3002 *)
+    iOpenConfidentialWriteGate[nb, accessLevel, privSpec];
     
     (* \[HorizontalLine]\[HorizontalLine] WindowStatusArea \:306b\:521d\:671f\:30b9\:30c6\:30fc\:30bf\:30b9\:8868\:793a \[HorizontalLine]\[HorizontalLine]
        2026-07-29: \:7121\:4fdd\:8b77\:306e CurrentValue \:66f8\:304d\:8fbc\:307f\:306f FE \:304c\:585e\:304c\:3063\:3066\:3044\:308b\:3068
@@ -38998,6 +39091,11 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
     jobId    = Lookup[meta, "JobId", ""];
     ae       = TrueQ[Lookup[meta, "AutoEvaluate", True]];
     autoMark = TrueQ[Lookup[meta, "AutoMark", False]];
+    (* 2026-08-06: \:3053\:306e\:95a2\:6570\:306f 1 \:30bf\:30fc\:30f3\:306b\:8907\:6570\:56de\:518d\:5165\:3059\:308b (\:751f\:30ec\:30b9\:30dd\:30f3\:30b9 \[RightArrow]
+       \:627f\:8a8d UI \[RightArrow] \:627f\:8a8d\:5f8c\:306e\:5b9f\:884c\:7d50\:679c)\:3002\:66f8\:304d\:8fbc\:307f\:306e\:76f4\:524d\:306b\:6bce\:56de\:95a2\:6240\:3092\:958b\:3051\:76f4\:3059\:3002
+       (\:958b\:3051\:3063\:653e\:3057\:306b\:305b\:305a\:6642\:9593\:3067\:9589\:3058\:3066\:3044\:305f\:305f\:3081\:3001\:627f\:8a8d\:5f8c\:306e\:30bb\:30eb\:304c\:672a\:4fdd\:8b77\:3060\:3063\:305f) *)
+    If[TrueQ[autoMark],
+      Quiet @ Check[NBAccess`NBSetWriteConfidential[nb, 1.0], Null]];
     ccBefore = Lookup[meta, "CellCountBefore", 0];
     copts    = Lookup[meta, "ContinueOpts", <||>];
     step     = Lookup[meta, "Step", 0];
@@ -39006,7 +39104,8 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
     If[status === "AwaitingApproval",
       Module[{pending, valResult, isDenyOverride, reasonClass,
               explanation, heldExpr, exprStr, approvalUI, kind,
-              expSec, defTimeout, rawCode, approvalTag},
+              expSec, defTimeout, rawCode, approvalTag,
+              apprBeforeCells = Replace[Quiet @ Cells[nb], Except[_List] -> {}]},
         pending = Lookup[st, "PendingApproval", <||>];
         valResult = Lookup[pending, "ValidationResult", <||>];
         isDenyOverride = TrueQ[Lookup[pending, "DenyOverride", False]];
@@ -39280,6 +39379,13 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
           Editable -> False,
           CellTags -> {approvalTag}]];
         
+        (* 2026-08-06: \:627f\:8a8d UI \:306e\:30bb\:30eb\:7fa4\:3082\:81ea\:52d5\:6a5f\:5bc6\:30de\:30fc\:30af\:5bfe\:8c61\:306b\:3059\:308b\:3002
+           NeedsApproval \:30bb\:30eb (style Input) \:3068\:300cLLM \:63d0\:6848\:30b3\:30fc\:30c9\:5168\:6587\:300d(style Code) \:306f
+           \:63d0\:6848\:5f0f\:3092\:305d\:306e\:307e\:307e\:542b\:3080\:305f\:3081\:3001\:6a5f\:5bc6\:30bf\:30fc\:30f3\:3067\:306f\:79d8\:5bc6\:306e\:30ea\:30c6\:30e9\:30eb\:304c\:305d\:3053\:306b\:6b8b\:308b\:3002
+           NBGetContext \:306f Input/Code/Output \:3092\:53ce\:96c6\:3059\:308b\:306e\:3067\:3001\:30de\:30fc\:30af\:3057\:306a\:3044\:3068
+           \:6b21\:306e\:30af\:30e9\:30a6\:30c9\:30bf\:30fc\:30f3\:306e\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:306b\:305d\:306e\:307e\:307e\:8f09\:308b (\:5b9f\:884c\:7d50\:679c\:30bb\:30eb\:3060\:3051\:3067\:306f\:4e0d\:5341\:5206)\:3002 *)
+        If[TrueQ[autoMark],
+          Quiet @ Check[iAutoMarkCellsAddedSince[nb, apprBeforeCells], Null]];
         If[StringQ[jobId] && jobId =!= "",
           NBAccess`NBJobResetSlotWritten[jobId, 1];
           $iJobActiveNb = None];
@@ -39763,7 +39869,24 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
        DAG onComplete \:30b3\:30fc\:30eb\:30d0\:30c3\:30af\:5185\:3067\:5b9f\:884c\:3055\:308c\:308b\:305f\:3081\:3001
        \:65e7 ScheduledTask \:306e writing \:30d5\:30a7\:30fc\:30ba\:306b\:76f8\:5f53\:3059\:308b\:3002 *)
     Scan[Function[thk, Quiet[thk[]]], queue];
-    
+    (* 2026-08-06: \:9045\:5ef6\:30b9\:30a4\:30fc\:30d7\:3002\:30ad\:30e5\:30fc\:5185\:306e\:30de\:30fc\:30af\:6642\:70b9\:3067\:306f\:307e\:3060\:5b58\:5728\:3057\:306a\:3044
+       \:30bb\:30eb (NBEvaluatePreviousCell \:306e\:8a55\:4fa1\:7d50\:679c\:306a\:3069\:3001FE \:5074\:3067\:9045\:308c\:3066\:6750\:6599\:5316\:3059\:308b Output)
+       \:304c\:6a5f\:5bc6\:30bf\:30fc\:30f3\:3067\:672a\:30de\:30fc\:30af\:306e\:307e\:307e\:6b8b\:308b\:5b9f\:4f8b\:304c\:3042\:3063\:305f\:305f\:3081\:3001\:540c\:3058 identity \:30b9\:30ca\:30c3\:30d7\:30b7\:30e7\:30c3\:30c8\:3067
+       \:3082\:3046\:4e00\:5ea6\:8d70\:67fb\:3059\:308b\:3002\:65e2\:30de\:30fc\:30af\:30bb\:30eb\:306f\:30b9\:30ad\:30c3\:30d7\:3055\:308c\:308b\:306e\:3067\:51aa\:7b49\:3002 *)
+    If[TrueQ[autoMark],
+      With[{nb2m = nb, bc2 = beforeCells, rid2 = runtimeId},
+        Quiet @ Check[
+          SessionSubmit[ScheduledTask[
+            Quiet @ Check[iAutoMarkCellsAddedSince[nb2m, bc2], Null];
+            (* \:307e\:3060\:627f\:8a8d\:5f85\:3061\:306a\:3089\:9589\:3058\:306a\:3044\:3002\:627f\:8a8d\:5f8c\:306b\:3053\:306e\:95a2\:6570\:304c\:518d\:5165\:3057\:3001
+               \:305d\:306e\:56de\:306e\:9045\:5ef6\:30bf\:30b9\:30af\:304c\:6539\:3081\:3066\:9589\:3058\:308b\:3002 *)
+            If[! iRuntimeAwaitingApprovalQ[rid2],
+              Quiet @ Check[iCloseConfidentialWriteGate[nb2m], Null]],
+            {2.0, 1}]],
+          Null]]];
+    (* autoMark \:3067\:306a\:3044 (= \:975e\:6a5f\:5bc6) \:30bf\:30fc\:30f3\:306f\:5373\:6642\:306b\:9589\:3058\:308b *)
+    If[! TrueQ[autoMark], iCloseConfidentialWriteGate[nb]];
+
     (* done \:30d5\:30a7\:30fc\:30ba: \:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:66f4\:65b0\:ff08\:65e7 evalCallback \:306e $iDeferredWork \:76f8\:5f53\:ff09 *)
     iSessionUpdateLast[nb, tag, <|
       "response"       -> response,

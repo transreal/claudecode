@@ -1347,4 +1347,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-06 パス、11回目)。今回は全 `::usage` 宣言を行頭パターン (215件) と行中包含パターン (261件、差分は関数コメント内の説明文字列であり実シンボルではないことを個別確認済み) の2通りで機械的に列挙し、ファイル末尾28813行目の ClaudeSetRoutingPolicy まで全件が本ドキュメントに記載済みであることを確認した。iLLMGraphNode 等の内部ヘルパー (Public 化済みだが ::usage 文字列を持たない) についても実体定義の存在を関数本体レベルで確認した。乖離は検出されなかった。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-06 パス、12回目)。今回は全 `::usage` 宣言 249 件を grep で機械的に再列挙し (前回の215/261件パターンから抽出方式を刷新、行頭・行中双方の宣言を1パスで捕捉)、`$ClaudeTaskClassTable` の8種類の TaskClass 定義・`$ClaudeSpecImplUseSession` の usage 文言をソース該当行 (それぞれ L11531-11548, L27386-27391) と一字一句照合、ファイル末尾 (42473行目、claudecode_editmodes.wl マージ済み・claudecode_directives.wl 自動ロードのみ) まで新規公開シンボルが無いことを確認した。乖離は検出されなかった。
