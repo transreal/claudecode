@@ -263,6 +263,7 @@ If[AssociationQ[ClaudeCode`$ClaudePackageKeywordMap],
 - `SourceVaultSearchMailSnapshots[..., MaxPrivacy -> 0.5]` で公開メールのみに絞れる。snapshot の `Derived.PrivacyLevel` がルーティング基準。
 - IMAP アカウント・所有者 identity・グループ重みは**ソースにハードコードせず** vault config（`SourceVaultRegisterMailAccount` 等）とユーザDB #1 に外部化する（rule 03）。
 - 旧 `maildb.wl`（`maildb_legacy.wl`）の `mailAskLLM` 等はセキュリティレベルでモデルを自動分配する（移行参照）。
+- **メール一覧の最終出力は専用 View 必須**（`rules/106-mail-list-view-output.md`）。検索結果の一覧は `SourceVaultMailSearchIndexView`（索引・シャード非ロード・各行 ✉本文/☰スレッドボタン付き）または `SourceVaultMailView` で出力し、素の `Dataset`/`Grid` で件名一覧を**手組みしない**（行アクションが無いと本文を参照できない）。複数キーワードの OR は query に文字列リストを渡す（例 `SourceVaultMailSearchIndexView[{"科研","KAKENHI","学振"}, "MBox"->"univ", ...]`）。自前 `Select` で絞った行リストも `SourceVaultMailSearchIndexView[rows]` で表示できる。
 - 詳細は `skills/maildb-operations` スキルと `SourceVault_info/docs/`、設計前提は `rules/101-sourcevault-stage-status` の「暗号化・メール・identity サブシステム」節を参照。
 
 ## Wolfram Language 関数名検証ルール（必須）

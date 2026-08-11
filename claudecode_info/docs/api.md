@@ -324,7 +324,7 @@ LLM backend の事前可用性チェック (preflight)。lmstudio は /api/v0/mo
 
 ### $ClaudeRoutingModelPolicy
 型: Automatic | "Local" | "Cloud" | "Off"
-プロンプトルーターが軽量 LLM 作業に使うモデル層を制御する。Automatic (既定) は電源状態に従う (AC→ローカル軽量モデル、バッテリー→クラウド軽量モデル)。"Local"/"Cloud" で固定、"Off" は軽量層ディスパッチを止める。ShowClaudePalette から切替可能。
+プロンプトルーターが軽量 LLM 作業に使うモデル層を制御する。Automatic (既定) は電源状態に従う (AC→ローカル軽量モデル、バッテリー→クラウド軽量モデル)。"Local"/"Cloud" で固定、"Off" は軽量層ディスパッチを止める (リクエストは $ClaudeModel にフォールスルーする。LLM 不要のコンテキストプランナーは "Off" でも動き続ける)。ShowClaudePalette から切替可能。
 
 ### ClaudeRoutingModelClass[] → "Local" | "Cloud" | "Off"
 $ClaudeRoutingModelPolicy の Automatic を現在の電源状態 (Windows: BatteryStatus WMI、他 OS では常に "AC" とみなす) に対して解決した実効クラスを返す。
@@ -787,15 +787,6 @@ Options: MarkdownToCells と同じ + "WindowTitle" -> Automatic
 markdown 文字列 (または File[path]) をインライン表示可能な式としてレンダリングする (パイプテーブルは Dataset に、画像・mermaid フローチャートは描画、見出し・リストはスタイル保持)。新規ノートブックを開かず現在のノートブック内で markdown を確認したい場合に使う。
 → 表示可能な式
 Options: MarkdownToCells と同じ
-
-### MarkdownWriteCells[md, opts]
-markdown 文字列 (または File[path]) を MarkdownToCells で変換し、評価セルの直下に結果セルを書き込む。
-→ Integer (書き込んだセル数)
-Options: MarkdownToCells と同じ
-
-### MarkdownWriteCells[md, nb, opts]
-指定 NotebookObject nb に書き込む。
-→ Integer
 
 ### MermaidGraph[src, opts]
 mermaid フローチャート ("flowchart TD", "graph LR" 等) をパースし、枠付きノードラベル・エッジラベル・宣言方向に従ったレイヤーレイアウトを持つ Graph を返す。src は生 mermaid テキスト、```mermaid フェンスブロック、または File[path]。対応ノード形状: [..], (..), ((..)), {..}, ([..]), [[..]], {{..}}, >..]。対応エッジ: -->, ---, -.->, ==>, <-->, -->|label|, A -- label --> B、A --> B --> C のチェーン、& による fan-in/out。ラベル中の \n や <br> は改行になる。%% コメントおよび subgraph/class/style/click 行は無視される。追加オプションは Graph に渡され既定値を上書きする。パース不能な場合は MermaidGraph::noparse を発行し $Failed を返す (MarkdownToCells はその場合プレーンな "Program" セルにフォールバックする)。
@@ -1351,4 +1342,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl) と突き合わせて同期を確認した (2026-08-11、14回目)。今回の主な修正: `CreateImplementationWorkflow` の options 中の `"AdvisoryModel"` を正しい綴り `"AdvisaryModel"` に修正 (ソースの `::usage` 文字列および `$ClaudeAdvisaryModel` 変数名と一致)。パレット provider 循環順・静的モデル候補 (`$iPaletteProviderOrder`, `$iPaletteModelsByProvider`) を初期化コードと照合し一致を確認。`$iPaletteDefaultClaudeModel = "claude-opus-5"` および `$iModelSonnet = {"claudecode", "claude-sonnet-4-6"}` による `$ClaudeDocModel` 初期値を確認。ClaudePackageManager へ移管済み関数群は本文に列挙せず移管注記のみとする方針を維持。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl, 42564行) と突き合わせて同期を確認した (2026-08-11、15回目)。全 public シンボルの `::usage` 宣言 (274件) をソース全文から抽出し、api.md 記載の全関数・全変数名と突き合わせて漏れ・削除対象がないことを確認。`CreateImplementationWorkflow` の `Options[...]` 定義 (`"AdvisaryModel" -> Automatic`) を実コードで再確認し前回修正が正しいことを確認。`$ClaudeRoutingModelPolicy` の説明に、"Off" 時の実際の動作 (リクエストは $ClaudeModel にフォールスルーし、LLM 不要のコンテキストプランナーは動き続ける) を追記。ClaudePackageManager へ移管済み関数群は本文に列挙せず移管注記のみとする方針を維持。

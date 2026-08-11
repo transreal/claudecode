@@ -4249,10 +4249,17 @@ iConfidentialCellEpilog[] := Quiet @ Module[
            CellEpilog \:30ec\:30d9\:30eb\:3067\:6b63\:3057\:304f\:691c\:51fa\:3055\:308c\:308b\:3002
            \:4f8b: b=2a \:3067 b \:304c\:767b\:9332 \[RightArrow] d=2c+b \:3067 d \:3082\:767b\:9332 \[RightArrow] y=2c+d \:3067 y \:3082\:767b\:9332 *)
         If[ListQ[assigns] && Length[assigns] > 0,
-          Do[With[{lhs = First[a]},
-            If[!KeyExistsQ[$confidentialSymbols, lhs],
-              $confidentialSymbols[lhs] = AbsoluteTime[]]],
-            {a, assigns}]];
+          (* 2026-08-11: スコープ付きローカル (Module/With/Block/Function 局所・
+             パターン変数) は連鎖登録しない。登録すると kws/rows のような一般的な
+             ローカル名が機密シンボル化し、以後の提案が全部
+             ConfidentialLeakRisk 拒否される (result3 直後の再クエリで実害)。 *)
+          Module[{scopedLocals = Quiet @ Check[
+              NBAccess`NBTextScopedVarNames[inputText], {}]},
+            Do[With[{lhs = First[a]},
+              If[!KeyExistsQ[$confidentialSymbols, lhs] &&
+                 !MemberQ[scopedLocals, lhs],
+                $confidentialSymbols[lhs] = AbsoluteTime[]]],
+              {a, assigns}]]];
         If[idx < nCells,
           ocStyle = NBAccess`NBCellStyle[nb, idx + 1];
           If[MemberQ[{"Output", "Print"}, ocStyle] &&
@@ -4321,11 +4328,16 @@ iRebuildConfidentialSymbolsIncremental[afterLine_Integer] :=
         depTag = Quiet[CurrentValue[c,
           {TaggingRules, "claudecode", "dependent"}]];
         If[TrueQ[tag] && !TrueQ[depTag],
-          Module[{text, assigns},
+          Module[{text, assigns, scopedLocals},
             text = Quiet[NBAccess`iCellToInputText[c]];
             If[StringQ[text],
               assigns = NBAccess`NBExtractAssignments[text];
-              Do[iRegisterConfidentialVar[First[a]], {a, assigns}]]]]],
+              (* 2026-08-11: スコープ付きローカルは昇格しない (NBCellExtractVarNames
+                 と同じ除外。機密セル内 Module ローカルの誤昇格防止)。 *)
+              scopedLocals = Quiet @ Check[
+                NBAccess`NBTextScopedVarNames[text], {}];
+              Do[If[!MemberQ[scopedLocals, First[a]],
+                  iRegisterConfidentialVar[First[a]]], {a, assigns}]]]]],
       {c, cells}],
     {nbx, allNBs}]
   ];

@@ -1232,7 +1232,14 @@ $ClaudeAlwaysOnRules := {
   "20-api-key-security",
   "30-encoding-safety",
   "50-file-path",
-  "60-confidential-structure"
+  "60-confidential-structure",
+  (* 2026-08-11: メール一覧の最終出力は専用 View (✉/☰ 付き) 必須。
+     taskHint 無しの Runtime bridge 経路 (iClaudeSysPrompt) では always-on
+     ルールしか注入されないため、キーワード選別では届かない (result6:
+     LLM が素の Dataset を手組みし本文を参照できない一覧になった)。
+     Summary 投影は本文先頭 400 字に切り詰めるので、ルール側は冒頭に
+     必須事項を凝縮してある。 *)
+  "106-mail-list-view-output"
 };
 
 (* \:30bf\:30b9\:30af\:7279\:5b9a\:6027\:306e\:4f4e\:3044\:6c4e\:7528\:8a9e\:3002frontmatter keywords \:3068\:30bf\:30b9\:30af\:306e
