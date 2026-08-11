@@ -20812,6 +20812,78 @@ iDocProgressMark[docsDir_String, cycleKey_String, docFile_String] :=
 iDocProgressClear[docsDir_String] :=
   With[{p = iDocProgressPath[docsDir]}, If[FileExistsQ[p], Quiet@Check[DeleteFile[p], Null]]];
 
+(* === CodePrivacyLevel の doc への継承 (2026-08-10) ===
+   ソース .wl 先頭付近の機械可読マーカー (* :CodePrivacyLevel: 0.1 *)
+   (>0 = ソース自体が非公開で公開リポジトリへコミット禁止。github.wl の
+   関所が遮断) を、そのパッケージから生成するドキュメントにも継承する。
+   .md には <!-- :CodePrivacyLevel: x --> として先頭に埋め込む (GitHub
+   レンダリング不可視・関所の正準形走査には掛かる)。冪等 (既存 stamp は
+   除去してから付け直し、レベル 0 なら除去のみ)。検出は行頭の正準スタンプ形
+   のみ: 裸の部分文字列マッチだと、マーカー記法を本文中で説明する生成 doc
+   を誤検出する (github.wl 側関所と同一規約, 2026-08-11)。 *)
+iDocCodePrivacyLevel[path_String] := Module[{st, bytes, head},
+  If[!FileExistsQ[path], Return[0]];
+  st = Quiet @ OpenRead[path, BinaryFormat -> True];
+  If[st === $Failed || Head[st] =!= InputStream, Return[0]];
+  bytes = WithCleanup[Quiet @ Check[ReadByteArray[st], $Failed], Quiet @ Close[st]];
+  If[!ByteArrayQ[bytes] || Length[bytes] === 0, Return[0]];
+  head = Quiet @ Check[ByteArrayToString[
+    ByteArray[Take[Normal[bytes], UpTo[4096]]], "UTF-8"], $Failed];
+  If[!StringQ[head], head = Quiet @ Check[ByteArrayToString[
+    ByteArray[Take[Normal[bytes], UpTo[4096]]], "ISO8859-1"], $Failed]];
+  If[!StringQ[head], Return[0]];
+  Replace[StringCases[head,
+      StartOfLine ~~ (" " | "\t") ... ~~ ("(*" | "<!--") ~~ Whitespace ... ~~
+        ":CodePrivacyLevel:" ~~ Whitespace ... ~~ lvl : NumberString ~~
+        Whitespace ... ~~ ("*)" | "-->") :> ToExpression[lvl], 1],
+    {{l_?NumericQ, ___} :> l, _ -> 0}]];
+
+(* パッケージのソース privacy level: <pkg>.wl (単一ファイル) と
+   <pkg>/<pkg>.wl (Paclet) の存在する方の最大値 *)
+iDocPackagePrivacyLevel[packageName_String] := Module[{cands},
+  If[StringTrim[packageName] === "", Return[0]];
+  cands = Select[{
+    FileNameJoin[{Global`$packageDirectory, packageName <> ".wl"}],
+    FileNameJoin[{Global`$packageDirectory, packageName, packageName <> ".wl"}]},
+    FileExistsQ];
+  If[cands === {}, 0, Max[Map[iDocCodePrivacyLevel, cands]]]];
+iDocPackagePrivacyLevel[_] := 0;
+
+(* doc 出力パスからパッケージ名を推定 (2 引数版 iSafeWriteDoc 用):
+   .../<pkg>_info/docs/... または .../<pkg>/docs/... *)
+iDocPackageFromPath[destPath_String] := Module[{parts, infoPart, pos},
+  parts = FileNameSplit[destPath];
+  infoPart = SelectFirst[parts, StringEndsQ[#, "_info"] &, Missing[]];
+  If[StringQ[infoPart], Return[StringDrop[infoPart, -StringLength["_info"]]]];
+  pos = FirstPosition[parts, "docs", Missing[]];
+  If[!MissingQ[pos] && pos[[1]] >= 2, parts[[pos[[1]] - 1]], ""]];
+
+(* doc 出力ファイルの実効 privacy level (per-source-file, 2026-08-11):
+   パッケージ本体レベルに加え、補助 api_<aux>.md はその元ソース
+   <pkg>_<aux>.wl のレベルとの最大値を取る。パッケージ本体が公開 (0) でも
+   非公開拡張モジュール (例: SourceVault_course_private.wl = 0.1) から
+   生成される api_course_private.md に stamp が継承されず、_info/docs 経由で
+   公開リポジトリへ流れ得たギャップの修正。 *)
+iDocEffectivePrivacyLevel[destPath_String, packageName_String] := Module[
+  {lvl = iDocPackagePrivacyLevel[packageName], aux, auxSrc},
+  aux = iExtractAuxNameFromApiDoc[FileNameTake[destPath]];
+  If[StringQ[aux],
+    auxSrc = iFindAuxPackageSource[packageName, aux];
+    If[StringQ[auxSrc] && FileExistsQ[auxSrc],
+      lvl = Max[lvl, iDocCodePrivacyLevel[auxSrc]]]];
+  lvl];
+
+iDocApplyPrivacyStamp[destPath_String, content_String, packageName_String] := Module[
+  {lvl = iDocEffectivePrivacyLevel[destPath, packageName], stripped, marker},
+  (* 既存 stamp (LLM が既存 doc から echo したもの含む) を除去して冪等に *)
+  stripped = StringReplace[content, RegularExpression[
+    "\\A\\s*(?:<!--[^\r\n]*:CodePrivacyLevel:[^\r\n]*-->|\\(\\*[^\r\n]*:CodePrivacyLevel:[^\r\n]*\\*\\))\\s*\r?\n+"] -> "", 1];
+  If[!NumericQ[lvl] || lvl <= 0, Return[stripped]];
+  marker = If[StringMatchQ[ToLowerCase[FileExtension[destPath]], "wl" | "m" | "wls"],
+    "(* :CodePrivacyLevel: " <> ToString[lvl] <> " *)",
+    "<!-- :CodePrivacyLevel: " <> ToString[lvl] <> " -->"];
+  marker <> "\n\n" <> stripped];
+
 (* \:5b89\:5168\:306a\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f8\:304d\:8fbc\:307f: \:691c\:8a3c \[RightArrow] \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7 \[RightArrow] \:66f8\:304d\:8fbc\:307f\:3002
    \:7121\:52b9\:306a\:5fdc\:7b54\:306e\:5834\:5408\:306f\:30d5\:30a1\:30a4\:30eb\:3092\:4e00\:5207\:5909\:66f4\:305b\:305a $Failed \:3092\:8fd4\:3059\:3002 *)
 iSafeWriteDoc[destPath_String, response_String] :=
@@ -20819,6 +20891,7 @@ iSafeWriteDoc[destPath_String, response_String] :=
     If[!iIsValidDocContent[response],
       Return[$Failed]];
     cleaned = iNormalizeDocHead[iCleanDocResponse[response]];
+    cleaned = iDocApplyPrivacyStamp[destPath, cleaned, iDocPackageFromPath[destPath]];
     Export[destPath, cleaned, "Text", CharacterEncoding -> "UTF-8"];
     destPath
   ];
@@ -20935,6 +21008,8 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
        末尾に --- 区切りが必ず入るため、先頭 --- が 1 行でも残ると GitHub が
        front matter とみなして README 全体が壊れる (2026-08-01) *)
     cleaned = iNormalizeDocHead[cleaned];
+    (* CodePrivacyLevel 継承: 非公開ソース (>0) の doc に stamp を付ける *)
+    cleaned = iDocApplyPrivacyStamp[destPath, cleaned, packageName];
     Export[destPath, cleaned, "Text", CharacterEncoding -> "UTF-8"];
     destPath
   ];

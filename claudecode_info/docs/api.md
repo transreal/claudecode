@@ -470,7 +470,7 @@ sv:// スナップショット URI (spec/review/requirements) を解決し内容
 ### CreateImplementationWorkflow[name, approvedSpec, opts]
 承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。実装担当ロールは ultra モデルクラス (ClaudeUltraModelSpec: CLI 優先、paid-API ゲート付き、$ClaudeUltraEnabled が True の場合のみ利用) を優先し、$ClaudeModel にフォールバックする ($ClaudeUltraEnabled の既定は False なので、明示的に True にしない限り常に $ClaudeModel が使われる)。テストファイル込みでパッケージを書き、検証担当 ($ClaudeAdvisaryModel) が仕様との整合性を確認しフィードバックを合意まで繰り返す。承認には生成したテストがフレッシュカーネルで通過することも必要 (proven-code gate、サマリーキー TestGate/Proven)。複雑な作業は補助仕様をレビューしてからステージ分割して実装する。ultra クラス実装者はプランニング時に実装スタイル (native/dag/petri) も選択する。$ClaudeSpecImplUseSession が Automatic (既定) かつセッション基盤モジュール (ClaudeOrchestrator_session/ClaudeRuntime_sessionrunner) がロード済みなら RuntimeSession episode 経路で実行し、失敗時は従来の wolframscript driver 経路に自動フォールバックする。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
 → String (バックグラウンドジョブ id)
-Options: "Notes" -> "" (追加指示), "ClaudeModel" -> Automatic ($ClaudeModel に解決), "AdvisoryModel" -> Automatic ($ClaudeAdvisaryModel に解決), "MaxRounds" -> Automatic, "Nb" -> Automatic (ターゲットノートブック), "Launch" -> True (完了後自動起動), "Project" -> "", "SpecURI" -> "", "SourceNotebookURI" -> ""
+Options: "Notes" -> "" (追加指示), "ClaudeModel" -> Automatic ($ClaudeModel に解決), "AdvisaryModel" -> Automatic ($ClaudeAdvisaryModel に解決), "MaxRounds" -> Automatic, "Nb" -> Automatic (ターゲットノートブック), "Launch" -> True (完了後自動起動), "Project" -> "", "SpecURI" -> "", "SourceNotebookURI" -> ""
 
 ### $ClaudeSpecImplUseSession
 型: Boolean | Automatic, 初期値: Automatic
@@ -1014,8 +1014,7 @@ LLMGraph ジョブ (Association) を非同期実行する。ジョブIDを即座
 → String (jobID)
 Options: PromptTemplate -> "`content`", Model -> Automatic, "Timeout" -> Automatic, "Verbose" -> True, "WriteToNotebook" -> False, "OnChunkDone" -> (Nothing&), "OnJobDone" -> (Nothing&)
 
-### LLMGraphExecute[input, typeName, opts]
-input と typeName からジョブを構築して実行する (簡易入口)。
+### LLMGraphExecute[input, typeName, opts]input と typeName からジョブを構築して実行する (簡易入口)。
 → String (jobID)
 Options: LLMGraphExecute[job, opts] と同じ
 
@@ -1352,4 +1351,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl、フルパス C:\Users\imai_\Dropbox\Mathematica-oneDrive\MyPackages\claudecode.wl) と再度突き合わせて同期を確認した (2026-08-06 パス、13回目)。今回は公開シンボル宣言ブロック (BeginPackage 直後の Remove/cleanup リストと `::usage` 宣言群) を先頭から機械的に走査し、api.md に本文エントリの無い公開シンボルを差分抽出したところ `$ClaudeModel` (パッケージの中心設定変数でありながら他エントリから参照されるだけで未定義だった) のみが検出されたため、型・初期値・provider タプル形式・パレット連動を明記した項目を冒頭に追加した。$ClaudeAdvisaryModel / $ClaudeUltraEnabled / ClaudeUltraModelSpec / CreateImplementationWorkflow / $ClaudeSpecImplUseSession / $ClaudePackageAuxKeywordMap / $ClaudePaletteServiceControls / ClaudeRegisterCLIMCPServer の usage 文言はソース該当行と一字一句照合し、パレットの provider 循環順・静的モデル候補 ($iPaletteProviderOrder, $iPaletteModelsByProvider) と $ClaudeFallbackModels / $ClaudeDocModel / $ClaudeAccessibleDirs / $ClaudeSnapshots / $ClaudeDocUpdateStaleSeconds の既定値も初期化コードと一致することを確認した。ClaudePackageManager へ移管済み関数群 (ClaudeUpdatePackage 系・Paclet 変換・トランザクションアダプター) は本文に列挙せず移管注記のみとする方針を維持している。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl) と突き合わせて同期を確認した (2026-08-11、14回目)。今回の主な修正: `CreateImplementationWorkflow` の options 中の `"AdvisoryModel"` を正しい綴り `"AdvisaryModel"` に修正 (ソースの `::usage` 文字列および `$ClaudeAdvisaryModel` 変数名と一致)。パレット provider 循環順・静的モデル候補 (`$iPaletteProviderOrder`, `$iPaletteModelsByProvider`) を初期化コードと照合し一致を確認。`$iPaletteDefaultClaudeModel = "claude-opus-5"` および `$iModelSonnet = {"claudecode", "claude-sonnet-4-6"}` による `$ClaudeDocModel` 初期値を確認。ClaudePackageManager へ移管済み関数群は本文に列挙せず移管注記のみとする方針を維持。

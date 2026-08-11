@@ -771,17 +771,41 @@ Dataset[Map[<|"col" -> Style[text, "Text", FontFamily -> ff]|> &, data]]
 
 Dataset 全体の `BaseStyle` は無い。表テキストのフォント/スタイルは**各セルを `Style[…, FontFamily->ff]` で包む**。日付/数値セルも個別に `Style` で包む。
 
-### 罠 #62: Dataset のインタラクティブセルを 1 セルに詰めると `...` 省略される。アクションは別列 + `ItemSize`
+### 罠 #62: Dataset のセルは **LeafCount 32 を超えると `...` に省略される**。列幅ではない。`ItemDisplayFunction` で回避する
+
+> **2026-08-08 全面改訂**。旧版は「列幅を超えると省略される。アクションを別列に分けよ」と書いていたが、**どちらも誤り**だった。FE ラスタライズ (`UsingFrontEnd@Rasterize[Dataset[...]]`) で二分探索した実測結果に差し替える。
 
 ```mathematica
-(* NG: ✉Button + 📎ActionMenu + ↩Button を 1 セルの Row に詰める → 幅超過で "..." 省略・押せない *)
-<|"" -> Row[{Button[...], ActionMenu[...], Button[...]}]|>
-(* OK: アクションを別列に分け、Dataset に ItemSize で列幅を与える *)
-<|"" -> Button[...], "Att" -> ActionMenu[...], "Reply" -> Button[...]|>
-Pane[Dataset[rows, ItemSize -> {2, {3, 4, 3}}, MaxItems -> {All, All}], ImageSize -> Full]
+(* NG: ✉Button + 添付Button + ↩Button を 1 セルに詰める → LeafCount 36 → "..." *)
+<|"" -> Row[{Button[...], Spacer[5], Button[...], Spacer[5], Button[...]}]|>
+
+(* OK: セルには小さいタグだけ。コントロールは ItemDisplayFunction で表示時に組む *)
+<|"" -> actTag[recordId, attachmentCount, namesKnownQ]|>   (* LeafCount 4 *)
+Dataset[rows,
+  ItemSize -> {Automatic, widths},
+  (* ★ 純関数で渡す。可変長で受ける定義にもしておく *)
+  ItemDisplayFunction -> (actDisplay[#] &),
+  MaxItems -> {25, All}]
+actDisplay[x_, ___] := Replace[x, actTag[r_, n_, k_] :> Row[{Button[...], ...}]]
 ```
 
-Dataset はセル内のインタラクティブ要素 (Button/ActionMenu) を含むセルが**列幅を超えると `...` に省略**する。(1) `ItemSize -> {既定, {列幅...}}` で列幅を明示し、(2) 複数コントロールは**別列に分割**する。左寄せ・先頭表示は `Item[…, Alignment->Left]` (Button のままだと末尾が見えて先頭が切れる)。
+**実測した挙動** (Mathematica 14 系 / Windows):
+
+| 条件 | 結果 |
+|---|---|
+| セル値の `LeafCount` **32 以下** | 正しく描画される |
+| セル値の `LeafCount` **33 以上** | `...` に省略され**クリックできない** |
+| `ItemSize` を外す / 幅を 8→10→12 と広げる | **無関係**。同じく省略される |
+| `Row` / `Grid` / `Item` / `Pane` / `Framed` で包む | **無関係**。閾値は包み方に依らない |
+| `ActionMenu` か `Button` か | **無関係**。要素数で決まる |
+| `ItemDisplayFunction` の戻り値が大きい | **問題なし**。判定は関数を通す**前**の値に対して行われる |
+
+- ✉+↩ の 2 ボタン行は 25 前後で収まるが、**3 つ目のコントロールを足すと 36 になり閾値を超える**。「添付のあるメールだけボタンが消える」という症状はこれ。
+- 対策は**セル値を小さく保つ**こと。表示に必要な最小限のスカラー (id / 件数 / フラグ) だけをタグに入れ、`ItemDisplayFunction` で組み立てる。
+- `ItemDisplayFunction -> f` に **1 引数定義のシンボルをそのまま渡してはいけない**。Dataset は表示関数を 1 引数で呼ぶとは限らず、未評価の `f[item, …]` が全セルに文字列として描画される (表全体が `Pkg\`Private\`f…` で埋まる)。`(f[#] &)` の純関数形で渡し、定義側も `f[x_, ___]` で受ける。
+- 別の制約と併せて読むこと: **アクションを 2 列目以降に置くと、`ItemSize` 併用時に当たり判定が描画とズレて押せなくなる** (SourceVault で実機確定)。つまり「別列に分ける」という旧対策は使えない。**1 列目にまとめたうえで `ItemDisplayFunction`** が唯一の解。
+- 左寄せ・先頭表示は `Item[…, Alignment->Left]`。
+- **切り分け方**: FE 無し環境でも `UsingFrontEnd@Rasterize[Dataset[…], ImageSize -> n]` を `Export` すれば `...` の有無を目視できる。幅・包み方・要素数を振った表を 1 枚にラスタライズすれば閾値は数分で特定できる。憶測で列幅をいじる前にこれをやる。
 
 ### 罠 #63: `ExportString[…, "RawJSON"]` は `Missing[]`/`$Failed` を出力できない。`NBMacWithKeyRef` 等は例外でなく `$Failed` を返す
 
@@ -793,3 +817,9 @@ ExportString[rec /. (_Missing | $Failed) -> Null, "RawJSON", "Compact" -> True]
 ```
 
 JSONL 永続化で `Missing[]` も `$Failed` も RawJSON にできない (`Export::jsonstrictencoding`)。保存直前に `/. (_Missing | $Failed) -> Null`。さらに、**鍵が無いとき `NBAccess`NBMacWithKeyRef` は例外を投げず `$Failed` を返す**ため、`Quiet@Check[NBMacWithKeyRef[...], Missing[]]` では捕まえられず (`Check` は返り値 `$Failed` を捕捉しない) フィールドに `$Failed` が残り、後の保存で上記エラーになる。`With[{t = Quiet@Check[NBMacWithKeyRef[...], $Failed]}, If[StringQ[t], t, Missing["NoKey"]]]` のように **`StringQ` 判定で Missing にフォールバック**する。JSONL は ISO8859-1 で読み書きし二重 encode を避ける (`skills/jsonl-store-pattern` / `wl-runtime-byte-io`)。
+
+## クイック診断 (暗号化・メール・Dataset UI の罠)
+
+- **Dataset の一部の行だけボタンが `...` になって押せなくなったら罠 #62 を疑う**。まず `LeafCount[セル値]` を出す。**33 以上なら確定**。列幅 (`ItemSize`) をいじっても直らないので時間を使わない。`ItemDisplayFunction` にタグを渡す形へ直す。
+- **表の全セルが `Pkg\`Private\`関数名…` という文字列で埋まったら**、`ItemDisplayFunction` にシンボルを直接渡していないか見る (罠 #62 後半)。
+- **Dataset UI の見た目の疑問は憶測でなくラスタライズで確かめる**: `UsingFrontEnd@Rasterize[Dataset[…], ImageSize -> 700]` を `Export` すれば headless でも実際の描画を目視できる。条件を振った表を 1 枚にすれば境界値が数分で出る。
