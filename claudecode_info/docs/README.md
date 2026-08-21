@@ -547,7 +547,8 @@ ClaudeEval["タスクの説明"]   (* 再び CLI 経由 *)
 | 設定項目 | 選択肢 | 説明 |
 |----------|--------|------|
 | **モデル** | Opus / Sonnet / Default | 使用モデルを切り替え |
-| **エフォート** | Low / Medium / High / Max | Think トリガー強度（Low: 思考なし、Max: ultrathink） |
+| **エフォート** | (Off /) Low / Medium / High / Max | 標準モデルの思考量。claudecode では Think トリガー強度（Low: 思考なし、Max: ultrathink）、lmstudio では `reasoning`（Off = thinking 無効、Max は xhigh があれば xhigh） |
+| **E:** | Off / Low / Medium / High / Max | 秘密モデル `$ClaudePrivateModel` の思考量。標準モデルとは独立。既定 Medium |
 | **課金API** | 禁止 / 許可 | `Fallback -> True/False` を制御 |
 | **P:** | provider 循環切替 | クリックのたびに登録済み provider（claudecode / chatgptcodex / anthropic / openai / zai / kimi / lmstudio 等）の順序で切り替え |
 | **M:** | モデル候補リスト | provider 別のモデルを選択。ChatGPTCodex 選択時は SourceVault のモデルレジストリから取得され、claudecode/anthropic 選択時も既定候補が SourceVault 経由で動的解決される（解決できない場合は `claude-opus-5` にフォールバック） |

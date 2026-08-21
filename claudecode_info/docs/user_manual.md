@@ -401,7 +401,8 @@ ShowClaudePalette[]
 |---|---|
 | **P:** | プロバイダを切り替えます。クリックするたびに `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio` の順で循環します。選択中のプロバイダ名がボタンラベルに表示されます。各プロバイダの特性は下表を参照してください。 |
 | **M:** | 選択中のプロバイダ内でモデルを切り替えます。クリックするたびに対応するモデル一覧を循環します。短縮名(例: Opus 5、Fable 5)で表示されます。`Automatic` は Codex CLI の既定モデルを使用します(chatgptcodex プロバイダの場合)。SourceVault のモデルレジストリがロードされている場合は、そこからモデル一覧が取得されます。特に `claudecode` / `anthropic` プロバイダの既定モデル(候補一覧の先頭に来るモデル)は、SourceVault がロードされていれば `ClaudeResolveModel` 経由で動的に解決されるため、SourceVault 側でモデルの世代が更新されてもパレット側のコード変更なしに追従します(SourceVault 未ロード時は静的な既定値 `claude-opus-5` にフォールバック)。`lmstudio` プロバイダでは LM Studio サーバーへの実問い合わせによる候補一覧が優先され、取得できない場合は SourceVault のカタログ、それも無ければ静的リストへ順にフォールバックします(`$ClaudeLMStudioPaletteLoadedOnly` 参照)。 |
-| **エフォート** | Low / Medium / High / Max — Think トリガーの強度を設定します。Low は思考なし、Medium は `think hard`、High は `think harder`、Max は `ultrathink` に対応します。 |
+| **エフォート** | 標準モデル (**M:** の直下) の思考量です。`claudecode` では Low / Medium / High / Max で Think トリガーの強度を設定します（Low は思考なし、Medium は `think hard`、High は `think harder`、Max は `ultrathink`）。`lmstudio` を選んでいるときは **Off** が加わって Off / Low / Medium / High / Max の 5 段になり、LM Studio の `reasoning` パラメータに写ります。**Off = thinking 無効**です。Off のまま `claudecode` に戻した場合、CLI には `--effort` を渡さず Medium 相当で動きます。 |
+| **E:**（秘密モデル枠内） | 秘密モデル `$ClaudePrivateModel` の思考量です。標準モデルのエフォートとは独立に保持され、Off / Low / Medium / High / Max を循環します。既定は Medium（thinking 有効）。 |
 | **課金API** | 禁止 / 許可 — `Fallback -> True/False` を制御します。「禁止」では Claude Code CLI または Codex CLI(課金なし扱い)のみ使用し、「許可」では CLI 利用不可時に Anthropic API・z.ai API 等へフォールバックします。 |
 
 **プロバイダ一覧**

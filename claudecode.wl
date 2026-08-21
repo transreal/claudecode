@@ -263,7 +263,7 @@ $ClaudeModel::usage =
   "\:4f8b: $ClaudeModel = \"claude-opus-4-6\"; (* \:30c7\:30d5\:30a9\:30eb\:30c8: \"\" \:306f\:7701\:7565\:6642 Claude Code \:81ea\:8eab\:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb *)";
 
 $ClaudeAdvisaryModel::usage =
-  "$ClaudeAdvisaryModel is the {provider, model} spec for the advisory (Codex) role in the spec review-and-revise orchestrator workflow, matching the form of $ClaudeModel. The Claude Code role uses $ClaudeModel; the Codex (advisory) role uses $ClaudeAdvisaryModel. Default: {\"chatgptcodex\", \"Automatic\"} (Automatic = the codex CLI default model). Example: {\"chatgptcodex\", \"gpt-5.5\"}. A bare provider string \"chatgptcodex\" is also accepted.";
+  "$ClaudeAdvisaryModel is the {provider, model} spec for the advisory role (spec generation: the drafter; spec implementation: the verifier), matching the form of $ClaudeModel. The other role uses $ClaudeModel. Default: {\"chatgptcodex\", \"Automatic\"} (Automatic = the codex CLI default model), but any provider works, e.g. {\"claudecode\", \"claude-opus-5\"}. A bare provider string \"chatgptcodex\" is also accepted. NOTE: a plain assignment only lives for the current kernel session -- it is reset to the default on the next kernel start, and the spec workflows then silently run codex again. To make a choice permanent use the SourceVault intent map, which is persisted to disk and re-applied at every load: SourceVaultSetModelIntent[\"$ClaudeAdvisaryModel\", {\"claudecode\", \"code-heavy\"}] (an intent) or {\"claudecode\", \"claude-opus-5\"} (a fixed model id). A manual session assignment is never overwritten by that layer.";
 
 $ClaudeUltraEnabled::usage =
   "$ClaudeUltraEnabled (default False) lets the spec-generation / spec-implementation workflows upgrade the $ClaudeModel role to the ultra model class (SourceVault model-registry intents \"code-ultra\" / \"ultra\", e.g. claude-fable-5) when it is available. The DEFAULT is False: the workflows honor $ClaudeModel / $ClaudeAdvisaryModel exactly as set (owner mandate 2026-08-03 -- the implicit fable upgrade surprised the owner and burns the shared fable session-usage window). Set to True explicitly to opt in to the ultra upgrade. The advisory role ($ClaudeAdvisaryModel) is never affected either way.";
@@ -664,6 +664,9 @@ $iAllowWebSearch = True;
 (* \:30e1\:30e2\:30ea\:4e0a\:306e\:30ad\:30e3\:30c3\:30b7\:30e5\:7528\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:ff08Dynamic \:8868\:793a\:7528\:ff09 *)
 $iPaletteModel = "opus";  (* \:65e7\:5f62\:5f0f\:3001\:4e92\:63db\:306e\:305f\:3081\:6b8b\:3059 *)
 $iPaletteEffort = "medium";
+(* 2026-08-16: 秘密モデル ($ClaudePrivateModel) 側の effort。標準モデルとは独立。
+   既定 "medium" = thinking 有効。"off" のときだけ thinking を切る。 *)
+$iPalettePrivateEffort = "medium";
 $iPaletteFallback = False;
 
 (* Phase 28+ (2026-05): \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:5358\:4f4d\:306e\:8ab2\:91d1API\:8a31\:53ef\:30d5\:30e9\:30b0\:3092 NBAccess \:7d4c\:7531
@@ -739,7 +742,8 @@ $iPaletteModelsByProvider = <|
      \:65b0\:30e2\:30c7\:30eb\:8ffd\:52a0\:6642\:306f\:3053\:306e\:30ea\:30b9\:30c8\:306b id \:3092\:8db3\:3059\:3002 *)
   "kimi"         -> {"kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed",
                      "kimi-k2.6"},
-  "lmstudio"     -> {"qwen3.6-27b", "qwen3.5-27b", "qwen3-coder-30b", "gpt-oss-120b"}
+  "lmstudio"     -> {"qwen3.8-27b", "qwen3.6-27b", "qwen3.5-27b",
+                     "qwen3-coder-30b", "gpt-oss-120b"}
 |>;
 
 (* SourceVault model catalog for a provider (a list of model-id strings),
@@ -891,7 +895,9 @@ iPaletteSyncClaudeModel[] :=
     If[$iPaletteProvider === "chatgptcodex",
       $ChatgptCodexModel = If[
         $iPaletteModelName === "Automatic" || $iPaletteModelName === "",
-        Automatic, $iPaletteModelName]]
+        Automatic, $iPaletteModelName]];
+    (* 2026-08-16: モデルが変わったら Effort をそのモデルのキーへ入れ直す *)
+    iPaletteSyncLMStudioEffort[]
   );
 
 (* ---- $ClaudePrivateModel \:30c8\:30b0\:30eb (2026-08-05) ----
@@ -922,7 +928,45 @@ iPaletteSyncPrivateModel[] := (
     {$iPalettePrivateProvider, $iPalettePrivateModelName,
      If[ListQ[$ClaudePrivateModel] && Length[$ClaudePrivateModel] >= 3 &&
         StringQ[$ClaudePrivateModel[[3]]],
-       $ClaudePrivateModel[[3]], $ClaudeLMStudioBaseURL]}]);
+       $ClaudePrivateModel[[3]], $ClaudeLMStudioBaseURL]}];
+  (* 2026-08-16: モデルが変わったら Effort をそのモデルのキーへ入れ直す *)
+  iPaletteSyncLMStudioEffort[]);
+
+(* ---- Effort トグル (2026-08-16) ----
+   標準モデルと秘密モデルで独立した Effort を持つ。
+   Claude Code CLI では --effort に、LM Studio では reasoning に写る。
+   lmstudio のときだけ "off" (thinking 無効) を循環に含める。
+   既定は "medium" なので、既定では thinking 有効側になる。 *)
+iPaletteEffortLabel[effort_] := Switch[effort,
+  "off", "Off", "low", "Low", "medium", "Medium",
+  "high", "High", "max", "Max", _, "Medium"];
+
+iPaletteEffortCycle[provider_] :=
+  If[provider === "lmstudio",
+    {"off", "low", "medium", "high", "max"},
+    {"low", "medium", "high", "max"}];
+
+iPaletteNextEffort[provider_, cur_] :=
+  Module[{cyc = iPaletteEffortCycle[provider], idx},
+    idx = Position[cyc, cur, {1}, Heads -> False];
+    idx = If[Length[idx] >= 1, idx[[1, 1]], 0];
+    cyc[[Mod[idx, Length[cyc]] + 1]]];
+
+(* パレットの Effort を LM Studio のモデル別 reasoning 表へ反映する。
+   provider が lmstudio のスロットだけ、そのモデル名をキーに effort を書く。
+   claudecode 等では書かない (Claude CLI は $iPaletteEffort を直接 --effort に使う)。
+   両スロットが同一モデルを指す場合は秘密モデル側が後勝ちになる。 *)
+iPaletteSyncLMStudioEffort[] := (
+  If[!AssociationQ[$ClaudeLMStudioModelReasoning],
+    $ClaudeLMStudioModelReasoning = <||>];
+  If[$iPaletteProvider === "lmstudio" &&
+     StringQ[$iPaletteModelName] && $iPaletteModelName =!= "",
+    $ClaudeLMStudioModelReasoning[$iPaletteModelName] = $iPaletteEffort];
+  If[$iPalettePrivateProvider === "lmstudio" &&
+     StringQ[$iPalettePrivateModelName] && $iPalettePrivateModelName =!= "",
+    $ClaudeLMStudioModelReasoning[$iPalettePrivateModelName] =
+      $iPalettePrivateEffort];
+);
 
 (* \:79d8M \:8868\:793a\:7528\:3002\:8868\:793a\:898f\:5247\:306f\:6a19\:6e96 M: \:30dc\:30bf\:30f3\:3068\:5171\:901a
    (iPaletteModelButtonLabel)\:3002 *)
@@ -996,8 +1040,12 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
     $iPaletteProvider === "claudecode" && StringContainsQ[$iPaletteModelName, "sonnet"], "sonnet",
     True, "default"
   ];
+  (* 2026-08-16: lmstudio 用に "off" (thinking 無効) を語彙へ追加 *)
   v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteEffort"}]];
-  $iPaletteEffort = If[MatchQ[v, "low" | "medium" | "high" | "max"], v, "medium"];
+  $iPaletteEffort = If[MatchQ[v, "off" | "low" | "medium" | "high" | "max"], v, "medium"];
+  v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "palettePrivateEffort"}]];
+  $iPalettePrivateEffort =
+    If[MatchQ[v, "off" | "low" | "medium" | "high" | "max"], v, "medium"];
   (* Phase 27: paletteFallback \:306f NBAccess \:7d4c\:7531 (absolute truth) \:3002 *)
   $iPaletteFallback = TrueQ @ Quiet @ NBAccess`NBGetNotebookPaidAPIAllowed[nb];
   v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteUpdateApiMd"}]];
@@ -1017,6 +1065,8 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
     iPaletteSyncPrivateModel[]];
   (* $ClaudeModel \:3092 tuple \:3068\:3057\:3066\:540c\:671f *)
   iPaletteSyncClaudeModel[];
+  (* 2026-08-16: Effort を LM Studio のモデル別 reasoning 表へ反映 *)
+  iPaletteSyncLMStudioEffort[];
   (* migration \:3055\:308c\:305f\:306a\:3089\:4fdd\:5b58 *)
   If[migrated, iSavePaletteSettings[nb]];
 ];
@@ -1029,6 +1079,7 @@ iSavePaletteSettings[nb_NotebookObject] := (
   (* \:65e7\:5f62\:5f0f\:3082\:8a18\:9332 (\:524d\:65b9\:4e92\:63db) *)
   Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteModel"}] = $iPaletteModel];
   Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteEffort"}] = $iPaletteEffort];
+  Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "palettePrivateEffort"}] = $iPalettePrivateEffort];
   (* Phase 27: paletteFallback \:306e\:6c38\:7d9a\:5316\:306f NBAccess \:7d4c\:7531 (absolute truth) \:3002 *)
   Quiet @ NBAccess`NBSetNotebookPaidAPIAllowed[nb, TrueQ[$iPaletteFallback]];
   Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteUpdateApiMd"}] = $iPaletteUpdateApiMd];
@@ -1317,12 +1368,16 @@ WebFetch::usage =
   "Automatic (ClaudeEval \:306e\:30c7\:30d5\:30a9\:30eb\:30c8): Claude \:304c\:30bf\:30b9\:30af\:3092\:5206\:6790\:3057\:3001\:5fc5\:8981\:306a\:3089\:81ea\:52d5\:3067 Web \:691c\:7d22\:3059\:308b\:3002\n" <>
   "ClaudeQuery \:306e\:30c7\:30d5\:30a9\:30eb\:30c8\:306f False\:3002\n" <>
   "\:91cd\:8981: WebFetch \:306f Anthropic API \:7d4c\:7531\:3067\:8ab2\:91d1\:304c\:767a\:751f\:3059\:308b\:305f\:3081\:3001Fallback -> True \:306e\:5834\:5408\:306e\:307f\:6709\:52b9\:3002";
-WebSearch::usage =
-  "WebSearch \:306f ClaudeQuery/ClaudeEval \:306e\:30aa\:30d7\:30b7\:30e7\:30f3\:3002\n" <>
-  "True (\:30c7\:30d5\:30a9\:30eb\:30c8): Claude Code CLI \:306e\:7d44\:307f\:8fbc\:307f Web \:691c\:7d22\:30c4\:30fc\:30eb\:3092\:8a31\:53ef\:3059\:308b\:3002\n" <>
-  "False: Claude Code CLI \:306e Web \:691c\:7d22\:3092\:7981\:6b62\:3059\:308b\:3002\n" <>
-  "\:3053\:308c\:306f Claude Code \:81ea\:4f53\:306e Web \:691c\:7d22\:6a5f\:80fd\:3067\:3042\:308a\:3001API \:7d4c\:7531\:306e\:8ab2\:91d1\:306f\:767a\:751f\:3057\:306a\:3044\:3002\n" <>
-  "WebFetch (\:8ab2\:91d1\:3042\:308a) \:3068\:306f\:7570\:306a\:308b\:3002";
+(* WebSearch option (ClaudeQuery/ClaudeEval/ContinueEval) reuses the BUILT-IN symbol
+   System`WebSearch as its option key. Built-in symbols accept ::usage assignment even
+   though Protected, so the former `WebSearch::usage = ...` here silently overwrote the
+   built-in WebSearch documentation (?WebSearch showed this option text). Do not assign
+   ::usage to System symbols; the option is documented in the function usages instead:
+     WebSearch -> True (default): allow Claude Code CLI's built-in web search tool.
+     WebSearch -> False: forbid CLI web search. This is Claude Code's own search and is
+     not billed via the API (unlike WebFetch).
+   Never reference this option as ClaudeCode`WebSearch from another package: that would
+   create a new symbol shadowing System`WebSearch. *)
 ClaudeCompactHistory::usage =
   "ClaudeCompactHistory[] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:5c65\:6b74\:3092\:624b\:52d5\:3067\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:3059\:308b\:3002\n" <>
   "ClaudeCompactHistory[name] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:3092\:30b3\:30f3\:30d1\:30af\:30b7\:30e7\:30f3\:3059\:308b\:3002\n" <>
@@ -1818,8 +1873,20 @@ $ClaudeLMStudioContextLength::usage =
   "\:6574\:6570\:3092\:6307\:5b9a\:3059\:308b\:3068\:305d\:306e\:5024\:3067\:30e2\:30c7\:30eb\:5074\:8a2d\:5b9a\:3092\:4e0a\:66f8\:304d\:3059\:308b (MCP \:4f7f\:7528\:6642\:306f 16000+ \:63a8\:5968)\:3002";
 
 $ClaudeLMStudioTemperature::usage =
-  "$ClaudeLMStudioTemperature \[LongDash] /api/v1/chat \:306e temperature\:3002Automatic \:306a\:3089\:9001\:3089\:305a\:30e2\:30c7\:30eb\:306e\:65e2\:5b9a\:5024\:3092\:4f7f\:3046\:3002\n" <>
+  "$ClaudeLMStudioTemperature \[LongDash] LM Studio \:547c\:3073\:51fa\:3057\:306e temperature (\:5168\:30e2\:30c7\:30eb\:5171\:901a\:306e\:5f37\:5236\:5024)\:3002\n" <>
+  "Automatic (\:65e2\:5b9a) \:306a\:3089\:3053\:3053\:3067\:306f\:6c7a\:3081\:305a\:3001$ClaudeLMStudioModelTemperatures \:306e\:30e2\:30c7\:30eb\:5225\:63a8\:5968\:5024\:3092\:4f7f\:3046\:3002\n" <>
+  "\:6570\:5024\:3092\:5165\:308c\:308b\:3068\:30e2\:30c7\:30eb\:5225\:8868\:3088\:308a\:512a\:5148\:3055\:308c\:308b\:3002\n" <>
   "tool \:5229\:7528\:6642\:306f 0 \[Tilde] 0.1 \:63a8\:5968 (\:30c4\:30fc\:30eb\:30b3\:30fc\:30eb\:306e JSON \:304c\:58ca\:308c\:306b\:304f\:3044)\:3002";
+
+$ClaudeLMStudioModelTemperatures::usage =
+  "$ClaudeLMStudioModelTemperatures \[LongDash] \:30e2\:30c7\:30eb\:5225\:306e\:63a8\:5968 temperature \:8868 (Association)\:3002\n" <>
+  "\:30ad\:30fc: \:30e2\:30c7\:30eb ID (\:4f8b \"qwen3.8-27b\") \:307e\:305f\:306f \"*\" \:3092\:542b\:3080\:30ef\:30a4\:30eb\:30c9\:30ab\:30fc\:30c9 (\:4f8b \"qwen3.8*\")\:3002\n" <>
+  "\:5024: temperature (\:6570\:5024)\:3001\:307e\:305f\:306f None (\:305d\:306e\:30e2\:30c7\:30eb\:3067\:306f temperature \:3092\:9001\:3089\:306a\:3044)\:3002\n" <>
+  "\:7167\:5408\:306f\:5927\:6587\:5b57\:5c0f\:6587\:5b57\:3092\:7121\:8996\:3057\:3001\:5b8c\:5168\:4e00\:81f4 \[RightArrow] \:6b63\:898f\:5316 ID (\:30d9\:30f3\:30c0\:63a5\:982d\:8f9e \"qwen/\" \:3068\n" <>
+  "\:91cf\:5b50\:5316\:30b5\:30d5\:30a3\:30c3\:30af\:30b9 \"@q4_k_m\" \:3092\:9664\:53bb) \:306e\:5b8c\:5168\:4e00\:81f4 \[RightArrow] \:30ef\:30a4\:30eb\:30c9\:30ab\:30fc\:30c9 \:306e\:9806\:3002\n" <>
+  "\:512a\:5148\:9806: \:547c\:3073\:51fa\:3057\:30aa\:30d7\:30b7\:30e7\:30f3\:660e\:793a > $ClaudeLMStudioTemperature (\:6570\:5024\:6642) > \:672c\:8868 > \:9001\:3089\:306a\:3044\:3002\n" <>
+  "\:65e2\:5b9a: <|\"qwen3.8-27b\" -> 1.0|> (Qwen3.8 \:306e\:516c\:5f0f\:63a8\:5968\:5024)\:3002\n" <>
+  "\:4f8b: $ClaudeLMStudioModelTemperatures[\"qwen3.6*\"] = 0.6;";
 
 $ClaudeLMStudioIncludeToolTrace::usage =
   "$ClaudeLMStudioIncludeToolTrace \[LongDash] True \:306a\:3089\:3001iQueryLMStudioChat \:306e\:623b\:308a\:5024\:306b\n" <>
@@ -1847,7 +1914,24 @@ $ClaudeLMStudioReasoning::usage =
   "\"off\"|\"on\"|\"low\"|\"medium\"|\"high\": \:30e6\:30fc\:30b6\:30fc\:660e\:793a\:6307\:5b9a (allowed_options \:306b\:542b\:307e\:308c\:308b\:3068\:304d\:306e\:307f\:9001\:308b)\:3002\n" <>
   "None: reasoning \:3092\:9001\:3089\:306a\:3044 (\:5b8c\:5168\:5f8c\:65b9\:4e92\:63db)\:3002\n" <>
   "\:30e2\:30c7\:30eb\:304c\:672a\:5bfe\:5fdc\:306e\:5024\:306f\:9001\:3089\:306a\:3044\:305f\:3081 LM Studio \:5074\:30a8\:30e9\:30fc\:306b\:306a\:3089\:306a\:3044\:3002\n" <>
-  "\:4f8b: qwen3.6 \:306f allowed_options=={\"off\",\"on\"} \:306a\:306e\:3067 Automatic \:3067 \"on\" \:304c\:9078\:3070\:308c\:308b\:3002";
+  "\:4f8b: qwen3.6 \:306f allowed_options=={\"off\",\"on\"} \:306a\:306e\:3067 Automatic \:3067 \"on\" \:304c\:9078\:3070\:308c\:308b\:3002\n" <>
+  "\:30e2\:30c7\:30eb\:5225\:306b\:6307\:5b9a\:3057\:305f\:3044\:5834\:5408\:306f $ClaudeLMStudioModelReasoning \:3092\:4f7f\:3046\:3002";
+
+$ClaudeLMStudioModelReasoning::usage =
+  "$ClaudeLMStudioModelReasoning \[LongDash] \:30e2\:30c7\:30eb\:5225\:306e reasoning effort \:8868 (Association)\:3002\n" <>
+  "\:30ad\:30fc: \:30e2\:30c7\:30eb ID \:307e\:305f\:306f \"*\" \:3092\:542b\:3080\:30ef\:30a4\:30eb\:30c9\:30ab\:30fc\:30c9 ($ClaudeLMStudioModelTemperatures \:3068\:540c\:3058\:7167\:5408\:898f\:5247)\:3002\n" <>
+  "\:5024: \"off\" (thinking \:7121\:52b9) | \"low\" | \"medium\" | \"high\" | \"max\" | Automatic\:3002\n" <>
+  "\:5b9f\:969b\:306b\:9001\:308b\:5024\:306f\:30e2\:30c7\:30eb\:306e allowed_options \:306b\:5408\:308f\:305b\:3066\:6bb5\:968e\:7684\:306b\:9078\:3070\:308c\:308b\:3002\n" <>
+  "  \"max\"    \[RightArrow] xhigh > high > on > medium > low\n" <>
+  "  \"high\"   \[RightArrow] high > on > xhigh > medium > low\n" <>
+  "  \"medium\" \[RightArrow] medium > on > high > low > xhigh\n" <>
+  "  \"low\"    \[RightArrow] low > on > medium > high > xhigh\n" <>
+  "  \"off\"    \[RightArrow] off > none > disabled (\:7121\:3051\:308c\:3070\:9001\:3089\:306a\:3044)\n" <>
+  "capabilities \:306b reasoning \:3092\:6301\:305f\:306a\:3044\:30e2\:30c7\:30eb (\:4f8b: qwen3.8-27b) \:3078\:306f\:4e00\:5207\:9001\:3089\:306a\:3044\:3002\n" <>
+  "\:9001\:308b\:3068 LM Studio \:304c 400 \\\"does not expose reasoning configuration\\\" \:3092\:8fd4\:3059\:305f\:3081\:3002\n" <>
+  "capabilities \:81ea\:4f53\:3092\:53d6\:5f97\:3067\:304d\:306a\:3044\:3068\:304d\:3082\:672c\:8868\:7531\:6765\:306e\:5024\:306f\:9001\:3089\:306a\:3044 (\:63a8\:6e2c\:3057\:306a\:3044)\:3002\n" <>
+  "\:512a\:5148\:9806: $ClaudeLMStudioReasoning (\:6587\:5b57\:5217\:6642) > \:672c\:8868 > Automatic (\:6700\:5f37\:5024\:3092\:81ea\:52d5\:9078\:629e)\:3002\n" <>
+  "\:30d1\:30ec\:30c3\:30c8\:306e Effort \:30dc\:30bf\:30f3 (\:6a19\:6e96\:30e2\:30c7\:30eb\:7528\:30fb\:79d8\:5bc6\:30e2\:30c7\:30eb\:7528) \:304c\:3053\:306e\:8868\:3092\:66f8\:304d\:63db\:3048\:308b\:3002";
 
 $ClaudeLMStudioToolNudge::usage =
   "$ClaudeLMStudioToolNudge \[LongDash] LM Studio MCP (integrations) \:6709\:52b9\:6642\:306b\n" <>
@@ -2112,8 +2196,16 @@ If[!ValueQ[$ClaudeLMStudioIntegrations],     $ClaudeLMStudioIntegrations     = N
 If[!ValueQ[$ClaudeLMStudioAPIToken],         $ClaudeLMStudioAPIToken         = None];
 If[!ValueQ[$ClaudeLMStudioContextLength],    $ClaudeLMStudioContextLength    = None];
 If[!ValueQ[$ClaudeLMStudioTemperature],      $ClaudeLMStudioTemperature      = Automatic];
+(* モデル別推奨 temperature (2026-08-16 追加)。
+   モデルごとに公式推奨値が違う (Qwen3.8 系は 1.0、Qwen3.6 系 thinking は 0.6)。
+   $ClaudeLMStudioTemperature は「全モデル共通の強制値」、こちらは「モデル別の既定」。 *)
+If[!ValueQ[$ClaudeLMStudioModelTemperatures],
+  $ClaudeLMStudioModelTemperatures = <|"qwen3.8-27b" -> 1.0|>];
 If[!ValueQ[$ClaudeLMStudioIncludeToolTrace], $ClaudeLMStudioIncludeToolTrace = False];
 If[!ValueQ[$ClaudeLMStudioReasoning],        $ClaudeLMStudioReasoning        = Automatic];
+(* モデル別 reasoning effort (2026-08-16 追加)。パレットの Effort ボタンが書く。
+   既定は空 = 全モデル Automatic (= thinking 有効側の最強値を自動選択)。 *)
+If[!ValueQ[$ClaudeLMStudioModelReasoning],   $ClaudeLMStudioModelReasoning   = <||>];
 If[!ValueQ[$ClaudeLMStudioSamplingParams],
   (* Qwen \:516c\:5f0f\:63a8\:5968 (thinking \:30e2\:30c7\:30eb\:306e\:7121\:9650\:30eb\:30fc\:30d7\:56de\:907f) *)
   $ClaudeLMStudioSamplingParams =
@@ -3129,7 +3221,7 @@ iNBFileRunPrivateNode[nb_NotebookObject, tag_String,
       Return[<||>]];
     prepared = iPrepareAnthropicPS1[apiKey, model, confPrompt,
       Which[ToLowerCase[provider]==="lmstudio",
-          iEnsureChatCompletionsPath[If[customURL=!="",customURL,"http://localhost:1234"]],
+          iEnsureChatCompletionsPath[If[customURL=!="",customURL,iLMStudioDefaultBaseURL[]]],
         customURL=!="", customURL, True, "https://api.anthropic.com/v1/messages"],
       If[ToLowerCase[provider]==="lmstudio","openai",provider], $ClaudeTimeout];
     If[prepared === $Failed,
@@ -5904,12 +5996,13 @@ iClaudeSpawnMailSummaryJob[heldExpr_, nb_] :=
    新着メール10件の派生サマリーを生成する (FE 非ブロック、完了時に通知)。
    NL プロンプトがルーターに横取りされる問題の確実な回避策。 *)
 ClaudeCode`ClaudeGenerateMailSummaries::usage =
-  "ClaudeGenerateMailSummaries[mbox_String, n_:10, period_:\"Latest\"] は mbox の新着メール n 件に派生サマリー (概要/カテゴリ/優先度/〆切) を *別プロセスで* 生成する。FrontEnd は塞がず、完了時に notebook へ通知が出る。内部で SourceVaultMailAddSummaries を子 wolframscript で実行し done.json を poll する。LLM/プロンプトルーターを経由しない決定的トリガー。n に Infinity を渡すと新着全件。";
-ClaudeCode`ClaudeGenerateMailSummaries[mbox_String, n_:10, period_:"Latest"] :=
-  With[{m = mbox, p = period, lim = n},
+  "ClaudeGenerateMailSummaries[mbox_String, n_:10, period_:\"Latest\", opts___Rule] は mbox の新着メール n 件に派生サマリー (概要/カテゴリ/優先度/〆切) を *別プロセスで* 生成する。FrontEnd は塞がず、完了時に notebook へ通知が出る。内部で SourceVaultMailAddSummaries を子 wolframscript で実行し done.json を poll する。LLM/プロンプトルーターを経由しない決定的トリガー。n に Infinity を渡すと新着全件。opts は SourceVaultMailAddSummaries へそのまま渡る (例: \"Refresh\" -> \"Ungrounded\", \"DateFrom\" -> \"2026-08-16\" = 保存済みサマリーがそのメールに接地していない件の再生成)。";
+ClaudeCode`ClaudeGenerateMailSummaries[mbox_String, n : Except[_Rule] : 10,
+    period : Except[_Rule] : "Latest", opts___Rule] :=
+  With[{m = mbox, p = period, lim = n, o = {opts}},
     iClaudeSpawnMailSummaryJob[
       HoldComplete[
-        SourceVault`SourceVaultMailAddSummaries[m, p, "Limit" -> lim]],
+        SourceVault`SourceVaultMailAddSummaries[m, p, "Limit" -> lim, Sequence @@ o]],
       Quiet @ Check[EvaluationNotebook[], None]]];
 
 (* ════════════════════════════════════════════════════════
@@ -7471,7 +7564,9 @@ iMakeBat[promptFile_String, outFile_String, imageDirs_List:{},
            StringQ[$ClaudeModel] && $ClaudeModel =!= "",
              " --model \"" <> $ClaudeModel <> "\"",
            True, ""] <>  (* B-\[Beta] fix3: $ClaudeModel=Automatic \:6642\:306b\:6587\:5b57\:5217\:9023\:7d50\:30a8\:30e9\:30fc\:3067 bat \:304c\:58ca\:308c\:3066\:3044\:305f *)
-         If[$iPaletteEffort =!= "medium", " --effort " <> $iPaletteEffort, ""] <>
+         (* 2026-08-16: "off" は LM Studio 専用語彙。CLI へは渡さない (既定 medium 扱い) *)
+         If[MemberQ[{"low", "high", "max"}, $iPaletteEffort],
+           " --effort " <> $iPaletteEffort, ""] <>
          permFlags <>
          iCLIMCPConfigFlags[] <>
          addDirFlags <>
@@ -7551,7 +7646,9 @@ iMakeBatStreamJson[promptFile_String, outFile_String, imageDirs_List:{},
            StringQ[$ClaudeModel] && $ClaudeModel =!= "",
              " --model \"" <> $ClaudeModel <> "\"",
            True, ""] <>  (* B-\[Beta] fix3: $ClaudeModel=Automatic \:6642\:306b\:6587\:5b57\:5217\:9023\:7d50\:30a8\:30e9\:30fc\:3067 bat \:304c\:58ca\:308c\:3066\:3044\:305f *)
-         If[$iPaletteEffort =!= "medium", " --effort " <> $iPaletteEffort, ""] <>
+         (* 2026-08-16: "off" は LM Studio 専用語彙。CLI へは渡さない (既定 medium 扱い) *)
+         If[MemberQ[{"low", "high", "max"}, $iPaletteEffort],
+           " --effort " <> $iPaletteEffort, ""] <>
          permFlags <>
          iCLIMCPConfigFlags[] <>
          addDirFlags <>
@@ -7755,7 +7852,9 @@ iMakeBatVerbose[promptFile_String, outFile_String, logFile_String] :=
            StringQ[$ClaudeModel] && $ClaudeModel =!= "",
              " --model \"" <> $ClaudeModel <> "\"",
            True, ""] <>  (* B-\[Beta] fix3: $ClaudeModel=Automatic \:6642\:306b\:6587\:5b57\:5217\:9023\:7d50\:30a8\:30e9\:30fc\:3067 bat \:304c\:58ca\:308c\:3066\:3044\:305f *)
-         If[$iPaletteEffort =!= "medium", " --effort " <> $iPaletteEffort, ""] <>
+         (* 2026-08-16: "off" は LM Studio 専用語彙。CLI へは渡さない (既定 medium 扱い) *)
+         If[MemberQ[{"low", "high", "max"}, $iPaletteEffort],
+           " --effort " <> $iPaletteEffort, ""] <>
          permFlags <>
          iCLIMCPConfigFlags[] <>
          addDirFlags <>
@@ -11037,15 +11136,23 @@ $iKimiChatCompletionsURL = "https://api.moonshot.ai/v1/chat/completions";
    model \:5074\:306e JSON \:30a8\:30b9\:30b1\:30fc\:30d7\:3082\:6b63\:3057\:304f\:884c\:308f\:308c\:308b\:3002
    ------------------------------------------------------------ *)
 iOpenAIChatBodyBytes[model_String, prompt_String] :=
+  iOpenAIChatBodyBytes[model, prompt, Automatic];
+
+(* 2026-08-16: temperature \:3092\:4efb\:610f\:3067\:4ed8\:4e0e\:3067\:304d\:308b\:3088\:3046\:306b\:3057\:305f\:3002
+   \:6570\:5024\:306e\:3068\:304d\:3060\:3051 body \:306b\:5165\:308c\:308b (Automatic / None \:306f\:5f93\:6765\:901a\:308a\:9001\:3089\:306a\:3044)\:3002 *)
+iOpenAIChatBodyBytes[model_String, prompt_String, temperature_] :=
   Quiet @ Check[
     ExportByteArray[
-      <|"model" -> model,
-        "messages" -> {<|"role" -> "user", "content" -> prompt|>}|>,
+      Join[
+        <|"model" -> model,
+          "messages" -> {<|"role" -> "user", "content" -> prompt|>}|>,
+        If[NumericQ[temperature], <|"temperature" -> N[temperature]|>, <||>]],
       "RawJSON", "Compact" -> True],
     $Failed];
 
 iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
-    customURL_String:"https://api.openai.com/v1/chat/completions"] :=
+    customURL_String:"https://api.openai.com/v1/chat/completions",
+    temperature_:Automatic] :=
   Module[{url, bodyBytes, resp, bodyStr, json, choices, msg, preflight},
     url = customURL;
     preflight = iCloudSendPreflightDecision["openai", prompt, url];
@@ -11056,7 +11163,7 @@ iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
     iLLMBreakpointGate["API sync (openai-compat)", <|"Provider" -> "openai-compat",
       "Model" -> model, "URL" -> url, "Prompt" -> prompt|>];
 
-    bodyBytes = iOpenAIChatBodyBytes[model, prompt];
+    bodyBytes = iOpenAIChatBodyBytes[model, prompt, temperature];
     If[!ByteArrayQ[bodyBytes],
       Return[iL["Error: OpenAI API \:30ea\:30af\:30a8\:30b9\:30c8 JSON \:306e\:76f4\:5217\:5316\:306b\:5931\:6557\:3057\:307e\:3057\:305f",
         "Error: OpenAI API request JSON serialization failed"]]];
@@ -11118,9 +11225,19 @@ iEnsureChatCompletionsPath[url_String] :=
    \:672a\:767b\:9332\:306e\:5834\:5408\:306f\:5f93\:6765\:306e\:30c0\:30df\:30fc "lm-studio" \:3092\:8fd4\:3059\:3002
    Claude Code CLI \:7d4c\:7531 / fallback chain / PS1 \:7d4c\:7531 \:306e\:5404\:7b87\:6240\:3067\:5171\:7528\:3059\:308b\:3002 *)
 
+(* ---- LM Studio 既定 base URL の解決 (2026-08-17 追加) ----
+   URL 未指定時のフォールバックを各所で "http://localhost:1234" に
+   ハードコードしていたため、$ClaudeLMStudioBaseURL を別ホスト
+   (例: LAN 上の別 PC) に向けても一部経路がローカルを見てしまっていた。
+   フォールバックはすべてここへ集約する。 *)
+iLMStudioDefaultBaseURL[] :=
+  If[StringQ[$ClaudeLMStudioBaseURL] && StringTrim[$ClaudeLMStudioBaseURL] =!= "",
+    StringTrim[$ClaudeLMStudioBaseURL],
+    "http://127.0.0.1:1234"];
+
 iResolveLMStudioAPIKey[customURL_String:""] :=
   Module[{effURL, k},
-    effURL = If[customURL =!= "", customURL, "http://localhost:1234"];
+    effURL = If[customURL =!= "", customURL, iLMStudioDefaultBaseURL[]];
     k = Quiet @ NBAccess`NBGetLocalLLMAPIKey["lmstudio", effURL,
           PrivacySpec -> <|"AccessLevel" -> 1.0|>];
     If[StringQ[k] && k =!= "", k, "lm-studio"]
@@ -11209,6 +11326,67 @@ iApplyLMStudioToolNudge[prompt_String, integrations_] :=
   ];
 iApplyLMStudioToolNudge[prompt_, _] := prompt;
 
+(* ---- LM Studio モデル別 temperature 解決ヘルパ (2026-08-16 追加) ----
+   モデルごとに公式推奨の temperature が違う (Qwen3.8 系は 1.0、Qwen3.6 系
+   thinking は 0.6)。$ClaudeLMStudioModelTemperatures にモデル ID → temperature
+   を宣言しておき、LM Studio 経路 (/api/v1/chat 同期・PS1 非同期・従来の
+   /v1/chat/completions) の全てでここを通して解決する。
+
+   iNormalizeLMStudioModelId: LM Studio のモデル ID 表記ゆれを吸収する。
+     "qwen/qwen3.8-27b"        -> "qwen3.8-27b"   (ベンダ接頭辞)
+     "qwen3.8-27b@q4_k_m"      -> "qwen3.8-27b"   (量子化バリアント) *)
+iNormalizeLMStudioModelId[model_String] :=
+  Module[{s = StringTrim[model]},
+    s = Last[StringSplit[s, "/"], s];
+    s = First[StringSplit[s, "@"], s];
+    ToLowerCase[StringTrim[s]]
+  ];
+iNormalizeLMStudioModelId[x_] := x;
+
+(* 表を引く。戻り値: 数値 / None (明示的に送らない) / Automatic (表に無い)。
+   照合順は 完全一致 (生 ID / 正規化 ID) → "*" を含むワイルドカードキー。
+   ワイルドカードは "*" を含むキーのみが対象 ("@" は WL の文字列パターンで
+   メタ文字なので、素の ID をパターンとして解釈させない)。 *)
+iLMStudioModelTemperature[model_String] :=
+  Module[{tbl = $ClaudeLMStudioModelTemperatures, keys, raw, norm, hit, val},
+    If[!AssociationQ[tbl] || Length[tbl] === 0, Return[Automatic]];
+    keys = Select[Keys[tbl], StringQ];
+    If[keys === {}, Return[Automatic]];
+    raw  = ToLowerCase[StringTrim[model]];
+    norm = iNormalizeLMStudioModelId[model];
+    hit = SelectFirst[keys,
+      With[{k = ToLowerCase[StringTrim[#]]}, k === raw || k === norm] &,
+      None];
+    If[hit === None,
+      hit = SelectFirst[keys,
+        StringContainsQ[#, "*"] &&
+          (StringMatchQ[raw, #, IgnoreCase -> True] ||
+           StringMatchQ[norm, #, IgnoreCase -> True]) &,
+        None]];
+    If[hit === None, Return[Automatic]];
+    val = tbl[hit];
+    Which[
+      NumericQ[val], N[val],
+      val === None,  None,
+      True,          Automatic]
+  ];
+iLMStudioModelTemperature[_] := Automatic;
+
+(* 実際に送る temperature を決める。
+   優先順: 呼び出しオプション明示 > $ClaudeLMStudioTemperature (数値時)
+           > $ClaudeLMStudioModelTemperatures > 送らない。
+   戻り値が数値のときだけ body に temperature を入れること。 *)
+iResolveLMStudioTemperature[model_, override_:Automatic] :=
+  Module[{t},
+    If[NumericQ[override], Return[N[override]]];
+    If[override === None,  Return[Automatic]];
+    t = $ClaudeLMStudioTemperature;
+    If[NumericQ[t], Return[N[t]]];
+    t = If[StringQ[model], iLMStudioModelTemperature[model], Automatic];
+    If[NumericQ[t], Return[N[t]]];
+    Automatic
+  ];
+
 (* ---- LM Studio \:30b5\:30f3\:30d7\:30ea\:30f3\:30b0 / max_output_tokens \:9069\:7528\:30d8\:30eb\:30d1 (2026-06-01 \:8ffd\:52a0) ----
    Qwen3 \:7cfb thinking \:30e2\:30c7\:30eb\:306e\:7121\:9650\:30eb\:30fc\:30d7 (\:540c\:4e00\:51fa\:529b\:7e70\:308a\:8fd4\:3057) \:306f\:65e2\:77e5\:30d0\:30b0\:3002
    Qwen \:516c\:5f0f\:63a8\:5968\:30b5\:30f3\:30d7\:30ea\:30f3\:30b0\:5024 (temperature=0.6 \:7b49) \:3067\:53cd\:5fa9\:3092\:6291\:5236\:3057\:3001
@@ -11248,8 +11426,22 @@ iApplyLMStudioSampling[x_] := x;
    \:623b\:308a\:5024: \:9001\:308b\:3079\:304d reasoning \:6587\:5b57\:5217\:3001\:307e\:305f\:306f None (\:9001\:3089\:306a\:3044)\:3002 *)
 
 (* \:30e2\:30c7\:30eb\:306e reasoning capability \:30ad\:30e3\:30c3\:30b7\:30e5 (\:30bb\:30c3\:30b7\:30e7\:30f3\:5185) *)
-If[!ValueQ[$iLMStudioModelReasoningCache], $iLMStudioModelReasoningCache = <||>];
+(* 2026-08-17: キャッシュの意味が変わった (None = 非対応確定 / $Failed = 不明)。
+   旧セマンティクスで貯めた None が「非対応」と誤読されないよう、
+   バージョンが上がったら 1 度だけ捨てる。 *)
+If[!ValueQ[$iLMStudioModelReasoningCache] ||
+   !MatchQ[$iLMStudioModelReasoningCacheVersion, 2],
+  $iLMStudioModelReasoningCache = <||>;
+  $iLMStudioModelReasoningCacheVersion = 2];
 
+(* 2026-08-17: 戻り値を 3 値に分けた。
+     Association  \[LongDash] reasoning 対応 (allowed_options / default を持つ)
+     None         \[LongDash] モデルは一覧にあるが reasoning capability を持たない
+                    (= 送ると LM Studio が 400 "does not expose reasoning
+                       configuration" を返す。絶対に送ってはいけない)
+     $Failed      \[LongDash] capability 不明 (サーバー不通 / モデルが一覧に無い)
+   従来は「非対応」も「不明」も None を返していたため、非対応モデルへ
+   reasoning を送ってエラーになっていた。 *)
 iGetLMStudioModelReasoning[model_String, baseURL_String] :=
   Module[{cacheKey, modelsURL, apiKey, resp, body, json, models, entry,
           caps, reasoning},
@@ -11269,50 +11461,121 @@ iGetLMStudioModelReasoning[model_String, baseURL_String] :=
         <|Method -> "GET",
           "Headers" -> {"Authorization" -> "Bearer " <> apiKey}|>],
         TimeConstraint -> 15], $Failed];
+    (* \:4ee5\:4e0b\:306f\:3044\:305a\:308c\:3082 capability \:4e0d\:660e (\:975e\:5bfe\:5fdc\:3068\:306f\:533a\:5225\:3059\:308b) *)
     If[Head[resp] =!= HTTPResponse || resp["StatusCode"] =!= 200,
-      $iLMStudioModelReasoningCache[cacheKey] = None;
-      Return[None]];
+      $iLMStudioModelReasoningCache[cacheKey] = $Failed;
+      Return[$Failed]];
     body = resp["Body"];
     json = Quiet @ Check[Developer`ReadRawJSONString[body], $Failed];
     If[!AssociationQ[json],
       json = Quiet @ Check[ImportString[body, "RawJSON"], $Failed]];
     If[!AssociationQ[json],
-      $iLMStudioModelReasoningCache[cacheKey] = None; Return[None]];
+      $iLMStudioModelReasoningCache[cacheKey] = $Failed; Return[$Failed]];
     models = Lookup[json, "models", {}];
     If[!ListQ[models],
-      $iLMStudioModelReasoningCache[cacheKey] = None; Return[None]];
+      $iLMStudioModelReasoningCache[cacheKey] = $Failed; Return[$Failed]];
     (* key \:5b8c\:5168\:4e00\:81f4\:30a8\:30f3\:30c8\:30ea\:3092\:63a2\:3059 *)
     entry = FirstCase[models,
       e_ /; AssociationQ[e] && Lookup[e, "key", ""] === model :> e, None];
     If[!AssociationQ[entry],
-      $iLMStudioModelReasoningCache[cacheKey] = None; Return[None]];
+      $iLMStudioModelReasoningCache[cacheKey] = $Failed; Return[$Failed]];
+    (* \:3053\:3053\:304b\:3089\:5148\:306f\:30e2\:30c7\:30eb\:304c\:5b9f\:5728\:3059\:308b\:306e\:3067\:3001reasoning \:7121\:3057 = \:975e\:5bfe\:5fdc\:78ba\:5b9a *)
     caps = Lookup[entry, "capabilities", <||>];
     reasoning = If[AssociationQ[caps], Lookup[caps, "reasoning", None], None];
-    (* reasoning = <|"allowed_options"->{...},"default"->"..."|> \:307e\:305f\:306f None *)
+    (* reasoning = <|"allowed_options"->{...},"default"->"..."|> \:307e\:305f\:306f None (\:975e\:5bfe\:5fdc) *)
     $iLMStudioModelReasoningCache[cacheKey] = reasoning;
     reasoning
   ];
-iGetLMStudioModelReasoning[___] := None;
+iGetLMStudioModelReasoning[___] := $Failed;
 
-(* \:9001\:308b\:3079\:304d reasoning \:5024\:3092\:6c7a\:5b9a *)
+(* ---- palette effort \[RightArrow] LM Studio reasoning \:30de\:30c3\:30d4\:30f3\:30b0 (2026-08-16 \:8ffd\:52a0) ----
+   \:30d1\:30ec\:30c3\:30c8\:306e Effort \:8a9e\:5f59 ("off"/"low"/"medium"/"high"/"max") \:3092\:3001
+   \:30e2\:30c7\:30eb\:304c\:5b9f\:969b\:306b\:7533\:544a\:3057\:305f allowed_options \:306e\:8a9e\:5f59\:3078\:6bb5\:968e\:7684\:306b\:5199\:3059\:3002
+   LM Studio \:306f\:30e2\:30c7\:30eb\:3054\:3068\:306b\:8a9e\:5f59\:304c\:9055\:3046 (qwen3.6 = {off,on}\:3001
+   gpt-oss = {low,medium,high}\:3001\:65b0\:3057\:3044\:30e2\:30c7\:30eb\:306f xhigh \:3092\:6301\:3064\:3053\:3068\:304c\:3042\:308b) \:305f\:3081\:3001
+   \:5019\:88dc\:5217\:306e\:5148\:982d\:304b\:3089 allowed \:306b\:3042\:308b\:3082\:306e\:3092\:63a1\:308b\:3002
+   "off" \:306f thinking \:7121\:52b9\:3002\:5bfe\:5fdc\:8a9e\:5f59\:304c\:7121\:3044\:30e2\:30c7\:30eb\:3067\:306f\:9001\:3089\:306a\:3044 (None)\:3002 *)
+$iLMStudioEffortVocabulary = {"off", "low", "medium", "high", "max"};
+
+iLMStudioReasoningCandidates["off"]    := {"off", "none", "disabled"};
+iLMStudioReasoningCandidates["low"]    := {"low", "on", "medium", "high", "xhigh"};
+iLMStudioReasoningCandidates["medium"] := {"medium", "on", "high", "low", "xhigh"};
+iLMStudioReasoningCandidates["high"]   := {"high", "on", "xhigh", "medium", "low"};
+iLMStudioReasoningCandidates["max"]    := {"xhigh", "high", "on", "medium", "low"};
+iLMStudioReasoningCandidates[_]        := {};
+
+(* allowed_options \:3092\:53d6\:5f97\:3067\:304d\:306a\:3044\:30e2\:30c7\:30eb\:3078\:9001\:308b\:7121\:96e3\:306a\:5024\:3002
+   "max" \:306f xhigh \:5bfe\:5fdc\:3092\:78ba\:8a8d\:3067\:304d\:306a\:3044\:306e\:3067 high \:306b\:843d\:3068\:3059\:3002 *)
+iLMStudioEffortFallbackValue["off"]    := "off";
+iLMStudioEffortFallbackValue["low"]    := "low";
+iLMStudioEffortFallbackValue["medium"] := "medium";
+iLMStudioEffortFallbackValue["high"]   := "high";
+iLMStudioEffortFallbackValue["max"]    := "high";
+iLMStudioEffortFallbackValue[_]        := None;
+
+(* \:30e2\:30c7\:30eb\:5225 effort \:8868\:3092\:5f15\:304f\:3002\:7167\:5408\:898f\:5247\:306f temperature \:8868\:3068\:5171\:901a\:3002
+   \:623b\:308a\:5024: effort \:6587\:5b57\:5217 / Automatic (\:8868\:306b\:7121\:3044) *)
+iLMStudioModelEffort[model_String] :=
+  Module[{tbl = $ClaudeLMStudioModelReasoning, keys, raw, norm, hit, val},
+    If[!AssociationQ[tbl] || Length[tbl] === 0, Return[Automatic]];
+    keys = Select[Keys[tbl], StringQ];
+    If[keys === {}, Return[Automatic]];
+    raw  = ToLowerCase[StringTrim[model]];
+    norm = iNormalizeLMStudioModelId[model];
+    hit = SelectFirst[keys,
+      With[{k = ToLowerCase[StringTrim[#]]}, k === raw || k === norm] &,
+      None];
+    If[hit === None,
+      hit = SelectFirst[keys,
+        StringContainsQ[#, "*"] &&
+          (StringMatchQ[raw, #, IgnoreCase -> True] ||
+           StringMatchQ[norm, #, IgnoreCase -> True]) &,
+        None]];
+    If[hit === None, Return[Automatic]];
+    val = tbl[hit];
+    If[StringQ[val] && MemberQ[$iLMStudioEffortVocabulary, ToLowerCase[val]],
+      ToLowerCase[val], Automatic]
+  ];
+iLMStudioModelEffort[_] := Automatic;
+
+(* \:9001\:308b\:3079\:304d reasoning \:5024\:3092\:6c7a\:5b9a\:3002
+   \:512a\:5148\:9806: $ClaudeLMStudioReasoning (None / \:6587\:5b57\:5217) > \:30e2\:30c7\:30eb\:5225\:8868 > Automatic\:3002 *)
 iResolveLMStudioReasoning[model_String, baseURL_String] :=
-  Module[{setting, cap, allowed, pick},
+  Module[{setting, effort, cap, allowed, pick},
     setting = $ClaudeLMStudioReasoning;
     (* None \:306a\:3089\:9001\:3089\:306a\:3044 (\:5b8c\:5168\:5f8c\:65b9\:4e92\:63db) *)
     If[setting === None, Return[None]];
+    (* \:30b0\:30ed\:30fc\:30d0\:30eb\:660e\:793a\:6307\:5b9a\:304c\:7121\:3051\:308c\:3070\:30e2\:30c7\:30eb\:5225\:8868\:3092\:898b\:308b *)
+    effort = If[StringQ[setting] &&
+      MemberQ[$iLMStudioEffortVocabulary, ToLowerCase[setting]],
+      ToLowerCase[setting], iLMStudioModelEffort[model]];
     cap = iGetLMStudioModelReasoning[model, baseURL];
+    (* 2026-08-17: reasoning 非対応と確定しているモデルへは何があっても送らない。
+       送ると LM Studio が 400 invalid_value を返して呼び出し自体が失敗する
+       (例: qwen3.8-27b は capabilities に reasoning を持たない)。 *)
+    If[cap === None, Return[None]];
     allowed = If[AssociationQ[cap], Lookup[cap, "allowed_options", {}], {}];
-    (* capability \:304c\:53d6\:5f97\:3067\:304d\:306a\:3044\:5834\:5408 *)
-    If[!(ListQ[allowed] && Length[allowed] > 0),
-      (* \:660e\:793a\:6307\:5b9a\:304c\:6587\:5b57\:5217\:306a\:3089\:305d\:306e\:307e\:307e\:9001\:308b (\:30e6\:30fc\:30b6\:30fc\:8cac\:4efb)\:3001
-         Automatic \:306a\:3089\:5b89\:5168\:5074\:306b\:9001\:3089\:306a\:3044 *)
-      Return[If[StringQ[setting] &&
-        MemberQ[{"off","low","medium","high","on"}, setting], setting, None]]];
-    (* \:660e\:793a\:6307\:5b9a: allowed \:306b\:542b\:307e\:308c\:308c\:3070\:9001\:308b\:3001\:306a\:3051\:308c\:3070\:9001\:3089\:306a\:3044 *)
-    If[StringQ[setting] && MemberQ[{"off","low","medium","high","on"}, setting],
+    If[!(ListQ[allowed] && Length[allowed] > 0), allowed = {}];
+    (* capability \:304c\:53d6\:5f97\:3067\:304d\:306a\:3044 (cap === $Failed) \:5834\:5408 *)
+    If[allowed === {},
+      (* \:63a8\:6e2c\:3067\:9001\:308b\:3068 400 \:306b\:306a\:308a\:5f97\:308b\:306e\:3067\:3001\:30d1\:30ec\:30c3\:30c8\:7531\:6765\:306e effort \:3067\:306f\:9001\:3089\:306a\:3044\:3002
+         \:30b0\:30ed\:30fc\:30d0\:30eb\:660e\:793a\:6307\:5b9a ($ClaudeLMStudioReasoning \:304c\:6587\:5b57\:5217) \:306e\:3068\:304d\:3060\:3051\:3001
+         \:30e6\:30fc\:30b6\:30fc\:8cac\:4efb\:3067\:6b63\:898f\:5316\:5024\:3092\:9001\:308b (\:5f93\:6765\:306e\:9003\:3052\:9053\:3092\:7dad\:6301)\:3002 *)
+      Return[Which[
+        StringQ[setting] && MemberQ[$iLMStudioEffortVocabulary, ToLowerCase[setting]],
+          iLMStudioEffortFallbackValue[ToLowerCase[setting]],
+        StringQ[setting] && MemberQ[{"off","on","low","medium","high","xhigh"}, setting],
+          setting,
+        True, None]]];
+    (* effort \:8a9e\:5f59\:306a\:3089\:5019\:88dc\:5217\:3092 allowed \:3067\:6ffe\:3057\:3066\:5148\:982d\:3092\:63a1\:308b *)
+    If[StringQ[effort] && MemberQ[$iLMStudioEffortVocabulary, effort],
+      Return[FirstCase[iLMStudioReasoningCandidates[effort],
+        v_ /; MemberQ[allowed, v] :> v, None]]];
+    (* \:65e7\:8a9e\:5f59\:306e\:660e\:793a\:6307\:5b9a: allowed \:306b\:542b\:307e\:308c\:308c\:3070\:9001\:308b *)
+    If[StringQ[setting] && MemberQ[{"off","on","low","medium","high","xhigh"}, setting],
       Return[If[MemberQ[allowed, setting], setting, None]]];
     (* Automatic: MCP \:5229\:7528\:524d\:63d0\:3067\:601d\:8003\:3092\:4fc3\:3059\:6700\:5f37\:5024\:3092\:9078\:3076 *)
-    pick = FirstCase[{"high","medium","low","on"},
+    pick = FirstCase[{"xhigh","high","medium","low","on"},
       v_ /; MemberQ[allowed, v] :> v, None];
     pick
   ];
@@ -11967,9 +12230,10 @@ iQueryLMStudioChat[model_String, prompt_String, baseURL_String,
             SourceVault`SourceVaultModelContextLength["lmstudio", model],
             None];
           If[IntegerQ[svCtx] && svCtx > 0, ctxLen = svCtx]]]];
-    (* None / Automatic / \:975e\:6b63\:306a\:5024\:306f\:9001\:4fe1\:305b\:305a\:30e2\:30c7\:30eb\:5074\:8a2d\:5b9a\:3092\:4f7f\:3046 *)
-    temp = OptionValue["Temperature"];
-    If[temp === Automatic, temp = $ClaudeLMStudioTemperature];
+    (* None / Automatic / \:975e\:6b63\:306a\:5024\:306f\:9001\:4fe1\:305b\:305a\:30e2\:30c7\:30eb\:5074\:8a2d\:5b9a\:3092\:4f7f\:3046\:3002
+       2026-08-16: モデル別推奨 temperature 表を経由する
+       (オプション明示 > $ClaudeLMStudioTemperature > モデル別表 > 送らない)。 *)
+    temp = iResolveLMStudioTemperature[model, OptionValue["Temperature"]];
     token = OptionValue["APIToken"];
     If[token === Automatic, token = $ClaudeLMStudioAPIToken];
     (* NBAccess \:304b\:3089\:30c8\:30fc\:30af\:30f3\:3092\:53d6\:5f97 ({"lmstudio", baseURL} -> credName -> SystemCredential) *)
@@ -12003,7 +12267,9 @@ iQueryLMStudioChat[model_String, prompt_String, baseURL_String,
       bodyAssoc = Join[bodyAssoc, <|"integrations" -> integrations|>]];
     (* 2026-06-01: reasoning \:5024\:306f /api/v1/models \:306e capabilities \:304b\:3089\:6c7a\:5b9a (\:30a8\:30e9\:30fc\:56de\:907f)\:3002 *)
     reasoning = iResolveLMStudioReasoning[model, url];
-    If[StringQ[reasoning] && MemberQ[{"off","low","medium","high","on"}, reasoning],
+    (* 2026-08-16: xhigh / none / disabled も allowed_options 由来なら通す *)
+    If[StringQ[reasoning] &&
+       MemberQ[{"off","none","disabled","on","low","medium","high","xhigh"}, reasoning],
       bodyAssoc = Join[bodyAssoc, <|"reasoning" -> reasoning|>]];
     (* 2026-06-01: Qwen3 thinking \:7121\:9650\:30eb\:30fc\:30d7\:5bfe\:7b56 (\:30b5\:30f3\:30d7\:30ea\:30f3\:30b0 + max_output_tokens) *)
     bodyAssoc = iApplyLMStudioSampling[bodyAssoc];
@@ -12133,7 +12399,7 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
 
     (* LM Studio \:7b49\:30ed\:30fc\:30ab\:30eb\:30e2\:30c7\:30eb *)
     If[prov === "lmstudio",
-      effectiveURL = If[customURL =!= "", customURL, "http://localhost:1234"];
+      effectiveURL = If[customURL =!= "", customURL, iLMStudioDefaultBaseURL[]];
       useMCP = ListQ[integrations] && Length[integrations] > 0;
       If[useMCP,
         (* \:65b0\:7d4c\:8def: /api/v1/chat + MCP *)
@@ -12155,8 +12421,10 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
             PrivacySpec -> <|"AccessLevel" -> 1.0|>]},
             If[StringQ[k] && k =!= "", resolvedKey = k]]];
         If[!StringQ[resolvedKey] || resolvedKey === "", resolvedKey = "lm-studio"];
+        (* 2026-08-16: 従来経路もモデル別推奨 temperature を尊重する *)
         Return @ Block[{$iClaudeCurrentAPIProvider = "lmstudio"},
-          iQueryOpenAIAPI[resolvedKey, model, prompt, url]]
+          iQueryOpenAIAPI[resolvedKey, model, prompt, url,
+            iResolveLMStudioTemperature[model, temp]]]
       ]
     ];
     (* ―― NBAccess ノートブック課金 API チェック (Phase 28 Paid フラグベース) ――
@@ -12582,7 +12850,8 @@ iPrepareLMStudioMCPPS1[apiKey_String, model_String, prompt_String,
         Module[{svCtx = Quiet @ Check[
           SourceVault`SourceVaultModelContextLength["lmstudio", model], None]},
           If[IntegerQ[svCtx] && svCtx > 0, ctxLen = svCtx]]]];
-    temp         = $ClaudeLMStudioTemperature;
+    (* 2026-08-16: モデル別推奨 temperature 表を経由 (同期経路と同じ優先順)。 *)
+    temp         = iResolveLMStudioTemperature[model, Automatic];
     (* 2026-06-01: integrations \:6709\:52b9\:6642\:306f tool-use nudge \:3092\:524d\:7f6e\:3057\:3066 web \:691c\:7d22\:5229\:7528\:3092\:4fc3\:3059\:3002 *)
     bodyAssoc = <|"model" -> model,
       "input" -> iHoistThinkPrefix[iApplyLMStudioToolNudge[prompt, integrations]]|>;
@@ -12596,7 +12865,9 @@ iPrepareLMStudioMCPPS1[apiKey_String, model_String, prompt_String,
        \:30e2\:30c7\:30eb\:306e allowed_options \:306b\:542b\:307e\:308c\:308b\:5024\:306e\:307f\:9001\:308b\:305f\:3081\:30a8\:30e9\:30fc\:306b\:306a\:3089\:306a\:3044\:3002
        MCP \:5229\:7528\:6642\:306f reasoning \:304c\:4e8b\:5b9f\:4e0a\:5fc5\:8981\:306a\:305f\:3081\:3001Automatic \:3067\:6700\:5f37\:5024\:3092\:81ea\:52d5\:9078\:629e\:3002 *)
     reasoning = iResolveLMStudioReasoning[model, url];
-    If[StringQ[reasoning] && MemberQ[{"off","low","medium","high","on"}, reasoning],
+    (* 2026-08-16: xhigh / none / disabled も allowed_options 由来なら通す *)
+    If[StringQ[reasoning] &&
+       MemberQ[{"off","none","disabled","on","low","medium","high","xhigh"}, reasoning],
       bodyAssoc = Join[bodyAssoc, <|"reasoning" -> reasoning|>]];
     (* 2026-06-01: Qwen3 thinking \:7121\:9650\:30eb\:30fc\:30d7\:5bfe\:7b56\:3002Qwen \:63a8\:5968\:30b5\:30f3\:30d7\:30ea\:30f3\:30b0\:5024\:3068
        max_output_tokens \:5b89\:5168\:5f01\:3092\:88dc\:5b8c (\:65e2\:5b58\:30ad\:30fc\:306f\:5c0a\:91cd)\:3002 *)
@@ -12820,7 +13091,7 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
          2026-07-29: mediaFiles \:304c\:3042\:308b\:5834\:5408\:306f /api/v1/chat \:304c text-only \:306e\:305f\:3081
          \:4e0b\:306e iPrepareAnthropicPS1 (openai \:5f62\:5f0f image_url) \:7d4c\:8def\:306b\:56de\:3059\:3002 *)
       iPrepareLMStudioMCPPS1[apiKey, model, prompt,
-        iEnsureLMStudioV1ChatPath[If[customURL =!= "", customURL, "http://localhost:1234"]],
+        iEnsureLMStudioV1ChatPath[If[customURL =!= "", customURL, iLMStudioDefaultBaseURL[]]],
         resolvedTimeout],
       iPrepareAnthropicPS1[apiKey, model, prompt,
         Which[
@@ -12831,7 +13102,7 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
              \:5fc5\:305a path \:3092\:88dc\:5b8c\:3059\:308b\:3002 *)
           ToLowerCase[provider] === "lmstudio",
             iEnsureChatCompletionsPath[
-              If[customURL =!= "", customURL, "http://localhost:1234"]],
+              If[customURL =!= "", customURL, iLMStudioDefaultBaseURL[]]],
           customURL =!= "", customURL,
           ToLowerCase[provider] === "zai", $iZAIChatCompletionsURL,
           ToLowerCase[provider] === "kimi", $iKimiChatCompletionsURL,
@@ -14295,7 +14566,7 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
       providerLower === "kimi",
         $iKimiChatCompletionsURL,
       providerLower === "lmstudio",
-        "http://localhost:1234/v1/chat/completions",
+        iEnsureChatCompletionsPath[iLMStudioDefaultBaseURL[]],
       True,
         Return["Error: \:672a\:5bfe\:5fdc\:30d7\:30ed\:30d0\:30a4\:30c0: " <> provider]
     ];
@@ -14306,7 +14577,10 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
     Which[
       providerLower === "openai" || providerLower === "zai" ||
           providerLower === "kimi" || providerLower === "lmstudio",
-        Return @ iQueryOpenAIAPI[apiKey, model, prompt, url],
+        (* 2026-08-16: lmstudio はモデル別推奨 temperature を付与 *)
+        Return @ iQueryOpenAIAPI[apiKey, model, prompt, url,
+          If[providerLower === "lmstudio",
+            iResolveLMStudioTemperature[model, Automatic], Automatic]],
       providerLower === "anthropic",
         Null,  (* \:4ee5\:4e0b\:306e Anthropic \:8def\:7d50\:3092\:7d9a\:884c *)
       True,
@@ -19332,6 +19606,67 @@ iMergeFunctionSegments[orig_String, patch_String] :=
 (* \:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:542b\:307e\:308c\:308b\:95a2\:6570\:540d\:3092\:30d1\:30c3\:30b1\:30fc\:30b8\:306e\:30a8\:30af\:30b9\:30dd\:30fc\:30c8\:540d\:4e00\:89a7\:3068\:7167\:5c04\:3057\:3066\:63a8\:5b9a *)
 
 (* ============================================================
+   Dropbox / OneDrive の同期競合コピーの判定
+   ============================================================
+   複数 PC 同期で生じる
+     <name> (MACHINE の競合コピー 2026-08-13).wl
+     <name> (MACHINE's conflicted copy 2026-08-13).md
+   は同期事故の産物であり、パッケージでもドキュメントでもない。
+   補助パッケージ走査 (iScanAuxPackages) やドキュメント列挙がこれを拾うと
+     api_mcp (Rapterlake4T の競合コピー 2026-08-13).md
+   のような偽ドキュメントを「更新対象」に並べてしまう (2026-08-21 fix)。 *)
+
+$iConflictedCopyMarkers = {
+  "conflicted copy",              (* Dropbox en *)
+  "競合コピー",                  (* Dropbox ja *)
+  "case conflict",                (* Dropbox 大文字小文字衝突 *)
+  "copia en conflicto",           (* es *)
+  "copie en conflit",             (* fr *)
+  "copia in conflitto",           (* it *)
+  "cópia em conflito",            (* pt *)
+  "in konflikt stehende kopie",   (* de *)
+  "충돌 사본",                    (* ko *)
+  "冲突副本", "衝突複本"            (* zh *)
+};
+
+(* パス / ファイル名が同期競合コピーか *)
+iConflictedCopyFileQ[path_String] :=
+  With[{name = FileNameTake[path]},
+    AnyTrue[$iConflictedCopyMarkers, StringContainsQ[name, #, IgnoreCase -> True] &]];
+iConflictedCopyFileQ[___] := False;
+
+(* 競合コピーを除いたリストを返す (フルパスでもファイル名でも可) *)
+iDropConflictedCopies[files_List] := Select[files, !iConflictedCopyFileQ[#] &];
+iDropConflictedCopies[files_] := files;
+
+(* パッケージのソース / ドキュメントに残っている競合コピーを列挙する *)
+iFindConflictedCopies[packageName_String, docsDir_] :=
+  Module[{pkgDir = Global`$packageDirectory, hits = {}},
+    If[StringQ[pkgDir] && pkgDir =!= "",
+      hits = Join[hits,
+        Select[FileNames[packageName <> "*.*", pkgDir], iConflictedCopyFileQ],
+        Select[FileNames[packageName <> "*.*",
+          FileNameJoin[{pkgDir, packageName, "Kernel"}]], iConflictedCopyFileQ]]];
+    If[StringQ[docsDir] && DirectoryQ[docsDir],
+      hits = Join[hits, Select[FileNames["*", docsDir, 2], iConflictedCopyFileQ]]];
+    DeleteDuplicates[hits]];
+iFindConflictedCopies[___] := {};
+
+(* 競合コピーを検出したら警告する (削除を推奨)。
+   除外自体は各列挙側 (iScanAuxPackages / allDocs 等) で行う。 *)
+iWarnConflictedCopies[nb_, packageName_String, docsDir_] :=
+  Module[{hits = iFindConflictedCopies[packageName, docsDir]},
+    If[hits === {}, Return[{}]];
+    nbPrint[nb, Style[
+      "\:26a0 同期競合コピーを検出 (" <> ToString[Length[hits]] <>
+      " 件)。パッケージでもドキュメントでもないため対象から除外します。削除を推奨:\n" <>
+      StringRiffle[FileNameTake /@ Take[hits, UpTo[12]], "\n"] <>
+      If[Length[hits] > 12, "\n... 他 " <> ToString[Length[hits] - 12] <> " 件", ""],
+      FontColor -> RGBColor[0.8, 0.4, 0]]];
+    hits];
+iWarnConflictedCopies[___] := {};
+
+(* ============================================================
    \:88dc\:52a9 API \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8 (api_*.md) \:7528\:30d8\:30eb\:30d1\:30fc\:7fa4
    \:88dc\:52a9\:30d1\:30c3\:30b1\:30fc\:30b8 <pkg>_<aux>.wl \:306b\:5bfe\:5fdc\:3059\:308b api_<aux>.md \:3092\:6271\:3046\:3002
    ============================================================ *)
@@ -19413,6 +19748,10 @@ iScanAuxPackages[packageName_String] :=
       FileNames[prefix <> "*.wl",
         FileNameJoin[{pkgDir, packageName, "Kernel"}]]
     ];
+    (* Dropbox 等の同期競合コピー
+       (<pkg>_<aux> (MACHINE の競合コピー 2026-08-13).wl) は補助パッケージではない。
+       除外しないと api_<aux> (競合コピー ...).md を生成 / 更新対象にしてしまう。 *)
+    files = iDropConflictedCopies[files];
     names = StringDrop[FileBaseName[#], StringLength[prefix]] & /@ files;
     DeleteDuplicates[Select[names, StringLength[#] > 0 &]]
   ];
@@ -20793,6 +21132,8 @@ If[!StringQ[$iDocLastFailReason], $iDocLastFailReason = ""];  (* iSafeWriteDoc \
    \:30c1\:30a7\:30fc\:30f3\:5168\:4f53\:3092\:4e2d\:65ad\:3057\:305f\:305f\:3081\:3001\:518d\:5b9f\:884c\:3057\:3066\:3082\:540c\:3058\:30d5\:30a1\:30a4\:30eb(\:4f8b: setup.md \:304c\:5de8\:5927\:5316\:3057
    agentic \:751f\:6210\:304c\:9014\:4e2d\:5207\:308c\:308b)\:3067\:518d\:5ea6\:5931\:6557\:3057\:3001\:6c38\:9060\:306b\:5b8c\:4e86\:3057\:306a\:304b\:3063\:305f\:3002 *)
 If[!AssociationQ[$iDocRetryCount], $iDocRetryCount = <||>];  (* "pkg|docFile" -> \:518d\:8a66\:884c\:6e08\:56de\:6570 *)
+(* create 経路 (iGenDocNext) で再試行析尽によりスキップした doc: packageName -> {file, ...} *)
+If[!AssociationQ[$iDocGenSkipped], $iDocGenSkipped = <||>];
 If[!IntegerQ[$iDocMaxRetries], $iDocMaxRetries = 1];         (* \:54c1\:8cea\:5931\:6557\:6642\:306e\:540c\:4e00\:30d5\:30a1\:30a4\:30eb\:518d\:751f\:6210\:56de\:6570 *)
 $iDocChainReentry = False;   (* retry \:518d\:5165\:6642\:306b idx===1 \:306e\:591a\:91cd\:8d77\:52d5\:30ac\:30fc\:30c9\:3092\:30d0\:30a4\:30d1\:30b9\:3059\:308b\:4e00\:56de\:6027\:30d5\:30e9\:30b0 *)
 (* 2026-07-09: step \:30c8\:30fc\:30af\:30f3\:306b\:3088\:308b\:4e8c\:91cd\:767a\:706b\:30ac\:30fc\:30c9\:3002\:54c1\:8cea\:5931\:6557\:3092 fail-fast \:304b\:3089
@@ -21328,7 +21669,7 @@ iDocBuildFiguresPrompt[packageName_String, docFile_String] :=
 iBuildReadmePrompt[sourceCode_String, packageName_String, outDir_String] :=
   Module[{docFiles, docsContent, docSummaries},
     docFiles = Select[FileNames["*.md", {outDir, FileNameJoin[{outDir, "examples"}]}],
-      FileNameTake[#] =!= "README.md" &];
+      FileNameTake[#] =!= "README.md" && !iConflictedCopyFileQ[#] &];
     (* 区切りに --- を使わない: LLM が体裁を真似て出力先頭に --- を置くと
        GitHub が YAML front matter とみなして README が壊れる (2026-08-01) *)
     docsContent = StringJoin[
@@ -21402,13 +21743,58 @@ iBuildReadmePrompt[sourceCode_String, packageName_String, outDir_String] :=
    ============================================================ *)
 
 (* \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:3092\:516c\:958b\:90e8\:3068 Private \:30bb\:30af\:30b7\:30e7\:30f3\:7fa4\:306b\:5206\:5272 *)
+(* 行頭 (インデントなし) から始まるトップレベル定義のシンボル名。定義行でなければ None。 *)
+iLeadingDefinitionSymbol[line_String] :=
+  Module[{m = StringCases[line,
+      StartOfString ~~ s:(("$" | LetterCharacter) ~~ (WordCharacter | "$" | "`") ...) ~~
+        (" " | "[" | ":" | "=" | "/" | "@") :> s, 1]},
+    If[m === {}, None, First[m]]];
+iLeadingDefinitionSymbol[___] := None;
+
+(* ============ 合成セクション化 (2026-08-21 fix) ============
+   iSplitSource は "(* ====== セクション名 ====== *)" 帯だけをセクション境界として
+   いたため、この規約を使わないパッケージ (例: VRCRealtime.wl) では sections が空になり、
+   iBuildChunkedSource が「公開シンボルだけ」の痩せたプロンプト (87407 字 → 7024 字) を
+   作ってしまう。結果、生成物が既存 doc の 40% 未満になり size regression で永遠に拒否された。
+   帯が見つからないときは、行頭定義の境界で private 部をブロックに分け、
+   先頭の定義シンボル名をタイトルにした合成セクションを返す。 *)
+iSyntheticSections[privateLines_List] :=
+  Module[{n = Length[privateLines], lens, total, target, cuts = {1}, acc = 0, bounds},
+    If[n === 0, Return[{}]];
+    lens = (StringLength[#] + 1) & /@ privateLines;
+    total = Total[lens];
+    (* セクション数が爆発しないよう 40 ブロック程度に収まる幅を選ぶ *)
+    target = Max[6000, Ceiling[total / 40]];
+    Do[
+      If[acc >= target && StringQ[iLeadingDefinitionSymbol[privateLines[[j]]]],
+        AppendTo[cuts, j]; acc = 0];
+      acc = acc + lens[[j]],
+      {j, n}];
+    bounds = Transpose[{cuts, Append[Rest[cuts] - 1, n]}];
+    Function[b,
+      Module[{blk = privateLines[[b[[1]] ;; b[[2]]]], sym},
+        sym = SelectFirst[iLeadingDefinitionSymbol /@ Take[blk, UpTo[60]], StringQ, None];
+        <|"title" -> If[StringQ[sym], sym <> " 他", "code"],
+          "code" -> StringRiffle[blk, "\n"],
+          "chars" -> Total[lens[[b[[1]] ;; b[[2]]]]]|>]] /@ bounds
+  ];
+iSyntheticSections[___] := {};
+
 iSplitSource[sourceCode_String] :=
   Module[{lines, publicEnd, publicCode, privateCode, sections, sectionStarts,
           sectionTitles, i, title},
     lines = StringSplit[sourceCode, "\n"];
     publicEnd = FirstPosition[lines,
       _String?(StringContainsQ[#, "Begin[\"`Private`\"]"] &),
-      {Length[lines]}, {1}][[1]];
+      {0}, {1}][[1]];
+    (* 補助モジュールは Begin["`CorePrivate`"] のように独自の private context 名を使う
+       (SourceVault_*.wl 全般)。"`Private`" 決め打ちだと private 部が丸ごと public 扱いになり、
+       セクション分割が効かないまま先頭 60000 字で切られていた (2026-08-21 fix)。 *)
+    If[publicEnd === 0,
+      publicEnd = FirstPosition[lines,
+        _String?(StringContainsQ[#, "Begin[\"`"] &),
+        {0}, {1}][[1]]];
+    If[publicEnd === 0, publicEnd = Length[lines]];
     publicCode = StringRiffle[lines[[;; Min[publicEnd, Length[lines]]]], "\n"];
     If[publicEnd >= Length[lines],
       Return[<|"public" -> publicCode, "sections" -> {},
@@ -21436,6 +21822,9 @@ iSplitSource[sourceCode_String] :=
         AppendTo[sections, <|"title" -> sectionTitles[[k]],
           "code" -> sCode, "chars" -> StringLength[sCode]|>]],
     {k, Length[sectionStarts]}];
+    (* 帯規約を使わないパッケージではここで sections が空になる。
+       そのままだと doc 生成プロンプトから実装が丸ごと落ちるので合成セクション化する。 *)
+    If[sections === {}, sections = iSyntheticSections[privateCode]];
     <|"public" -> publicCode, "sections" -> sections,
       "toc" -> StringRiffle[
         MapIndexed["[" <> ToString[#2[[1]]] <> "] " <> #1["title"] <>
@@ -21472,6 +21861,12 @@ iBuildChunkedSource[split_Association, docFile_String] :=
         Function[si, AnyTrue[kws,
           Function[kw, StringContainsQ[secs[[si]]["title"], kw, IgnoreCase -> True]]]]]
     ];
+    (* キーワードが 1 つも当たらない場合 ($iDocSectionKW は claudecode 自身の
+       セクション名に合わせた既定値なので、他パッケージでは普通に外れる) は、
+       セクション無しの痩せたプロンプトにせず、全セクションを下の予算内に入れる。
+       kws === {} (README 等の意図的な「セクション不要」) は従来通り空のまま (2026-08-21)。 *)
+    If[selIdx === {} && ListQ[kws] && kws =!= {} && Length[secs] > 0,
+      selIdx = Range[Length[secs]]];
     sel = secs[[selIdx]];
     total = StringLength[pub] + Total[#["chars"] & /@ sel];
     If[total > maxC && Length[sel] > 0,
@@ -21490,6 +21885,33 @@ iBuildChunkedSource[split_Association, docFile_String] :=
   ];
 
 (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:9806\:6b21\:751f\:6210\:3059\:308b\:518d\:5e30\:95a2\:6570 (retryCount \:4ed8\:304d) *)
+(* 既存 doc の分量ヒント + 再生成時の注意書き (2026-08-21)。
+   create 経路は既存 doc を材料にしないため、既存 10089 字の setup.md を
+   2881 字で作り直して iSafeWriteDoc の size regression (既存の 40% 未満) で
+   拒否され続ける事故が起きた。ゲートと同じ基準をプロンプト側にも伝える。 *)
+iDocLengthAndRetryNotice[destPath_String, retryCount_Integer] :=
+  Module[{txt, len, notice = ""},
+    If[FileExistsQ[destPath],
+      txt = Quiet @ Check[Import[destPath, "Text"], ""];
+      If[StringQ[txt] && StringLength[txt] > 200,
+        len = StringLength[txt];
+        notice = notice <>
+          "\n=== LENGTH REQUIREMENT ===\n" <>
+          "An existing version of this file is " <> ToString[len] <> " characters long.\n" <>
+          "Produce a document of comparable depth: at least " <> ToString[Ceiling[0.6 * len]] <>
+          " characters.\n" <>
+          "A much shorter document is REJECTED by the writer's size-regression guard " <>
+          "(< 40% of the existing size) and the whole generation is wasted.\n" <>
+          "Cover every public symbol and option visible in the source above; do not summarize the detail away.\n"]];
+    If[retryCount > 0,
+      notice = notice <>
+        "\nRETRY NOTICE: the previous attempt was rejected (too short, or cut off before finishing). This time:\n" <>
+        "- Output the COMPLETE document in ONE response, from the first line to the last.\n" <>
+        "- Do NOT use any tools - all the source you need is already included above.\n" <>
+        "- Make sure EVERY ``` code fence has a matching closing ```.\n"];
+    notice];
+iDocLengthAndRetryNotice[___] := "";
+
 iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     outDir_String, queue_List, idx_Integer, retryCount_Integer:0,
     splitCache_Association:<||>] :=
@@ -21498,10 +21920,26 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
     If[idx > Length[queue],
       (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:6c38\:7d9a\:5316 *)
       iSaveDocOptions[packageName];
+      (* 再試行析尽でスキップした doc があれば完了と言い切らない (2026-08-21) *)
+      Module[{skipped = Lookup[$iDocGenSkipped, packageName, {}]},
+        If[skipped =!= {},
+          nbPrint[nb, Style[
+            "\:26a0 次の doc は再試行析尽で未生成のままです: " <> StringRiffle[skipped, ", "] <>
+            "\nClaudeCreateDocumentation[\"" <> packageName <> "\"] で未生成分のみ再試行できます。",
+            Bold, FontColor -> RGBColor[0.8, 0.4, 0]]]];
+        $iDocGenSkipped = KeyDrop[$iDocGenSkipped, packageName]];
       nbPrint[nb, "\:2705 \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306e\:751f\:6210\:304c\:5b8c\:4e86\:3057\:307e\:3057\:305f\:3002\n\:51fa\:529b\:5148: " <> outDir];
       Return[]];
     spec = queue[[idx]];
     {outFile, docTitle, promptTemplate} = spec;
+    (* 再試行状態を iSafeWriteDoc と共有する (2026-08-21)。
+       これが無いと create 経路では何度リトライしても 40% ゲートのままなので、
+       巨大化した既存 doc を目標サイズへ縮められず ratchet して永遠に失敗する。
+       key は iSafeWriteDoc 側と同じ FileNameTake 基準 ("examples/example.md" -> "example.md")。 *)
+    Module[{rkey0 = packageName <> "|" <> FileNameTake[outFile]},
+      If[retryCount > 0,
+        $iDocRetryCount[rkey0] = retryCount,
+        $iDocRetryCount = KeyDrop[$iDocRetryCount, rkey0]]];
     subDir = DirectoryName[FileNameJoin[{outDir, outFile}]];
     If[!DirectoryQ[subDir],
       CreateDirectory[subDir, CreateIntermediateDirectories -> True]];
@@ -21554,6 +21992,9 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       "Do NOT start the output with a horizontal rule (---) or a YAML front matter block;\n" <>
       "the first line must be a Markdown heading.\n"
     ];
+    (* 既存 doc の分量要件と再生成時の注意を末尾 (最も見られる位置) に付ける (2026-08-21) *)
+    fullPrompt = fullPrompt <>
+      iDocLengthAndRetryNotice[FileNameJoin[{outDir, outFile}], retryCount];
     (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:7528\:30e2\:30c7\:30eb\:3067\:30af\:30a8\:30ea\:5b9f\:884c\:3002
        $ClaudeModel \:306f\:30d0\:30c3\:30c1\:30d5\:30a1\:30a4\:30eb\:751f\:6210\:6642\:306b\:306e\:307f\:53c2\:7167\:3055\:308c\:308b\:305f\:3081\:3001
        iClaudeQueryAsyncWithProgress \:304b\:3089\:623b\:3063\:305f\:76f4\:5f8c\:306b\:5fa9\:5143\:3059\:308b\:3002
@@ -21572,6 +22013,7 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
                \:3053\:308c\:3089\:3092\:30d0\:30a4\:30d1\:30b9\:3057\:3066\:304a\:308a\:3001\:5207\:308a\:8a70\:3081\:305f README \:304c\:305d\:306e\:307e\:307e\:66f8\:304d\:8fbc\:307e\:308c\:3066\:3044\:305f\:3002 *)
             writeResult = iSafeWriteDoc[destPath, response, pn];
             If[writeResult =!= $Failed,
+              $iDocRetryCount = KeyDrop[$iDocRetryCount, pn <> "|" <> FileNameTake[of]];
               nbPrint[nb2, "  \[Checkmark] " <> dt <> " \[RightArrow] " <> of];
               iGenDocNext[sc, pn, nb2, od, q, i + 1, 0, sp],
               (* \:7121\:52b9\:306a\:5fdc\:7b54\:307e\:305f\:306f\:54c1\:8cea\:30b2\:30fc\:30c8\:62d2\:5426: \:30ea\:30c8\:30e9\:30a4\:307e\:305f\:306f\:4e2d\:65ad\:3002
@@ -21592,13 +22034,17 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
                     (iGenDocNext[sc, pn, nb2, od, q, i, rc + 1, sp];
                      Quiet[RemoveScheduledTask[taskObj]]),
                     delaySec]],
+                (* 再試行析尽 (2026-08-21): ここでチェーンを止めると、持続的に失敗する
+                   1 ファイル (例: 巨大化した setup.md) が残り全部の生成を永遠にブロックする。
+                   update 経路 (iUpdateDocNext) と同じく skip-and-continue にする。 *)
+                $iDocRetryCount = KeyDrop[$iDocRetryCount, pn <> "|" <> FileNameTake[of]];
+                $iDocGenSkipped[pn] = DeleteDuplicates[Append[Lookup[$iDocGenSkipped, pn, {}], of]];
                 nbPrint[nb2, Style[
-                  "\:26a0\:fe0f " <> ToString[$ClaudeDocMaxRetries] <>
-                  " \:56de\:30ea\:30c8\:30e9\:30a4\:5931\:6557\:3002\n\:672a\:751f\:6210: " <>
-                  StringRiffle[q[[i ;; ]][[All, 1]], ", "] <> "\n" <>
-                  "ClaudeCreateDocumentation[\"" <> pn <>
-                  "\"] \:3067\:672a\:751f\:6210\:5206\:306e\:307f\:7d9a\:884c\:53ef\:80fd\:3002",
-                  Bold, FontColor -> RGBColor[0.8, 0, 0]]]
+                  "\:26d4 [" <> ToString[i] <> "/" <> ToString[Length[q]] <> "] " <> of <>
+                  " をスキップ (" <> ToString[$ClaudeDocMaxRetries] <>
+                  " 回リトライ失敗)。ファイルは変更せず次のファイルへ進みます。",
+                  FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+                iGenDocNext[sc, pn, nb2, od, q, i + 1, 0, sp]
               ]
             ]
           ]
@@ -21784,8 +22230,11 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
         ]
       ]
     ];
+    iWarnConflictedCopies[nb, packageName, outDir];
     nbPrint[nb, "\:751f\:6210\:5bfe\:8c61: " <> ToString[Length[filteredQueue]] <> " \:30d5\:30a1\:30a4\:30eb\n"];
 
+    (* 前回の中断で残ったスキップ記録をクリアしてからチェーンを始める (2026-08-21) *)
+    $iDocGenSkipped = KeyDrop[$iDocGenSkipped, packageName];
     iGenDocNext[sourceCode, packageName, nb, outDir, filteredQueue, 1, 0, <||>]
   ]]);
 
@@ -21805,7 +22254,7 @@ iDocsAvailableAndFresh[packageName_String] :=
     pkgDir  = Global`$packageDirectory;
     docsDir = iPackageDocsDir[packageName];
     If[!StringQ[docsDir] || !DirectoryQ[docsDir], Return[False]];
-    docFiles = FileNames["*.md", docsDir, Infinity];
+    docFiles = iDropConflictedCopies[FileNames["*.md", docsDir, Infinity]];
     If[Length[docFiles] === 0, Return[False]];
     (* \:30bd\:30fc\:30b9\:306e\:6700\:7d42\:66f4\:65b0\:65e5\:6642 *)
     srcFile = Which[
@@ -22581,6 +23030,9 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
           iExpandApiInTargetFiles[vtf, packageName, docsDir]], Module]];
       (* Automatic: \:5168\:30d5\:30a1\:30a4\:30eb\:3092\:691c\:51fa *)
       rootDocs = FileNameTake /@ FileNames["*.md", docsDir];
+      (* 同期競合コピー (api_mcp (MACHINE の競合コピー 2026-08-13).md 等) は
+         ドキュメントではなく同期事故の産物なので常に除外 (2026-08-21)。 *)
+      rootDocs = iDropConflictedCopies[rootDocs];
       (* 2026-07-08 fix: \:540c\:540d\:9664\:5916\:306e\:6bd4\:8f03\:76f8\:624b (rootNames) \:306f\:30d5\:30a3\:30eb\:30bf\:524d\:306e
          root \:4e00\:89a7\:3092\:4f7f\:3046\:3002\:65e7\:5b9f\:88c5\:306f\:30d5\:30a3\:30eb\:30bf\:5f8c\:306b\:53d6\:3063\:3066\:3044\:305f\:305f\:3081\:3001
          \:300c\:6700\:65b0\:3067\:9664\:5916\:3055\:308c\:305f root \:30d5\:30a1\:30a4\:30eb\:300d\:306e\:30b5\:30d6\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:91cd\:8907\:307b\:3069
@@ -22595,6 +23047,7 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
       subDocs = Module[{subFiles, nested},
         subFiles = FileNames["*.md", docsDir, 2];
         subFiles = Select[subFiles, DirectoryName[#] =!= docsDir &];
+        subFiles = iDropConflictedCopies[subFiles];
         nested = Select[subFiles,
           FileNameTake[DirectoryName[#], -1] === "docs" &];
         If[nested =!= {},
@@ -22655,6 +23108,7 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     If[baseline =!= "Github" && StringQ[prevBackup],
       nbPrint[nb, iL["\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Previous backup: "] <> prevBackup]];
     nbPrint[nb, "\:66f4\:65b0\:5bfe\:8c61: " <> StringRiffle[allDocs, ", "]];
+    iWarnConflictedCopies[nb, packageName, docsDir];
     nbPrint[nb, "\:30bd\:30fc\:30b9\:5dee\:5206: " <> StringTake[diffText, UpTo[200]] <> "\n"];
     If[StringQ[designContext] && designContext =!= "",
       nbPrint[nb, "design 新規内容: " <> ToString[
@@ -22983,6 +23437,8 @@ iBuildDocPrompt[sourceCode_String, packageName_String, docsDir_String, docFile_S
             Select[FileNames["*.md", docsDir, 2],
               (DirectoryName[#] === docsDir ||
                FileNameTake[DirectoryName[#], -1] =!= "docs") &]];
+          (* 同期競合コピーも README 素材にしない (2026-08-21) *)
+          siblingDocs = iDropConflictedCopies[siblingDocs];
           siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
           If[Length[siblingDocs] > 0,
             siblingContent = "\n=== OTHER DOCUMENTATION FILES (use as source for README overview) ===\n" <>
@@ -23230,6 +23686,8 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
             Select[FileNames["*.md", docsDir, 2],
               (DirectoryName[#] === docsDir ||
                FileNameTake[DirectoryName[#], -1] =!= "docs") &]];
+          (* 同期競合コピーも README 素材にしない (2026-08-21) *)
+          siblingDocs = iDropConflictedCopies[siblingDocs];
           siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
           If[Length[siblingDocs] > 0,
             siblingContent = "\n=== OTHER DOCUMENTATION FILES (use as source for README overview) ===\n" <>
@@ -27032,6 +27490,57 @@ iRunSourceVaultSpecFromCells[] := Module[
    ============================================================ *)
 
 If[! ValueQ[$iOrchWolframScript], $iOrchWolframScript = "wolframscript"];
+
+(* ============================================================
+   背景カーネルは init.m を読まない「素のカーネル」で起動する (2026-08-20)。
+
+   真因: init.m -> localInit.wl -> NotebookExtensions.wl が
+   Needs["RickHennigan`MCPServer`"] を実行し、ZeroMQLink とその
+   libzeromqlink.dll を全カーネルにロードする (実測: -noinit なら
+   ZeroMQLink 未ロード・socket 0、init.m 経由だと ZMQ_PAIR socket が 1 本開く)。
+   この DLL が 0xC0000005 (access violation) で落ちるため、背景ドライバは
+   起動直後にクラッシュしていた (Windows イベントログ: wolfram.exe /
+   WolframKernel.exe / math.exe が libzeromqlink.dll で 2026-08-07 以降
+   断続的に APPCRASH。ライセンス席とは無関係)。
+
+   背景ドライバ (spec-review / spec-impl / session worker) は必要な .wl を
+   自分で Get するので init.m は不要 (実測: -noinit で 3/3 ロード成功)。
+   $ClaudePristineBackgroundKernel = False で従来の wolframscript に戻せる。
+   ============================================================ *)
+If[! ValueQ[$ClaudePristineBackgroundKernel], $ClaudePristineBackgroundKernel = True];
+
+(* init.m を読まないカーネル実体 (wolframscript は -noinit でも init.m を読む) *)
+iPristineKernelPath[] := iPristineKernelPath[] = Module[{cands},
+  cands = {
+    FileNameJoin[{$InstallationDirectory, "SystemFiles", "Kernel", "Binaries",
+      $SystemID, "wolfram.exe"}],
+    FileNameJoin[{$InstallationDirectory, "wolfram.exe"}],
+    FileNameJoin[{$InstallationDirectory, "SystemFiles", "Kernel", "Binaries",
+      $SystemID, "wolfram"}],
+    FileNameJoin[{$InstallationDirectory, "wolfram"}]};
+  SelectFirst[cands, StringQ[#] && FileExistsQ[#] &, None]];
+
+(* 背景スクリプト起動コマンド。
+   素のカーネルは `-script file arg` の arg を $ScriptCommandLine に入れない
+   (実測: 空リストになる) ので、config パスを埋め込んだ bootstrap を書いて
+   それを実行する。ドライバ側は Global`$ClaudeDriverConfigFile を先に見る。
+   素のカーネルが見つからなければ従来の wolframscript 経路にそのまま落ちる。 *)
+iBackgroundKernelCommand[scriptFile_String, cfgFile_String] :=
+  Module[{k, boot},
+    k = If[TrueQ[$ClaudePristineBackgroundKernel], iPristineKernelPath[], None];
+    If[! StringQ[k], Return[{$iOrchWolframScript, "-file", scriptFile, cfgFile}]];
+    boot = FileNameJoin[{DirectoryName[cfgFile], "run.wls"}];
+    If[! TrueQ[Quiet @ Check[
+        iOrchWriteUTF8[boot,
+          "Global`$ClaudeDriverConfigFile = " <> ToString[cfgFile, InputForm] <> ";\n" <>
+          "Block[{$CharacterEncoding = \"UTF-8\"}, Get[" <>
+            ToString[scriptFile, InputForm] <> "]];\n"]; FileExistsQ[boot], False]],
+      Return[{$iOrchWolframScript, "-file", scriptFile, cfgFile}]];
+    {k, "-noinit", "-script", boot}];
+iBackgroundKernelCommand[scriptFile_String] :=
+  With[{k = If[TrueQ[$ClaudePristineBackgroundKernel], iPristineKernelPath[], None]},
+    If[StringQ[k], {k, "-noinit", "-script", scriptFile},
+      {$iOrchWolframScript, "-file", scriptFile}]];
 If[! ValueQ[$iOrchConsensusDriver],
   $iOrchConsensusDriver = FileNameJoin[{Global`$packageDirectory,
     "SourceVault_workflows", "spec-review", "palette_driver.wls"}]];
@@ -27068,7 +27577,7 @@ ClaudeOpenSourceVaultURI[uri_String] := Module[{ref, rec, text, findings, metaRo
   metaRows = Select[
     Join[{"URI" -> uri},
       (# -> Lookup[rec, #, ""]) & /@ {"Project", "Role", "Round", "Verdict", "CreatedBy",
-        "RequirementsRef", "ParentSpecRef", "TargetSpecRef"}],
+        "GeneratedBy", "RequirementsRef", "ParentSpecRef", "TargetSpecRef"}],
     (Last[#] =!= "" && ! MissingQ[Last[#]]) &];
   CreateDocument[
     Flatten[{
@@ -27337,12 +27846,13 @@ iRunOrchConsensusFromCells[] := Module[
   $iJobActiveNb = nb;
   NBAccess`NBWriteCell[nb, Cell[
     "SourceVault consensus drafting started (project: " <> project <> ", target v" <> ToString[version] <>
-    "). Codex<->Claude review loop is running in the background; the result will be appended here.",
+    "). draft: " <> iOrchModelLabel[advisary] <> " / review: " <> iOrchModelLabel[claude] <>
+    ". The draft<->review loop is running in the background; the result will be appended here.",
     "Text", Sequence @@ $specCellOpts, CellTags -> {"sourcevault-consensus-pending"}]];
   $iJobActiveNb = None;
   iSafeSetWindowStatus[nb, "[spec] starting..."];
 
-  proc = StartProcess[{$iOrchWolframScript, "-file", $iOrchConsensusDriver, cfgFile}];
+  proc = StartProcess[iBackgroundKernelCommand[$iOrchConsensusDriver, cfgFile]];
   jobId = "orchcons-" <> StringReplace[CreateUUID[], "-" -> ""];
   $iOrchConsensusJobs[jobId] = <|"Nb" -> nb, "ResultFile" -> resultFile, "SpecOut" -> specOut,
     "ProgressFile" -> progressFile,
@@ -27373,9 +27883,37 @@ iWorkflowNotebookSavedQ[nb_] := Module[{path, modified},
   modified = TrueQ[Quiet @ Check[CurrentValue[nb, "ModifiedInMemory"], False]];
   ! modified];
 
+(* {provider, model} -> "provider:model" 表示ラベル (workflow 側 iModelLabel と同形) *)
+iOrchModelLabel[model_] := Which[
+  StringQ[model] && model =!= "", model,
+  ListQ[model] && Length[model] >= 1 && StringQ[model[[1]]],
+    model[[1]] <> If[Length[model] >= 2 && StringQ[model[[2]]] && model[[2]] =!= "" &&
+      model[[2]] =!= "Automatic", ":" <> model[[2]], ""],
+  True, "(unset)"];
+
+iOrchCodexModelQ[model_] := iCodexProviderQ[Which[
+  ListQ[model] && Length[model] >= 1 && StringQ[model[[1]]], model[[1]],
+  StringQ[model], model, True, ""]];
+
+(* 実行前に「どの役をどのモデルが走るか」を出す (2026-08-20)。
+   $ClaudeAdvisaryModel がカーネル再起動でパッケージ既定 (codex) に戻っていても
+   押す前に気づける (900s の codex タイムアウトを踏む前に止められる)。 *)
+iRoleModelRows[roles_List] /; roles =!= {} := Column[
+  Prepend[
+    Function[r, Row[{
+      Style[First[r] <> ": ", FontSize -> 11],
+      Style[iOrchModelLabel[Last[r]], FontSize -> 11, FontFamily -> "Courier",
+        FontColor -> If[iOrchCodexModelQ[Last[r]],
+          Darker[Orange], RGBColor[0.1, 0.35, 0.15]]]}]] /@ roles,
+    Style[iL["実行するモデル", "Models that will run"], Bold, FontSize -> 11]],
+  Alignment -> Left, Spacings -> 0.3];
+iRoleModelRows[_] := Nothing;
+
 (* Proceed/Cancel 確認ダイアログ。未保存なら保存を奨励し「保存して続行」も出す。
+   roles: {{役割名, model}, ...} を渡すと実行モデルを併記する。
    返り値: "Proceed" | "SaveProceed" | "Cancel"。 *)
-iConfirmWorkflowRun[nb_, label_String] := Module[{savedQ, res},
+iConfirmWorkflowRun[nb_, label_String] := iConfirmWorkflowRun[nb, label, {}];
+iConfirmWorkflowRun[nb_, label_String, roles_List] := Module[{savedQ, res},
   savedQ = iWorkflowNotebookSavedQ[nb];
   res = DialogInput[
     Pane[
@@ -27388,6 +27926,7 @@ iConfirmWorkflowRun[nb_, label_String] := Module[{savedQ, res},
             "\[WarningSign] The notebook is unsaved. Saving lets the generated workflow\nrecord a link back to this notebook."],
             Darker[Orange], FontSize -> 11, TextAlignment -> Center],
           Nothing],
+        If[roles =!= {}, {Spacer[10], iRoleModelRows[roles]}, Nothing],
         Spacer[14],
         Row[Flatten[{
           If[! savedQ,
@@ -27405,10 +27944,19 @@ iConfirmWorkflowRun[nb_, label_String] := Module[{savedQ, res},
 
 (* palette spec button: consensus (SourceVault+ClaudeOrchestrator) > single-model (SourceVault) > legacy。
    押し間違え防止に Proceed/Cancel ガードを前置。 *)
+iSpecRoleModels[nb_] := Module[{advisary, claude},
+  claude = iSpecUltraOrDefaultModel[nb];
+  advisary = If[ValueQ[$ClaudeAdvisaryModel], $ClaudeAdvisaryModel, {"chatgptcodex", "Automatic"}];
+  If[iSVConsensusAvailableQ[],
+    {{iL["\:8d77\:8349 ($ClaudeAdvisaryModel)", "draft ($ClaudeAdvisaryModel)"], advisary},
+     {iL["\:30ec\:30d3\:30e5\:30fc ($ClaudeModel)", "review ($ClaudeModel)"], claude}},
+    {{iL["\:4ed5\:69d8 ($ClaudeModel)", "spec ($ClaudeModel)"], claude}}]];
+
 iRunClaudeSpecFromCells[] := Module[{nb, choice},
   nb = iUserNotebook[];
   If[Head[nb] =!= NotebookObject, Return[$Failed]];
-  choice = iConfirmWorkflowRun[nb, iL["\:4ed5\:69d8\:751f\:6210", "Spec generation"]];
+  choice = iConfirmWorkflowRun[nb, iL["\:4ed5\:69d8\:751f\:6210", "Spec generation"],
+    iSpecRoleModels[nb]];
   If[choice === "Cancel", Return[$Failed]];
   If[choice === "SaveProceed", Quiet @ NotebookSave[nb]];
   Which[
@@ -28186,7 +28734,54 @@ iOrchWolframProcessList[] := If[! TrueQ[$iOrchListProcessesOnBlock], "",
    ライセンス席数 (独立プロセス上限) 枯渇による起動失敗はあらゆる背景起動で
    起き得るため、「kill して席を空けてから再実行」の対処指示と現在の Wolfram
    プロセス一覧を必ず併記する (ユーザー明示指示 2026-08-03)。 *)
-iSpecImplDeadProcResult[job_] := Module[{p = Lookup[job, "Proc", None], code, diag, procs},
+(* 終了コード/出力から死因を分類する。以前は何であれ「ライセンス席数の枯渇」と
+   決めつけていたため、実際にはカーネルのクラッシュ (0xC0000005) でも席の話を
+   読まされ、原因究明が遠回りになった (2026-08-20 実測: 真因は init.m 経由で
+   全カーネルに入る ZeroMQLink の libzeromqlink.dll が access violation)。 *)
+$iCrashExitCodes = {-1073741819, 3221225477, -1073740791, 3221226505, -1073741571};
+
+iBackgroundDeathKind[code_, out_] := Which[
+  MemberQ[$iCrashExitCodes, code], "Crash",
+  code === 40 || (StringQ[out] && StringContainsQ[out,
+    "No valid password found" | "not activated" | "license-related problem",
+    IgnoreCase -> True]), "License",
+  StringQ[out] && StringContainsQ[out, "The product exited for an unknown reason"], "Crash",
+  True, "Unknown"];
+
+iBackgroundDeathAdvice[kind_String, code_] := Which[
+  kind === "Crash",
+    iL["【対処】背景カーネルが異常終了しました (exit " <> ToString[code] <>
+       " = access violation)。ライセンス席の問題ではありません。\n" <>
+       "この機械では init.m (localInit.wl -> NotebookExtensions.wl の\n" <>
+       "Needs[\"RickHennigan`MCPServer`\"]) が全カーネルに ZeroMQLink を読み込み、\n" <>
+       "その libzeromqlink.dll が断続的に落ちます。背景ドライバは init.m を読まない\n" <>
+       "素のカーネルで起動する設定 ($ClaudePristineBackgroundKernel = True) に\n" <>
+       "なっているか確認し、もう一度実行してください。\n" <>
+       "確認: イベントビューアー > Windows ログ > Application の「アプリケーション エラー」",
+       "[Action] The background kernel crashed (exit " <> ToString[code] <>
+       " = access violation). This is NOT a license problem. On this machine init.m " <>
+       "pulls ZeroMQLink into every kernel (localInit.wl -> NotebookExtensions.wl -> " <>
+       "Needs[\"RickHennigan`MCPServer`\"]) and libzeromqlink.dll faults intermittently. " <>
+       "Make sure background drivers start from a pristine kernel " <>
+       "($ClaudePristineBackgroundKernel = True) and retry."],
+  kind === "License",
+    iL["【対処】背景カーネルが起動できませんでした。ライセンス席数 (独立プロセス上限) の" <>
+       "枯渇の可能性が高いです (wolfram.exe の「未activation」表示は席数枯渇でも出ます)。" <>
+       "残留している WolframKernel.exe / wolframscript.exe (孤児カーネル) を kill して" <>
+       "席を空けてから、もう一度実行してください。",
+       "[Action] The background kernel could not start. Most likely the Wolfram license " <>
+       "seat limit (independent process cap) is exhausted (the wolfram.exe 'not activated' " <>
+       "message also appears on seat exhaustion). Kill leftover WolframKernel.exe / " <>
+       "wolframscript.exe (orphan kernels) to free a seat, then retry."],
+  True,
+    iL["【対処】背景ドライバが結果を書かずに終了しました (exit " <> ToString[code] <>
+       ")。上の driver output を確認してください。席枯渇なら孤児カーネルを kill、" <>
+       "クラッシュなら再実行で解消することがあります。",
+       "[Action] The background driver exited without writing a result (exit " <>
+       ToString[code] <> "). Check the driver output above. If seats are exhausted kill " <>
+       "orphan kernels; if it crashed, a retry often succeeds."]];
+
+iSpecImplDeadProcResult[job_] := Module[{p = Lookup[job, "Proc", None], code, diag, procs, kind},
   code = Quiet @ Check[ProcessInformation[p, "ExitCode"], "?"];
   diag = Quiet @ Check[
     TimeConstrained[
@@ -28199,21 +28794,16 @@ iSpecImplDeadProcResult[job_] := Module[{p = Lookup[job, "Proc", None], code, di
       3, ""],
     ""];
   procs = iOrchWolframProcessList[];
-  <|"Status" -> "Error",
+  kind = iBackgroundDeathKind[code, diag];
+  <|"Status" -> "Error", "DeathKind" -> kind, "ExitCode" -> code,
     "Error" -> ("the background driver exited without producing a result (exit code " <>
-      ToString[code] <> "). The background kernel likely failed to start -- e.g. a Wolfram " <>
-      "license / kernel seat was unavailable (are parallel kernels running?) -- or it crashed " <>
-      "at launch." <>
+      ToString[code] <> "; classified as " <> kind <> ")." <>
+      Switch[kind,
+        "Crash", " The background kernel CRASHED (access violation) -- this is not a license issue.",
+        "License", " The background kernel could not obtain a license seat.",
+        _, " The background kernel exited before writing its result."] <>
       If[StringQ[diag] && diag =!= "", "\n--- driver output ---\n" <> StringTake[diag, UpTo[800]], ""] <>
-      "\n" <> iL[
-        "【対処】背景カーネルが起動できませんでした。ライセンス席数 (独立プロセス上限) の" <>
-        "枯渇の可能性が高いです (wolfram.exe の「未activation」表示は席数枯渇でも出ます)。" <>
-        "残留している WolframKernel.exe / wolframscript.exe (孤児カーネル) を kill して" <>
-        "席を空けてから、もう一度実行してください。",
-        "[Action] The background kernel could not start. Most likely the Wolfram license " <>
-        "seat limit (independent process cap) is exhausted (the wolfram.exe 'not activated' " <>
-        "message also appears on seat exhaustion). Kill leftover WolframKernel.exe / " <>
-        "wolframscript.exe (orphan kernels) to free a seat, then retry."] <>
+      "\n" <> iBackgroundDeathAdvice[kind, code] <>
       If[StringQ[procs] && procs =!= "",
         "\n--- Wolfram processes now (incl. this FE) ---\n" <> procs,
         "\n" <> iL[
@@ -28533,7 +29123,7 @@ CreateImplementationWorkflow[name_String, approvedSpec_String, opts:OptionsPatte
         "Slug" -> slug|>]];
   If[! StringQ[jobId],
     (* legacy 経路 (session 不使用 / 起動失敗 fallback) *)
-    proc = StartProcess[{$iOrchWolframScript, "-file", $iSpecImplDriver, cfgFile}];
+    proc = StartProcess[iBackgroundKernelCommand[$iSpecImplDriver, cfgFile]];
     jobId = "specimpl-" <> StringReplace[CreateUUID[], "-" -> ""];
     $iSpecImplJobs[jobId] = <|"Nb" -> nb, "Slug" -> slug, "Display" -> name,
       "ResultFile" -> resultFile, "ProgressFile" -> progressFile, "TargetDir" -> targetDir,
@@ -28571,7 +29161,10 @@ iRunSpecImplFromCells[] := Module[{nb, project, approved, specText, name, notes,
     MessageDialog[iL[
       "SourceVault \:30ef\:30fc\:30af\:30d5\:30ed\:30fc\:6a5f\:80fd\:304c\:5229\:7528\:3067\:304d\:307e\:305b\:3093\:3002",
       "SourceVault workflow support is not available."]]; Return[$Failed]];
-  choice = iConfirmWorkflowRun[nb, iL["\:4ed5\:69d8\:5b9f\:88c5", "Spec implementation"]];
+  choice = iConfirmWorkflowRun[nb, iL["\:4ed5\:69d8\:5b9f\:88c5", "Spec implementation"],
+    {{iL["\:5b9f\:88c5 ($ClaudeModel)", "implement ($ClaudeModel)"], iSpecUltraOrDefaultModel[nb]},
+     {iL["\:691c\:8a3c ($ClaudeAdvisaryModel)", "verify ($ClaudeAdvisaryModel)"],
+      If[ValueQ[$ClaudeAdvisaryModel], $ClaudeAdvisaryModel, {"chatgptcodex", "Automatic"}]}}];
   If[choice === "Cancel", Return[$Failed]];
   If[choice === "SaveProceed", Quiet @ NotebookSave[nb]];
   project = iSVSpecProjectId[nb];
@@ -29338,6 +29931,28 @@ ShowClaudePalette[] := (
                  "Refresh LMStudio loaded-model list"]],
             Nothing]
         }], SynchronousUpdating -> False],
+      (* ---- 標準モデルの Effort (2026-08-16)。モデル行の直下に置く。
+         claudecode: Claude Code CLI の --effort。
+         lmstudio:   /api/v1/chat の reasoning (Off = thinking 無効)。 ---- *)
+      Dynamic[
+        Tooltip[
+          Button[
+            Style[iL["\:30a8\:30d5\:30a9\:30fc\:30c8: ", "Effort: "] <>
+              iPaletteEffortLabel[$iPaletteEffort],
+              9, Bold, GrayLevel[0.2]],
+            (If[$iPaletteProvider === "lmstudio" || $iPaletteModel =!= "sonnet",
+              $iPaletteEffort =
+                iPaletteNextEffort[$iPaletteProvider, $iPaletteEffort];
+              iPaletteSyncLMStudioEffort[];
+              iSavePaletteSettings[InputNotebook[]]]),
+            Appearance -> "Frameless"],
+          Dynamic[
+            If[$iPaletteProvider === "lmstudio",
+              iL["\:6a19\:6e96\:30e2\:30c7\:30eb (LM Studio) \:306e reasoning\:3002Off/Low/Medium/High/Max \:3092\:5faa\:74b0\:3002Off = thinking \:7121\:52b9\:3002",
+                 "Reasoning for the standard LM Studio model. Cycles Off/Low/Medium/High/Max; Off disables thinking."],
+              iL["\:6a19\:6e96\:30e2\:30c7\:30eb\:306e\:30a8\:30d5\:30a9\:30fc\:30c8 (Claude Code CLI \:306e --effort)\:3002",
+                 "Effort for the standard model (Claude Code CLI --effort)."]]]],
+        SynchronousUpdating -> False],
       (* ---- $ClaudePrivateModel (\:79d8\:5bc6\:30c7\:30fc\:30bf\:51e6\:7406\:7528)\:3002
          PL 1.0 = \:30ed\:30fc\:30ab\:30eb\:5b9f\:884c\:30d7\:30ed\:30d0\:30a4\:30c0\:306e\:307f\:5faa\:74b0\:53ef\:3002
          2 \:884c\:3092 1 \:3064\:306e\:8584\:8d64\:30d6\:30ed\:30c3\:30af\:306b\:307e\:3068\:3081\:3001\:30e2\:30c7\:30eb\:540d\:306f
@@ -29392,7 +30007,20 @@ ShowClaudePalette[] := (
                     Appearance -> "Frameless",
                     ImageSize -> {14, 12},
                     FrameMargins -> {{2, 0}, {0, 0}}],
-                  Nothing]}]},
+                  Nothing]}],
+              (* ---- 秘密モデルの Effort (2026-08-16)。秘密モデル行の直下。
+                 lmstudio なので Off/Low/Medium/High/Max の 5 段。
+                 Off = thinking 無効。既定 Medium (thinking 有効)。 ---- *)
+              Button[
+                Style["E: " <> iPaletteEffortLabel[$iPalettePrivateEffort],
+                  9, Bold, RGBColor[0.55, 0.15, 0.15]],
+                ($iPalettePrivateEffort =
+                   iPaletteNextEffort[$iPalettePrivateProvider,
+                     $iPalettePrivateEffort];
+                 iPaletteSyncLMStudioEffort[];
+                 iSavePaletteSettings[InputNotebook[]]),
+                Appearance -> "Frameless",
+                FrameMargins -> {{0, 0}, {0, 0}}]},
               (* \:6a19\:6e96\:30e2\:30c7\:30eb\:8868\:793a\:3068\:63c3\:3048\:3066\:4e2d\:592e\:63c3\:3048\:3001\:4e0a\:4e0b\:306e\:4f59\:767d\:3092\:8a70\:3081\:308b
                  (ContentPadding -> False \:304c\:306a\:3044\:3068 Framed \:304c 1 \:884c\:5206\:306e\:9ad8\:3055\:3092\:78ba\:4fdd\:3057\:3066\:3057\:307e\:3046) *)
               Alignment -> Center, Spacings -> 0],
@@ -29406,18 +30034,10 @@ ShowClaudePalette[] := (
             "Private-data model $ClaudePrivateModel (privacy level 1.0 local only). Current: "] <>
             If[!StringQ[$iPalettePrivateModelName] ||
                 $iPalettePrivateModelName === "",
-              iL["\:672a\:8a2d\:5b9a", "unset"], $iPalettePrivateModelName]]],
+              iL["\:672a\:8a2d\:5b9a", "unset"], $iPalettePrivateModelName] <>
+            iL["\n E: \:79d8\:5bc6\:30e2\:30c7\:30eb\:306e reasoning\:3002Off/Low/Medium/High/Max\:3002Off = thinking \:7121\:52b9 (\:65e2\:5b9a Medium)\:3002",
+               "\n E: reasoning for the private model. Off/Low/Medium/High/Max; Off disables thinking (default Medium)."]]],
         SynchronousUpdating -> False],
-      Dynamic[
-        Button[
-          Style[iL["\:30a8\:30d5\:30a9\:30fc\:30c8: ", "Effort: "] <>
-            Switch[$iPaletteEffort, "low", "Low", "medium", "Medium", "high", "High", "max", "Max", _, "Medium"],
-            9, Bold, GrayLevel[0.2]],
-          (If[$iPaletteModel =!= "sonnet",
-            $iPaletteEffort = Switch[$iPaletteEffort,
-              "low", "medium", "medium", "high", "high", "max", "max", "low", _, "medium"];
-            iSavePaletteSettings[InputNotebook[]]]),
-          Appearance -> "Frameless"], SynchronousUpdating -> False],
       Dynamic[
         Button[
           (* Stage 9 P1.5: \:8868\:793a\:6587\:5b57\:5217\:3092\:8a00\:8a9e\:975e\:4f9d\:5b58\:306e\:82f1\:5358\:8a9e\:306b\:7d71\:4e00 (Cloud \:30d1\:30ec\:30c3\:30c8\:3068\:540c\:65b9\:91dd)\:3002
@@ -29567,7 +30187,8 @@ ShowClaudePalette[] := (
          \:30d1\:30ec\:30c3\:30c8\:3078\:306e\:5e38\:6642\:8868\:793a\:306f\:4e0d\:8981\:3002 *)
 
     }, Alignment -> Center, Spacings -> 0],
-    TrackedSymbols :> {$iPaletteModel, $iPaletteEffort, $iPaletteFallback, $iPaletteUpdateApiMd},
+    TrackedSymbols :> {$iPaletteModel, $iPaletteEffort, $iPalettePrivateEffort,
+      $iPaletteFallback, $iPaletteUpdateApiMd},
     (* 2026-06-12 (freeze fix 3): パレットは常時表示のため、同期 Dynamic だと
        カーネルが長時間評価 (承認済み提案コードの同期実行等) で占有されている間、
        FE が再描画のたびに Dynamic 応答を待って UI スレッドごとブロックし
@@ -32594,7 +33215,7 @@ iILaunchChunkAsync[chunk_Association, prompt_String,
           If[!StringQ[apiKey], Return[$Failed]];
           apiURL = Which[
             ToLowerCase[provider] === "lmstudio",
-              iEnsureChatCompletionsPath["http://localhost:1234"],
+              iEnsureChatCompletionsPath[iLMStudioDefaultBaseURL[]],
             True,
               "https://api.anthropic.com/v1/messages"];
           prepared = iPrepareAnthropicPS1[apiKey, mdl, prompt, apiURL,
@@ -35298,7 +35919,7 @@ iClaudeProcessFileLaunchNodeA[prompt_String, provider_String,
     If[!StringQ[apiKey], Return[None]];
     url = Which[
       ToLowerCase[provider] === "lmstudio",
-        iEnsureChatCompletionsPath[If[customURL =!= "", customURL, "http://localhost:1234"]],
+        iEnsureChatCompletionsPath[If[customURL =!= "", customURL, iLMStudioDefaultBaseURL[]]],
       customURL =!= "", customURL,
       True, "https://api.anthropic.com/v1/messages"];
     prepared = iPrepareAnthropicPS1[apiKey, model, prompt, url,
@@ -35563,7 +36184,7 @@ NBFileTranslate[inputPath_String, outputPath_String,
                   Which[
                     ToLowerCase[provider] === "lmstudio",
                       iEnsureChatCompletionsPath[
-                        If[customURL =!= "", customURL, "http://localhost:1234"]],
+                        If[customURL =!= "", customURL, iLMStudioDefaultBaseURL[]]],
                     customURL =!= "", customURL,
                     True, "https://api.anthropic.com/v1/messages"],
                   If[ToLowerCase[provider] === "lmstudio", "openai", provider],
@@ -35651,6 +36272,7 @@ Quiet @ Check[
 
 ClaudeCode`GetPaletteModel[] := $iPaletteModel;
 ClaudeCode`GetPaletteEffort[] := $iPaletteEffort;
+ClaudeCode`GetPalettePrivateEffort[] := $iPalettePrivateEffort;
 ClaudeCode`GetPaletteFallback[] := TrueQ[$iPaletteFallback];
 ClaudeCode`GetModelOpus[] := $iModelOpus;
 ClaudeCode`GetModelSonnet[] := $iModelSonnet;
@@ -35708,7 +36330,10 @@ ClaudeCode`SetPaletteModel[v_String] := (
   $iPaletteModel = v;
   $ClaudeModel = Switch[v, "opus", $iModelOpus, "sonnet", $iModelSonnet, _, ""];
 );
-ClaudeCode`SetPaletteEffort[v_String] := ($iPaletteEffort = v);
+ClaudeCode`SetPaletteEffort[v_String] :=
+  ($iPaletteEffort = v; iPaletteSyncLMStudioEffort[]; v);
+ClaudeCode`SetPalettePrivateEffort[v_String] :=
+  ($iPalettePrivateEffort = v; iPaletteSyncLMStudioEffort[]; v);
 ClaudeCode`SetPaletteFallback[v_] := ($iPaletteFallback = TrueQ[v]);
 ClaudeCode`SavePaletteSettings[nb_NotebookObject] := iSavePaletteSettings[nb];
 ClaudeCode`LoadPaletteSettings[nb_NotebookObject] := iLoadPaletteSettings[nb];
@@ -35719,6 +36344,9 @@ ClaudeCode`LoadPaletteSettings[nb_NotebookObject] := iLoadPaletteSettings[nb];
 ClaudeCode`GetLMStudioPaletteModels[]     := iLMStudioPaletteModels[];
 ClaudeCode`RefreshLMStudioPaletteModels[] := (
   $iLMStudioPaletteModelsCache = <||>;
+  (* 2026-08-16: reasoning capability もセッションキャッシュなので一緒に落とす。
+     モデルの DL 完了前に問い合わせて None を掴むと、以後 Effort が効かなく見える。 *)
+  $iLMStudioModelReasoningCache = <||>;
   iLMStudioPaletteModels[]);
 
 (* ============================================================
@@ -37178,7 +37806,7 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
             Module[{lmstudioModel2, customURL2, label2, apiKey2, prepared2, proc2},
               lmstudioModel2 = modelSpec[[2]];
               customURL2 = If[Length[modelSpec] >= 3, modelSpec[[3]],
-                "http://localhost:1234"];
+                iLMStudioDefaultBaseURL[]];
               label2 = "lmstudio/" <> lmstudioModel2;
               
               Quiet[CurrentValue[nb, WindowStatusArea] =

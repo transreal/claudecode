@@ -5,7 +5,8 @@ LLM 呼び出しに使うモデル指定。{provider, modelName} タプル形式
 
 ### $ClaudeAdvisaryModel
 型: {String, String} | String, 初期値: {"chatgptcodex", "Automatic"}
-仕様レビュー・合意形成ワークフローでのアドバイザリー役 (Codex) のモデル指定。$ClaudeModel と同形式。bare provider string "chatgptcodex" も受け付ける。例: {"chatgptcodex", "gpt-5.5"}
+アドバイザリー役のモデル指定 ($ClaudeModel と同形式)。役割は文脈で反転する: 仕様生成ワークフローでは本変数がドラフター役、$ClaudeModel がレビュアー役。仕様実装ワークフロー (CreateImplementationWorkflow) では本変数が検証役、$ClaudeModel が実装役。Automatic ("chatgptcodex" のデフォルト第二要素) は Codex CLI 自身の既定モデルを使う。bare provider string "chatgptcodex" も受け付ける。単純な代入はカーネルセッション限りで、カーネル再起動で既定値にリセットされ、仕様ワークフローは無言で codex に戻ってしまう。永続化するには SourceVault のインテントマップを使う: SourceVaultSetModelIntent["$ClaudeAdvisaryModel", {"claudecode", "code-heavy"}] (インテント指定) または {"claudecode", "claude-opus-5"} (固定モデルID指定)、いずれもディスクに永続化されロード時ごとに再適用される。手動セッション代入はこの永続化レイヤーによって上書きされない。
+例: {"chatgptcodex", "gpt-5.5"}
 
 ### $ClaudeUltraEnabled
 型: Boolean, 初期値: False
@@ -253,7 +254,7 @@ LM Studio への Authorization Bearer トークン。None なら "lm-studio" を
 
 ### $ClaudeLMStudioBaseURL
 型: String, 初期値: "http://127.0.0.1:1234"
-LM Studio の既定 base URL。model tuple に URL が無い場合の fallback。
+LM Studio の既定 base URL。model tuple に URL が無い場合の fallback。全経路 (同期 /api/v1/chat、PS1 非同期経路、API トークン解決) がこの一箇所に集約されたフォールバックを参照する (2026-08-17: 以前は各所で "http://localhost:1234" がハードコードされ、別ホストに向けても一部経路がローカルを見てしまう不整合があった)。
 
 ### $ClaudeLMStudioContextLength
 型: Integer | None | Automatic
@@ -261,7 +262,20 @@ LM Studio の既定 base URL。model tuple に URL が無い場合の fallback�
 
 ### $ClaudeLMStudioTemperature
 型: Number | Automatic
-/api/v1/chat の temperature。Automatic はモデル既定値。tool 利用時は 0〜0.1 推奨。
+LM Studio 呼び出しの temperature (全モデル共通の強制値)。Automatic (既定) ならここでは決めず `$ClaudeLMStudioModelTemperatures` のモデル別推奨値を使う。数値を入れるとモデル別表より優先される。tool 利用時は 0〜0.1 推奨。
+
+### $ClaudeLMStudioModelTemperatures
+型: Association, 初期値: `<|"qwen3.8-27b" -> 1.0|>`
+モデル別の推奨 temperature 表。キーはモデル ID (例 `"qwen3.8-27b"`) または `*` を含むワイルドカード (例 `"qwen3.8*"`)、値は temperature (数値) か None (そのモデルでは送らない)。照合は大文字小文字を無視し、完全一致 → 正規化 ID (`"qwen/"` などのベンダ接頭辞と `"@q4_k_m"` 量子化サフィックスを除去) の完全一致 → ワイルドカードの順。
+
+優先順位: 呼び出しオプション明示 > `$ClaudeLMStudioTemperature` (数値時) > 本表 > 送らない。
+
+`/api/v1/chat` 同期経路 (`iQueryLMStudioChat`)、PS1 非同期経路 (`iPrepareLMStudioMCPPS1`)、従来の `/v1/chat/completions` 経路のいずれでも適用される (マルチモーダル時の PS1 経路のみ未対応)。
+
+```wl
+$ClaudeLMStudioModelTemperatures["qwen3.6*"] = 0.6;   (* ワイルドカードで一括指定 *)
+$ClaudeLMStudioModelTemperatures["gpt-oss-20b"] = None; (* このモデルは送らない *)
+```
 
 ### $ClaudeLMStudioIncludeToolTrace
 型: Boolean, 初期値: False
@@ -278,6 +292,28 @@ True で iQueryLMStudioChat の戻り値先頭に tool_call のトレース (ツ
 ### $ClaudeLMStudioReasoning
 型: String | None | Automatic
 /api/v1/chat の reasoning 設定。Automatic (既定) は /api/v1/models の capabilities から MCP 前提の最強値 (high>medium>low>on) を自動選択。"off"|"on"|"low"|"medium"|"high" で明示指定 (allowed_options に含まれる場合のみ送信)。None で送らない。
+
+### $ClaudeLMStudioModelReasoning
+型: Association, 初期値: `<||>`
+モデル別の reasoning effort 表。キーの照合規則は `$ClaudeLMStudioModelTemperatures` と同じ (完全一致 → 正規化 ID → ワイルドカード)。値は `"off"` (thinking 無効) / `"low"` / `"medium"` / `"high"` / `"max"` / Automatic。
+
+実際に送る値はモデルの `allowed_options` に合わせて段階的に選ばれます。
+
+| effort | 候補列 (先頭から allowed にあるものを採用) |
+|---|---|
+| `"max"` | xhigh → high → on → medium → low |
+| `"high"` | high → on → xhigh → medium → low |
+| `"medium"` | medium → on → high → low → xhigh |
+| `"low"` | low → on → medium → high → xhigh |
+| `"off"` | off → none → disabled (無ければ送らない) |
+
+`capabilities` に `reasoning` を持たないモデル (例: `qwen3.8-27b`, `qwen3.6-35b-a3b`) へは **一切送りません**。送ると LM Studio が `400 invalid_value / "Model '...' does not expose reasoning configuration."` を返して呼び出しごと失敗するためです。`capabilities` そのものを取得できない場合 (サーバー不通・モデルが一覧に無い) も本表由来の値は送りません。
+
+`$ClaudeLMStudioReasoning` に文字列を直接入れた場合だけ、capabilities 不明時にユーザー責任で正規化値を送ります (`"max"` は `xhigh` 対応を確認できないため `high` に落とす)。
+
+優先順位: `$ClaudeLMStudioReasoning` (文字列時) > 本表 > Automatic (allowed_options から最強値を自動選択)。
+
+パレットの Effort ボタン (標準モデル用・秘密モデル用の 2 つ) がこの表を書き換えます。
 
 ### $ClaudeLMStudioToolNudge
 型: String | None
@@ -468,7 +504,7 @@ sv:// スナップショット URI (spec/review/requirements) を解決し内容
 → NotebookObject | $Failed
 
 ### CreateImplementationWorkflow[name, approvedSpec, opts]
-承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。実装担当ロールは ultra モデルクラス (ClaudeUltraModelSpec: CLI 優先、paid-API ゲート付き、$ClaudeUltraEnabled が True の場合のみ利用) を優先し、$ClaudeModel にフォールバックする ($ClaudeUltraEnabled の既定は False なので、明示的に True にしない限り常に $ClaudeModel が使われる)。テストファイル込みでパッケージを書き、検証担当 ($ClaudeAdvisaryModel) が仕様との整合性を確認しフィードバックを合意まで繰り返す。承認には生成したテストがフレッシュカーネルで通過することも必要 (proven-code gate、サマリーキー TestGate/Proven)。複雑な作業は補助仕様をレビューしてからステージ分割して実装する。ultra クラス実装者はプランニング時に実装スタイル (native/dag/petri) も選択する。$ClaudeSpecImplUseSession が Automatic (既定) かつセッション基盤モジュール (ClaudeOrchestrator_session/ClaudeRuntime_sessionrunner) がロード済みなら RuntimeSession episode 経路で実行し、失敗時は従来の wolframscript driver 経路に自動フォールバックする。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
+承認済み設計仕様を SVWorkflow_<Name> パッケージとして SourceVault_workflows/<name>/ 配下に実装する (SourceVault の spec-impl ワークフローをバックグラウンドドライバーで実行)。approvedSpec は sv:// URI、スナップショット ref、または生テキスト。実装担当ロールは ultra モデルクラス (ClaudeUltraModelSpec: CLI 優先、paid-API ゲート付き、$ClaudeUltraEnabled が True の場合のみ利用) を優先し、$ClaudeModel にフォールバックする ($ClaudeUltraEnabled の既定は False なので、明示的に True にしない限り常に $ClaudeModel が使われる)。テストファイル込みでパッケージを書き、検証担当 ($ClaudeAdvisaryModel) が仕様との整合性を確認しフィードバックを合意まで繰り返す。承認には生成したテストがフレッシュカーネルで通過することも必要 (proven-code gate、サマリーキー TestGate/Proven)。複雑な作業は補助仕様をレビューしてからステージ分割して実装する。ultra クラス実装者はプランニング時に実装スタイル (native/dag/petri) も選択する。実行前には確認ダイアログに「どの役をどのモデルが走るか」を明示表示する (2026-08-20 追加、$ClaudeAdvisaryModel がカーネル再起動で既定の codex に戻っていても実行前に気づける)。$ClaudeSpecImplUseSession が Automatic (既定) かつセッション基盤モジュール (ClaudeOrchestrator_session/ClaudeRuntime_sessionrunner) がロード済みなら RuntimeSession episode 経路で実行し、失敗時は従来の wolframscript driver 経路に自動フォールバックする。進捗 (実行中モデル + フェーズ) は WindowStatusArea に表示。完了時に生成ワークフローの起動関数を登録 (session + promptrouter) してサマリーをノートブックに書き込む。
 → String (バックグラウンドジョブ id)
 Options: "Notes" -> "" (追加指示), "ClaudeModel" -> Automatic ($ClaudeModel に解決), "AdvisaryModel" -> Automatic ($ClaudeAdvisaryModel に解決), "MaxRounds" -> Automatic, "Nb" -> Automatic (ターゲットノートブック), "Launch" -> True (完了後自動起動), "Project" -> "", "SpecURI" -> "", "SourceNotebookURI" -> ""
 
@@ -788,6 +824,12 @@ markdown 文字列 (または File[path]) をインライン表示可能な式�
 → 表示可能な式
 Options: MarkdownToCells と同じ
 
+### MarkdownWriteCells[md, opts]
+markdown 文字列 (または File[path]) を MarkdownToCells で変換し、評価セルの直下に結果セルを書き込む。CreateDocument で新規ノートブックを開かず (MarkdownToNotebook)、値として式を返すのでもなく (MarkdownDisplay)、現在のノートブックに直接セルを追記したい場合に使う。
+→ Integer (書き込んだセル数)
+Options: MarkdownToCells と同じ
+例: MarkdownWriteCells[md]; MarkdownWriteCells[md, nb]
+
 ### MermaidGraph[src, opts]
 mermaid フローチャート ("flowchart TD", "graph LR" 等) をパースし、枠付きノードラベル・エッジラベル・宣言方向に従ったレイヤーレイアウトを持つ Graph を返す。src は生 mermaid テキスト、```mermaid フェンスブロック、または File[path]。対応ノード形状: [..], (..), ((..)), {..}, ([..]), [[..]], {{..}}, >..]。対応エッジ: -->, ---, -.->, ==>, <-->, -->|label|, A -- label --> B、A --> B --> C のチェーン、& による fan-in/out。ラベル中の \n や <br> は改行になる。%% コメントおよび subgraph/class/style/click 行は無視される。追加オプションは Graph に渡され既定値を上書きする。パース不能な場合は MermaidGraph::noparse を発行し $Failed を返す (MarkdownToCells はその場合プレーンな "Program" セルにフォールバックする)。
 → Graph | $Failed
@@ -1005,7 +1047,8 @@ LLMGraph ジョブ (Association) を非同期実行する。ジョブIDを即座
 → String (jobID)
 Options: PromptTemplate -> "`content`", Model -> Automatic, "Timeout" -> Automatic, "Verbose" -> True, "WriteToNotebook" -> False, "OnChunkDone" -> (Nothing&), "OnJobDone" -> (Nothing&)
 
-### LLMGraphExecute[input, typeName, opts]input と typeName からジョブを構築して実行する (簡易入口)。
+### LLMGraphExecute[input, typeName, opts]
+input と typeName からジョブを構築して実行する (簡易入口)。
 → String (jobID)
 Options: LLMGraphExecute[job, opts] と同じ
 
@@ -1342,4 +1385,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl, 42564行) と突き合わせて同期を確認した (2026-08-11、15回目)。全 public シンボルの `::usage` 宣言 (274件) をソース全文から抽出し、api.md 記載の全関数・全変数名と突き合わせて漏れ・削除対象がないことを確認。`CreateImplementationWorkflow` の `Options[...]` 定義 (`"AdvisaryModel" -> Automatic`) を実コードで再確認し前回修正が正しいことを確認。`$ClaudeRoutingModelPolicy` の説明に、"Off" 時の実際の動作 (リクエストは $ClaudeModel にフォールスルーし、LLM 不要のコンテキストプランナーは動き続ける) を追記。ClaudePackageManager へ移管済み関数群は本文に列挙せず移管注記のみとする方針を維持。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl, 43008行) と突き合わせて同期を確認した (2026-08-21、17回目)。今回のソース抜粋 (Public symbols 宣言部および変数初期化部) から `$ClaudeAdvisaryModel::usage` の全文を確認し、ドラフター/検証役が仕様生成/仕様実装ワークフローで反転する点・単純なセッション代入はカーネル再起動でリセットされる点・SourceVaultSetModelIntent による永続化方法の記述が api.md 側で欠けていたため、当該エントリを全面的に書き直した。他の public シンボル (変数既定値・パレットのプロバイダー/モデル表・$ClaudeUltraEnabled・CreateImplementationWorkflow・$ClaudeLLMBreakpoint 等) は今回の抜粋範囲内で前回確認済み (16回目) の記載と矛盾なし。
