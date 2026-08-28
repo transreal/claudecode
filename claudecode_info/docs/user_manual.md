@@ -1,4 +1,4 @@
-## 設計思想と実装の概要
+# 設計思想と実装の概要
 
 ClaudeCode は以下の設計原則に基づいています。
 
@@ -7,14 +7,14 @@ ClaudeCode は以下の設計原則に基づいています。
 - **安全なパッケージ管理**: パッケージの更新はバックアップ・差分マージ・安全性検証・再ロードを自動で行います。排他ロック機構により、同一パッケージへの並列更新を防止します。更新後は自動生成された検証テストが実行され、意図した変更が正しくコードに反映されているか確認します。2026-06-10 の改善により、LLM レスポンスを「連続した行のかたまり(セグメント)」単位でマージするようになり、マージ精度が大幅に向上しました。`Pkg\`X` / `Pkg\`Private\`iX` のような完全修飾定義も正しく認識されます。
 - **差分ベースバックアップ**: バックアップは SequenceAlignment ベースの差分形式(.cz / .cdiff / .unchanged)で保存され、ストレージ消費を大幅に削減します。既存の生バックアップは `ClaudeMigrateBackupHistory` で差分形式に変換できます。
 - **機密データ保護**: `Confidential[]` による秘匿変数システムと、プライバシー考慮型モデルルーティングにより、機密データの安全な取り扱いを実現します。アクセスレベルに基づいて、クラウドモデルとローカルモデルを自動的に使い分けます。
-- **多段フォールバック**: Claude Code CLI が利用不可の場合、アクセスレベルに応じたフォールバックモデルに自動切替します。Anthropic API、OpenAI API、z.ai(GLM シリーズ)、Kimi(Moonshot AI)、LM Studio 等のローカルモデルを順次試行します。フォールバック候補を順に試す際は、429(レート制限)やサーバー過負荷エラーが連続して発生する事態を避けるため、次候補の起動を指数バックオフ(1秒→2秒→4秒を上限とする遅延)で行います。
+- **多段フォールバック**: Claude Code CLI が利用不可の場合、アクセスレベルに応じたフォールバックモデルに自動切替します。Anthropic API、OpenAI API、z.ai(GLM シリーズ)、Kimi(Moonshot AI)、LM Studio・freetoken 等のローカルモデルを順次試行します。フォールバック候補を順に試す際は、429(レート制限)やサーバー過負荷エラーが連続して発生する事態を避けるため、次候補の起動を指数バックオフ(1秒→2秒→4秒を上限とする遅延)で行います。2026-08-28 の改訂では、Claude Code CLI の OAuth 認証切れ(401 authentication_failed)もレート制限と同格の検出対象に追加され、`ClaudeAuthStatus` / `ClaudeAuthClear` で状態の確認・手動リセットができるようになりました(詳細は「認証切れ検出(ClaudeAuthStatus / ClaudeAuthClear)」を参照)。
 - **セッション管理**: 会話履歴をノートブックの TaggingRules に永続化し、差分圧縮と自動コンパクションによりストレージを効率的に利用します。
 - **多言語対応**: `$Language` 設定に基づいてプロンプトの言語指示を動的に生成します。`$Language` が `"Japanese"` の場合は日本語で応答するよう指示し、それ以外の場合は英語に切り替わります。
 - **AI 生成機能**: OpenAI Images API による画像生成(`ClaudeImageGenerate`)と OpenAI TTS API による音声生成(`ClaudeSpeech`)を統合しています。
 - **プロジェクト固有ディレクティブ**: ノートブックディレクトリごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。
 - **claudecode_directives 連携**: オプションの独立パッケージ [claudecode_directives](https://github.com/transreal/claudecode_directives) をロードすることで、`rules/` および `skills/` ディレクトリのデフォルトセットが自動的にインストールされます。ロード後は Claude Code CLI のコンテキストに rules/ の制約と skills/ の手順が自動的に注入され、Claude がスキルを呼び出せるようになります。claudecode.wl 本体はディレクティブの内容に非依存であり、claudecode_directives がその管理を担います。
 - **ディレクティブ投影レイヤー (ClaudeDirectives)**: rules/skills を含む正規ディレクティブ・リポジトリを読み込み、モデルの能力(コンテキスト長・課金有無)・ロール・タスクに応じて、投影モード(Full / Summary / Index / Lazy)と適用するスキル・ルールを in-memory で動的に選択します。さらに、単一の正規リポジトリから Claude CLI 用(`.claude/`)と Codex CLI 用(`AGENTS.md` / `.agents/`)のハーネスを生成・実体化する機能を備えます。ファイル形式は Claude Code 互換を維持し、claudecode.wl / NBAccess.wl への依存を持たない純 Wolfram Language 実装(Rule 11)として、claudecode.wl 側から optional に統合されます。
-- **スマートドキュメント管理**: ドキュメント生成・更新時のモード制御(新規作成・既存更新)、部分更新対象の指定、差分検出による効率的な更新処理を提供します。`ClaudeUpdateDocumentation` の `Baseline` オプションにより、差分の基準を「直近の更新バックアップ(`"LastDocUpdate"`)」と「GitHub コミット版(`"Github"`)」から選択でき、後者では `_info/design` の新規設計内容も加味した更新が行えます。20 ファイル以上の一括更新時は、README を除くドキュメントを LLM へ並列投入し、ウィンドウステータスバーにリアルタイム進捗(「完了 N/M • K 並列実行中 • 経過 Ts」)を表示します。サイクル再開(resumption)機能により、API エラーで中断後に再実行しても同一サイクル内の更新済みファイルをスキップして効率的に継続できます。2026-07-09 の改訂により、更新失敗は「システム的失敗(fail-fast でチェーン即中断)」と「品質ゲート失敗(切り詰め・サイズ退行・タイトル不整合。当該ファイルをスキップして次に進む)」に明確に分類され、1 ファイルの持続的な品質失敗が残り全部の更新を巻き添えにしなくなりました。品質ゲート失敗が発生した場合はまず 1 回だけ自動リトライが行われ、その際は「単一応答で出力すること・ツールを使用しないこと・コードフェンスを正しく閉じること」を明示する RETRY NOTICE がプロンプトに追加注入されます。リトライ後も同じ理由で失敗した場合は当該ファイルをスキップして次のファイルに進み、進捗表示には切り詰め文字数・サイズ退行前後の文字数と割合・タイトル不一致内容などの具体的な失敗理由が付記されます。既存ファイルへの上書き時には、新しい内容の文字数が既存内容の 40% 未満に縮小した場合は書き込み自体を拒否するサイズ退行ガードも機能します(閾値 40%)。リトライ実行時はこの比率ガードが緩和され、stub(空同然の応答)防止のための絶対値床(600 文字未満のみ拒否)に切り替わります。これは RETRY NOTICE により意図的に簡潔な応答が返ってくることを想定した調整です。また、サイクル再開(resumption)機能についても、前回実行の残存カウンタにより初回試行が誤ってスキップされてしまう不具合が修正され、より正確に継続できるようになりました。品質ゲート失敗時のリトライ・スキップ経路で、共有ポーリングタスクの再発火や派生クエリの二重起動によりドキュメント更新チェーンが分岐(fork)してしまう不具合を防ぐため、各ステップに一意のシリアルトークンを発行し最初のコールバックのみを有効化する二重発火ガードも導入されています。また `docs/` 配下に同期事故等で生じた `docs/docs/` ネスト重複ドキュメントを自動検出し、更新対象から除外した上で削除を推奨する警告を表示します。2026-07-09 の改訂では、`docs/examples/` 配下の `*.md`(使用例ドキュメント)も `Automatic`(既定)モードでの自動更新対象から除外されるようになりました。これは、examples は手作業内容が主であり毎回再生成すると多数作成した場合に更新が終わらなくなるためで、更新するには `TargetFiles` オプションで明示的に指定する必要があります(詳細は「ドキュメント更新対象ファイルの指定(TargetFiles)」を参照)。ドキュメント更新チェーンの多重起動防止ガードにより、同一パッケージに対して複数の更新チェーンが同時起動することを防ぎます。チェーンが異常終了した場合も `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放されます。補助 API ドキュメント(`api_<aux>.md`)の再生成要否判定は、更新日時(mtime)比較からコンテンツハッシュ比較へ段階的に移行しており、Dropbox 同期や複数 PC 環境による mtime の揺れだけでは不要な再生成が発生しないようになっています。2026-07-10 の改訂では、条件を満たす場合にドキュメント更新パイプライン全体を外部 wolframscript ワーカープロセスへ退避して実行する仕組み(`$ClaudeDocUpdateExternal`)が導入され、複数のドキュメント更新を並走させた際のメインカーネル飽和によるフリーズが根絶されました(詳細は「ドキュメント更新の外部プロセス実行」を参照)。2026-07-13 の改訂では、README.md の「## 謝辞」「## 免責事項」「## ライセンス」節を LLM には書かせず、`Acknowledgments` / `Disclaimer` / `License` オプションと `doc_options.json` の既定値から書き込み直前にコード側で決定的に(verbatim で)追記する方式へ変更されました。これにより法的節の文言が LLM の出力切り詰めの影響を受けなくなります。追記前には本文が必須の「## 使用例」節まで到達しているか、および本文自体が途中で切れていないかを検証する専用ガードが働き、いずれかに該当する場合は書き込みが拒否されます。同じく 2026-07-13 の改訂で、複数パッケージが同時に言及されるタスクにおける API ドキュメントの注入順序とコンテキスト予算の割り当ても再設計されています(詳細は「複数パッケージ言及時の注入順序とコンテキスト予算」を参照)。
+- **スマートドキュメント管理**: ドキュメント生成・更新時のモード制御(新規作成・既存更新)、部分更新対象の指定、差分検出による効率的な更新処理を提供します。`ClaudeUpdateDocumentation` の `Baseline` オプションにより、差分の基準を「直近の更新バックアップ(`"LastDocUpdate"`)」と「GitHub コミット版(`"Github"`)」から選択でき、後者では `_info/design` の新規設計内容も加味した更新が行えます。20 ファイル以上の一括更新時は、README を除くドキュメントを LLM へ並列投入し、ウィンドウステータスバーにリアルタイム進捗(「完了 N/M • K 並列実行中 • 経過 Ts」)を表示します。サイクル再開(resumption)機能により、API エラーで中断後に再実行しても同一サイクル内の更新済みファイルをスキップして効率的に継続できます。2026-07-09 の改訂により、更新失敗は「システム的失敗(fail-fast でチェーン即中断)」と「品質ゲート失敗(切り詰め・サイズ退行・タイトル不整合。当該ファイルをスキップして次に進む)」に明確に分類され、1 ファイルの持続的な品質失敗が残り全部の更新を巻き添えにしなくなりました。品質ゲート失敗が発生した場合はまず 1 回だけ自動リトライが行われ、その際は「単一応答で出力すること・ツールを使用しないこと・コードフェンスを正しく閉じること」を明示する RETRY NOTICE がプロンプトに追加注入されます。リトライ後も同じ理由で失敗した場合は当該ファイルをスキップして次のファイルに進み、進捗表示には切り詰め文字数・サイズ退行前後の文字数と割合・タイトル不一致内容などの具体的な失敗理由が付記されます。既存ファイルへの上書き時には、新しい内容の文字数が既存内容の 40% 未満に縮小した場合は書き込み自体を拒否するサイズ退行ガードも機能します(閾値 40%)。リトライ実行時はこの比率ガードが緩和され、stub(空同然の応答)防止のための絶対値床(600 文字未満のみ拒否)に切り替わります。これは RETRY NOTICE により意図的に簡潔な応答が返ってくることを想定した調整です。また、サイクル再開(resumption)機能についても、前回実行の残存カウンタにより初回試行が誤ってスキップされてしまう不具合が修正され、より正確に継続できるようになりました。品質ゲート失敗時のリトライ・スキップ経路で、共有ポーリングタスクの再発火や派生クエリの二重起動によりドキュメント更新チェーンが分岐(fork)してしまう不具合を防ぐため、各ステップに一意のシリアルトークンを発行し最初のコールバックのみを有効化する二重発火ガードも導入されています。また `docs/` 配下に同期事故等で生じた `docs/docs/` ネスト重複ドキュメントを自動検出し、更新対象から除外した上で削除を推奨する警告を表示します。2026-07-09 の改訂では、`docs/examples/` 配下の `*.md`(使用例ドキュメント)も `Automatic`(既定)モードでの自動更新対象から除外されるようになりました。これは、examples は手作業内容が主であり毎回再生成すると多数作成した場合に更新が終わらなくなるためで、更新するには `TargetFiles` オプションで明示的に指定する必要があります(詳細は「ドキュメント更新対象ファイルの指定(TargetFiles)」を参照)。ドキュメント更新チェーンの多重起動防止ガードにより、同一パッケージに対して複数の更新チェーンが同時起動することを防ぎます。チェーンが異常終了した場合も `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放されます。補助 API ドキュメント(`api_<aux>.md`)の再生成要否判定は、更新日時(mtime)比較からコンテンツハッシュ比較へ段階的に移行しており、Dropbox 同期や複数 PC 環境による mtime の揺れだけでは不要な再生成が発生しないようになっています。2026-07-10 の改訂では、条件を満たす場合にドキュメント更新パイプライン全体を外部 wolframscript ワーカープロセスへ退避して実行する仕組み(`$ClaudeDocUpdateExternal`)が導入され、複数のドキュメント更新を並走させた際のメインカーネル飽和によるフリーズが根絶されました(詳細は「ドキュメント更新の外部プロセス実行」を参照)。2026-07-13 の改訂では、README.md の「## 謝辞」「## 免責事項」「## ライセンス」節を LLM には書かせず、`Acknowledgments` / `Disclaimer` / `License` オプションと `doc_options.json` の既定値から書き込み直前にコード側で決定的に(verbatim で)追記する方式へ変更されました。これにより法的節の文言が LLM の出力切り詰めの影響を受けなくなります。追記前には本文が必須の「## 使用例」節まで到達しているか、および本文自体が途中で切れていないかを検証する専用ガードが働き、いずれかに該当する場合は書き込みが拒否されます。同じく 2026-07-13 の改訂で、複数パッケージが同時に言及されるタスクにおける API ドキュメントの注入順序とコンテキスト予算の割り当ても再設計されています(詳細は「複数パッケージ言及時の注入順序とコンテキスト予算」を参照)。2026-08-28 の改訂では、Claude Code CLI の OAuth 認証切れ(401 authentication_failed)を検出した場合、レート制限と同格の投入前ゲートとして扱われ、新規ドキュメントを 1 件も投入せずに中断して再ログインを促すようになりました(詳細は「認証切れ検出とドキュメント更新の投入前ゲート」を参照)。
 - **分離原則検証**: NBAccess パッケージとの適切な分離を維持するため、コード内の分離原則違反を自動検出・修正する機能を備えています。
 - **パッケージキーワード自動注入**: 各パッケージが独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。パッケージ単位(`$ClaudePackageKeywordMap`)に加え、補助ドキュメント単位(`$ClaudePackageAuxKeywordMap`)でも注入条件を制御できます。
 - **自動実行安全ガード**: `ClaudeEval` の `AutoEvaluate -> True` で生成コードを自動実行する際、`NBAutoEvalProhibitedPatterns` に定義された禁止パターンに該当するコードの自動実行をブロックします。これにより、ファイル削除や危険なシステム操作などを含むコードが意図せず実行されることを防止します。
@@ -163,8 +163,8 @@ $ClaudeAdvisaryModel = {"chatgptcodex", Automatic}
 $ClaudeUltraEnabled = False
 
 (* パレットのプロバイダ循環順序 *)
-(* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio" *)
-$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "kimi", "lmstudio"}
+(* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio" | "freetoken" *)
+$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "kimi", "lmstudio", "freetoken"}
 
 (* パレットの lmstudio モデル一覧を「現在ロード済みのモデルのみ」に絞るか「LM Studio が
    把握している全モデル」まで含めるかを制御する。LM Studio サーバーに到達できない場合は
@@ -261,7 +261,7 @@ ClaudePrepareCommit["MyPackage"]
 | | `ClaudeRestorePackage` | バックアップからの復元 |
 | | `ClaudeConvertToPaclet` | Paclet 形式への変換 |
 | **ドキュメント** | `ClaudeCreateDocumentation` | ドキュメント一式の自動生成 |
-| | `ClaudeUpdateDocumentation` | 差分検出による自動更新・モード制御・Baseline 切替(直近更新／GitHub コミット版)・`TargetFiles` による部分更新対象の指定(`"api.md"`/`"examples/*"` 等のマーカー展開含む)・並列更新・サイクル再開(resumption)・失敗分類(システム的失敗/品質ゲート失敗)・RETRY NOTICE 付き自動リトライ・サイズ退行ガード・docs/docs 重複検出・外部プロセス実行(docext) |
+| | `ClaudeUpdateDocumentation` | 差分検出による自動更新・モード制御・Baseline 切替(直近更新／GitHub コミット版)・`TargetFiles` による部分更新対象の指定(`"api.md"`/`"examples/*"` 等のマーカー展開含む)・並列更新・サイクル再開(resumption)・失敗分類(システム的失敗/品質ゲート失敗)・RETRY NOTICE 付き自動リトライ・サイズ退行ガード・docs/docs 重複検出・外部プロセス実行(docext)・認証切れ投入前ゲート |
 | **バックアップ** | `ClaudeBackupDataset` | バックアップ履歴の管理・復元 |
 | | `ClaudeMigrateBackupHistory` | 生バックアップを差分形式に変換 |
 | **機密データ** | `Confidential` / `NonConfidential` | 変数の秘匿・解除 |
@@ -275,6 +275,10 @@ ClaudePrepareCommit["MyPackage"]
 | | `ClaudeCompactHistory` | 履歴コンパクション |
 | | `ClaudeHistorySize` | 履歴サイズ診断 |
 | | `ClaudeAttach` / `ClaudeDetach` | 参考資料のアタッチ |
+| **認証・利用制限** | `ClaudeRateLimitStatus` | レート制限状態の確認 |
+| | `ClaudeRateLimitClear` | レート制限記録のクリア |
+| | `ClaudeAuthStatus` | claude CLI の OAuth 認証状態確認 |
+| | `ClaudeAuthClear` | 認証エラー記録の手動クリア |
 | **ディレクティブ** | `ClaudeAddDirective` | ルール・スキルの追加 |
 | | `ClaudeUpdateDirective` | ディレクティブの自動整合・テキスト指示更新 |
 | | `ClaudeSyncDirectives` | 外部フォルダからの同期 |
@@ -399,10 +403,10 @@ ShowClaudePalette[]
 
 | 設定項目 | 説明 |
 |---|---|
-| **P:** | プロバイダを切り替えます。クリックするたびに `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio` の順で循環します。選択中のプロバイダ名がボタンラベルに表示されます。各プロバイダの特性は下表を参照してください。 |
-| **M:** | 選択中のプロバイダ内でモデルを切り替えます。クリックするたびに対応するモデル一覧を循環します。短縮名(例: Opus 5、Fable 5)で表示されます。`Automatic` は Codex CLI の既定モデルを使用します(chatgptcodex プロバイダの場合)。SourceVault のモデルレジストリがロードされている場合は、そこからモデル一覧が取得されます。特に `claudecode` / `anthropic` プロバイダの既定モデル(候補一覧の先頭に来るモデル)は、SourceVault がロードされていれば `ClaudeResolveModel` 経由で動的に解決されるため、SourceVault 側でモデルの世代が更新されてもパレット側のコード変更なしに追従します(SourceVault 未ロード時は静的な既定値 `claude-opus-5` にフォールバック)。`lmstudio` プロバイダでは LM Studio サーバーへの実問い合わせによる候補一覧が優先され、取得できない場合は SourceVault のカタログ、それも無ければ静的リストへ順にフォールバックします(`$ClaudeLMStudioPaletteLoadedOnly` 参照)。 |
-| **エフォート** | 標準モデル (**M:** の直下) の思考量です。`claudecode` では Low / Medium / High / Max で Think トリガーの強度を設定します（Low は思考なし、Medium は `think hard`、High は `think harder`、Max は `ultrathink`）。`lmstudio` を選んでいるときは **Off** が加わって Off / Low / Medium / High / Max の 5 段になり、LM Studio の `reasoning` パラメータに写ります。**Off = thinking 無効**です。Off のまま `claudecode` に戻した場合、CLI には `--effort` を渡さず Medium 相当で動きます。 |
-| **E:**（秘密モデル枠内） | 秘密モデル `$ClaudePrivateModel` の思考量です。標準モデルのエフォートとは独立に保持され、Off / Low / Medium / High / Max を循環します。既定は Medium（thinking 有効）。 |
+| **P:** | プロバイダを切り替えます。クリックするたびに `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken` の順で循環します。選択中のプロバイダ名がボタンラベルに表示されます。各プロバイダの特性は下表を参照してください。 |
+| **M:** | 選択中のプロバイダ内でモデルを切り替えます。クリックするたびに対応するモデル一覧を循環します。短縮名(例: Opus 5、Fable 5)で表示されます。`Automatic` は Codex CLI の既定モデルを使用します(chatgptcodex プロバイダの場合)。SourceVault のモデルレジストリがロードされている場合は、そこからモデル一覧が取得されます。特に `claudecode` / `anthropic` プロバイダの既定モデル(候補一覧の先頭に来るモデル)は、SourceVault がロードされていれば `ClaudeResolveModel` 経由で動的に解決されるため、SourceVault 側でモデルの世代が更新されてもパレット側のコード変更なしに追従します(SourceVault 未ロード時は静的な既定値 `claude-opus-5` にフォールバック)。`lmstudio` プロバイダでは LM Studio サーバーへの実問い合わせによる候補一覧が優先され、取得できない場合は SourceVault のカタログ、それも無ければ静的リストへ順にフォールバックします(`$ClaudeLMStudioPaletteLoadedOnly` 参照)。`freetoken` プロバイダでもモデル候補・エフォート設定はキャッシュされ、LM Studio と同様の仕組みで管理されます。 |
+| **エフォート** | 標準モデル (**M:** の直下) の思考量です。`claudecode` では Low / Medium / High / Max で Think トリガーの強度を設定します(Low は思考なし、Medium は `think hard`、High は `think harder`、Max は `ultrathink`)。`lmstudio` を選んでいるときは **Off** が加わって Off / Low / Medium / High / Max の 5 段になり、LM Studio の `reasoning` パラメータに写ります。**Off = thinking 無効**です。Off のまま `claudecode` に戻した場合、CLI には `--effort` を渡さず Medium 相当で動きます。`freetoken`(2026-08-24 追加)でも同様に Off / Low / Medium / High / Max の 5 段になり、モデル別の推奨 Effort 表を lmstudio と共有した上で `reasoning_effort` パラメータとして送信されます(値が文字列型のときのみ送信され、Automatic 等は従来どおり送られません)。 |
+| **E:**(秘密モデル枠内) | 秘密モデル `$ClaudePrivateModel` の思考量です。標準モデルのエフォートとは独立に保持され、Off / Low / Medium / High / Max を循環します。既定は Medium(thinking 有効)。 |
 | **課金API** | 禁止 / 許可 — `Fallback -> True/False` を制御します。「禁止」では Claude Code CLI または Codex CLI(課金なし扱い)のみ使用し、「許可」では CLI 利用不可時に Anthropic API・z.ai API 等へフォールバックします。 |
 
 **プロバイダ一覧**
@@ -416,6 +420,7 @@ ShowClaudePalette[]
 | `zai` | z.ai API(GLM シリーズ) | あり |
 | `kimi` | Kimi API(Moonshot AI、OpenAI 互換) | あり |
 | `lmstudio` | LM Studio(ローカル LLM) | なし |
+| `freetoken` | freetoken(ローカルの無料エンドポイント、既定 `http://localhost:1919` / `gpt-oss-120b`) | なし |
 
 **z.ai プロバイダ**
 
@@ -424,6 +429,14 @@ ShowClaudePalette[]
 **Kimi プロバイダ**
 
 `kimi` は Moonshot AI が提供する Kimi シリーズモデルへのアクセスを提供します。z.ai と同様に OpenAI 互換 API 形式を採用しており、内部的に既存の OpenAI API 経路(base URL を Kimi エンドポイントに差し替え)を利用します。利用可能なモデルは kimi-k3、kimi-k2.7-code、kimi-k2.7-code-highspeed、kimi-k2.6 等です。API キーは NBAccess の SystemCredential 管理機能で登録します。課金 API のため、パレットの「課金API: 許可」設定が必要です。
+
+**freetoken プロバイダ(2026-08-24 追加)**
+
+`freetoken` は、ローカルネットワーク上で動作する無料の OpenAI 互換 chat/completions エンドポイント(既定 `http://localhost:1919`、既定モデル `gpt-oss-120b`)へのアクセスを提供する軽量プロバイダです。LM Studio と同じく課金は発生しません。
+
+- パレットの `M:` ボタンで循環するモデル候補と、`エフォート` で選択した Effort 値は、いずれも接続先(base URL)ごとにキャッシュされます。パッケージリロード時や設定変更時にはこのキャッシュも同時に破棄されます。
+- Effort(Off / Low / Medium / High / Max)は、モデル別の推奨値表を LM Studio 経路と共有した上で `reasoning_effort` パラメータとして送信されます。値が文字列型の場合のみ `reasoning_effort` キーが付与され、`Automatic` 等の場合は付与されません。
+- `$ClaudeModel` に `{"freetoken", "gpt-oss-120b"}` のように明示的に指定することもできます(カスタム URL を第 3 要素として指定可能)。
 
 **LM Studio プロバイダのモデル一覧**
 
@@ -553,6 +566,10 @@ SystemCredential["lmstudio-http://127.0.0.1:1234"] = "your-lm-studio-api-key";
 登録後は `ClaudeEval` 等の呼び出し時に API キーが自動取得されます。未登録の場合は認証なしのダミーキー(`"lm-studio"`)にフォールバックするため、Require Authentication が Off の通常利用では登録不要です。
 
 **注意**: キー名に含まれる URL は `$ClaudeModel` の第3要素(カスタム URL)と一致させてください。リモートの LM Studio サーバーを使用する場合はそのサーバーの URL に合わせてキー名を変更してください。
+
+#### モデル別推奨 temperature(2026-08-16)
+
+LM Studio 経由のリクエストでは、送信するモデルごとにあらかじめ用意された推奨 temperature が自動的に付与されるようになりました。値が数値のときのみリクエスト本文に `"temperature"` キーとして含まれ、`Automatic` / `None` の場合は従来どおり temperature パラメータ自体を送信しません。この推奨値は Claude Code CLI 以外の従来経路(zai / kimi / openai 等の OpenAI 互換経路)でも尊重されます。
 
 ### ChatGPT Codex の直接使用
 
@@ -712,6 +729,39 @@ ClaudeCode`$ClaudeDocUpdateExternal = False
 | 実行席(seat)の枯渇・子プロセス spawn 失敗 | ライセンス席や OS リソースが確保できない場合 |
 
 いずれの場合も、ユーザーが意識することなく品質ゲート・進捗表示・サイクル再開などの挙動は従来どおり保たれます。
+
+### 認証切れ検出とドキュメント更新の投入前ゲート(ClaudeAuthStatus / ClaudeAuthClear、2026-08-28)
+
+Claude Code CLI の OAuth セッションが期限切れになると、`claude` CLI は 401 `authentication_failed` を返すようになります。従来はこれが単に「内部エラー」としてしか表示されず、特にドキュメント一括更新のような多数ファイルの並列投入中にセッションが切れた場合、原因が認証切れであると判別できないまま更新が失敗し続けるという問題がありました(2026-08-28、SourceVault のドキュメント更新中断時に実際に発生)。
+
+この問題に対応するため、認証切れを `ClaudeRateLimitStatus` / `ClaudeRateLimitClear` によるレート制限検出と同格の一級市民として扱う仕組みが追加されました。
+
+#### `ClaudeAuthStatus[]` / `ClaudeAuthClear[]`
+
+- **`ClaudeAuthStatus[]`**: claude CLI の認証(OAuth)状態を返します。認証が切れている場合は Association、問題なければ `None` を返します(`ClaudeRateLimitStatus` と同じ規約)。判定は API を一切呼び出さず、次の 2 系統の情報のみで行われます。
+  1. 直近の応答から検出した 401 `authentication_failed` の記録
+  2. `~/.claude/.credentials.json` のアクセストークンの有無(資格情報を追跡できない環境向けの保険であり、検出から 30 分で自動失効します)
+  記録は、資格情報ファイルが記録時刻より後に更新されていれば「再ログイン済み」とみなして自動的にクリアされます。
+- **`ClaudeAuthClear[]`**: 内部に保持された認証エラー記録を手動でクリアします。再ログイン後は自動でクリアされますが、誤検出でガードがかかってしまった場合の手動リセット手段として使用できます。
+
+```mathematica
+(* 認証状態を確認する *)
+ClaudeAuthStatus[]
+(* 認証切れなら Association、問題なければ None *)
+
+(* 誤検出時などに手動でクリア *)
+ClaudeAuthClear[]
+```
+
+#### ドキュメント更新への統合(投入前ゲート)
+
+`ClaudeUpdateDocumentation` / `ClaudeCreateDocumentation` の並列投入パイプラインは、認証切れをレート制限と同格の「システム的失敗」として扱います。
+
+- CLI 経由(claudecode provider)のドキュメント更新実行時、応答から 401 認証切れを検出すると記録され、(間引き付きで)警告が表示されます。この記録は外部プロセス実行(docext)・カーネル内非同期実行のどちらの経路でも共有されます。
+- **投入前ゲート**: 新しいドキュメントを投入する前に認証切れが記録されているかどうかを確認し、切れていれば 1 件も投入せずに中断して再ログインを促します。Claude Code CLI の OAuth 認証切れは全ドキュメントが確実に失敗する状況であるため(レート制限の投入前ガードと同じ設計を踏襲)、無駄な投入を避けます。
+- 中断・失敗メッセージには再ログイン案内(ターミナルで `claude` を起動して再ログインするよう促す文言)が自動的に埋め込まれるため、どの機能から呼ばれても認証切れであることが必ず一度は明示されます。
+
+なお、この機能は claudecode provider(Claude Code CLI 経由)のドキュメント更新にのみ適用され、lmstudio / codex 等の他プロバイダは対象外です。
 
 ### パッケージ更新の検証テスト
 
@@ -931,7 +981,7 @@ Anthropic API 経由のフォールバック通信(`ClaudeQueryBg`)では、Wind
 - `model` 変数がそのまま JSON 文字列に埋め込まれるため、モデル名に JSON エスケープが必要な文字が含まれていた場合に不正な JSON が生成され得る。
 - 手組みした JSON 文字列を String として `Body` に渡すため、送信層で再度エンコード処理が行われ、Windows 環境で ShiftJIS 等への暗黙変換(送信層での再符号化 = 二重エンコード)が発生し得る。
 
-現在は内部関数 `iOpenAIChatBodyBytes[model, prompt]` が、文字列連結ではなく Association(`<|"model" -> model, "messages" -> {<|"role" -> "user", "content" -> prompt|>}|>`)から直接 `ExportByteArray["RawJSON", "Compact" -> True]` で UTF-8 ByteArray を生成し、それを `Body` に渡すよう変更されました。これにより、`model` 側の JSON エスケープも正しく行われ、送信層での再符号化(二重エンコード)も発生しなくなりました。JSON の直列化自体が失敗した場合は `"Error: OpenAI API リクエスト JSON の直列化に失敗しました"` が返されます。
+現在は内部関数 `iOpenAIChatBodyBytes[model, prompt, temperature]` が、文字列連結ではなく Association(`<|"model" -> model, "messages" -> {<|"role" -> "user", "content" -> prompt|>}|>`、`temperature` が数値のときのみ `"temperature"` キーを追加)から直接 `ExportByteArray["RawJSON", "Compact" -> True]` で UTF-8 ByteArray を生成し、それを `Body` に渡すよう変更されました。これにより、`model` 側の JSON エスケープも正しく行われ、送信層での再符号化(二重エンコード)も発生しなくなりました。JSON の直列化自体が失敗した場合は `"Error: OpenAI API リクエスト JSON の直列化に失敗しました"` が返されます。2026-08-16 の改訂で LM Studio 経路にモデル別推奨 temperature が導入された際も、`Automatic` / `None` 指定時は温度パラメータを送信しないという従来の挙動がそのまま維持されています。
 
 この変更は内部的な信頼性強化であり、新しい公開 API の追加はありません。
 

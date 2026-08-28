@@ -172,6 +172,7 @@ Quiet[Scan[
    "ClaudeAttach","ClaudeDetach","ClaudeAttachments","ClearAttachments",
    "ClaudeAttachmentMetadata","ClaudeAttachmentCachedFile",
    "ClaudeRateLimitStatus","ClaudeRateLimitClear",
+   "ClaudeAuthStatus","ClaudeAuthClear",
    "MarkConfidential","UnmarkConfidential","IsConfidential","Confidential","NonConfidential",
    "ScanConfidentialCells","ShowClaudePalette","ClaudeQueryShowContext",
    "ClaudeShowAccessConfig","ClaudeSessionStatus","ClaudeCompactHistory","ClaudeHistorySize",
@@ -703,7 +704,7 @@ If[Quiet[DownValues[NBAccess`NBSetNotebookPaidAPIAllowed]] === {},
 
 (* Phase 28 (2026-05-12): \:30d1\:30ec\:30c3\:30c8\:30c7\:30b6\:30a4\:30f3\:3092 Provider + Model \:306e 2 \:30dc\:30bf\:30f3\:306b\:62e1\:5f35\:3002
    \:65e7 $iPaletteModel ("opus"/"sonnet"/"default") \:3068\:306f\:72ec\:7acb\:3057\:3066\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:3092\:7ba1\:7406\:3059\:308b\:3002 *)
-$iPaletteProvider  = "claudecode";    (* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio" *)
+$iPaletteProvider  = "claudecode";    (* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio" | "freetoken" *)
 
 (* claudecode/anthropic palette default model: the minor version is owned by
    SourceVault's model-registry. The palette resolves it via
@@ -718,7 +719,7 @@ $iPaletteModelName = $iPaletteDefaultClaudeModel; (* \:73fe\:30d7\:30ed\:30d0\:3
 (* Provider \:5faa\:74b0\:9806\:5e8f\:3002Phase 5 (2026-05-26): chatgptcodex \:3092
    claudecode \:306e\:6b21\:306b\:8ffd\:52a0\:3002\:3069\:3061\:3089\:3082\:30b5\:30d6\:30b9\:30af\:30ea\:30d7\:30b7\:30e7\:30f3\:7d4c\:7531\:306e
    CLI \:306a\:306e\:3067\:8ab2\:91d1 API \:7981\:6b62\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3067\:3082\:5229\:7528\:53ef\:80fd\:3002 *)
-$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "kimi", "lmstudio"};
+$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "kimi", "lmstudio", "freetoken"};
 
 (* \:5404 Provider \:306e\:5019\:88dc\:30e2\:30c7\:30eb\:4e00\:89a7 (Phase 28) \:3002
    \:30af\:30ea\:30c3\:30af\:3067\:3053\:306e\:5217\:3092\:5faa\:74b0\:9078\:629e\:3059\:308b\:3002 *)
@@ -743,7 +744,11 @@ $iPaletteModelsByProvider = <|
   "kimi"         -> {"kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed",
                      "kimi-k2.6"},
   "lmstudio"     -> {"qwen3.8-27b", "qwen3.6-27b", "qwen3.5-27b",
-                     "qwen3-coder-30b", "gpt-oss-120b"}
+                     "qwen3-coder-30b", "gpt-oss-120b"},
+  (* FreeToken (localhost:1919)。サーバは 1 モデル常駐なので候補は
+     ライブ一覧 (/v1/models) が第一、この静的リストはサーバ不通時の
+     フォールバック。 *)
+  "freetoken"    -> {"gpt-oss-120b"}
 |>;
 
 (* SourceVault model catalog for a provider (a list of model-id strings),
@@ -807,6 +812,12 @@ iPaletteModelsFor[provider_String] :=
             DeleteCases[sv, "Automatic"],
             Lookup[$iPaletteModelsByProvider, provider,
               {$iPaletteDefaultClaudeModel}]]],
+      provider === "freetoken",
+        (* FreeToken: ライブ一覧 (/v1/models) 優先、不通なら静的リスト。 *)
+        live = iFreeTokenPaletteModels[];
+        If[live =!= {},
+          live,
+          Lookup[$iPaletteModelsByProvider, provider, {"gpt-oss-120b"}]],
       provider === "claudecode" || provider === "anthropic",
         sv = DeleteCases[iPaletteSourceVaultModels[provider], "Automatic"];
         base = If[sv =!= {}, sv,
@@ -882,6 +893,7 @@ iPaletteProviderLabel[p_String] :=
     "zai",          "Z.AI",
     "kimi",         "Kimi",
     "lmstudio",     "LMStudio",
+    "freetoken",    "FreeToken",
     _, p];
 iPaletteProviderLabel[_] := "ClaudeCode";
 
@@ -902,9 +914,9 @@ iPaletteSyncClaudeModel[] :=
 
 (* ---- $ClaudePrivateModel \:30c8\:30b0\:30eb (2026-08-05) ----
    \:79d8\:5bc6\:30c7\:30fc\:30bf\:51e6\:7406\:7528\:30e2\:30c7\:30eb\:306e\:9078\:629e\:3002\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:30ec\:30d9\:30eb 1.0 =
-   \:30ed\:30fc\:30ab\:30eb\:5b9f\:884c\:30d7\:30ed\:30d0\:30a4\:30c0\:306e\:307f\:5faa\:74b0\:53ef (\:73fe\:72b6 lmstudio\:3002\:5c06\:6765\:306e
-   \:30ed\:30fc\:30ab\:30eb\:30d7\:30ed\:30d0\:30a4\:30c0\:306f\:3053\:306e list \:3078\:8ffd\:52a0)\:3002 *)
-$iPalettePrivateProviderOrder = {"lmstudio"};
+   \:30ed\:30fc\:30ab\:30eb\:5b9f\:884c\:30d7\:30ed\:30d0\:30a4\:30c0\:306e\:307f\:5faa\:74b0\:53ef\:3002
+   2026-08-24: freetoken (localhost:1919, gpt-oss-120b) \:3092\:8ffd\:52a0\:3002 *)
+$iPalettePrivateProviderOrder = {"lmstudio", "freetoken"};
 
 If[!ValueQ[$iPalettePrivateProvider],
   $iPalettePrivateProvider = If[
@@ -919,7 +931,9 @@ If[!ValueQ[$iPalettePrivateModelName],
     $ClaudePrivateModel[[2]], ""]];
 
 (* \:30d1\:30ec\:30c3\:30c8\:306e\:9078\:629e\:3092 $ClaudePrivateModel = {provider, model, url} \:3078\:53cd\:6620\:3002
-   url \:306f\:65e2\:5b58\:5024\:3092\:4fdd\:6301 (\:7121\:3051\:308c\:3070 $ClaudeLMStudioBaseURL)\:3002
+   url \:306f\:540c\:3058 provider \:306e\:307e\:307e\:306a\:3089\:65e2\:5b58\:5024\:3092\:4fdd\:6301\:3002provider \:304c\:5909\:308f\:3063\:305f\:3089
+   \:305d\:306e provider \:306e\:65e2\:5b9a URL (lmstudio: $ClaudeLMStudioBaseURL /
+   freetoken: $ClaudeFreeTokenBaseURL) \:3078\:5207\:308a\:66ff\:3048\:308b (2026-08-24)\:3002
    \:30e2\:30c7\:30eb\:672a\:9078\:629e\:306f\:672a\:8a2d\:5b9a ({}) \:306e\:307e\:307e\:3002 *)
 iPaletteSyncPrivateModel[] := (
   $ClaudePrivateModel = If[
@@ -927,8 +941,12 @@ iPaletteSyncPrivateModel[] := (
     {},
     {$iPalettePrivateProvider, $iPalettePrivateModelName,
      If[ListQ[$ClaudePrivateModel] && Length[$ClaudePrivateModel] >= 3 &&
-        StringQ[$ClaudePrivateModel[[3]]],
-       $ClaudePrivateModel[[3]], $ClaudeLMStudioBaseURL]}];
+        StringQ[$ClaudePrivateModel[[3]]] &&
+        StringQ[First[$ClaudePrivateModel, ""]] &&
+        ToLowerCase[First[$ClaudePrivateModel, ""]] ===
+          ToLowerCase[$iPalettePrivateProvider],
+       $ClaudePrivateModel[[3]],
+       iLocalOAIDefaultBaseURL[$iPalettePrivateProvider]]}];
   (* 2026-08-16: モデルが変わったら Effort をそのモデルのキーへ入れ直す *)
   iPaletteSyncLMStudioEffort[]);
 
@@ -942,7 +960,7 @@ iPaletteEffortLabel[effort_] := Switch[effort,
   "high", "High", "max", "Max", _, "Medium"];
 
 iPaletteEffortCycle[provider_] :=
-  If[provider === "lmstudio",
+  If[iLocalOAIProviderQ[provider],
     {"off", "low", "medium", "high", "max"},
     {"low", "medium", "high", "max"}];
 
@@ -959,10 +977,12 @@ iPaletteNextEffort[provider_, cur_] :=
 iPaletteSyncLMStudioEffort[] := (
   If[!AssociationQ[$ClaudeLMStudioModelReasoning],
     $ClaudeLMStudioModelReasoning = <||>];
-  If[$iPaletteProvider === "lmstudio" &&
+  (* 2026-08-24: freetoken もモデル別表を共有する (iResolveFreeTokenReasoning
+     が同じ表から引いて FreeToken 語彙へ写す)。 *)
+  If[iLocalOAIProviderQ[$iPaletteProvider] &&
      StringQ[$iPaletteModelName] && $iPaletteModelName =!= "",
     $ClaudeLMStudioModelReasoning[$iPaletteModelName] = $iPaletteEffort];
-  If[$iPalettePrivateProvider === "lmstudio" &&
+  If[iLocalOAIProviderQ[$iPalettePrivateProvider] &&
      StringQ[$iPalettePrivateModelName] && $iPalettePrivateModelName =!= "",
     $ClaudeLMStudioModelReasoning[$iPalettePrivateModelName] =
       $iPalettePrivateEffort];
@@ -1009,9 +1029,10 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
     (* (a) \:65b0\:5f62\:5f0f\:304c\:4fdd\:5b58\:3055\:308c\:3066\:3044\:308b *)
     StringQ[vP] && MemberQ[$iPaletteProviderOrder, vP] &&
        StringQ[vM] && vM =!= "" &&
-       (* lmstudio: accept the saved model without a load-time HTTP query, so the
-          palette restores even when that model is not currently loaded. *)
-       (vP === "lmstudio" || MemberQ[iPaletteModelsFor[vP], vM]),
+       (* lmstudio/freetoken: accept the saved model without a load-time HTTP
+          query, so the palette restores even when that model is not currently
+          loaded / the server is down. *)
+       (iLocalOAIProviderQ[vP] || MemberQ[iPaletteModelsFor[vP], vM]),
       $iPaletteProvider  = vP;
       $iPaletteModelName = vM,
 
@@ -1232,6 +1253,44 @@ ClaudeRateLimitClear::usage =
   "ClaudeRateLimitClear[\"claudecode\"|...] \:306f\:6307\:5b9a provider \:306e\:307f\:30af\:30ea\:30a2\:3059\:308b\:3002\n" <>
   "\:8aa4\:691c\:51fa\:3084 status=allowed \:306e\:9032\:6357\:901a\:77e5\:306b\:3088\:308a\:30d6\:30ed\:30c3\:30af\:304c\:304b\:304b\:3063\:3066\:3057\:307e\:3063\:305f\:969b\:306b\n" <>
   "\:4f7f\:7528\:3059\:308b\:3002\:547c\:3073\:51fa\:3057\:5f8c\:306b ClaudeRateLimitStatus[] \:306f None \:3092\:8fd4\:3059\:3002";
+ClaudeAuthStatus::usage =
+  "ClaudeAuthStatus[] は claude CLI の認証 (OAuth) 状態を返す。
+" <>
+  "認証が切れている場合は Association、問題なければ None (ClaudeRateLimitStatus と同じ規約)。
+" <>
+  "判定は (1) 応答で検出した 401 authentication_failed の記録 と
+" <>
+  "(2) ~/.claude/.credentials.json のトークン有無 の 2 系統。API は叩かない。
+" <>
+  "再ログイン (資格情報ファイルの更新) を検知すると記録は自動でクリアされる。
+" <>
+  "
+" <>
+  "返り値のキー:
+" <>
+  "  \"State\"           -> \"expired\"
+" <>
+  "  \"Reason\"          -> \"OAuthSessionExpired\" | \"InvalidAPIKey\" | \"AuthenticationFailed\"
+" <>
+  "  \"Source\"          -> \"response\" | \"credentials\" | \"response+credentials\"
+" <>
+  "  \"Detected\"        -> DateObject[...] (応答から検出した場合)
+" <>
+  "  \"CredentialsPath\" -> \"...\\.claude\\.credentials.json\"
+" <>
+  "  \"Message\"         -> 再ログイン案内
+" <>
+  "
+" <>
+  "例:
+" <>
+  "  If[AssociationQ[ClaudeAuthStatus[]], Print[\"要再ログイン\"], Print[\"認証 OK\"]]";
+
+ClaudeAuthClear::usage =
+  "ClaudeAuthClear[] は内部に保持された認証エラー記録を手動でクリアする。
+" <>
+  "再ログイン後は自動でクリアされるが、誤検出でガードがかかった場合に使用する。";
+
 ClaudeAttachments::usage =
   "ClaudeAttachments[] \:306f\:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:4e00\:89a7\:3092\:8fd4\:3059\:3002\n" <>
   "ClaudeAttachments[session] \:306f\:6307\:5b9a\:30bb\:30c3\:30b7\:30e7\:30f3\:306e\:30a2\:30bf\:30c3\:30c1\:30e1\:30f3\:30c8\:4e00\:89a7\:3092\:8fd4\:3059\:3002";
@@ -1825,6 +1884,11 @@ $ClaudeLMStudioAPIToken::usage =
 $ClaudeLMStudioBaseURL::usage =
   "$ClaudeLMStudioBaseURL \[LongDash] LM Studio の既定 base URL (既定 \"http://127.0.0.1:1234\")。\n" <>
   "model tuple に URL が無い場合の fallback。ポート変更時はこの 1 箇所を変える (hardening 04 Inc1)。";
+
+$ClaudeFreeTokenBaseURL::usage =
+  "$ClaudeFreeTokenBaseURL \[LongDash] FreeToken (VRAM 超え MoE 用ローカル推論サーバ) の既定 base URL\n" <>
+  "(既定 \"http://127.0.0.1:1919\")。OpenAI 互換 /v1/chat/completions を提供する。\n" <>
+  "provider \"freetoken\" は lmstudio と同じローカル OpenAI 互換経路で扱われる (2026-08-24)。";
 
 ClaudeBackendAvailableQ::usage =
   "ClaudeBackendAvailableQ[{provider, model, url...}] は LLM backend の事前可用性チェック (preflight)。\n" <>
@@ -2744,8 +2808,8 @@ iCloudSendRouteLabel[provider_, url_:Automatic] :=
         "CloudLLM",
       prov === "openai" || prov === "zai" || prov === "kimi",
         If[localURLQ, "LocalOpenAICompatible", "CloudLLM"],
-      MemberQ[{"lmstudio", "ollama", "llamacpp", "localai", "local",
-               "koboldcpp", "textgenwebui"}, prov],
+      MemberQ[{"lmstudio", "freetoken", "ollama", "llamacpp", "localai",
+               "local", "koboldcpp", "textgenwebui"}, prov],
         "LocalLLM",
       localURLQ,
         "LocalLLM",
@@ -3213,15 +3277,16 @@ iNBFileRunPrivateNode[nb_NotebookObject, tag_String,
     provider  = $ClaudePrivateModel[[1]];
     model     = $ClaudePrivateModel[[2]];
     customURL = If[Length[$ClaudePrivateModel] >= 3, $ClaudePrivateModel[[3]], ""];
-    apiKey = If[ToLowerCase[provider] === "lmstudio",
-      iResolveLMStudioAPIKey[customURL],
+    apiKey = If[iLocalOAIProviderQ[provider],
+      iResolveLocalLLMAPIKey[provider, customURL],
       Quiet[NBAccess`NBGetAPIKey[provider, PrivacySpec -> <|"AccessLevel"->1.0|>]]];
     If[!StringQ[apiKey],
       iSessionUpdateLast[nb, tag, <|"response"->"ERROR: No API key"|>];
       Return[<||>]];
     prepared = iPrepareAnthropicPS1[apiKey, model, confPrompt,
-      Which[ToLowerCase[provider]==="lmstudio",
-          iEnsureChatCompletionsPath[If[customURL=!="",customURL,iLMStudioDefaultBaseURL[]]],
+      Which[iLocalOAIProviderQ[provider],
+          iEnsureChatCompletionsPath[If[customURL=!="",customURL,
+            iLocalOAIDefaultBaseURL[provider]]],
         customURL=!="", customURL, True, "https://api.anthropic.com/v1/messages"],
       If[ToLowerCase[provider]==="lmstudio","openai",provider], $ClaudeTimeout];
     If[prepared === $Failed,
@@ -9118,6 +9183,111 @@ iRecordRateLimitInfo[info_Association, provider_String] :=
 iRecordRateLimitInfo[_] := Null;
 iRecordRateLimitInfo[_, _] := Null;
 
+(* ── CLI 認証切れ (OAuth) の記録・警告・ガード (2026-08-28) ────────────
+   rate-limit と対になる層。401 authentication_failed は「使用制限」と同じく
+   呼び出し側では回復できない systemic な停止要因なので、同じ扱い
+   (記録 → 警告 → 呼び出し前ガード) にする。違いは復旧手段だけ:
+   rate-limit は待てば直る / 認証切れは再ログインしないと永久に直らない。
+   従来は iIsAPIErrorResponse に吸収され、各機能が独自の「API エラー/利用制限/
+   内部エラー」文言を出すだけだったため、認証切れだと分からなかった。 *)
+If[!ValueQ[$iLastAuthFailure], $iLastAuthFailure = None];
+If[!ValueQ[$iAuthWarnLastShown] || !NumericQ[$iAuthWarnLastShown],
+  $iAuthWarnLastShown = 0];
+(* 同一エラーの連投 (doc 並列投入など) で警告が溢れないよう間引く秒数 *)
+$iAuthWarnQuietSeconds = 60;
+
+iAuthFailureReason[text_String] :=
+  Which[
+    StringContainsQ[text, "OAuth session expired"], "OAuthSessionExpired",
+    StringContainsQ[text, "Invalid API key"], "InvalidAPIKey",
+    True, "AuthenticationFailed"];
+iAuthFailureReason[_] := "AuthenticationFailed";
+
+(* 応答から認証切れを検出したときに呼ぶ。記録 + (間引き付き) 警告表示。 *)
+iRecordAuthFailure[text_] :=
+  Module[{info},
+    info = <|
+      "State" -> "expired",
+      "Reason" -> iAuthFailureReason[text],
+      "Source" -> "response",
+      "Detected" -> DateObject[],
+      "DetectedAbs" -> AbsoluteTime[],
+      "Provider" -> "claudecode",
+      "CredentialsPath" -> Quiet @ Check[iClaudeCLICredentialsPath[], ""],
+      "Message" -> $iClaudeAuthFixHint|>;
+    $iLastAuthFailure = info;
+    iWarnAuthFailure[info];
+    info];
+
+iWarnAuthFailure[info_Association] :=
+  Module[{now = AbsoluteTime[]},
+    If[NumericQ[$iAuthWarnLastShown] &&
+       now - $iAuthWarnLastShown < $iAuthWarnQuietSeconds,
+      Return[Null, Module]];
+    $iAuthWarnLastShown = now;
+    Quiet @ Check[
+      Print[Style["\[WarningSign] [Claude CLI] 認証エラー 401 (" <>
+        Lookup[info, "Reason", "AuthenticationFailed"] <> ")。" <>
+        $iClaudeAuthFixHint, RGBColor[0.85, 0.1, 0.1], Bold]], Null];
+    Null];
+iWarnAuthFailure[_] := Null;
+
+(* 記録が古い / 再ログイン済みなら無効。資格情報ファイルが検出時刻より後に
+   更新されていれば再ログインとみなして自動クリアする。 *)
+iAuthRecordStaleQ[rec_Association] :=
+  Module[{det, credT},
+    det = Lookup[rec, "DetectedAbs", None];
+    If[!NumericQ[det], Return[True, Module]];
+    credT = Quiet @ Check[
+      AbsoluteTime[FileDate[iClaudeCLICredentialsPath[]]], None];
+    If[NumericQ[credT] && credT > det, Return[True, Module]];
+    (* 資格情報を追跡できない環境向けの保険 (30 分で失効) *)
+    AbsoluteTime[] - det > 1800];
+iAuthRecordStaleQ[_] := True;
+
+ClaudeAuthStatus[] :=
+  Module[{fileState, rec},
+    rec = $iLastAuthFailure;
+    If[AssociationQ[rec] && iAuthRecordStaleQ[rec],
+      $iLastAuthFailure = None; rec = None];
+    fileState = Quiet @ Check[iClaudeCLIAuthStatus[], "unknown"];
+    Which[
+      fileState === "expired",
+        Join[If[AssociationQ[rec], rec, <||>],
+          <|"State" -> "expired",
+            "Source" -> If[AssociationQ[rec], "response+credentials", "credentials"],
+            "Reason" -> If[AssociationQ[rec],
+              Lookup[rec, "Reason", "AuthenticationFailed"], "CredentialsCleared"],
+            "CredentialsPath" -> Quiet @ Check[iClaudeCLICredentialsPath[], ""],
+            "Message" -> $iClaudeAuthFixHint|>],
+      AssociationQ[rec], rec,
+      True, None]];
+
+ClaudeAuthClear[] := ($iLastAuthFailure = None; $iAuthWarnLastShown = 0; None);
+
+(* 呼び出し前ガード。provider が claudecode 以外 (lmstudio / 課金 API / codex)
+   なら CLI の認証状態は無関係なので発火しない。 *)
+iClaudeAuthGuard[modelSpec_:Automatic] :=
+  Module[{provider, st},
+    provider = Quiet @ Check[iRateLimitProviderKey[modelSpec], "claudecode"];
+    If[provider =!= "claudecode", Return[False, Module]];
+    st = Quiet @ Check[ClaudeAuthStatus[], None];
+    If[!AssociationQ[st], Return[False, Module]];
+    Quiet @ Check[
+      Print[Style["\[WarningSign] [ClaudeEval] Claude CLI の認証が無効です (" <>
+        ToString[Lookup[st, "Reason", "AuthenticationFailed"]] <> ")。" <>
+        $iClaudeAuthFixHint <> " CLI 呼び出しをスキップします。",
+        RGBColor[0.85, 0.1, 0.1], Bold]], Null];
+    True];
+
+iClaudeAuthFailure[] :=
+  Failure["AuthExpired", <|
+    "Reason" -> Quiet @ Check[
+      Lookup[Replace[ClaudeAuthStatus[], Except[_Association] -> <||>],
+        "Reason", "AuthenticationFailed"], "AuthenticationFailed"],
+    "CredentialsPath" -> Quiet @ Check[iClaudeCLICredentialsPath[], ""],
+    "Message" -> $iClaudeAuthFixHint|>];
+
 (* v2026-04-20 T05: Claude CLI \:306e stream-json (JSONL) \:304c raw \:306e\:307e\:307e
    \:6e21\:3055\:308c\:305f\:5834\:5408\:3001\:6700\:7d42 "type":"result" \:30a4\:30d9\:30f3\:30c8\:306e "result" \:30d5\:30a3\:30fc\:30eb\:30c9\:3092
    \:62bd\:51fa\:3059\:308b\:3002rate-limit \:30a8\:30e9\:30fc (429) \:306a\:3069\:3067\:306f
@@ -9142,7 +9312,7 @@ iStreamJsonLikeQ[_] := False;
 iExtractStreamJsonResultText[text_String] :=
   Module[{lines, resultLine, parsed,
           resultText, isError = False, apiErr = None,
-          rliInfo, resetsStr = "", resetsDate, nowDate, dur},
+          rliInfo, resetsStr = "", authStr = "", resetsDate, nowDate, dur},
     If[!iStreamJsonLikeQ[text], Return[text]];
     lines = StringSplit[text, "\n"];
     (* "type":"result" \:3092\:542b\:3080\:6700\:7d42\:884c\:3092\:63a2\:3059 *)
@@ -9177,10 +9347,17 @@ iExtractStreamJsonResultText[text_String] :=
               ""] <>
             ")"]]];
     
+    (* 2026-08-28: 認証切れ (401) は rate-limit と同様にここで記録し、
+       返すエラーテキスト自体にも再ログイン案内を埋め込む。これで
+       「API エラー」としか出さない呼び出し側でも原因が読み取れる。 *)
+    If[(isError || (IntegerQ[apiErr] && apiErr >= 400)) &&
+       iIsAuthFailureResponse[text],
+      iRecordAuthFailure[text];
+      authStr = " \[LongDash] " <> $iClaudeAuthFixHint];
     (* \:30a8\:30e9\:30fc\:6642\:306f\:63a5\:982d\:8f9e\:3092\:4ed8\:3051\:3066\:8b58\:5225\:3057\:3084\:3059\:304f\:3059\:308b *)
     If[isError || (IntegerQ[apiErr] && apiErr >= 400),
       "Error" <> If[IntegerQ[apiErr], " (" <> ToString[apiErr] <> ")", ""] <>
-        ": " <> resultText <> resetsStr,
+        ": " <> resultText <> resetsStr <> authStr,
       resultText]];
 iExtractStreamJsonResultText[x_] := x;
 
@@ -10388,7 +10565,11 @@ iIsAPIErrorResponse[response_String] :=
        \:4ee5\:964d ClaudeRateLimitStatus[] \:3067\:53c2\:7167\:53ef\:80fd\:3002 *)
     If[TrueQ[isErr],
       rliInfo = iExtractRateLimitInfo[response];
-      If[AssociationQ[rliInfo], iRecordRateLimitInfo[rliInfo]]];
+      If[AssociationQ[rliInfo], iRecordRateLimitInfo[rliInfo]];
+      (* 2026-08-28: 認証切れも rate-limit と同格で記録 + 警告する。
+         ここは全 provider の全応答が通る唯一の共通点なので、
+         どの機能から呼ばれても認証切れが必ず一度は表示される。 *)
+      If[iIsAuthFailureResponse[response], iRecordAuthFailure[response]]];
     isErr];
 
 (* \:5f93\:6765\:306e\:30d2\:30e5\:30fc\:30ea\:30b9\:30c6\:30a3\:30c3\:30af\:5224\:5b9a (stream-json \:4ee5\:5916\:3067\:4f7f\:7528) *)
@@ -10429,6 +10610,87 @@ iIsAPIErrorResponseLegacy[response_String] :=
 
 iIsAPIErrorResponse[_] := True;  (* \:975e\:6587\:5b57\:5217\:306f\:5e38\:306b\:30a8\:30e9\:30fc\:6271\:3044 *)
 iIsAPIErrorResponseLegacy[_] := True;
+
+(* ── Claude CLI の OAuth 認証切れ (2026-08-28) ───────────────────────────
+   `claude` CLI が 401 authentication_failed を返し
+   "Failed to authenticate: OAuth session expired and could not be refreshed"
+   で即終了するケース。API エラーの一種ではあるが rate limit でも一時的な
+   内部エラーでもなく、再試行では絶対に回復しない (ユーザーの再ログインが必須)。
+   従来は iIsAPIErrorResponse に吸収され「API エラー/利用制限/内部エラー」と
+   だけ表示されていたため、ドキュメント更新が中断した理由を判別できなかった。 *)
+$iClaudeAuthFixHint =
+  "Claude CLI の認証が切れています (OAuth セッション期限切れ)。" <>
+  "ターミナルで claude を起動し /login で再認証してから再実行してください。";
+
+iIsAuthFailureResponse[response_String] :=
+  StringContainsQ[response,
+    "OAuth session expired" | "Failed to authenticate" |
+    "\"error\":\"authentication_failed\"" |
+    "\"subtype\":\"authentication_failed\"" |
+    "\"error_status\":401" | "\"api_error_status\":401" |
+    "Invalid API key" | "Please run /login" | "invalid_grant"];
+iIsAuthFailureResponse[_] := False;
+
+(* CLI の資格情報ファイル。CLAUDE_CONFIG_DIR があればそちらを優先。 *)
+iClaudeCLICredentialsPath[] :=
+  Module[{d = Environment["CLAUDE_CONFIG_DIR"]},
+    If[!StringQ[d] || StringTrim[d] === "",
+      d = FileNameJoin[{$HomeDirectory, ".claude"}]];
+    FileNameJoin[{d, ".credentials.json"}]];
+
+(* API を叩かずファイルだけで CLI 認証の生死を判定する (投入前 fail-fast 用)。
+     "ok"      : 資格情報あり (期限内、または refresh 可能)
+     "expired" : トークンが空 / refresh token 自体が期限切れ = 回復不能
+     "unknown" : 判定材料なし (別の資格ストア等) → ブロックしない
+   リフレッシュに失敗した CLI は accessToken/refreshToken を空文字で書き戻す
+   (2026-08-28 実測: SourceVault doc 更新中断時の .credentials.json)。 *)
+iClaudeCLIAuthStatus[] :=
+  Module[{key, path, txt, j, o, at, rt, rexp},
+    key = Environment["ANTHROPIC_API_KEY"];
+    If[StringQ[key] && StringTrim[key] =!= "", Return["ok", Module]];
+    path = iClaudeCLICredentialsPath[];
+    If[!FileExistsQ[path], Return["unknown", Module]];
+    txt = Quiet @ Check[Import[path, "Text", CharacterEncoding -> "UTF-8"], $Failed];
+    If[!StringQ[txt], Return["unknown", Module]];
+    j = Quiet @ Check[Developer`ReadRawJSONString[txt], $Failed];
+    If[!AssociationQ[j], Return["unknown", Module]];
+    o = Lookup[j, "claudeAiOauth", None];
+    If[!AssociationQ[o], Return["unknown", Module]];
+    at = Lookup[o, "accessToken", None]; rt = Lookup[o, "refreshToken", None];
+    (* トークンのキー自体が無い = 別形式の資格ストア → 判定材料なし。
+       キーはあるが両方とも空 = リフレッシュ失敗で CLI が消去した状態。 *)
+    If[at === None && rt === None, Return["unknown", Module]];
+    If[(!StringQ[at] || StringTrim[at] === "") &&
+       (!StringQ[rt] || StringTrim[rt] === ""),
+      Return["expired", Module]];
+    rexp = Lookup[o, "refreshTokenExpiresAt", None];
+    If[NumericQ[rexp] && rexp > 0 && UnixTime[] > rexp/1000,
+      Return["expired", Module]];
+    "ok"];
+
+(* ドキュメント更新が claude CLI 経路かどうか (lmstudio/codex 等は対象外)。
+   判定は iDocExternalEligibleQ のモデル分岐と同じ意味論。 *)
+iDocUsesClaudeCLIQ[] :=
+  Module[{m = Quiet @ Check[iDocModelOverride[], Automatic]},
+    Which[
+      StringQ[m], True,
+      ListQ[m] && Length[m] >= 2 && StringQ[m[[1]]],
+        ToLowerCase[m[[1]]] === "claudecode",
+      ListQ[m], False,
+      True, True]];
+
+(* 投入前ゲート: 認証切れなら 1 件も投入せずに中断して再ログインを促す。 *)
+iDocAuthPreflightOK[nb_] :=
+  Module[{st},
+    If[!iDocUsesClaudeCLIQ[], Return[True, Module]];
+    st = Quiet @ Check[ClaudeAuthStatus[], None];
+    If[!AssociationQ[st], Return[True, Module]];
+    nbPrint[nb, Style["⛔ " <> $iClaudeAuthFixHint <> " (" <>
+      ToString[Lookup[st, "Reason", "AuthenticationFailed"]] <> " / 資格情報: " <>
+      ToString[Lookup[st, "CredentialsPath", ""]] <> ")",
+      FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+    Quiet @ Check[iSafeSetWindowStatus[nb, "⛔ Claude CLI 認証切れ"], Null];
+    False];
 
 iHTTPResponseBodyUTF8[resp_HTTPResponse] := Module[{bytes, body},
   bytes = Quiet @ Check[resp["BodyByteArray"], $Failed];
@@ -11139,20 +11401,25 @@ iOpenAIChatBodyBytes[model_String, prompt_String] :=
   iOpenAIChatBodyBytes[model, prompt, Automatic];
 
 (* 2026-08-16: temperature \:3092\:4efb\:610f\:3067\:4ed8\:4e0e\:3067\:304d\:308b\:3088\:3046\:306b\:3057\:305f\:3002
-   \:6570\:5024\:306e\:3068\:304d\:3060\:3051 body \:306b\:5165\:308c\:308b (Automatic / None \:306f\:5f93\:6765\:901a\:308a\:9001\:3089\:306a\:3044)\:3002 *)
-iOpenAIChatBodyBytes[model_String, prompt_String, temperature_] :=
+   \:6570\:5024\:306e\:3068\:304d\:3060\:3051 body \:306b\:5165\:308c\:308b (Automatic / None \:306f\:5f93\:6765\:901a\:308a\:9001\:3089\:306a\:3044)\:3002
+   2026-08-24: reasoningEffort (\:6587\:5b57\:5217\:306e\:3068\:304d\:306e\:307f "reasoning_effort" \:3092\:4ed8\:4e0e\:3002
+   FreeToken \:7528\:3002None / Automatic \:306f\:9001\:3089\:306a\:3044)\:3002 *)
+iOpenAIChatBodyBytes[model_String, prompt_String, temperature_,
+    reasoningEffort_:None] :=
   Quiet @ Check[
     ExportByteArray[
       Join[
         <|"model" -> model,
           "messages" -> {<|"role" -> "user", "content" -> prompt|>}|>,
-        If[NumericQ[temperature], <|"temperature" -> N[temperature]|>, <||>]],
+        If[NumericQ[temperature], <|"temperature" -> N[temperature]|>, <||>],
+        If[StringQ[reasoningEffort] && reasoningEffort =!= "",
+          <|"reasoning_effort" -> reasoningEffort|>, <||>]],
       "RawJSON", "Compact" -> True],
     $Failed];
 
 iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
     customURL_String:"https://api.openai.com/v1/chat/completions",
-    temperature_:Automatic] :=
+    temperature_:Automatic, reasoningEffort_:None] :=
   Module[{url, bodyBytes, resp, bodyStr, json, choices, msg, preflight},
     url = customURL;
     preflight = iCloudSendPreflightDecision["openai", prompt, url];
@@ -11163,7 +11430,8 @@ iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
     iLLMBreakpointGate["API sync (openai-compat)", <|"Provider" -> "openai-compat",
       "Model" -> model, "URL" -> url, "Prompt" -> prompt|>];
 
-    bodyBytes = iOpenAIChatBodyBytes[model, prompt, temperature];
+    bodyBytes = iOpenAIChatBodyBytes[model, prompt, temperature,
+      reasoningEffort];
     If[!ByteArrayQ[bodyBytes],
       Return[iL["Error: OpenAI API \:30ea\:30af\:30a8\:30b9\:30c8 JSON \:306e\:76f4\:5217\:5316\:306b\:5931\:6557\:3057\:307e\:3057\:305f",
         "Error: OpenAI API request JSON serialization failed"]]];
@@ -11242,6 +11510,96 @@ iResolveLMStudioAPIKey[customURL_String:""] :=
           PrivacySpec -> <|"AccessLevel" -> 1.0|>];
     If[StringQ[k] && k =!= "", k, "lm-studio"]
   ];
+
+(* ---- FreeToken (2026-08-24 追加) ----
+   FreeToken は VRAM に収まらない MoE モデル (gpt-oss-120b 等) を
+   CPU-GPU 協調実行するローカル推論サーバ。OpenAI 互換
+   /v1/chat/completions と /v1/models のみ提供する (LM Studio の
+   /api/v1 系 API や MCP integrations は無い)。lmstudio と同じ
+   「ローカル OpenAI 互換 provider」として配線し、URL 既定だけ替える。 *)
+iFreeTokenDefaultBaseURL[] :=
+  If[StringQ[$ClaudeFreeTokenBaseURL] && StringTrim[$ClaudeFreeTokenBaseURL] =!= "",
+    StringTrim[$ClaudeFreeTokenBaseURL],
+    "http://127.0.0.1:1919"];
+
+(* ローカル OpenAI 互換 provider の判定と URL 解決。lmstudio 分岐を
+   freetoken にも開くときは個別比較ではなくこの 2 つを使う。 *)
+iLocalOAIProviderQ[p_] :=
+  StringQ[p] && MemberQ[{"lmstudio", "freetoken"}, ToLowerCase[p]];
+
+iLocalOAIDefaultBaseURL[p_] :=
+  If[StringQ[p] && ToLowerCase[p] === "freetoken",
+    iFreeTokenDefaultBaseURL[], iLMStudioDefaultBaseURL[]];
+
+(* provider 名込みのローカル LLM トークン解決。NBAccess の credential 機構は
+   (provider, url) をキーにするので freetoken は freetoken として引く。
+   未登録なら従来どおりダミー "lm-studio" (FreeToken は Authorization を
+   要求しないので実害なし)。 *)
+iResolveLocalLLMAPIKey[p_, customURL_String:""] :=
+  Module[{prov, effURL, k},
+    prov = If[StringQ[p], ToLowerCase[p], "lmstudio"];
+    If[prov === "lmstudio", Return[iResolveLMStudioAPIKey[customURL]]];
+    effURL = If[customURL =!= "", customURL, iLocalOAIDefaultBaseURL[prov]];
+    k = Quiet @ NBAccess`NBGetLocalLLMAPIKey[prov, effURL,
+          PrivacySpec -> <|"AccessLevel" -> 1.0|>];
+    If[StringQ[k] && k =!= "", k, "lm-studio"]
+  ];
+
+(* ---- FreeToken reasoning effort (2026-08-24) ----
+   FreeToken は /v1/models が supported_reasoning_efforts を申告し、
+   /v1/chat/completions の "reasoning_effort" で受ける (gpt-oss 系:
+   none/minimal/low/medium/high/max/xhigh)。パレットの Effort は
+   lmstudio と同じモデル別表 $ClaudeLMStudioModelReasoning に書かれる
+   ので、そこから引いて FreeToken 語彙へ写す。申告に無い値は送らない
+   (lmstudio の「非対応へは送らない」規則と同じ)。 *)
+If[!AssociationQ[$iFreeTokenEffortsCache], $iFreeTokenEffortsCache = <||>];
+
+iGetFreeTokenSupportedEfforts[baseURL_String] :=
+  Module[{root, resp, body, json, data, entry, sup},
+    root = iLMStudioServerRoot[baseURL];
+    If[KeyExistsQ[$iFreeTokenEffortsCache, root],
+      Return[$iFreeTokenEffortsCache[root]]];
+    resp = Quiet @ Check[
+      URLRead[HTTPRequest[root <> "/v1/models", <|Method -> "GET"|>],
+        TimeConstraint -> 6], $Failed];
+    If[Head[resp] =!= HTTPResponse || resp["StatusCode"] =!= 200,
+      $iFreeTokenEffortsCache[root] = $Failed; Return[$Failed]];
+    body = resp["Body"];
+    json = Quiet @ Check[Developer`ReadRawJSONString[body], $Failed];
+    If[!AssociationQ[json],
+      json = Quiet @ Check[ImportString[body, "RawJSON"], $Failed]];
+    If[!AssociationQ[json],
+      $iFreeTokenEffortsCache[root] = $Failed; Return[$Failed]];
+    data = Lookup[json, "data", {}];
+    entry = FirstCase[data, e_ /; AssociationQ[e], <||>];
+    sup = Lookup[entry, "supported_reasoning_efforts", $Failed];
+    If[!ListQ[sup] || !AllTrue[sup, StringQ], sup = $Failed];
+    $iFreeTokenEffortsCache[root] = sup;
+    sup
+  ];
+iGetFreeTokenSupportedEfforts[___] := $Failed;
+
+(* パレット effort 語彙 -> FreeToken 語彙の候補列 (先頭から supported を採る) *)
+iFreeTokenReasoningCandidates["off"]    := {"none", "minimal"};
+iFreeTokenReasoningCandidates["low"]    := {"low", "minimal", "medium"};
+iFreeTokenReasoningCandidates["medium"] := {"medium", "low", "high"};
+iFreeTokenReasoningCandidates["high"]   := {"high", "medium", "xhigh"};
+iFreeTokenReasoningCandidates["max"]    := {"xhigh", "max", "high"};
+iFreeTokenReasoningCandidates[_]        := {};
+
+(* 送るべき reasoning_effort 値、または None (送らない)。
+   モデル別表 (パレット Effort が書く) -> supported で濾過。 *)
+iResolveFreeTokenReasoning[model_String, baseURL_String:""] :=
+  Module[{effort, sup},
+    effort = iLMStudioModelEffort[model];
+    If[!StringQ[effort], Return[None]];
+    sup = iGetFreeTokenSupportedEfforts[
+      If[baseURL =!= "", baseURL, iFreeTokenDefaultBaseURL[]]];
+    If[!ListQ[sup], Return[None]];
+    FirstCase[iFreeTokenReasoningCandidates[effort],
+      v_ /; MemberQ[sup, v] :> v, None]
+  ];
+iResolveFreeTokenReasoning[___] := None;
 
 (* ---- LM Studio MCP integrations \:89e3\:6c7a\:30d8\:30eb\:30d1 (2026-06-01 \:8ffd\:52a0) ----
    LM Studio /api/v1/chat \:306e integrations \:30d1\:30e9\:30e1\:30fc\:30bf (MCP \:30b5\:30fc\:30d0\:30fc / plugin) \:3092
@@ -11702,6 +12060,29 @@ iLMStudioPaletteModels[] :=
     ids];
 iLMStudioPaletteModels[___] := {};
 
+(* FreeToken のパレット候補: /v1/models の id 一覧 (TTL キャッシュ)。
+   不通時は {} を返し呼び出し側が静的リストへフォールバックする。 *)
+If[!AssociationQ[$iFreeTokenPaletteModelsCache],
+  $iFreeTokenPaletteModelsCache = <||>];
+
+iFreeTokenPaletteModels[] :=
+  Module[{baseURL, now, cached, models, ids},
+    baseURL = iFreeTokenDefaultBaseURL[];
+    now = AbsoluteTime[];
+    cached = Lookup[$iFreeTokenPaletteModelsCache, baseURL, Missing[]];
+    If[AssociationQ[cached] && NumberQ[Lookup[cached, "t", 0]] &&
+       now - cached["t"] < $iLMStudioPaletteModelsTTL,
+      Return[Lookup[cached, "ids", {}]]];
+    models = iLMStudioFetchModelsAt[
+      iLMStudioServerRoot[baseURL] <> "/v1/models", "lm-studio"];
+    ids = If[ListQ[models],
+      Select[DeleteDuplicates[DeleteMissing[iLMStudioModelEntryId /@ models]],
+        StringQ],
+      {}];
+    $iFreeTokenPaletteModelsCache[baseURL] = <|"t" -> now, "ids" -> ids|>;
+    ids];
+iFreeTokenPaletteModels[___] := {};
+
 (* ============================================================
    Backend preflight (hardening 04 Inc1, 2026-07-08)
 
@@ -11713,6 +12094,8 @@ iLMStudioPaletteModels[___] := {};
 
 If[! ValueQ[$ClaudeLMStudioBaseURL],
   $ClaudeLMStudioBaseURL = "http://127.0.0.1:1234"];
+If[! ValueQ[$ClaudeFreeTokenBaseURL],
+  $ClaudeFreeTokenBaseURL = "http://127.0.0.1:1919"];
 If[! AssociationQ[$iClaudeBackendAvailCache], $iClaudeBackendAvailCache = <||>];
 If[! ValueQ[$iClaudeBackendAvailTTL], $iClaudeBackendAvailTTL = 60];
 
@@ -11767,6 +12150,31 @@ iClaudeBackendAvailCompute["lmstudio", spec_List] :=
             "LoadedModels" -> loadedIds|>,
           <|"Available" -> False, "Reason" -> "ModelNotLoaded",
             "LoadedModels" -> loadedIds, "BaseURL" -> url|>]]];
+
+(* freetoken (2026-08-24): /v1/models が引ければ稼働中。model 指定時は
+   一覧に居るか suffix 一致で確認 (FreeToken は 1 モデル常駐)。
+   ロード中 (503) は /v1/models 自体は 200 を返すので block しない。 *)
+iClaudeBackendAvailCompute["freetoken", spec_List] :=
+  Module[{model, url, models, ids, ok},
+    model = If[Length[spec] >= 2, spec[[2]], Automatic];
+    url = If[Length[spec] >= 3 && StringQ[spec[[3]]] && spec[[3]] =!= "",
+      spec[[3]], iFreeTokenDefaultBaseURL[]];
+    models = iLMStudioFetchModelsAt[
+      iLMStudioServerRoot[url] <> "/v1/models", "lm-studio"];
+    If[! ListQ[models],
+      Return[<|"Available" -> False, "Reason" -> "NotRunning",
+        "BaseURL" -> url|>, Module]];
+    ids = Select[DeleteMissing[iLMStudioModelEntryId /@ models], StringQ];
+    If[model === Automatic || ! StringQ[model] || model === "",
+      Return[<|"Available" -> True, "Reason" -> "OK",
+        "LoadedModels" -> ids|>, Module]];
+    ok = MemberQ[ids, model] ||
+      AnyTrue[ids,
+        (StringEndsQ[#, "/" <> model] || StringEndsQ[model, "/" <> #]) &];
+    If[ok,
+      <|"Available" -> True, "Reason" -> "OK", "LoadedModels" -> ids|>,
+      <|"Available" -> False, "Reason" -> "ModelNotLoaded",
+        "LoadedModels" -> ids, "BaseURL" -> url|>]];
 
 iClaudeBackendAvailCompute["claudecode", _] :=
   Module[{rli = Quiet @ Check[ClaudeRateLimitStatus["claudecode"], None]},
@@ -12397,10 +12805,14 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
         iClaudeQueryRaw[prompt]]
     ];
 
-    (* LM Studio \:7b49\:30ed\:30fc\:30ab\:30eb\:30e2\:30c7\:30eb *)
-    If[prov === "lmstudio",
-      effectiveURL = If[customURL =!= "", customURL, iLMStudioDefaultBaseURL[]];
-      useMCP = ListQ[integrations] && Length[integrations] > 0;
+    (* LM Studio / FreeToken \:7b49\:30ed\:30fc\:30ab\:30eb\:30e2\:30c7\:30eb *)
+    If[iLocalOAIProviderQ[prov],
+      effectiveURL = If[customURL =!= "", customURL,
+        iLocalOAIDefaultBaseURL[prov]];
+      (* MCP (/api/v1/chat) \:306f LM Studio \:5c02\:7528\:3002freetoken \:306f\:5e38\:306b
+         OpenAI \:4e92\:63db /v1/chat/completions \:7d4c\:8def (2026-08-24)\:3002 *)
+      useMCP = prov === "lmstudio" &&
+        ListQ[integrations] && Length[integrations] > 0;
       If[useMCP,
         (* \:65b0\:7d4c\:8def: /api/v1/chat + MCP *)
         Return @ iQueryLMStudioChat[model, prompt, effectiveURL,
@@ -12417,14 +12829,17 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
         If[resolvedKey === Automatic, resolvedKey = $ClaudeLMStudioAPIToken];
         If[!StringQ[resolvedKey] || resolvedKey === "",
           Module[{k = Quiet @ NBAccess`NBGetLocalLLMAPIKey[
-            "lmstudio", effectiveURL,
+            prov, effectiveURL,
             PrivacySpec -> <|"AccessLevel" -> 1.0|>]},
             If[StringQ[k] && k =!= "", resolvedKey = k]]];
         If[!StringQ[resolvedKey] || resolvedKey === "", resolvedKey = "lm-studio"];
-        (* 2026-08-16: 従来経路もモデル別推奨 temperature を尊重する *)
-        Return @ Block[{$iClaudeCurrentAPIProvider = "lmstudio"},
+        (* 2026-08-16: 従来経路もモデル別推奨 temperature を尊重する。
+           2026-08-24: freetoken はモデル別 Effort を reasoning_effort として送る。 *)
+        Return @ Block[{$iClaudeCurrentAPIProvider = prov},
           iQueryOpenAIAPI[resolvedKey, model, prompt, url,
-            iResolveLMStudioTemperature[model, temp]]]
+            iResolveLMStudioTemperature[model, temp],
+            If[prov === "freetoken",
+              iResolveFreeTokenReasoning[model, effectiveURL], None]]]
       ]
     ];
     (* ―― NBAccess ノートブック課金 API チェック (Phase 28 Paid フラグベース) ――
@@ -12583,7 +12998,14 @@ iPrepareAnthropicPS1[apiKey_String, model_String, prompt_String,
     url_String:"https://api.anthropic.com/v1/messages",
     provider_String:"anthropic", psTimeout_Integer:300, mediaFiles_List:{}] :=
   Module[{psExe, tmpDir, promptFile, outFile, errFile, ps1File, script, strm,
-          manifestFile, isAnthropic = ToLowerCase[provider] === "anthropic"},
+          manifestFile, isAnthropic = ToLowerCase[provider] === "anthropic",
+          reEff, reEffPS},
+    (* 2026-08-24: freetoken はモデル別 Effort を reasoning_effort として
+       openai 形式 body に焼き込む (body は PS1 内で組むため WL 側で解決)。 *)
+    reEff = If[ToLowerCase[provider] === "freetoken",
+      Quiet @ iResolveFreeTokenReasoning[model, url], None];
+    reEffPS = If[StringQ[reEff] && reEff =!= "",
+      " reasoning_effort = '" <> reEff <> "';", ""];
     (* BreakPtr: 送信直前ブレーク (PS1 API 系、マルチモーダル含む) *)
     iLLMBreakpointGate["API (PS1)", <|"Provider" -> provider,
       "Model" -> model, "URL" -> url, "Prompt" -> prompt,
@@ -12657,14 +13079,16 @@ iPrepareAnthropicPS1[apiKey_String, model_String, prompt_String,
 " <>
       "    if ($mf.provider -eq 'anthropic') { $payloadObj = @{ model = $Model; max_tokens = 16384; messages = @(@{ role = 'user'; content = $contentArr.ToArray() }) } }
 " <>
-      "    else { $payloadObj = @{ model = $Model; messages = @(@{ role = 'user'; content = $contentArr.ToArray() }) } }
+      "    else { $payloadObj = @{ model = $Model;" <> reEffPS <>
+      " messages = @(@{ role = 'user'; content = $contentArr.ToArray() }) } }
 " <>
       "  } else {
 " <>
       If[isAnthropic,
         "    $payloadObj = @{ model = $Model; max_tokens = 16384; messages = @(@{ role = 'user'; content = $promptText }) }
 ",
-        "    $payloadObj = @{ model = $Model; messages = @(@{ role = 'user'; content = $promptText }) }
+        "    $payloadObj = @{ model = $Model;" <> reEffPS <>
+        " messages = @(@{ role = 'user'; content = $promptText }) }
 "
       ] <>
       "  }
@@ -13068,9 +13492,9 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
         If[ListQ[queue], Scan[Function[thk, Quiet[thk[]]], queue]];
         Return[]]];
 
-    (* API \:30ad\:30fc\:53d6\:5f97: lmstudio \:306f NBAccess \:7d4c\:7531\:3067\:89e3\:6c7a (Auth ON \:5bfe\:5fdc) *)
-    If[ToLowerCase[provider] === "lmstudio",
-      apiKey = iResolveLMStudioAPIKey[customURL],
+    (* API \:30ad\:30fc\:53d6\:5f97: lmstudio/freetoken \:306f NBAccess \:7d4c\:7531\:3067\:89e3\:6c7a (Auth ON \:5bfe\:5fdc) *)
+    If[iLocalOAIProviderQ[provider],
+      apiKey = iResolveLocalLLMAPIKey[provider, customURL],
       apiKey = Quiet[NBAccess`NBGetAPIKey[provider,
         PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
       If[!StringQ[apiKey],
@@ -13099,10 +13523,11 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
             "https://api.anthropic.com/v1/messages",
           (* 2026-07-29: lmstudio + media \:306f OpenAI \:4e92\:63db chat/completions \:3078\:3002
              customURL \:306f base URL (\:4f8b: http://127.0.0.1:1234) \:306e\:305f\:3081
-             \:5fc5\:305a path \:3092\:88dc\:5b8c\:3059\:308b\:3002 *)
-          ToLowerCase[provider] === "lmstudio",
+             \:5fc5\:305a path \:3092\:88dc\:5b8c\:3059\:308b\:3002freetoken \:3082\:540c\:69d8 (2026-08-24)\:3002 *)
+          iLocalOAIProviderQ[provider],
             iEnsureChatCompletionsPath[
-              If[customURL =!= "", customURL, iLMStudioDefaultBaseURL[]]],
+              If[customURL =!= "", customURL,
+                iLocalOAIDefaultBaseURL[provider]]],
           customURL =!= "", customURL,
           ToLowerCase[provider] === "zai", $iZAIChatCompletionsURL,
           ToLowerCase[provider] === "kimi", $iKimiChatCompletionsURL,
@@ -14539,8 +14964,8 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
 
     (* \[HorizontalLine]\[HorizontalLine] API \:30ad\:30fc\:53d6\:5f97 (provider \:5225) \[HorizontalLine]\[HorizontalLine] *)
     apiKey = Which[
-      providerLower === "lmstudio",
-        iResolveLMStudioAPIKey[
+      iLocalOAIProviderQ[providerLower],
+        iResolveLocalLLMAPIKey[providerLower,
           If[ListQ[modelSpec] && Length[modelSpec] >= 3 && StringQ[modelSpec[[3]]], modelSpec[[3]], ""]],
       True,
         Quiet[NBAccess`NBGetAPIKey[providerLower,
@@ -14554,7 +14979,7 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
     url = Which[
       ListQ[modelSpec] && Length[modelSpec] >= 3 && StringQ[modelSpec[[3]]] && modelSpec[[3]] =!= "",
         If[providerLower === "openai" || providerLower === "zai" ||
-           providerLower === "kimi" || providerLower === "lmstudio",
+           providerLower === "kimi" || iLocalOAIProviderQ[providerLower],
           iEnsureChatCompletionsPath[modelSpec[[3]]],
           modelSpec[[3]]],
       providerLower === "anthropic",
@@ -14565,8 +14990,8 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
         $iZAIChatCompletionsURL,
       providerLower === "kimi",
         $iKimiChatCompletionsURL,
-      providerLower === "lmstudio",
-        iEnsureChatCompletionsPath[iLMStudioDefaultBaseURL[]],
+      iLocalOAIProviderQ[providerLower],
+        iEnsureChatCompletionsPath[iLocalOAIDefaultBaseURL[providerLower]],
       True,
         Return["Error: \:672a\:5bfe\:5fdc\:30d7\:30ed\:30d0\:30a4\:30c0: " <> provider]
     ];
@@ -14576,11 +15001,14 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
        Anthropic \:306f\:4ee5\:524d\:901a\:308a URLRead \:7d4c\:7531\:3067 ByteArray \:9001\:53d7\:4fe1\:3002 *)
     Which[
       providerLower === "openai" || providerLower === "zai" ||
-          providerLower === "kimi" || providerLower === "lmstudio",
-        (* 2026-08-16: lmstudio はモデル別推奨 temperature を付与 *)
+          providerLower === "kimi" || iLocalOAIProviderQ[providerLower],
+        (* 2026-08-16: lmstudio はモデル別推奨 temperature を付与。
+           2026-08-24: freetoken は reasoning_effort も付与。 *)
         Return @ iQueryOpenAIAPI[apiKey, model, prompt, url,
-          If[providerLower === "lmstudio",
-            iResolveLMStudioTemperature[model, Automatic], Automatic]],
+          If[iLocalOAIProviderQ[providerLower],
+            iResolveLMStudioTemperature[model, Automatic], Automatic],
+          If[providerLower === "freetoken",
+            iResolveFreeTokenReasoning[model], None]],
       providerLower === "anthropic",
         Null,  (* \:4ee5\:4e0b\:306e Anthropic \:8def\:7d50\:3092\:7d9a\:884c *)
       True,
@@ -17697,6 +18125,10 @@ ClaudeEval[task_String, opts:OptionsPattern[]] := Module[{dispatchResult, single
           "RateLimitType" ->
             Lookup[$iLastRateLimitInfo, "RateLimitType", None],
           "Message" -> "CLI call skipped: rate limit active."|>]]];
+    (* 2026-08-28: 認証切れ事前ガード。rate-limit と同格で扱う
+       (待てば直る rate-limit と違い、再ログインしないと永久に直らない)。 *)
+    If[TrueQ[iClaudeAuthGuard[OptionValue[Model]]],
+      Return[iClaudeAuthFailure[]]];
     iClaudeFreezeLog["eval-ratelimit-end"];
     dispatchResult = iClaudeEvalTryDispatch[task, {opts}];
     iClaudeFreezeLog["eval-dispatch-end",
@@ -17785,6 +18217,10 @@ ClaudeEval[items_List, opts:OptionsPattern[]] := Module[{dispatchResult, paidGua
       Return[Failure["RateLimitActive",
         <|"ResetsAt" -> Lookup[$iLastRateLimitInfo, "ResetsAt", None],
           "Message" -> "CLI call skipped: rate limit active."|>]]];
+    (* 2026-08-28: 認証切れ事前ガード。rate-limit と同格で扱う
+       (待てば直る rate-limit と違い、再ログインしないと永久に直らない)。 *)
+    If[TrueQ[iClaudeAuthGuard[OptionValue[Model]]],
+      Return[iClaudeAuthFailure[]]];
     dispatchResult = iClaudeEvalTryDispatch[items, {opts}];
     iClaudeFreezeLog["eval-list-dispatch-end",
       If[dispatchResult =!= $iClaudeEvalNotDispatched,
@@ -17835,6 +18271,10 @@ ClaudeEval[session_Association, task_String, opts:OptionsPattern[]] := Module[{p
       Return[Failure["RateLimitActive",
         <|"ResetsAt" -> Lookup[$iLastRateLimitInfo, "ResetsAt", None],
           "Message" -> "CLI call skipped: rate limit active."|>]]];
+    (* 2026-08-28: 認証切れ事前ガード。rate-limit と同格で扱う
+       (待てば直る rate-limit と違い、再ログインしないと永久に直らない)。 *)
+    If[TrueQ[iClaudeAuthGuard[OptionValue[ClaudeEval, {opts}, Model]]],
+      Return[iClaudeAuthFailure[]]];
     iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[ClaudeEval, {opts}, Fallback]];
     $iAllowReadTool = False;
@@ -17871,6 +18311,10 @@ ClaudeEval[session_Association, items_List, opts:OptionsPattern[]] := Module[{pa
       Return[Failure["RateLimitActive",
         <|"ResetsAt" -> Lookup[$iLastRateLimitInfo, "ResetsAt", None],
           "Message" -> "CLI call skipped: rate limit active."|>]]];
+    (* 2026-08-28: 認証切れ事前ガード。rate-limit と同格で扱う
+       (待てば直る rate-limit と違い、再ログインしないと永久に直らない)。 *)
+    If[TrueQ[iClaudeAuthGuard[OptionValue[ClaudeEval, {opts}, Model]]],
+      Return[iClaudeAuthFailure[]]];
     iCaptureEvalCell[];
     $currentUseFallback = TrueQ[OptionValue[ClaudeEval, {opts}, Fallback]];
     $iAllowReadTool = False;
@@ -23116,6 +23560,10 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     (* 2026-07-10 (docext): 適格なら全パイプラインを外部 wolframscript ワーカーへ
        退避し、FE メインカーネルは軽量 status tick のみにする。不成立 ($Failed) 時は
        従来経路へフォールバック。 *)
+    (* 2026-08-28: CLI の OAuth 認証切れ時は外部/カーネル内どちらの経路でも
+       全 doc が確実に失敗する (81k chars のプロンプトを 3 本組んで 401 で全滅した
+       実績あり)。1 件も投入せずに中断し、再ログインを促す。 *)
+    If[!iDocAuthPreflightOK[nb], Return[$Failed]];
     If[iDocExternalEligibleQ[{}] &&
        iDocExternalDispatch[packageName, nb, docsDir, autoInstruction, allDocs,
          diffText, srcFile, "Update", designContext] =!= $Failed,
@@ -23267,6 +23715,7 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
           Length[StringCases[designContext, "--- design/"]]] <> " 件を加味"]];
       (* 2026-07-10 (docext): 画像添付なし かつ 適格なら外部 wolframscript ワーカーへ。
          不成立 ($Failed) 時は従来経路へフォールバック。 *)
+      If[!iDocAuthPreflightOK[nb], Return[$Failed]];
       If[mf === {} && iDocExternalEligibleQ[mf] &&
          iDocExternalDispatch[packageName, nb, docsDir, enrichedInstruction,
            targetDocs, diffText, srcFile, mode, designContext] =!= $Failed,
@@ -23856,8 +24305,10 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
             If[!StringQ[response] || iIsAPIErrorResponse[response],
               nbPrint[nb2, Style[
                 "\:26d4 [" <> ToString[i] <> "/" <> ToString[Length[tds]] <> "] " <> df <>
-                  " \:306e\:66f4\:65b0\:3092\:4e2d\:65ad\:3057\:307e\:3057\:305f (API \:30a8\:30e9\:30fc/\:5229\:7528\:5236\:9650/\:5185\:90e8\:30a8\:30e9\:30fc)\:3002" <>
-                  "\:518d\:5b9f\:884c\:3059\:308b\:3068\:672a\:5b8c\:4e86\:5206\:304b\:3089\:518d\:958b\:3057\:307e\:3059\:3002\n" <>
+                  If[StringQ[response] && iIsAuthFailureResponse[response],
+                    " \:306e\:66f4\:65b0\:3092\:4e2d\:65ad\:3057\:307e\:3057\:305f\:3002" <> $iClaudeAuthFixHint <> "\n",
+                    " \:306e\:66f4\:65b0\:3092\:4e2d\:65ad\:3057\:307e\:3057\:305f (API \:30a8\:30e9\:30fc/\:5229\:7528\:5236\:9650/\:5185\:90e8\:30a8\:30e9\:30fc)\:3002" <>
+                    "\:518d\:5b9f\:884c\:3059\:308b\:3068\:672a\:5b8c\:4e86\:5206\:304b\:3089\:518d\:958b\:3057\:307e\:3059\:3002\n"] <>
                   StringTake[ToString[response], UpTo[300]],
                 FontColor -> RGBColor[0.8, 0.2, 0.2]]];
               $iDocUpdateActive = KeyDrop[$iDocUpdateActive, pn];
@@ -24027,7 +24478,9 @@ iDocParallelPump[jobId_String] :=
                    Lookup[stx["gen"], d, 0] === g,
                   Which[
                     !StringQ[response] || iIsAPIErrorResponse[response],
-                      iDocParallelReport[jid, d, g, "systemic",
+                      iDocParallelReport[jid, d, g,
+                        If[StringQ[response] && iIsAuthFailureResponse[response],
+                          "auth", "systemic"],
                         If[StringQ[response], StringTake[StringTrim[response], UpTo[120]], "(\:975e\:6587\:5b57\:5217)"]],
                     iSafeWriteDoc[dpath, response, pn] === $Failed,
                       iDocParallelReport[jid, d, g, "quality", $iDocLastFailReason],
@@ -24076,6 +24529,12 @@ iDocParallelReport[jobId_String, doc_String, gen_Integer, outcome_String, detail
           nbPrint[st["nb"], Style["\:26d4 " <> doc <> " \:5931\:6557" <> dtl <> " (\:518d\:8a66\:884c " <> ToString[maxR] <>
             " \:56de\:5f8c)\:3002\:30d5\:30a1\:30a4\:30eb\:306f\:5909\:66f4\:305b\:305a\:30b9\:30ad\:30c3\:30d7\:3001\:518d\:5b9f\:884c\:3067\:518d\:8a66\:884c\:3002",
             FontColor -> RGBColor[0.8, 0.2, 0.2]]]],
+      "auth",
+        (* \:8a8d\:8a3c\:5207\:308c: \:518d\:8a66\:884c\:3067\:306f\:56de\:5fa9\:3057\:306a\:3044\:306e\:3067\:5373\:4e2d\:65ad + \:518d\:30ed\:30b0\:30a4\:30f3\:6848\:5185 *)
+        st["done"] = Append[st["done"], doc];
+        st["failed"] = Append[st["failed"], doc]; st["systemic"] = True;
+        nbPrint[st["nb"], Style["\:26d4 " <> doc <> " \:5931\:6557: " <> $iClaudeAuthFixHint,
+          FontColor -> RGBColor[0.8, 0.2, 0.2]]],
       _,
         st["done"] = Append[st["done"], doc];
         st["failed"] = Append[st["failed"], doc]; st["systemic"] = True;
@@ -24106,7 +24565,11 @@ iDocParallelFinishNonReadme[jobId_String] :=
             If[!AssociationQ[stx] || Lookup[stx, "readmeRetries", 0] =!= rgg, Return[Null]];
             maxR = Lookup[stx, "maxRetries", 1];
             If[!StringQ[response] || iIsAPIErrorResponse[response],
-              nbPrint[nb2, Style["\:26d4 README.md \:5931\:6557 (API \:30a8\:30e9\:30fc/\:5236\:9650)\:3002\:518d\:5b9f\:884c\:3067 README \:304b\:3089\:518d\:958b\:3002", FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+              nbPrint[nb2, Style[
+                If[StringQ[response] && iIsAuthFailureResponse[response],
+                  "\:26d4 README.md \:5931\:6557: " <> $iClaudeAuthFixHint,
+                  "\:26d4 README.md \:5931\:6557 (API \:30a8\:30e9\:30fc/\:5236\:9650)\:3002\:518d\:5b9f\:884c\:3067 README \:304b\:3089\:518d\:958b\:3002"],
+                FontColor -> RGBColor[0.8, 0.2, 0.2]]];
               iDocParallelFinalizeFailed[jid]; Return[Null]];
             If[iSafeWriteDoc[dpath, response, pn] === $Failed,
               If[rgg < maxR,
@@ -24296,7 +24759,8 @@ iDocWorkerRunCore[jobDir_String, job_Association] :=
           targets, cycleKey, maxConc, maxRetries, perDocTimeout, jobDeadline,
           model, effort, sourceCode, splitCache, statusPath, donePath, claimPath,
           events = {}, pending, launched = <||>, doneDocs = {}, okDocs = {},
-          failedDocs = {}, systemic = False, seq = 0, startT = AbsoluteTime[],
+          failedDocs = {}, systemic = False, authExpired = False,
+          seq = 0, startT = AbsoluteTime[],
           emit, writeStatus, launchDoc, handleResponse, grandTotal},
     pkg           = Replace[Lookup[job, "Package", ""], Except[_String] -> ""];
     srcFile       = Replace[Lookup[job, "SrcFile", ""], Except[_String] -> ""];
@@ -24320,6 +24784,14 @@ iDocWorkerRunCore[jobDir_String, job_Association] :=
     If[pkg === "" || !FileExistsQ[srcFile] || !DirectoryQ[docsDir] || targets === {},
       iDocExtWriteJson[donePath,
         <|"Done" -> True, "Ok" -> False, "Error" -> "InvalidJobFields"|>];
+      Return[$Failed, Module]];
+    (* 2026-08-28: CLI の OAuth 認証切れは全 doc が確実に失敗する。
+       80k chars 級のプロンプトを組んで CLI を起動する前に fail-fast する。
+       (FE 側 iDocAuthPreflightOK と二重ゲート: dispatch 後に切れた場合も拾う) *)
+    If[iDocUsesClaudeCLIQ[] && AssociationQ[Quiet @ Check[ClaudeAuthStatus[], None]],
+      iDocExtWriteJson[donePath,
+        <|"Done" -> True, "Ok" -> False, "OkDocs" -> {}, "FailedDocs" -> {},
+          "Systemic" -> True, "Error" -> "AuthExpired"|>];
       Return[$Failed, Module]];
     (* References/Demos 等の doc 状態を job + 永続 doc_options.json から復元 *)
     iDocInitState[pkg,
@@ -24403,8 +24875,13 @@ iDocWorkerRunCore[jobDir_String, job_Association] :=
       Module[{rkey = pkg <> "|" <> doc, rc, w},
         If[!StringQ[response] || iIsAPIErrorResponse[response],
           systemic = True;
+          If[StringQ[response] && iIsAuthFailureResponse[response],
+            authExpired = True];
           doneDocs = Append[doneDocs, doc]; failedDocs = Append[failedDocs, doc];
-          emit["⛔ " <> doc <> " 失敗 (API エラー/利用制限/内部エラー)。新規投入を停止します。"],
+          emit[If[TrueQ[authExpired],
+            "⛔ " <> doc <> " 失敗 (Claude CLI の認証切れ: OAuth セッション期限切れ)。" <>
+              "再試行では回復しないため中断します。",
+            "⛔ " <> doc <> " 失敗 (API エラー/利用制限/内部エラー)。新規投入を停止します。"]],
           w = Quiet @ Check[iSafeWriteDoc[info["DocPath"], response, pkg], $Failed];
           If[w === $Failed,
             rc = Lookup[$iDocRetryCount, rkey, 0];
@@ -24497,6 +24974,7 @@ iDocWorkerRunCore[jobDir_String, job_Association] :=
           "Done" -> True, "Ok" -> okAll,
           "OkDocs" -> okDocs, "FailedDocs" -> failedDocs,
           "Systemic" -> systemic,
+          "Error" -> If[TrueQ[authExpired], "AuthExpired", ""],
           "Backup" -> If[StringQ[histDir], histDir, ""],
           "ElapsedSeconds" -> Round[AbsoluteTime[] - startT]|>];
         (* claim は最後に削除 (writeStatus が再作成しない位置で)。
@@ -24698,6 +25176,7 @@ iClaudeDocExtFinish[jid_String, info_Association, d_Association] :=
           If[failedDocs =!= {}, "失敗: " <> StringRiffle[failedDocs, ", "] <> "。", ""] <>
           If[err === "WorkerDied",
             "ワーカーが完了マーカーを残さず終了しました (ライセンス席枯渇の可能性)。", ""] <>
+          If[err === "AuthExpired", $iClaudeAuthFixHint, ""] <>
           "再実行で未完了分から再開します。",
           FontColor -> RGBColor[0.8, 0.2, 0.2]]]];
       iSafeSetWindowStatus[nb, If[ok,
@@ -29909,14 +30388,14 @@ ShowClaudePalette[] := (
             Dynamic[
               If[StringQ[$iPaletteModelName] && $iPaletteModelName =!= "",
                 $iPaletteModelName, iL["\:672a\:8a2d\:5b9a", "unset"]]]],
-          (* lmstudio: refresh the live loaded-model list on demand *)
-          If[$iPaletteProvider === "lmstudio",
+          (* lmstudio/freetoken: refresh the live model list on demand *)
+          If[iLocalOAIProviderQ[$iPaletteProvider],
             Tooltip[
               Button[
                 Style["\:21bb", 11, Bold, RGBColor[0.2, 0.45, 0.3]],
                 (ClaudeCode`RefreshLMStudioPaletteModels[];
                  Module[{models},
-                   models = iPaletteModelsFor["lmstudio"];
+                   models = iPaletteModelsFor[$iPaletteProvider];
                    If[ListQ[models] && Length[models] >= 1 &&
                       ! MemberQ[models, $iPaletteModelName],
                      $iPaletteModelName = models[[1]];
@@ -29940,16 +30419,16 @@ ShowClaudePalette[] := (
             Style[iL["\:30a8\:30d5\:30a9\:30fc\:30c8: ", "Effort: "] <>
               iPaletteEffortLabel[$iPaletteEffort],
               9, Bold, GrayLevel[0.2]],
-            (If[$iPaletteProvider === "lmstudio" || $iPaletteModel =!= "sonnet",
+            (If[iLocalOAIProviderQ[$iPaletteProvider] || $iPaletteModel =!= "sonnet",
               $iPaletteEffort =
                 iPaletteNextEffort[$iPaletteProvider, $iPaletteEffort];
               iPaletteSyncLMStudioEffort[];
               iSavePaletteSettings[InputNotebook[]]]),
             Appearance -> "Frameless"],
           Dynamic[
-            If[$iPaletteProvider === "lmstudio",
-              iL["\:6a19\:6e96\:30e2\:30c7\:30eb (LM Studio) \:306e reasoning\:3002Off/Low/Medium/High/Max \:3092\:5faa\:74b0\:3002Off = thinking \:7121\:52b9\:3002",
-                 "Reasoning for the standard LM Studio model. Cycles Off/Low/Medium/High/Max; Off disables thinking."],
+            If[iLocalOAIProviderQ[$iPaletteProvider],
+              iL["\:6a19\:6e96\:30e2\:30c7\:30eb (\:30ed\:30fc\:30ab\:30eb LLM) \:306e reasoning\:3002Off/Low/Medium/High/Max \:3092\:5faa\:74b0\:3002Off = thinking \:7121\:52b9\:3002",
+                 "Reasoning for the standard local LLM model. Cycles Off/Low/Medium/High/Max; Off disables thinking."],
               iL["\:6a19\:6e96\:30e2\:30c7\:30eb\:306e\:30a8\:30d5\:30a9\:30fc\:30c8 (Claude Code CLI \:306e --effort)\:3002",
                  "Effort for the standard model (Claude Code CLI --effort)."]]]],
         SynchronousUpdating -> False],
@@ -29994,11 +30473,12 @@ ShowClaudePalette[] := (
                       iSavePaletteSettings[InputNotebook[]]]],
                   Appearance -> "Frameless",
                   FrameMargins -> {{0, 0}, {0, 0}}],
-                If[$iPalettePrivateProvider === "lmstudio",
+                If[iLocalOAIProviderQ[$iPalettePrivateProvider],
                   Button[
                     Style["\:21bb", 9, Bold, RGBColor[0.55, 0.2, 0.2]],
                     (ClaudeCode`RefreshLMStudioPaletteModels[];
-                     Module[{models = iPaletteModelsFor["lmstudio"]},
+                     Module[{models =
+                         iPaletteModelsFor[$iPalettePrivateProvider]},
                        If[ListQ[models] && Length[models] >= 1 &&
                           ! MemberQ[models, $iPalettePrivateModelName],
                          $iPalettePrivateModelName = models[[1]];
@@ -33206,16 +33686,17 @@ iILaunchChunkAsync[chunk_Association, prompt_String,
             "startTime"->AbsoluteTime[]|>,
           $Failed],
       (* \[HorizontalLine]\[HorizontalLine] Anthropic API / LMStudio / OpenAI: PS1 \:7d4c\:7531 \[HorizontalLine]\[HorizontalLine] *)
-      MemberQ[{"anthropic","lmstudio","openai"}, ToLowerCase[provider]],
+      MemberQ[{"anthropic","lmstudio","freetoken","openai"},
+          ToLowerCase[provider]],
         Module[{apiKey, apiURL},
-          apiKey = If[ToLowerCase[provider] === "lmstudio",
-            iResolveLMStudioAPIKey[],
+          apiKey = If[iLocalOAIProviderQ[provider],
+            iResolveLocalLLMAPIKey[provider],
             Quiet[NBAccess`NBGetAPIKey[provider,
               PrivacySpec -> <|"AccessLevel" -> 1.0|>]]];
           If[!StringQ[apiKey], Return[$Failed]];
           apiURL = Which[
-            ToLowerCase[provider] === "lmstudio",
-              iEnsureChatCompletionsPath[iLMStudioDefaultBaseURL[]],
+            iLocalOAIProviderQ[provider],
+              iEnsureChatCompletionsPath[iLocalOAIDefaultBaseURL[provider]],
             True,
               "https://api.anthropic.com/v1/messages"];
           prepared = iPrepareAnthropicPS1[apiKey, mdl, prompt, apiURL,
@@ -35912,14 +36393,15 @@ iClaudeProcessFileLaunchNodeB[prompt_String] :=
 iClaudeProcessFileLaunchNodeA[prompt_String, provider_String,
                                model_String, customURL_String] :=
   Module[{apiKey, url, prepared, proc},
-    apiKey = If[ToLowerCase[provider] === "lmstudio",
-      iResolveLMStudioAPIKey[customURL],
+    apiKey = If[iLocalOAIProviderQ[provider],
+      iResolveLocalLLMAPIKey[provider, customURL],
       Quiet[NBAccess`NBGetAPIKey[provider,
         PrivacySpec -> <|"AccessLevel" -> 1.0|>]]];
     If[!StringQ[apiKey], Return[None]];
     url = Which[
-      ToLowerCase[provider] === "lmstudio",
-        iEnsureChatCompletionsPath[If[customURL =!= "", customURL, iLMStudioDefaultBaseURL[]]],
+      iLocalOAIProviderQ[provider],
+        iEnsureChatCompletionsPath[If[customURL =!= "", customURL,
+          iLocalOAIDefaultBaseURL[provider]]],
       customURL =!= "", customURL,
       True, "https://api.anthropic.com/v1/messages"];
     prepared = iPrepareAnthropicPS1[apiKey, model, prompt, url,
@@ -36171,8 +36653,8 @@ NBFileTranslate[inputPath_String, outputPath_String,
               model     = $ClaudePrivateModel[[2]];
               customURL = If[Length[$ClaudePrivateModel] >= 3,
                 $ClaudePrivateModel[[3]], ""];
-              apiKey = If[ToLowerCase[provider] === "lmstudio",
-                iResolveLMStudioAPIKey[customURL],
+              apiKey = If[iLocalOAIProviderQ[provider],
+                iResolveLocalLLMAPIKey[provider, customURL],
                 Quiet[NBAccess`NBGetAPIKey[provider,
                   PrivacySpec -> <|"AccessLevel"->1.0|>]]];
               If[!StringQ[apiKey],
@@ -36182,9 +36664,10 @@ NBFileTranslate[inputPath_String, outputPath_String,
               resp = Quiet @ Module[{prepared, proc, outF, startT},
                 prepared = iPrepareAnthropicPS1[apiKey, model, prompt,
                   Which[
-                    ToLowerCase[provider] === "lmstudio",
+                    iLocalOAIProviderQ[provider],
                       iEnsureChatCompletionsPath[
-                        If[customURL =!= "", customURL, iLMStudioDefaultBaseURL[]]],
+                        If[customURL =!= "", customURL,
+                          iLocalOAIDefaultBaseURL[provider]]],
                     customURL =!= "", customURL,
                     True, "https://api.anthropic.com/v1/messages"],
                   If[ToLowerCase[provider] === "lmstudio", "openai", provider],
@@ -36347,6 +36830,9 @@ ClaudeCode`RefreshLMStudioPaletteModels[] := (
   (* 2026-08-16: reasoning capability もセッションキャッシュなので一緒に落とす。
      モデルの DL 完了前に問い合わせて None を掴むと、以後 Effort が効かなく見える。 *)
   $iLMStudioModelReasoningCache = <||>;
+  (* 2026-08-24: freetoken の候補/effort キャッシュも同時に落とす *)
+  $iFreeTokenPaletteModelsCache = <||>;
+  $iFreeTokenEffortsCache = <||>;
   iLMStudioPaletteModels[]);
 
 (* ============================================================
@@ -37618,7 +38104,7 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
              \:6301\:3064\:305f\:3081\:5f37\:5236 sync \:3057\:306a\:3044\:3002
              \:540c\:671f URLRead \:3060\:3068 glm \:63a8\:8ad6\:30e2\:30c7\:30eb\:306e\:9577\:6642\:9593\:5fdc\:7b54\:4e2d\:30ab\:30fc\:30cd\:30eb\:3092\:5360\:6709\:3057
              FE \:304c\:30d5\:30ea\:30fc\:30ba\:3059\:308b\:305f\:3081\:3001StartProcess \:7d4c\:8def\:306e async \:306b\:4e57\:305b\:308b\:3002 *)
-          provLC === "lmstudio" || provLC === "zai" || provLC === "kimi" ||
+          iLocalOAIProviderQ[provLC] || provLC === "zai" || provLC === "kimi" ||
               iCodexProviderQ[modelSpec[[1]]],
             syncProv = False,
           provLC === "claudecode",
@@ -37634,7 +38120,7 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
       Module[{prov = ToLowerCase[modelSpec[[1]]],
               mdl = If[Length[modelSpec] >= 2 && StringQ[modelSpec[[2]]],
                        ToLowerCase[modelSpec[[2]]], ""]},
-        If[prov === "lmstudio" ||
+        If[iLocalOAIProviderQ[prov] ||
            StringContainsQ[mdl,
              "qwen3" | "deepseek-r1" | "-r1" | "reasoning" | "thinking"],
           maxCont = Min[maxCont, 2]]]];
@@ -37799,21 +38285,23 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
              Return \:306f\:6700\:5916\:5074 Function \:307e\:3067\:6e21\:308a\:3001
              \:6539\:9020\:524d\:3068\:5b8c\:5168\:540c\:7b49\:306e\:5b9f\:884c\:6319\:52d5\:3092\:7dad\:6301\:3059\:308b\:3002 *)
           
-          (* lmstudio \:5206\:5c90: \:6210\:529f\:6642\:306f\:65e9\:671f Return\:3001\:5931\:6557\:6642\:306f $Failed \:3092 Return *)
+          (* lmstudio/freetoken \:5206\:5c90: \:6210\:529f\:6642\:306f\:65e9\:671f Return\:3001\:5931\:6557\:6642\:306f $Failed \:3092 Return *)
           If[ListQ[modelSpec] && Length[modelSpec] >= 2 &&
              StringQ[modelSpec[[1]]] &&
-             ToLowerCase[modelSpec[[1]]] === "lmstudio",
-            Module[{lmstudioModel2, customURL2, label2, apiKey2, prepared2, proc2},
+             iLocalOAIProviderQ[modelSpec[[1]]],
+            Module[{prov2, lmstudioModel2, customURL2, label2, apiKey2,
+                    prepared2, proc2},
+              prov2 = ToLowerCase[modelSpec[[1]]];
               lmstudioModel2 = modelSpec[[2]];
               customURL2 = If[Length[modelSpec] >= 3, modelSpec[[3]],
-                iLMStudioDefaultBaseURL[]];
-              label2 = "lmstudio/" <> lmstudioModel2;
+                iLocalOAIDefaultBaseURL[prov2]];
+              label2 = prov2 <> "/" <> lmstudioModel2;
               
               Quiet[CurrentValue[nb, WindowStatusArea] =
                 label2 <> " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s",
                                     " querying... 0s"]];
               
-              apiKey2 = iResolveLMStudioAPIKey[customURL2];
+              apiKey2 = iResolveLocalLLMAPIKey[prov2, customURL2];
               If[!StringQ[apiKey2], apiKey2 = "lm-studio"];
 
               (* 2026-07-29: multimodal \:5bfe\:5fdc\:3002mediaFiles \:304c\:3042\:308b\:5834\:5408\:306f
@@ -37823,9 +38311,11 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                  \:306f text-only \:306e\:305f\:3081 media \:3068\:306f\:4f75\:7528\:3057\:306a\:3044\:3002
                  PS1 \:81ea\:8eab\:304c choices[0].message.content \:3092\:62bd\:51fa\:3057\:3066 outFile \:306b
                  plain text \:3092\:66f8\:304f\:306e\:3067\:3001collectProvider \:5074\:306f\:305d\:306e\:307e\:307e\:901a\:308b\:3002 *)
-              prepared2 = If[Length[mediaFiles] > 0,
+              (* freetoken \:306f /api/v1/chat (MCP) \:304c\:7121\:3044\:306e\:3067\:5e38\:306b OpenAI \:4e92\:63db
+                 PS1 \:7d4c\:8def (2026-08-24)\:3002lmstudio \:306f\:5f93\:6765\:3069\:304a\:308a media \:6709\:7121\:3067\:5206\:5c90\:3002 *)
+              prepared2 = If[prov2 === "freetoken" || Length[mediaFiles] > 0,
                 iPrepareAnthropicPS1[apiKey2, lmstudioModel2, prompt,
-                  iEnsureChatCompletionsPath[customURL2], "lmstudio",
+                  iEnsureChatCompletionsPath[customURL2], prov2,
                   Replace[timeoutOpt, Automatic -> $iFallbackTimeout],
                   mediaFiles],
                 iPrepareLMStudioMCPPS1[apiKey2, lmstudioModel2, prompt,
@@ -37852,7 +38342,7 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                 "startTime"    -> AbsoluteTime[],
                 "timeout"      -> Replace[timeoutOpt,
                                     Automatic -> $iFallbackTimeout],
-                "providerKind" -> "lmstudio",
+                "providerKind" -> prov2,
                 "lmstudioURL"  -> customURL2,
                 "lmstudioModel"-> lmstudioModel2|>]
             ]

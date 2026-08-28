@@ -1,3 +1,5 @@
+# claudecode パッケージ セットアップガイド
+
 ### 必須環境
 - **Wolfram Language 12.0** 以上（Mathematica または Wolfram Engine）
 - **Windows 10/11** （現在 Windows 専用実装）
@@ -221,14 +223,17 @@ $ClaudeFallbackModels = {
 | `zai` | z.ai（GLM シリーズ）API | あり |
 | `kimi` | Kimi（Moonshot AI）API | あり |
 | `lmstudio` | ローカル LLM（LM Studio 経由） | なし |
+| `freetoken` | ローカル LLM（既定 `http://localhost:1919`、`gpt-oss-120b` 等） | なし |
 
 `zai` は z.ai が提供する GLM シリーズ（`glm-5.2`, `glm-5.1`, `glm-5`, `glm-5-turbo`, `glm-4.7`, `glm-4.6`, `glm-4.5-air`, `glm-4.5` など）への API アクセスです。OpenAI 互換 API 形式で動作します。
 
 `kimi` は Moonshot AI が提供する Kimi シリーズ（`kimi-k3`, `kimi-k2.7-code`, `kimi-k2.7-code-highspeed`, `kimi-k2.6` など）への API アクセスです。`zai` と同様に OpenAI 互換 API 形式で動作します。
 
-`lmstudio` は LM Studio 経由のローカル LLM です。画像などのメディアファイルが添付される場合は OpenAI 互換 `/v1/chat/completions` エンドポイントに自動的にルーティングされ、マルチモーダルクエリをサポートします。
+`lmstudio` は LM Studio 経由のローカル LLM です。画像などのメディアファイルが添付される場合は OpenAI 互換 `/v1/chat/completions` エンドポイントに自動的にルーティングされ、マルチモーダルクエリをサポートします。`lmstudio` の判定はローカル OpenAI 互換バックエンド全般（`ollama` / `llamacpp` / `localai` / `koboldcpp` / `textgenwebui` / `local` を含む）に一般化されており、これらの provider 名も `$ClaudeFallbackModels` / `$ClaudePrivateModel` で同様に指定できます。
 
-パレットの `P:` ボタンをクリックすると provider が順に切り替わります。切り替え順は `$iPaletteProviderOrder` で定義されており、現在の順序は `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio` です。`kimi` は `zai` の次、`lmstudio` の前に位置します。
+`freetoken` はローカルで動作する無料枠 LLM エンドポイント（既定 `http://localhost:1919`、モデル例 `gpt-oss-120b`）です。`lmstudio` と同様に OpenAI 互換 API 形式で動作し、`kimi`/`zai` と同じくモデル別の推奨設定表を共有します。モデルごとに推奨される reasoning effort が定義されている場合は `reasoning_effort` として自動的に付与されます（文字列の Effort 指定時のみ送信）。
+
+パレットの `P:` ボタンをクリックすると provider が順に切り替わります。切り替え順は `$iPaletteProviderOrder` で定義されており、現在の順序は `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken` です。`kimi` は `zai` の次、`lmstudio` の前に位置し、`freetoken` は末尾（`lmstudio` の次）に位置します。
 
 ### 6. ドキュメント生成設定
 
@@ -254,7 +259,7 @@ $ClaudeDocUpdateStaleSeconds = 1800
 
 `ClaudeUpdateDocumentation` は同一サイクル内での**再開（resumption）**に対応しています。API エラーや利用制限などで更新が途中で中断した場合、再実行すると成功済みのファイルは自動的にスキップされ、未完了分のみ処理が再開されます。サイクルが完全に完了すると進捗ファイルは自動的にクリアされます（次回の実行ではソース変更に基づく新しいサイクルとして開始されます）。
 
-20 ファイル以上のパッケージでは、README 以外のドキュメントファイルが `$LLMGraphMaxConcurrency["cli"]` で制御される並列度で同時更新されます（既定 2）。並列更新中はウィンドウステータスバーに「完了 N/M • K 並列実行中 • 経過 Ts」がライブ表示されます。API エラー・利用制限・プロバイダ内部エラー・空応答などのシステム的失敗が複数のファイルで発生した場合は、チェーン全体が中断され `⚠ Doc update aborted (N failed)` と表示されます（N は失敗ファイル数）。一方、切り詰め・サイズ退行・タイトル不整合などの品質失敗は当該ファイルのみをスキップして次のファイルへ進むため、チェーン全体は中断されません（2026-07-09 改訂。詳細は後述の「切り詰め検出（品質ゲート3）」を参照）。
+20 ファイル以上のパッケージでは、README 以外のドキュメントファイルが `$LLMGraphMaxConcurrency["cli"]` で制御される並列度で同時更新されます（既定 2）。並列更新中はウィンドウステータスバーに「完了 N/M • K 並列実行中 • 経過 Ts」がライブ表示されます。API エラー・利用制限・プロバイダ内部エラー・空応答などのシステム的失敗が複数のファイルで発生した場合は、チェーン全体が中断され `⚠ Doc update aborted (N failed)` と表示されます（N は失敗ファイル数）。一方、切り詰め・サイズ退行・タイトル不整合などの品質失敗は当該ファイルのみをスキップして次のファイルへ進むため、チェーン全体は中断されません（2026-07-09 改訂。詳細は後述の「切り詰め検出（品質ゲート3）」を参照）。claude CLI の OAuth 認証切れ（401 authentication_failed）が検出された場合は、レート制限と同格のシステム的失敗として扱われ、更新の投入前にチェーン全体が中断されます（詳細は後述の「トラブルシューティング > 17. Claude CLI の認証切れでドキュメント更新が中断される」を参照）。
 
 ドキュメントの新規作成は `ClaudeCreateDocumentation`、既存ドキュメントの更新は `ClaudeUpdateDocumentation` で行います（後述の「高度な設定 > ドキュメントの自動生成・更新」を参照）。
 
@@ -811,6 +816,39 @@ TargetFiles に不正なファイル名 "xxx.md" が含まれています。許�
 
 なお、この席枯渇レポートに残留 WolframKernel プロセスの一覧を含めるかどうかは、前述の「7. タスクが停止しない・フリーズする」内の説明のとおり既定 OFF です。手動で確認する場合は端末で `tasklist /FI "IMAGENAME eq WolframKernel.exe"` を実行してください。
 
+#### 17. Claude CLI の認証切れ（OAuth セッション期限切れ）でドキュメント更新が中断される
+
+`claude` CLI が 401 authentication_failed を返した場合、OAuth セッションが期限切れになったとみなされ、レート制限と同格のシステム的失敗として記録・警告表示されます。この記録が有効な間、`ClaudeUpdateDocumentation` は**投入前ゲート**により、1 件もドキュメントを投入せずに中断し、再ログインを促します（再試行では回復しないため、無駄な API 呼び出しを避けるための fail-fast 動作です）。
+
+```
+⛔ README.md 失敗: Claude CLI の認証が切れています (OAuth セッション期限切れ)。ターミナルで claude を起動し再ログインしてください。
+```
+
+判定は次の 2 系統で行われ、API は叩きません：
+
+1. 直近のレスポンスで検出した 401 authentication_failed の記録
+2. `~/.claude/.credentials.json` のトークン有無
+
+外部 wolframscript ワーカー経由・カーネル内実行のどちらの経路でも同じ判定が働くため、実行方式によらず確実に検知されます。
+
+**対処法**：ターミナルで `claude` を起動し、再ログインしてください。
+
+```bash
+claude
+```
+
+再ログイン後、`.credentials.json`（資格情報ファイル）が更新されたことを検知すると、記録は自動的にクリアされ、次回の `ClaudeUpdateDocumentation` 実行から通常どおり更新が再開されます。資格情報ファイルの更新を追跡できない環境向けの保険として、記録から 30 分経過すると自動的に無効化されます。
+
+状態確認・手動クリアには以下を使用します：
+
+```mathematica
+(* claude CLI の認証状態を確認（認証切れなら Association、問題なければ None） *)
+ClaudeAuthStatus[]
+
+(* 誤検出などで記録をクリアしたい場合（通常は再ログインで自動クリアされる） *)
+ClaudeAuthClear[]
+```
+
 ### デバッグ情報の取得
 
 ```mathematica
@@ -853,7 +891,7 @@ ClaudeCreateDocumentation["pkg"]
 ClaudeUpdateDocumentation["pkg"]
 ```
 
-`ClaudeUpdateDocumentation` は同じパッケージへの多重起動が禁止されています。既に更新チェーンが実行中の場合は警告が表示され、完了まで再実行は行われません。チェーンが異常終了して解放されなかった場合は `$ClaudeDocUpdateStaleSeconds`（既定 1800 秒）経過後に自動解放されます。
+`ClaudeUpdateDocumentation` は同じパッケージへの多重起動が禁止されています。既に更新チェーンが実行中の場合は警告が表示され、完了まで再実行は行われません。チェーンが異常終了して解放されなかった場合は `$ClaudeDocUpdateStaleSeconds`（既定 1800 秒）経過後に自動解放されます。claude CLI の OAuth 認証切れが検出されている間は、投入前ゲートによりチェーンそのものが開始されません（前述の「トラブルシューティング > 17. Claude CLI の認証切れでドキュメント更新が中断される」を参照）。
 
 #### Baseline オプション（差分基準の切り替え）
 
@@ -941,6 +979,7 @@ API エラー・利用制限・プロバイダ内部エラー・空応答など�
 - ジョブの実体（子プロセスと出力ファイル）はディスク側で進行するため、ノートブックを閉じたりカーネルを再起動しても、次回 `ClaudeUpdateDocumentation` 実行時に生存中のワーカーを検知できます。進行中ジョブの追跡に加え、フロントエンド再起動をまたいで生存を検知する claim ファイルによる二重の多重起動防止が行われます（前述の「トラブルシューティング > 11. ドキュメント更新チェーンが「進行中」と表示される」も参照）。
 - 外部ワーカーには全体デッドラインが設定されています（実運用での長時間ドキュメント更新の実測を踏まえ、既定で 90 分程度に引き上げ済み）。デッドラインを超過した場合、残りの未処理ファイルは失敗扱いとして処理を終了します。この場合も、同一サイクルの再実行で成功済みファイルはスキップされます。
 - ワーカーが完了マーカーを残さず終了した場合は「トラブルシューティング > 16. ドキュメント更新中に『ワーカーが完了マーカーを残さず終了しました』と表示される」の警告が表示されることがあります（ライセンス席枯渇の可能性）。なお、この種の席枯渇レポートで残留 WolframKernel プロセスの一覧が自動表示されない理由は、前述の「トラブルシューティング > 7. タスクが停止しない・フリーズする」内の説明を参照してください（既定 OFF、`tasklist` 等の列挙処理がフロントエンドを固める事例が実測されたため）。
+- claude CLI の OAuth 認証切れは、経由するプロセス（外部ワーカー / メインカーネル内）にかかわらず同一のロジックで検出・記録されます。詳細は「トラブルシューティング > 17. Claude CLI の認証切れでドキュメント更新が中断される」を参照してください。
 
 この機能は設定不要で自動的に動作し、既存の `ClaudeUpdateDocumentation` の呼び出し方法や `TargetFiles` / `Baseline` オプションには影響しません。
 
@@ -950,7 +989,7 @@ LLM レスポンスが切り詰められた（truncated）と判定された場�
 
 **失敗の分類（2026-07-09 改訂）**：
 
-- **システム的失敗**（API エラー・利用制限・プロバイダ内部エラー・空応答）― 従来どおりチェーン全体を即中断します（fail-fast）。
+- **システム的失敗**（API エラー・利用制限・認証切れ・プロバイダ内部エラー・空応答）― 従来どおりチェーン全体を即中断します（fail-fast）。
 - **品質失敗**（切り詰め・サイズ退行・タイトル不整合）― 当該ファイルのみをスキップして次のファイルの更新に進みます。チェーン全体は中断されません。
 
 README.md の更新では追加のチェックとして、生成された本文が「使用例」セクションまで到達しているかどうかも検証されます。到達していない、または内容が途中で切れていると判定された場合は書き込み自体が拒否され、以下のような警告が表示されます：
@@ -1301,4 +1340,6 @@ ShowClaudePalette[]
 ?ClaudeResolveLLMTier
 ?ClaudeTaskClassAttributes
 ?ClaudeDiagEvents
+?ClaudeAuthStatus
+?ClaudeAuthClear
 ```

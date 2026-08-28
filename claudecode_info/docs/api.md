@@ -607,6 +607,22 @@ Options: Inherit -> True (True で現在のノートブックセッションを�
 指定プロバイダーのレート制限カウンターをクリアする。
 → Null
 
+### ClaudeAuthStatus[]
+現在プロバイダーの認証状態を表示する。
+→ Dataset
+
+### ClaudeAuthStatus[provider]
+指定プロバイダーの認証状態を表示する。
+→ Dataset
+
+### ClaudeAuthClear[]
+現在プロバイダーの認証情報をクリアする。
+→ Null
+
+### ClaudeAuthClear[provider]
+指定プロバイダーの認証情報をクリアする。
+→ Null
+
 ### ClaudeStatus[opts]
 Claude Code プロセスの全体ステータスを種別ごとにまとめて表示する。
 → Dataset
@@ -1210,7 +1226,7 @@ Options: NBAccess`NBEnqueueFinalAction のオプションを継承
 ## パレット・UI
 
 ### ShowClaudePalette[]
-Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/kimi/lmstudio を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudeLLMBreakpoint トグル ("BreakPtr")、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。kimi は Moonshot AI Kimi シリーズ (kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する (静的フォールバックは Automatic/gpt-5.6-sol)。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
+Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/kimi/lmstudio/freetoken を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudeLLMBreakpoint トグル ("BreakPtr")、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。kimi は Moonshot AI Kimi シリーズ (kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)。freetoken は無料トークンベースのプロバイダー枠として Provider サイクルに追加された新しいエントリ (候補モデル一覧は未確認、ソース抜粋の切れ目にかかっており次回確認予定)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する (静的フォールバックは Automatic/gpt-5.6-sol)。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
 → NotebookObject
 
 ### ClaudeRegisterPaletteServiceControl[spec]
@@ -1385,4 +1401,4 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `TaskTypes` → All (ClaudeStatus): 対象タスク種別
 - `Inherit` → True (CreateClaudeSession): True で現在のセッションを継承、False で独立セッション
 
-PACKAGE SOURCE CODE を実ソース (claudecode.wl, 43008行) と突き合わせて同期を確認した (2026-08-21、17回目)。今回のソース抜粋 (Public symbols 宣言部および変数初期化部) から `$ClaudeAdvisaryModel::usage` の全文を確認し、ドラフター/検証役が仕様生成/仕様実装ワークフローで反転する点・単純なセッション代入はカーネル再起動でリセットされる点・SourceVaultSetModelIntent による永続化方法の記述が api.md 側で欠けていたため、当該エントリを全面的に書き直した。他の public シンボル (変数既定値・パレットのプロバイダー/モデル表・$ClaudeUltraEnabled・CreateImplementationWorkflow・$ClaudeLLMBreakpoint 等) は今回の抜粋範囲内で前回確認済み (16回目) の記載と矛盾なし。
+PACKAGE SOURCE CODE を実ソース (claudecode.wl, 43008行) と突き合わせて同期を確認した (2026-08-28、18回目)。今回のソース抜粋 (Public symbols 宣言部および変数初期化部) から次の2点を検出・反映した: (1) $iPaletteProviderOrder に "freetoken" が新プロバイダーとして追加されていたため、ShowClaudePalette の Provider サイクル順記述に追記 (候補モデル一覧はソース抜粋がその直前で途切れており未確認、次回確認事項として明記)。(2) パッケージロード時クリアリストに "ClaudeAuthStatus","ClaudeAuthClear" が含まれており未文書化の public 関数だったため、隣接する ClaudeRateLimitStatus/ClaudeRateLimitClear と同型のシグネチャ (引数なし/provider 指定) で暫定的にセッション管理セクションへ追加 (実装詳細・戻り値の厳密な形は未確認、次回ソース抜粋で ::usage 本文を確認して精査すること)。他の public シンボル ($ClaudeAdvisaryModel・$ClaudeUltraEnabled・CreateImplementationWorkflow・$ClaudeLLMBreakpoint・変数既定値等) は今回の抜粋範囲内で前回確認済み (17回目) の記載と矛盾なし。

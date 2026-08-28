@@ -22,7 +22,7 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 実装面では、Claude Code CLI をバックエンドとして利用し、`--output-format stream-json` モードでリアルタイムにストリーミング出力を解析します。問い合わせ中は経過時間に加え、現在の状態（思考中・テキスト生成中・ツール実行中）やフラグメント数をリアルタイムで表示します。エラー出力は stderr 経由で分離処理され、stdout の JSON ストリームと干渉しない設計になっています。ファイルパス操作には `FileNameJoin` を一貫して使用し、OS 非依存のパス構築を徹底しています。
 
-作業ディレクトリ (`$ClaudeWorkingDirectory`) 配下の CLAUDE.md やディレクティブ (rules/skills) が Claude Code に自動的に読み込まれ、プロジェクト固有のガイドラインを反映した応答が得られます。プロジェクトディレクティブ機構により、NotebookDirectory ごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。Claude Code CLI が利用できない場合のフォールバック機構として、Anthropic API・OpenAI API・z.ai（GLM シリーズ）API・Kimi（Moonshot AI）API への直接呼び出しに加え、LM Studio 等のローカル LLM サーバーへの接続もサポートしています。フォールバックモデルは `$ClaudeFallbackModels` で優先順位付きで設定でき、`{provider, model, url}` の3要素形式でカスタム URL を指定できます。フォールバック候補を順に試行する際は、429（レート制限）やサーバー過負荷エラーが連続発生する事態を避けるため、次候補の起動を指数バックオフ（1秒→2秒→4秒を上限とする遅延）で行います。アクセスレベルに基づいて利用可能なモデルのみが選択されるプライバシー対応ルーティングにより、機密データの処理をローカルモデルへ自動転送できます。
+作業ディレクトリ (`$ClaudeWorkingDirectory`) 配下の CLAUDE.md やディレクティブ (rules/skills) が Claude Code に自動的に読み込まれ、プロジェクト固有のガイドラインを反映した応答が得られます。プロジェクトディレクティブ機構により、NotebookDirectory ごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。Claude Code CLI が利用できない場合のフォールバック機構として、Anthropic API・OpenAI API・z.ai（GLM シリーズ）API・Kimi（Moonshot AI）API への直接呼び出しに加え、LM Studio 等のローカル LLM サーバーへの接続もサポートしています。フォールバックモデルは `$ClaudeFallbackModels` で優先順位付きで設定でき、`{provider, model, url}` の3要素形式でカスタム URL を指定できます。フォールバック候補を順に試行する際は、429（レート制限）やサーバー過負荷エラーが連続発生する事態を避けるため、次候補の起動を指数バックオフ（1秒→2秒→4秒を上限とする遅延）で行います。アクセスレベルに基づいて利用可能なモデルのみが選択されるプライバシー対応ルーティングにより、機密データの処理をローカルモデルへ自動転送できます。2026-08-28 の改訂では、Claude Code CLI の OAuth 認証切れ（401 authentication_failed）もレート制限と同格の検出対象に追加され、フォールバック判定に組み込まれるようになりました。`ClaudeAuthStatus[]` で認証状態を確認し、`ClaudeAuthClear[]` で検出済みの認証切れ状態を手動リセットできます。ドキュメント更新（`ClaudeUpdateDocumentation`）でも認証切れを検出した場合はレート制限と同格の投入前ゲートとして扱われ、新規ドキュメントを1件も投入せずに中断して再ログインを促します。
 
 **LM Studio の主モデル利用と MCP ツール連携**: `$ClaudeModel` に LM Studio のエンドポイントを直接指定することで、すべての ClaudeEval/ClaudeQuery を LM Studio 経由で実行できます。さらに `$ClaudeLMStudioIntegrations` に MCP サーバー ID を指定すると、LM Studio がサーバー側で tool-call を自動実行し、Web 検索等の MCP ツールをローカル LLM から呼び出せます。これにより、プライバシーを優先しながら外部ツール統合を実現できます。2026-07-29 より LM Studio プロバイダに対してもマルチモーダル入力（テキスト + 画像）が可能になり、OpenAI 互換の chat/completions エンドポイント経由で画像を含むクエリを送信できます。
 
@@ -238,6 +238,10 @@ ClaudeHistorySize[]
 (* セッションと全履歴を削除 *)
 ClaudeDeleteSession["セッション名", "All"]
 
+(* 認証状態の確認・リセット *)
+ClaudeAuthStatus[]
+ClaudeAuthClear[]
+
 (* LM Studio のローカルモデルを使用（Model オプションで直接指定） *)
 ClaudeEval["階乗を計算して",
   Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
@@ -310,7 +314,7 @@ ShowClaudePalette[]
 | `$ClaudeMDContent` | `""` | 読み込まれた CLAUDE.md の内容。空の場合は未検出または内容なし |
 | `$ClaudeAccessibleDirs` | `{$packageDirectory}` | Claude Code に Read 許可する追加ディレクトリ。パスを見せないことがファイアウォールの本質であり、安易な追加は避けること。`$packageDirectory` 配下以外の新規ディレクトリを追加すると、初回使用時に許可確認ダイアログが表示される |
 | `$ClaudeNBDirAccess` | `"list"` | NotebookDirectory のアクセスレベル（`"list"` / `"read"` / `"readwrite"`） |
-| `$ClaudeFallbackModels` | `{{"chatgptcodex","gpt-5.6-sol"},{"anthropic","claude-opus-5"},{"openai","gpt-5.5"}}` | フォールバックモデル優先順位。各要素は `{provider, model}` または `{provider, model, url}`。`"lmstudio"` プロバイダーでローカル LLM も、`"zai"` プロバイダーで z.ai（GLM シリーズ）の課金 API も、`"kimi"` プロバイダーで Kimi（Moonshot AI）の課金 API も指定可能。候補を順に試す際は 429・過負荷エラーの連続発生を避けるため指数バックオフ（1秒→2秒→4秒上限）で次候補を起動 |
+| `$ClaudeFallbackModels` | `{{"chatgptcodex","gpt-5.6-sol"},{"anthropic","claude-opus-5"},{"openai","gpt-5.5"}}` | フォールバックモデル優先順位。各要素は `{provider, model}` または `{provider, model, url}`。`"lmstudio"` プロバイダーでローカル LLM も、`"zai"` プロバイダーで z.ai（GLM シリーズ）の課金 API も、`"kimi"` プロバイダーで Kimi（Moonshot AI）の課金 API も指定可能。候補を順に試す際は 429・過負荷エラーの連続発生を避けるため指数バックオフ（1秒→2秒→4秒上限）で次候補を起動。Claude Code CLI の OAuth 認証切れ（401 authentication_failed）もレート制限と同格の検出対象としてフォールバック判定に組み込まれる（2026-08-28） |
 | `$ClaudePrivateModel` | `{}` | 秘密データ処理用のローカルモデル指定 |
 | `$ClaudeLMStudioIntegrations` | `{}` | LM Studio 使用時に有効にする MCP サーバー ID のリスト（例: `{"mcp/exa"}`）。mcp.json に登録済みのサーバーを指定すると、LM Studio がサーバー側で tool-call を自動実行する |
 | `$ClaudeTestModel` | `$ClaudeModel と同じ` | `ClaudeCheckSeparation` 等のテスト用モデル名。未設定の場合はロード時に `$ClaudeModel` と同じ値に初期化される |
@@ -321,7 +325,7 @@ ShowClaudePalette[]
 | `$ClaudeDocMaxRetries` | `3` | ドキュメント生成の最大リトライ回数 |
 | `$ClaudeDocMaxChunkChars` | `60000` | プロンプト中ソースの最大文字数 |
 | `$ClaudeDocUpdateStaleSeconds` | `1800` | ドキュメント更新チェーンの多重起動ガード解放待機秒数。異常終了したチェーンがこの秒数後に自動解放される |
-| `$ClaudeDocUpdateExternal` | `True` | `True` のときドキュメント更新パイプライン全体を外部 wolframscript ワーカープロセスへ退避して実行し、複数のドキュメント更新を並走させた際のメインカーネル飽和によるフリーズを防止する（claim ファイル + heartbeat による二重ワーカー起動防止、stale 120秒で自動失効）。ライセンス席の枯渇・画像添付タスク・非 claude CLI モデル使用時は自動的に従来のカーネル内非同期経路にフォールバックする |
+| `$ClaudeDocUpdateExternal` | `True` | `True` のときドキュメント更新パイプライン全体を外部 wolframscript ワーカープロセスへ退避して実行し、複数のドキュメント更新を並走させた際のメインカーネル飽和によるフリーズを防止する（claim ファイル + heartbeat による二重ワーカー起動防止、stale 120秒で自動失効）。ライセンス席の枯渇・画像添付タスク・非 claude CLI モデル使用時は自動的に従来のカーネル内非同期経路にフォールバックする。Claude Code CLI の OAuth 認証切れを検出した場合は、レート制限と同格の投入前ゲートとして扱われ新規ドキュメントを投入せずに中断する（2026-08-28） |
 | `$ClaudeEvalMaxDepth` | `5` | ClaudeEval が再帰的に ClaudeEval/ContinueEval を生成する際の最大深度。0 で再帰禁止 |
 | `$ClaudeEvalMode` | `Automatic` | ClaudeEval の動作モード |
 | `$ClaudeEvalHook` | `None` | ClaudeEval の実行前後に呼ばれるフック関数 |
@@ -410,7 +414,7 @@ ShowClaudePalette[]
 
 **ドキュメント生成**
 - `ClaudeCreateDocumentation["name"]` — パッケージの文書一式を自動生成。`Disclaimer`・`License`・`Acknowledgments` 等のオプションで README に免責事項・ライセンス情報・謝辞を付加可能。`References -> {URL, ...}` で参考文献リスト、`Demos -> {URL, ...}` でデモリンクを追加可能。リミット到達時は自動停止し、再実行で未生成分のみ続行。`$ClaudeDocModel` で生成専用モデルを指定可能
-- `ClaudeUpdateDocumentation["name", "指示"]` — 既存ドキュメントの更新。ノートブックのコンテキストも参照可能。オプション設定は `doc_options.json` に永続化。`TargetFiles` オプションで更新対象を `api`・`setup`・`user_manual`・`example`・`README` の5種類に限定でき（拡張子 `.md` は省略可能）。`Baseline` オプションで差分の基準を `"LastDocUpdate"`（直近の更新バックアップ）または `"Github"`（GitHub コミット版）から選択可能。多重起動防止ガードにより同一パッケージへの同時更新を防止。更新失敗は「システム的失敗（fail-fast）」と「品質ゲート失敗（当該ファイルのみスキップ）」に分類され、1 ファイルの失敗が全体を巻き添えにしない。品質ゲート失敗時はまず自動リトライが1回行われ（RETRY NOTICE 付きプロンプトで再送）、失敗が続く場合のみ当該ファイルをスキップ。品質ゲート失敗のリトライ・スキップ経路でチェーンが分岐（fork）しないよう、各ステップに一意のシリアルトークンを発行する二重発火ガードも機能。既存ファイル上書き時のサイズ退行ガード（新内容が既存の40%未満に縮小した場合は書き込み拒否）も機能。`docs/docs/` ネスト重複ドキュメントを自動検出し更新対象から除外。`docs/examples/` 配下の使用例ドキュメントは既定（Automatic）モードでの自動更新対象から除外(`TargetFiles` で明示指定すれば更新可能)。20 ファイル以上の一括更新時は並列投入とリアルタイム進捗表示が行われ、中断後もサイクル再開（resumption）機能により効率的に継続可能。チェーンが異常終了した場合は `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放。条件を満たす場合はパイプライン全体を外部 wolframscript ワーカープロセスへ退避して実行（`$ClaudeDocUpdateExternal`、既定 `True`）し、複数更新の並走によるメインカーネル飽和フリーズを防止（ライセンス席の枯渇・画像添付タスク・非 claude CLI モデル使用時は自動的に従来経路にフォールバック）。補助 API ドキュメント（`api_<aux>.md`）の再生成要否はコンテンツハッシュ比較で判定され、mtime のずれのみによる不要な再生成を防止
+- `ClaudeUpdateDocumentation["name", "指示"]` — 既存ドキュメントの更新。ノートブックのコンテキストも参照可能。オプション設定は `doc_options.json` に永続化。`TargetFiles` オプションで更新対象を `api`・`setup`・`user_manual`・`example`・`README` の5種類に限定でき（拡張子 `.md` は省略可能）。`Baseline` オプションで差分の基準を `"LastDocUpdate"`（直近の更新バックアップ）または `"Github"`（GitHub コミット版）から選択可能。多重起動防止ガードにより同一パッケージへの同時更新を防止。更新失敗は「システム的失敗（fail-fast）」と「品質ゲート失敗（当該ファイルのみスキップ）」に分類され、1 ファイルの失敗が全体を巻き添えにしない。品質ゲート失敗時はまず自動リトライが1回行われ（RETRY NOTICE 付きプロンプトで再送）、失敗が続く場合のみ当該ファイルをスキップ。品質ゲート失敗のリトライ・スキップ経路でチェーンが分岐（fork）しないよう、各ステップに一意のシリアルトークンを発行する二重発火ガードも機能。既存ファイル上書き時のサイズ退行ガード（新内容が既存の40%未満に縮小した場合は書き込み拒否）も機能。`docs/docs/` ネスト重複ドキュメントを自動検出し更新対象から除外。`docs/examples/` 配下の使用例ドキュメントは既定（Automatic）モードでの自動更新対象から除外(`TargetFiles` で明示指定すれば更新可能)。20 ファイル以上の一括更新時は並列投入とリアルタイム進捗表示が行われ、中断後もサイクル再開（resumption）機能により効率的に継続可能。チェーンが異常終了した場合は `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放。条件を満たす場合はパイプライン全体を外部 wolframscript ワーカープロセスへ退避して実行（`$ClaudeDocUpdateExternal`、既定 `True`）し、複数更新の並走によるメインカーネル飽和フリーズを防止（ライセンス席の枯渇・画像添付タスク・非 claude CLI モデル使用時は自動的に従来経路にフォールバック）。Claude Code CLI の OAuth 認証切れを検出した場合はレート制限と同格の投入前ゲートとして扱われ、新規ドキュメントを1件も投入せずに中断して再ログインを促す（2026-08-28）。補助 API ドキュメント（`api_<aux>.md`）の再生成要否はコンテンツハッシュ比較で判定され、mtime のずれのみによる不要な再生成を防止
 
 **ディレクティブ管理**
 - `ClaudeAddDirective[target, description]` — CLAUDE.md やスキルファイルにディレクティブを追加。`Scope -> "Local"` でプロジェクト固有のディレクティブも追加可能
@@ -469,6 +473,8 @@ ShowClaudePalette[]
 - `ClaudeCommand["/command"]` — Claude Code CLI コマンドの直接実行
 - `ClaudeQueryShowContext[]` — 次回送信されるノートブックコンテキストの確認（デバッグ用）
 - `ClaudeShowAccessConfig[]` — ファイルアクセス設定の確認（デバッグ用）
+- `ClaudeAuthStatus[]` — Claude Code CLI の OAuth 認証状態を確認（401 authentication_failed 等の認証切れを検出。2026-08-28 追加）
+- `ClaudeAuthClear[]` — 検出済みの認証切れ状態を手動でリセット（2026-08-28 追加）
 - `ClaudeRegisterCLIMCPServer[spec]` — ヘッドレス Claude CLI 実行（`ClaudeQueryBg` 等）に組み込む MCP サーバーを登録する package-neutral な窓口（`$ClaudeCLIMCPServers` で管理。例: SourceVault の MCP サーバー連携が利用）
 
 ### 後方互換性について
@@ -681,6 +687,20 @@ ClaudeEval["この複雑なデータを分析して傾向を可視化して"]
 - **疎結合**: claudecode 本体は SourceVault に対するハードな依存を持ちません（rule 11）。SourceVault が未インストールの環境では PromptRouter ブリッジ自体が存在せず、従来の自然言語ディスパッチのみが動作します。
 
 SourceVault をロードすると、仕様書の審査から実装ワークフロー化までを支援する API 群（`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`・`ClaudeImplStatus`・`ClaudeImplMonitor`）も利用可能になります。`CreateImplementationWorkflow` が完了すると、生成されたワークフローの起動関数がスラッグ・表示名をキーワードとして PromptRouter に自動登録されるため、以降は `ClaudeEval` でスラッグ名を呼び出すだけでワークフローを起動できます。
+
+### 認証切れ検出（ClaudeAuthStatus / ClaudeAuthClear）
+
+2026-08-28 の改訂により、Claude Code CLI の OAuth 認証切れ（401 authentication_failed）がレート制限と同格の検出対象として扱われるようになりました。
+
+```mathematica
+(* 現在の認証状態を確認 *)
+ClaudeAuthStatus[]
+
+(* 検出済みの認証切れ状態を手動でリセット（再ログイン後に使用） *)
+ClaudeAuthClear[]
+```
+
+認証切れが検出されると、フォールバック判定・`ClaudeUpdateDocumentation` の投入前ゲートの双方で、レート制限と同様に扱われます。`ClaudeUpdateDocumentation` では新規ドキュメントを 1 件も投入せずに中断し、`claude auth login` 等での再ログインを促します。認証が回復したら `ClaudeAuthClear[]` で状態をリセットしてください。
 
 ### 多言語対応
 
