@@ -20,9 +20,21 @@ description: |
 
 ## 公開 API
 
+> **core / View 分離 (2026-08-29)**: `SourceVaultSources` / `SourceVaultArXiv` / `SourceVaultSummaries` は **連想リストを返す core**、表示は `…View` (`SourceVaultSourcesView` 等) が担う。行データを LLM/後段処理へ渡すときは core、ユーザーに見せるときは View。表示行数の上限は View 層 (`$SourceVaultCatalogViewMaxRows`)。
+
 - `SourceVaultBackfillArXivSummaries[opts]` — 既存 arXiv ソースのうち Summary 未設定 (または過去の LLM エラー本文) のものに、アブストラクトを取得・翻訳して付与する。ingest フックと同じ `iSVArXivAttachSummary` を共用。
   - Options: `"Force" -> False` (True で既存 Summary も再生成)、`"Model" -> Automatic`、`"Limit" -> Automatic|n` (処理件数の上限、お試し用)
   - 戻り値: `<|"Candidates", "Updated", "AlreadyPresent", "NoAbstract", "Failed", "Language", "Results"|>`
+
+- `SourceVaultBackfillSourceSummaries[opts]` (2026-08-29 追加) — **web / local ソース**用。arXiv のようなアブストラクト API が無いので、**ingest 済み snapshot の本文 (plaintext) を LLM で要約**して `meta["Summary"]` に書く。本体は `iSVSourceAttachSummary`。
+  - Options: `"Kind" -> {"web","local"}` (既定。`All` で arxiv も)、`"Sources" -> All|{sourceId...}`、`"Force"`、`"Limit" -> 10`、`"Model" -> Automatic`、`"MaxChars" -> Automatic` (`$SourceVaultSourceSummaryMaxChars`=12000)、`"TimeoutSeconds" -> 120`
+  - 戻り値: `<|"Candidates", "Updated", "AlreadyPresent", "NoText", "Quarantined", "Failed", "Remaining", "Language", "Results"|>`
+  - **モデルは行の PrivacyLevel で決まる** (`iCallSummaryLLM`: `PL > 0.5` → `$ClaudePrivateModel` = ローカル、以下 → クラウド CLI)。**PL 不明は fail-safe で 1.0 = ローカル**。
+  - **本文は UNTRUSTED データ境界で包んでから渡す** (`SourceVaultWrapUntrustedText` へ弱結合、未ロード時は内蔵 preamble)。prescan が quarantined と判定したら **LLM へ渡さず** `Status -> "Quarantined"`。これは webingest `SourceVaultSummarizeText` の既定 `QuarantinePolicy -> "Block"` と同方針。
+  - 本文抽出は `iExtractTextPages` (pdf/html/txt/md)。`TimeConstrained` で `"TimeoutSeconds"` を上限にし、超えたら `NoText` (巨大 PDF で止めない)。
+  - 書き込むキー: `Summary` / `SummarySource`(`"DocumentText"`) / `SummaryLanguage` / `SummaryModel` / `SummaryInputChars` / `SummaryFetchedAt`。
+  - テスト: `test codes/SourceVault_sourcesummary_backfill_test.wls` (meta store / 本文抽出 / `iCallSummaryLLM` を Block で差し替える決定的テスト。実 LLM 不要)。
+  - **罠**: `iCallSummaryLLM` は **`SourceVault`** 公開文脈にピン留めされた単一シンボル (SourceVault.wl L1245 の設計メモ: スタブ差し替えを確実に効かせるため)。テストで `SourceVault`Private`iCallSummaryLLM` を Block しても効かない。
 
 ## ingest 自動付与 (今後の動作)
 
@@ -45,7 +57,7 @@ meta に書くフィールド: `Summary` / `SummarySource` (`"arXivAbstract"`) /
 - **エラーゲートを必ず通す**。`iCallSummaryLLM` は内部で `iSVLooksLikeLLMError` を呼び、利用制限本文 (`"session limit"` 等) や HTTP エラー本文を `Status -> "Failed"` に落とす。これにより**エラー文が要約として保存されない**。新しい要約保存経路を足すときは必ずこのゲートを通すこと (memory: サマリーLLMエラー検出ゲート / `rules/90-api-error-handling.md` と同根)。backfill の対象判定でも `iSVLooksLikeLLMError[既存Summary]` を「未設定扱い」に含め、過去に混入したエラー文を再生成で上書きする。
   - **実地で 529 がすり抜けた (2026-06-25)**: 翻訳 LLM が `"API Error: 529 Overloaded. This is a server-side issue, usually ..."` を正常応答として返し要約保存された。当初ゲートは `"Error:"` 前置 / `StatusCode=` しか見ておらず `"API Error:"` 前置・`Overloaded` を取りこぼした。`iSVLooksLikeLLMError` に `"API Error"` 前置 / `overloaded` / `server-side issue` / `rate_limit` / HTTP 4xx-5xx (429/500/502/503/504/529) + error-keyword の regex を追加。ゲート補強後は plain `SourceVaultBackfillArXivSummaries[]` (Force 不要) で当該行が候補化され再翻訳される。
 - **失敗時は原文 fallback**。LLM 未ロード・エラー・空のときは翻訳済みでなく**原文アブストラクト**を `Summary` に入れ (`SummaryTranslated -> False`)、空欄よりはマシな状態にする。
-- **表示パスは LLM-free に保つ**。`iSVSourcesEnrich` / `iSVSourceEnrichOne` (= `SourceVaultSources` 表示時に走る) は network のみのメタ補完 (Title/Authors/Published) に留め、**翻訳 (LLM) を入れない**。重い翻訳は ingest フックと backfill でだけ行う。一覧表示が LLM 呼び出しで遅く・不安定になるのを防ぐ。
+- **表示パスは LLM-free に保つ**。`iSVSourcesEnrich` / `iSVSourceEnrichOne` (= `SourceVaultSources` 行取得時に走る) は network のみのメタ補完 (Title/Authors/Published) に留め、**翻訳 (LLM) を入れない**。重い翻訳は ingest フックと backfill でだけ行う。一覧表示が LLM 呼び出しで遅く・不安定になるのを防ぐ。
 
 ## headless $Language 罠 (運用上の最重要点)
 
@@ -55,12 +67,12 @@ backfill は**必ず FrontEnd セッション (または `$Language = "Japanese"
 (* FE セッションで *)
 Needs["SourceVault`"]   (* 既ロードなら Get["SourceVault`"] で再読込 *)
 SourceVaultBackfillArXivSummaries[]            (* Summary 未設定の arXiv を一括付与 *)
-SourceVaultArXiv[]                              (* 付与結果を確認 *)
+SourceVaultArXivView[]                          (* 付与結果を確認 (View = 表) *)
 ```
 
 ## 編集可能サマリーノート (Eagle と同じ枠組み) (2026-06-25 追加)
 
-`SourceVaultSources` / `SourceVaultArXiv` / `SourceVaultSummaries` の表で**タイトルまたはサマリー preview をクリックすると、要約を編集可能なノートブックで開く**。Eagle の `SourceVaultEagleShowSummary` と同一の枠組みを arXiv / web / local の全 ingest ソースに展開したもの。
+`SourceVaultSourcesView` / `SourceVaultArXivView` / `SourceVaultSummariesView` の表で**タイトルまたはサマリー preview をクリックすると、要約を編集可能なノートブックで開く**。Eagle の `SourceVaultEagleShowSummary` と同一の枠組みを arXiv / web / local の全 ingest ソースに展開したもの。
 
 - 公開 `SourceVaultShowSourceSummary[sourceId, "Fresh" -> False]`。挙動:
   1. 保存済みノート (`iSVSourceSummaryNoteFile[sourceId]`) があればそれを `NotebookOpen` (= **ユーザー追記が正本**)。

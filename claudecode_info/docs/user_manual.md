@@ -7,7 +7,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **安全なパッケージ管理**: パッケージの更新はバックアップ・差分マージ・安全性検証・再ロードを自動で行います。排他ロック機構により、同一パッケージへの並列更新を防止します。更新後は自動生成された検証テストが実行され、意図した変更が正しくコードに反映されているか確認します。2026-06-10 の改善により、LLM レスポンスを「連続した行のかたまり(セグメント)」単位でマージするようになり、マージ精度が大幅に向上しました。`Pkg\`X` / `Pkg\`Private\`iX` のような完全修飾定義も正しく認識されます。
 - **差分ベースバックアップ**: バックアップは SequenceAlignment ベースの差分形式(.cz / .cdiff / .unchanged)で保存され、ストレージ消費を大幅に削減します。既存の生バックアップは `ClaudeMigrateBackupHistory` で差分形式に変換できます。
 - **機密データ保護**: `Confidential[]` による秘匿変数システムと、プライバシー考慮型モデルルーティングにより、機密データの安全な取り扱いを実現します。アクセスレベルに基づいて、クラウドモデルとローカルモデルを自動的に使い分けます。
-- **多段フォールバック**: Claude Code CLI が利用不可の場合、アクセスレベルに応じたフォールバックモデルに自動切替します。Anthropic API、OpenAI API、z.ai(GLM シリーズ)、Kimi(Moonshot AI)、LM Studio・freetoken 等のローカルモデルを順次試行します。フォールバック候補を順に試す際は、429(レート制限)やサーバー過負荷エラーが連続して発生する事態を避けるため、次候補の起動を指数バックオフ(1秒→2秒→4秒を上限とする遅延)で行います。2026-08-28 の改訂では、Claude Code CLI の OAuth 認証切れ(401 authentication_failed)もレート制限と同格の検出対象に追加され、`ClaudeAuthStatus` / `ClaudeAuthClear` で状態の確認・手動リセットができるようになりました(詳細は「認証切れ検出(ClaudeAuthStatus / ClaudeAuthClear)」を参照)。
+- **多段フォールバック**: Claude Code CLI が利用不可の場合、アクセスレベルに応じたフォールバックモデルに自動切替します。Anthropic API、OpenAI API、z.ai(GLM シリーズ)、Kimi(Moonshot AI)、LM Studio・freetoken・llamacpp 等のローカルモデルを順次試行します。フォールバック候補を順に試す際は、429(レート制限)やサーバー過負荷エラーが連続して発生する事態を避けるため、次候補の起動を指数バックオフ(1秒→2秒→4秒を上限とする遅延)で行います。2026-08-28 の改訂では、Claude Code CLI の OAuth 認証切れ(401 authentication_failed)もレート制限と同格の検出対象に追加され、`ClaudeAuthStatus` / `ClaudeAuthClear` で状態の確認・手動リセットができるようになりました(詳細は「認証切れ検出(ClaudeAuthStatus / ClaudeAuthClear)」を参照)。
 - **セッション管理**: 会話履歴をノートブックの TaggingRules に永続化し、差分圧縮と自動コンパクションによりストレージを効率的に利用します。
 - **多言語対応**: `$Language` 設定に基づいてプロンプトの言語指示を動的に生成します。`$Language` が `"Japanese"` の場合は日本語で応答するよう指示し、それ以外の場合は英語に切り替わります。
 - **AI 生成機能**: OpenAI Images API による画像生成(`ClaudeImageGenerate`)と OpenAI TTS API による音声生成(`ClaudeSpeech`)を統合しています。
@@ -163,13 +163,29 @@ $ClaudeAdvisaryModel = {"chatgptcodex", Automatic}
 $ClaudeUltraEnabled = False
 
 (* パレットのプロバイダ循環順序 *)
-(* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio" | "freetoken" *)
-$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "kimi", "lmstudio", "freetoken"}
+(* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio" | "freetoken" | "llamacpp" *)
+$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "kimi", "lmstudio", "freetoken", "llamacpp"}
 
 (* パレットの lmstudio モデル一覧を「現在ロード済みのモデルのみ」に絞るか「LM Studio が
    把握している全モデル」まで含めるかを制御する。LM Studio サーバーに到達できない場合は
    SourceVault のカタログ、それも取得できない場合は静的リストに自動フォールバックする。 *)
 $ClaudeLMStudioPaletteLoadedOnly = True
+
+(* llama.cpp (llama-server) をベースにしたローカルプロバイダの既定ベース URL
+   (デフォルト "http://127.0.0.1:8080")。$ClaudeModel / $ClaudePrivateModel の
+   第 3 要素(カスタム URL)で呼び出しごとに上書き可能。詳細は「llamacpp プロバイダ」を参照 *)
+$ClaudeLlamaCppBaseURL = "http://127.0.0.1:8080"
+
+(* /api/v1/chat のようなサーバー側ツールループ用エンドポイントを持たないローカル
+   OpenAI 互換プロバイダ (freetoken・llamacpp) 向けの、クライアント側非同期ツールループの制御。
+   Automatic (デフォルト): 該当プロバイダにのみ自動適用し、サーバー側ループを持つ lmstudio は対象外。
+   True: lmstudio を含め常にクライアント側ツールループを使う。 False: 常に無効。
+   詳細は「ローカルプロバイダの非同期ツールループ」を参照 *)
+$ClaudeLocalToolLoop = Automatic
+
+(* 上記ツールループの最大往復回数(デフォルト 8)。上限到達時は最後の 1 往復のみ
+   ツール定義を外して問い合わせ、必ず本文で応答を終わらせる(無限ループ防止) *)
+$ClaudeLocalToolLoopMaxIterations = 8
 ```
 
 ### パッケージキーワード自動注入システム
@@ -403,9 +419,9 @@ ShowClaudePalette[]
 
 | 設定項目 | 説明 |
 |---|---|
-| **P:** | プロバイダを切り替えます。クリックするたびに `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken` の順で循環します。選択中のプロバイダ名がボタンラベルに表示されます。各プロバイダの特性は下表を参照してください。 |
-| **M:** | 選択中のプロバイダ内でモデルを切り替えます。クリックするたびに対応するモデル一覧を循環します。短縮名(例: Opus 5、Fable 5)で表示されます。`Automatic` は Codex CLI の既定モデルを使用します(chatgptcodex プロバイダの場合)。SourceVault のモデルレジストリがロードされている場合は、そこからモデル一覧が取得されます。特に `claudecode` / `anthropic` プロバイダの既定モデル(候補一覧の先頭に来るモデル)は、SourceVault がロードされていれば `ClaudeResolveModel` 経由で動的に解決されるため、SourceVault 側でモデルの世代が更新されてもパレット側のコード変更なしに追従します(SourceVault 未ロード時は静的な既定値 `claude-opus-5` にフォールバック)。`lmstudio` プロバイダでは LM Studio サーバーへの実問い合わせによる候補一覧が優先され、取得できない場合は SourceVault のカタログ、それも無ければ静的リストへ順にフォールバックします(`$ClaudeLMStudioPaletteLoadedOnly` 参照)。`freetoken` プロバイダでもモデル候補・エフォート設定はキャッシュされ、LM Studio と同様の仕組みで管理されます。 |
-| **エフォート** | 標準モデル (**M:** の直下) の思考量です。`claudecode` では Low / Medium / High / Max で Think トリガーの強度を設定します(Low は思考なし、Medium は `think hard`、High は `think harder`、Max は `ultrathink`)。`lmstudio` を選んでいるときは **Off** が加わって Off / Low / Medium / High / Max の 5 段になり、LM Studio の `reasoning` パラメータに写ります。**Off = thinking 無効**です。Off のまま `claudecode` に戻した場合、CLI には `--effort` を渡さず Medium 相当で動きます。`freetoken`(2026-08-24 追加)でも同様に Off / Low / Medium / High / Max の 5 段になり、モデル別の推奨 Effort 表を lmstudio と共有した上で `reasoning_effort` パラメータとして送信されます(値が文字列型のときのみ送信され、Automatic 等は従来どおり送られません)。 |
+| **P:** | プロバイダを切り替えます。クリックするたびに `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken → llamacpp` の順で循環します。選択中のプロバイダ名がボタンラベルに表示されます。各プロバイダの特性は下表を参照してください。 |
+| **M:** | 選択中のプロバイダ内でモデルを切り替えます。クリックするたびに対応するモデル一覧を循環します。短縮名(例: Opus 5、Fable 5)で表示されます。`Automatic` は Codex CLI の既定モデルを使用します(chatgptcodex プロバイダの場合)。SourceVault のモデルレジストリがロードされている場合は、そこからモデル一覧が取得されます。特に `claudecode` / `anthropic` プロバイダの既定モデル(候補一覧の先頭に来るモデル)は、SourceVault がロードされていれば `ClaudeResolveModel` 経由で動的に解決されるため、SourceVault 側でモデルの世代が更新されてもパレット側のコード変更なしに追従します(SourceVault 未ロード時は静的な既定値 `claude-opus-5` にフォールバック)。`lmstudio` / `freetoken` / `llamacpp` プロバイダでは、それぞれのサーバーへの実問い合わせによる候補一覧が優先され、取得できない場合は SourceVault のカタログ、それも無ければ静的リストへ順にフォールバックします(`$ClaudeLMStudioPaletteLoadedOnly` 参照)。 |
+| **エフォート** | 標準モデル (**M:** の直下) の思考量です。`claudecode` では Low / Medium / High / Max で Think トリガーの強度を設定します(Low は思考なし、Medium は `think hard`、High は `think harder`、Max は `ultrathink`)。`lmstudio` を選んでいるときは **Off** が加わって Off / Low / Medium / High / Max の 5 段になり、LM Studio の `reasoning` パラメータに写ります。**Off = thinking 無効**です。Off のまま `claudecode` に戻した場合、CLI には `--effort` を渡さず Medium 相当で動きます。`freetoken`(2026-08-24 追加)でも同様に Off / Low / Medium / High / Max の 5 段になり、モデル別の推奨 Effort 表を lmstudio と共有した上で `reasoning_effort` パラメータとして送信されます(値が文字列型のときのみ送信され、Automatic 等は従来どおり送られません)。`llamacpp`(2026-08-29 追加)を選んでいるときだけは **Off がありません**(Low/Medium/High/Max の 4 段)。これは llama-server のサンプリング・thinking 設定がサーバー起動時に固定され、リクエスト単位で無効化できないためです。 |
 | **E:**(秘密モデル枠内) | 秘密モデル `$ClaudePrivateModel` の思考量です。標準モデルのエフォートとは独立に保持され、Off / Low / Medium / High / Max を循環します。既定は Medium(thinking 有効)。 |
 | **課金API** | 禁止 / 許可 — `Fallback -> True/False` を制御します。「禁止」では Claude Code CLI または Codex CLI(課金なし扱い)のみ使用し、「許可」では CLI 利用不可時に Anthropic API・z.ai API 等へフォールバックします。 |
 
@@ -421,6 +437,7 @@ ShowClaudePalette[]
 | `kimi` | Kimi API(Moonshot AI、OpenAI 互換) | あり |
 | `lmstudio` | LM Studio(ローカル LLM) | なし |
 | `freetoken` | freetoken(ローカルの無料エンドポイント、既定 `http://localhost:1919` / `gpt-oss-120b`) | なし |
+| `llamacpp` | llama.cpp(llama-server、LAN 内の別マシンでの運用を想定、既定 `http://127.0.0.1:8080`、要認証) | なし |
 
 **z.ai プロバイダ**
 
@@ -434,9 +451,47 @@ ShowClaudePalette[]
 
 `freetoken` は、ローカルネットワーク上で動作する無料の OpenAI 互換 chat/completions エンドポイント(既定 `http://localhost:1919`、既定モデル `gpt-oss-120b`)へのアクセスを提供する軽量プロバイダです。LM Studio と同じく課金は発生しません。
 
-- パレットの `M:` ボタンで循環するモデル候補と、`エフォート` で選択した Effort 値は、いずれも接続先(base URL)ごとにキャッシュされます。パッケージリロード時や設定変更時にはこのキャッシュも同時に破棄されます。
+- パレットの `M:` ボタンで循環するモデル候補と、`エフォート` で選択した Effort 値は、いずれも接続先(base URL)ごとにキャッシュされます。パッケージリロード時や設定変更時にはこのキャッシュも同時に破棄されます。この base URL 別キャッシュの仕組みは、2026-08-29 に追加された `llamacpp` プロバイダとも共有されています。
 - Effort(Off / Low / Medium / High / Max)は、モデル別の推奨値表を LM Studio 経路と共有した上で `reasoning_effort` パラメータとして送信されます。値が文字列型の場合のみ `reasoning_effort` キーが付与され、`Automatic` 等の場合は付与されません。
 - `$ClaudeModel` に `{"freetoken", "gpt-oss-120b"}` のように明示的に指定することもできます(カスタム URL を第 3 要素として指定可能)。
+
+**llamacpp プロバイダ(2026-08-29 追加)**
+
+`llamacpp` は `llama-server`(llama.cpp のサーバーモード)へのアクセスを提供するプロバイダで、LAN 内の別マシンで常時起動しているサーバーに接続する運用を主眼に置いています。LM Studio と同様に OpenAI 互換の `/v1/chat/completions` エンドポイントを使用しますが、LM Studio 固有の `/api/v0`・`/api/v1` のような拡張エンドポイントは持たない、素の OpenAI 互換サーバーです。
+
+- **既定 URL**: `$ClaudeLlamaCppBaseURL`(既定 `http://127.0.0.1:8080`)。`$ClaudeModel` / `$ClaudePrivateModel` の第 3 要素(カスタム URL)で呼び出しごとに上書きできます(lmstudio・freetoken と同じ規則)。
+
+  ```mathematica
+  (* LAN 内の別機で動作する llama-server に接続する例 *)
+  $ClaudePrivateModel = {"llamacpp", "qwen3.8-flash-next", "http://192.168.1.10:8080"};
+  ```
+
+- **認証が必須です**(認証任意の freetoken とは異なる点です)。llama-server は通常 `--api-key-file` オプション付きで起動されており、API キーが無いと `/health` 以外のすべてのエンドポイントが 401 を返します。API キーは NBAccess の SystemCredential 管理機能に登録します。
+
+  ```mathematica
+  (* llama.cpp の API キーを登録する例 *)
+  NBAccess`NBStoreLocalLLMAPIKey["llamacpp", $ClaudeLlamaCppBaseURL, "LLAMACPP_API_KEY", "your-api-key"];
+  ```
+
+  未登録の場合はダミーキー(`"lm-studio"`)にフォールバックしますが、認証必須サーバーに対してはこれが 401 エラーとして明示的に返るため、失敗の原因が分からず無音でハングすることはありません。
+- **モデル名の指定は事実上装飾的**です。llama-server は起動時にロードした単一モデルのみを常駐させるため、リクエストの `model` フィールドに何を指定しても、その常駐モデルが応答します。既定候補は `"qwen3.8-flash-next"` です。
+- **稼働状態の判定**: llama-server が公開する health 用エンドポイントは `/health` のみのため、まずそこに問い合わせて未起動(`NotRunning`)・503(モデルロード中、`ModelLoading`。100GB 級の大きなモデルは再起動後 3〜5 分ロードにかかることがあります)を判定し、続いて認証キー付きで `/v1/models` に問い合わせて認証切れ(`Unauthorized`、401)を判定します。パレットのプロバイダ状態表示や `ClaudeQueryBg` 等の内部プリフライトはこの判定結果を利用します。
+- **thinking の Off 切り替えはできません**。llama-server のサンプリング・思考設定はサーバー起動時に固定されるため、パレットの `エフォート` は llamacpp 選択時のみ Off を除いた Low/Medium/High/Max の 4 段になります(前掲の「設定セクション」表を参照)。
+
+**ローカルプロバイダの非同期ツールループ(lmstudio/freetoken/llamacpp、2026-08-29)**
+
+LM Studio は `/api/v1/chat` エンドポイント経由でサーバー側が MCP 等のツール呼び出しループを自動実行しますが、`freetoken` や `llamacpp` はそのような拡張エンドポイントを持たない素の `/v1/chat/completions` のみを提供します。これらのプロバイダで SourceVault MCP 等のツールを使わせたい場合、claudecode.wl 側(クライアント側)がツール呼び出しループ(ツール実行 → 結果を会話に追加 → 再送信)を駆動する必要があります。
+
+- `$ClaudeLocalToolLoop`(既定 `Automatic`): `Automatic` は、`/api/v1/chat` のようなサーバー側ツールループ用エンドポイントを持たないプロバイダ(freetoken・llamacpp)にのみクライアント側ツールループを自動適用します。既にサーバー側ループを持つ lmstudio は既定では対象外です。`True` を指定すると lmstudio を含め常にクライアント側ツールループが使われ、`False` では常に無効になります。
+- `$ClaudeLocalToolLoopMaxIterations`(既定 `8`): ツール呼び出し→実行→再送信の往復回数の上限です。上限に達すると、最後の 1 往復だけツール定義を送らずに問い合わせ、必ず本文で応答を終わらせます(無限ループ防止)。
+- 内部実装は `URLSubmit` ベースの非同期往復(応答をハンドラで受け取り、ツールを実行して次の往復を自動送信する)で、カーネルをブロックしません。カーネルをブロックする同期的な実装(`RunProcess` 相当)も内部に残されており状況に応じて使い分けられますが、いずれも上記 2 つの公開変数で制御されるため、ユーザーから見た挙動・設定方法は共通です。
+- **ツール結果の切り詰め**: 1 回のツール呼び出しの戻り値は既定で 8000 文字を超えると切り詰められます。SourceVault のようなツールはカタログや検索結果を丸ごと返すことがあり、切り詰めずに履歴へ積み続けると 128k トークンの文脈を圧迫したうえ、モデルの出力が壊れて(未収束のツール呼び出し表現が繰り返される等)応答が収束しなくなる不具合が実際に確認されたための対策です。切り詰めが発生した場合は「切り詰めた事実」がモデルにも明示され、必要であればより絞り込んだクエリで再度ツールを呼び出すよう促されます。
+
+**サブネット信用トグル**
+
+パレットには `Subnet: 信用する` / `Subnet: Untrusted` と表示されるトグルボタンがあり、既定は「信用しない」です。ローカル LLM プロバイダ(lmstudio・freetoken・llamacpp)は、ノートブックが起動時と異なるサブネットに接続していると判定された場合、たとえ実際には同一サブネット上のサーバーに到達できていてもプライバシーレベルが 0.25 に強制されます。このトグルを明示的に「信用する」に切り替えることで、その場限り制限を緩和できます。
+
+この信用状態は **セッション(ノートブックのランタイム)限りの値であり、ノートブックファイルには保存されません**。これは意図的な設計です。もし「信用する」をノートブックの TaggingRules 等に永続化してしまうと、後から別のネットワーク(同じ IP アドレス帯を割り当てる別の LAN 等)でそのノートブックを開いた瞬間に「信用する」設定が黙って復活し、意図しないデータ露出につながる恐れがあるためです。現在接続しているサブネットの識別情報が変化するたびに再評価されるため、ネットワークを切り替える(例: 自宅と大学で同じノートブックを開く)たびに信用トグルは自動的に「信用しない」へ戻り、カーネル再起動時も常に「信用しない」から始まります。
 
 **LM Studio プロバイダのモデル一覧**
 
@@ -510,10 +565,11 @@ ClaudeCode は機密データを含むタスクに対して、自動的にロー
 - **`AutoPrivate -> True`**: 機密変数にアクセスするタスクで自動的にローカルモデルを使用します
 - **`PrivacySpec`**: アクセスレベルを明示的に制御します
 - **3段階フォールバック**: Claude Code CLI → アクセスレベル対応フォールバックモデル → エラーの順で試行します。次のフォールバック候補への切替は、429(レート制限)や過負荷エラーが連続発生する事態を避けるため、指数バックオフ(1秒→2秒→4秒を上限とする遅延)で行われます。
+- **サブネット信用トグル**: ローカルプロバイダ(lmstudio・freetoken・llamacpp)は、ノートブックが起動時と異なるサブネットで開かれていると判定されるとプライバシーレベルが 0.25 に強制されます。パレットの「Subnet: 信用する」トグルで一時的に緩和できますが、この状態はノートブックには保存されません(詳細は「操作パレット」の「サブネット信用トグル」を参照)。
 
 ### LM Studio の直接使用
 
-`$ClaudeModel` に LM Studio のモデル仕様(リスト形式)を設定することで、Claude Code CLI を使わずに LM Studio をメインの推論エンジンとして直接使用できます。これにより、ローカル LLM を用いた Web 検索や MCP ツール連携が可能になります。
+`$ClaudeModel` に LM Studio のモデル仕様(リスト形式)を設定することで、Claude Code CLI を使わずに LM Studio をメインの推論エンジンとして直接使用できます。これにより、ローカル LLM を用いた Web 検索や MCP ツール連携が可能になります。同様の「$ClaudeModel をローカル OpenAI 互換サーバーのタプルに直接設定する」方式は `freetoken` や `llamacpp`(LAN 内の llama-server、詳細は「操作パレット」の「llamacpp プロバイダ」を参照)でも利用できます。
 
 #### 基本設定例
 
@@ -565,7 +621,7 @@ SystemCredential["lmstudio-http://127.0.0.1:1234"] = "your-lm-studio-api-key";
 
 登録後は `ClaudeEval` 等の呼び出し時に API キーが自動取得されます。未登録の場合は認証なしのダミーキー(`"lm-studio"`)にフォールバックするため、Require Authentication が Off の通常利用では登録不要です。
 
-**注意**: キー名に含まれる URL は `$ClaudeModel` の第3要素(カスタム URL)と一致させてください。リモートの LM Studio サーバーを使用する場合はそのサーバーの URL に合わせてキー名を変更してください。
+**注意**: キー名に含まれる URL は `$ClaudeModel` の第3要素(カスタム URL)と一致させてください。リモートの LM Studio サーバーを使用する場合はそのサーバーの URL に合わせてキー名を変更してください。`llamacpp` プロバイダは常時認証が必須で、登録方法は `NBAccess`NBStoreLocalLLMAPIKey`(詳細は「llamacpp プロバイダ」を参照)を使う点が LM Studio と異なります。
 
 #### モデル別推奨 temperature(2026-08-16)
 

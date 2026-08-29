@@ -704,7 +704,7 @@ If[Quiet[DownValues[NBAccess`NBSetNotebookPaidAPIAllowed]] === {},
 
 (* Phase 28 (2026-05-12): \:30d1\:30ec\:30c3\:30c8\:30c7\:30b6\:30a4\:30f3\:3092 Provider + Model \:306e 2 \:30dc\:30bf\:30f3\:306b\:62e1\:5f35\:3002
    \:65e7 $iPaletteModel ("opus"/"sonnet"/"default") \:3068\:306f\:72ec\:7acb\:3057\:3066\:30b0\:30ed\:30fc\:30d0\:30eb\:5909\:6570\:3092\:7ba1\:7406\:3059\:308b\:3002 *)
-$iPaletteProvider  = "claudecode";    (* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio" | "freetoken" *)
+$iPaletteProvider  = "claudecode";    (* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio" | "freetoken" | "llamacpp" *)
 
 (* claudecode/anthropic palette default model: the minor version is owned by
    SourceVault's model-registry. The palette resolves it via
@@ -719,7 +719,7 @@ $iPaletteModelName = $iPaletteDefaultClaudeModel; (* \:73fe\:30d7\:30ed\:30d0\:3
 (* Provider \:5faa\:74b0\:9806\:5e8f\:3002Phase 5 (2026-05-26): chatgptcodex \:3092
    claudecode \:306e\:6b21\:306b\:8ffd\:52a0\:3002\:3069\:3061\:3089\:3082\:30b5\:30d6\:30b9\:30af\:30ea\:30d7\:30b7\:30e7\:30f3\:7d4c\:7531\:306e
    CLI \:306a\:306e\:3067\:8ab2\:91d1 API \:7981\:6b62\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3067\:3082\:5229\:7528\:53ef\:80fd\:3002 *)
-$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "kimi", "lmstudio", "freetoken"};
+$iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "kimi", "lmstudio", "freetoken", "llamacpp"};
 
 (* \:5404 Provider \:306e\:5019\:88dc\:30e2\:30c7\:30eb\:4e00\:89a7 (Phase 28) \:3002
    \:30af\:30ea\:30c3\:30af\:3067\:3053\:306e\:5217\:3092\:5faa\:74b0\:9078\:629e\:3059\:308b\:3002 *)
@@ -748,7 +748,12 @@ $iPaletteModelsByProvider = <|
   (* FreeToken (localhost:1919)。サーバは 1 モデル常駐なので候補は
      ライブ一覧 (/v1/models) が第一、この静的リストはサーバ不通時の
      フォールバック。 *)
-  "freetoken"    -> {"gpt-oss-120b"}
+  "freetoken"    -> {"gpt-oss-120b"},
+  (* llama.cpp llama-server。FreeToken と同じく 1 モデル常駐なので候補は
+     ライブ一覧 (/v1/models) が第一で、この静的リストはサーバ不通/未認証時の
+     フォールバック。llama-server は model フィールドを無視する (常駐している
+     1 モデルへ流す) ため、フォールバック名で送っても実害はない。 *)
+  "llamacpp"     -> {"qwen3.8-flash-next"}
 |>;
 
 (* SourceVault model catalog for a provider (a list of model-id strings),
@@ -818,6 +823,14 @@ iPaletteModelsFor[provider_String] :=
         If[live =!= {},
           live,
           Lookup[$iPaletteModelsByProvider, provider, {"gpt-oss-120b"}]],
+      provider === "llamacpp",
+        (* llama.cpp: ライブ一覧 (/v1/models) 優先、不通なら静的リスト。
+           llama-server は /v1/models も API キーで保護されるので、
+           iLocalOAIPaletteModels が NBAccess 経由でキーを解決して送る。 *)
+        live = iLlamaCppPaletteModels[];
+        If[live =!= {},
+          live,
+          Lookup[$iPaletteModelsByProvider, provider, {"qwen3.8-flash-next"}]],
       provider === "claudecode" || provider === "anthropic",
         sv = DeleteCases[iPaletteSourceVaultModels[provider], "Automatic"];
         base = If[sv =!= {}, sv,
@@ -894,6 +907,7 @@ iPaletteProviderLabel[p_String] :=
     "kimi",         "Kimi",
     "lmstudio",     "LMStudio",
     "freetoken",    "FreeToken",
+    "llamacpp",     "llama.cpp",
     _, p];
 iPaletteProviderLabel[_] := "ClaudeCode";
 
@@ -915,8 +929,10 @@ iPaletteSyncClaudeModel[] :=
 (* ---- $ClaudePrivateModel \:30c8\:30b0\:30eb (2026-08-05) ----
    \:79d8\:5bc6\:30c7\:30fc\:30bf\:51e6\:7406\:7528\:30e2\:30c7\:30eb\:306e\:9078\:629e\:3002\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:30ec\:30d9\:30eb 1.0 =
    \:30ed\:30fc\:30ab\:30eb\:5b9f\:884c\:30d7\:30ed\:30d0\:30a4\:30c0\:306e\:307f\:5faa\:74b0\:53ef\:3002
-   2026-08-24: freetoken (localhost:1919, gpt-oss-120b) \:3092\:8ffd\:52a0\:3002 *)
-$iPalettePrivateProviderOrder = {"lmstudio", "freetoken"};
+   2026-08-24: freetoken (localhost:1919, gpt-oss-120b) \:3092\:8ffd\:52a0\:3002
+   2026-08-29: llamacpp (LAN \:5185 llama-server) \:3092\:8ffd\:52a0\:3002LAN \:5185\:306e\:5225\:6a5f\:3060\:304c
+   \:5916\:90e8\:9001\:4fe1\:306f\:767a\:751f\:3057\:306a\:3044\:305f\:3081 PL 1.0 (\:79d8\:5bc6\:30c7\:30fc\:30bf\:53ef) \:6271\:3044\:3002 *)
+$iPalettePrivateProviderOrder = {"lmstudio", "freetoken", "llamacpp"};
 
 If[!ValueQ[$iPalettePrivateProvider],
   $iPalettePrivateProvider = If[
@@ -959,8 +975,14 @@ iPaletteEffortLabel[effort_] := Switch[effort,
   "off", "Off", "low", "Low", "medium", "Medium",
   "high", "High", "max", "Max", _, "Medium"];
 
+(* "off" (thinking 無効) を出せるのは、その語彙を実際にサーバへ送れる
+   provider だけ。lmstudio は reasoning、freetoken は reasoning_effort に
+   写る。llamacpp (llama-server) は OpenAI 互換 body に thinking スイッチが
+   無く、サンプリングも起動時 (/etc/llm-server.env) で固定されているため
+   "off" を出しても効かない。出せない選択肢は循環に含めない (2026-08-29)。 *)
 iPaletteEffortCycle[provider_] :=
-  If[iLocalOAIProviderQ[provider],
+  If[iLocalOAIProviderQ[provider] &&
+     StringQ[provider] && ToLowerCase[provider] =!= "llamacpp",
     {"off", "low", "medium", "high", "max"},
     {"low", "medium", "high", "max"}];
 
@@ -1093,6 +1115,11 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
 ];
 
 (* Phase Q-7 \:79fb\:7ba1: Options[ClaudeUpdatePackage] (1) \:306f ClaudePackageManager.wl \:3078\:5b8c\:5168\:79fb\:7ba1 *)
+(* !! NBAccess`$NBTrustCurrentSubnet をここに足さないこと (rule 107)。
+   サブネット信用トグルはセッション限りの値で、ノートブックに保存すると
+   別ネットワークでそのノートを開いた瞬間に「信用する」が黙って復活し、
+   トグルが防ごうとしている攻撃 (別 LAN で同じ IP を名乗るサーバ) を通す。
+   iLoadPaletteSettings 側も同様に読まない。 *)
 iSavePaletteSettings[nb_NotebookObject] := (
   (* Phase 28: \:65b0\:5f62\:5f0f Provider/ModelName \:3092\:4fdd\:5b58 *)
   Quiet[CurrentValue[nb, {TaggingRules, "claudecode", "paletteProvider"}]  = $iPaletteProvider];
@@ -1890,11 +1917,50 @@ $ClaudeFreeTokenBaseURL::usage =
   "(既定 \"http://127.0.0.1:1919\")。OpenAI 互換 /v1/chat/completions を提供する。\n" <>
   "provider \"freetoken\" は lmstudio と同じローカル OpenAI 互換経路で扱われる (2026-08-24)。";
 
+$ClaudeLlamaCppBaseURL::usage =
+  "$ClaudeLlamaCppBaseURL \[LongDash] llama.cpp llama-server の既定 base URL\n" <>
+  "(既定 \"http://127.0.0.1:8080\")。OpenAI 互換 /v1/chat/completions と /v1/models のみを\n" <>
+  "提供する (LM Studio の /api/v0, /api/v1 系は無い)。\n" <>
+  "provider \"llamacpp\" は lmstudio と同じローカル OpenAI 互換経路で扱われる (2026-08-29)。\n" <>
+  "\n" <>
+  "LAN 上の別機で動かす場合、既定値をここで書き換えないこと (パッケージは GitHub に\n" <>
+  "公開されるので localhost 固定が正)。マシン固有の IP は起動ファイル (localInit.wl)\n" <>
+  "側で上書きする。サブネットに依存する場合は接続先を条件分岐させる:\n" <>
+  "  $ClaudeLlamaCppBaseURL = If[\n" <>
+  "    AnyTrue[$MachineAddresses, StringStartsQ[#, \"192.168.1.\"] &],\n" <>
+  "    \"http://192.168.1.10:8080\", \"http://127.0.0.1:8080\"];\n" <>
+  "model tuple の第 3 要素でも上書きできる (lmstudio と同じ規則。こちらが優先):\n" <>
+  "  $ClaudePrivateModel = {\"llamacpp\", \"<model>\", \"http://192.168.1.10:8080\"}\n" <>
+  "\n" <>
+  "llama-server は --api-key-file で認証必須。キーは NBAccess`NBStoreLocalLLMAPIKey[\n" <>
+  "  \"llamacpp\", $ClaudeLlamaCppBaseURL, \"LLAMACPP_API_KEY\", \"<key>\"] で登録する\n" <>
+  "(未登録なら credential 名は ToUpperCase[provider]<>\"_API_KEY\" にフォールバック)。";
+
+$ClaudeLocalToolLoop::usage =
+  "$ClaudeLocalToolLoop \[LongDash] ローカル OpenAI 互換 provider で SourceVault MCP の\n" <>
+  "ツールをモデルに使わせるか (クライアント側ツールループ)。\n" <>
+  "Automatic (既定): /api/v1/chat を持たない provider (llamacpp / freetoken) で有効。\n" <>
+  "True: lmstudio も含め常に有効。False: 無効 (従来どおり素の 1 往復)。\n" <>
+  "\n" <>
+  "LM Studio は integrations でサーバ側がツールループを回すが、llama-server には\n" <>
+  "その機能が無い (OpenAI 互換 /v1/chat/completions のみ)。そこで tools を送り、\n" <>
+  "finish_reason == \"tool_calls\" が返るたびに SourceVaultMCPCallTool を\n" <>
+  "**このカーネル内で**実行して role:\"tool\" で返す。MCP エンドポイントを LAN に\n" <>
+  "公開する必要は無く、ネットワークを渡るのはプロンプトとツール結果だけ。\n" <>
+  "ツール可否と可視範囲は SourceVault の delivery profile に従う。";
+
+$ClaudeLocalToolLoopMaxIterations::usage =
+  "$ClaudeLocalToolLoopMaxIterations \[LongDash] $ClaudeLocalToolLoop のツール往復上限 (既定 8)。\n" <>
+  "上限に達したらツール無しでもう 1 往復し、その応答を返す (無限ループ防止)。";
+
 ClaudeBackendAvailableQ::usage =
   "ClaudeBackendAvailableQ[{provider, model, url...}] は LLM backend の事前可用性チェック (preflight)。\n" <>
   "lmstudio: /api/v0/models のロード状態を確認 (未起動/未ロードへ POST して長時間 timeout を待たない)。\n" <>
+  "freetoken: /v1/models が引ければ稼働中とみなす。\n" <>
+  "llamacpp: /health (公開) でロード中 503 を検出し、/v1/models の 401 を未登録キーとして弾く。\n" <>
   "claudecode: rate limit 状態。結果は 60 秒キャッシュ、\"Refresh\"->True で再取得。\n" <>
-  "返り値: <|\"Available\"->True|False, \"Reason\"->\"OK\"|\"NotRunning\"|\"ModelNotLoaded\"|..., ...|>。";
+  "返り値: <|\"Available\"->True|False, \"Reason\"->\"OK\"|\"NotRunning\"|\"ModelNotLoaded\"|\n" <>
+  "  \"ModelLoading\"|\"Unauthorized\"|\"ModelNameMismatch\"|\"StateUnknown\", ...|>。";
 
 $ClaudeLLMTierTable::usage =
   "$ClaudeLLMTierTable \[LongDash] TaskClass -> backend 候補列 (優先順) の宣言表 (hardening 04 Inc2)。\n" <>
@@ -4820,7 +4886,8 @@ iClaudeEvalPrivacyGuard[nb_, modelSpec_, rawModelOpt_] :=
         "RequiredLevel" -> requiredLevel, "Source" -> source|>]];
     (* Model \:6307\:5b9a\:3042\:308a: NBAccess \:306b\:691c\:8a3c\:3055\:305b\:308b *)
     canHandle = Quiet @ Check[
-      NBAccess`NBModelCanHandleAccessLevel[modelSpec, requiredLevel],
+      NBAccess`NBModelCanHandleAccessLevel[
+        iSpecWithResolvedURL[modelSpec], requiredLevel],
       False];
     provider = Quiet @ Check[
       NBAccess`NBModelProviderName[modelSpec], "unknown"];
@@ -11417,6 +11484,372 @@ iOpenAIChatBodyBytes[model_String, prompt_String, temperature_,
       "RawJSON", "Compact" -> True],
     $Failed];
 
+(* ============================================================
+   ローカル OpenAI 互換 provider 用 SourceVault ツールループ (2026-08-29)
+
+   LM Studio は /api/v1/chat の integrations で **サーバ側が** ツールループを
+   回すので MCP が使える。llama-server にはその機能が無く、OpenAI 互換の
+   /v1/chat/completions しか持たない (実測: --jinja 有効なので tool_calls は
+   出せる)。そこでループをこちら側で回す:
+
+     tools を送る -> finish_reason == "tool_calls" -> SourceVaultMCPCallTool を
+     このカーネル内で実行 -> role:"tool" で結果を返す -> 収束まで繰り返す
+
+   重要: ツールは in-process 実行なので **MCP エンドポイントを LAN に開く必要が
+   無い**。別ホストの llama-server へ渡るのはプロンプトとツール結果だけで、
+   LM Studio 方式 (サーバが MCP へ接続する) より攻撃面が小さい。
+   ============================================================ *)
+
+If[! ValueQ[$ClaudeLocalToolLoop], $ClaudeLocalToolLoop = Automatic];
+If[! IntegerQ[$ClaudeLocalToolLoopMaxIterations],
+  $ClaudeLocalToolLoopMaxIterations = 8];
+(* ツール 1 件の戻り値上限。SourceVault のツールはカタログや検索結果を丸ごと
+   返すことがあり、無制限に履歴へ積むと 128k 文脈を食い潰したうえ、モデルが
+   壊れた形式 (<function=..><parameter=..>) を吐き始めて収束しなくなる
+   (2026-08-29 実測)。切り詰めた旨はモデルにも伝える。 *)
+If[! IntegerQ[$ClaudeLocalToolLoopMaxResultChars],
+  $ClaudeLocalToolLoopMaxResultChars = 8000];
+If[! ValueQ[$ClaudeLocalToolLoopVerbose], $ClaudeLocalToolLoopVerbose = True];
+If[! AssociationQ[$iSourceVaultOpenAIToolsCache],
+  $iSourceVaultOpenAIToolsCache = <||>];
+
+(* SourceVault MCP のツール定義 (name/description/inputSchema) を OpenAI の
+   tools 形式へ変換する。SourceVault 未ロードなら {}。 *)
+iSourceVaultOpenAITools[] :=
+  Module[{defs, tools},
+    If[KeyExistsQ[$iSourceVaultOpenAIToolsCache, "tools"],
+      Return[$iSourceVaultOpenAIToolsCache["tools"]]];
+    defs = If[
+      TrueQ[Quiet @ Check[MemberQ[$Packages, "SourceVault`"], False]],
+      Quiet @ Check[SourceVault`SourceVaultMCPTools[], {}], {}];
+    If[! ListQ[defs], defs = {}];
+    tools = DeleteMissing @ Map[
+      Function[d,
+        Module[{name, desc, schema},
+          name = Lookup[d, "name", Missing[]];
+          If[! StringQ[name], Return[Missing[], Module]];
+          desc = Lookup[d, "description", ""];
+          schema = Lookup[d, "inputSchema",
+            <|"type" -> "object", "properties" -> <||>|>];
+          <|"type" -> "function",
+            "function" -> <|"name" -> name,
+              "description" -> If[StringQ[desc], desc, ""],
+              "parameters" -> schema|>|>]],
+      Select[defs, AssociationQ]];
+    $iSourceVaultOpenAIToolsCache["tools"] = tools;
+    tools];
+iSourceVaultOpenAITools[___] := {};
+
+ClaudeCode`RefreshSourceVaultOpenAITools[] := (
+  $iSourceVaultOpenAIToolsCache = <||>; iSourceVaultOpenAITools[]);
+
+(* この provider でツールループを使うか。Automatic は「/api/v1/chat を持たない
+   ローカル provider」= lmstudio 以外のローカル OpenAI 互換。lmstudio は
+   integrations 経路が既にあるので既定では二重化しない。 *)
+iLocalToolLoopEnabledQ[prov_] :=
+  Module[{p = If[StringQ[prov], ToLowerCase[prov], ""]},
+    Which[
+      $ClaudeLocalToolLoop === False, False,
+      ! iLocalOAIProviderQ[p], False,
+      iSourceVaultOpenAITools[] === {}, False,
+      TrueQ[$ClaudeLocalToolLoop], True,
+      $ClaudeLocalToolLoop === Automatic, p =!= "lmstudio",
+      True, False]];
+
+(* MCP result (<|"content" -> {<|"type"->"text","text"->..|>..}, "isError"->_|>)
+   を role:"tool" の content 文字列へ潰す。 *)
+iMCPResultToText[r_] :=
+  Module[{content, parts},
+    If[! AssociationQ[r], Return[ToString[r]]];
+    content = Lookup[r, "content", Missing[]];
+    parts = Which[
+      StringQ[content], {content},
+      ListQ[content],
+        Map[Function[c,
+          Which[
+            StringQ[c], c,
+            AssociationQ[c], ToString @ Lookup[c, "text", ToString[c]],
+            True, ToString[c]]], content],
+      True, {ToString[content]}];
+    StringRiffle[Select[parts, StringQ], "\n"]];
+
+(* ツール結果を上限で切り詰める。切り詰めた事実をモデルに明示しないと、
+   途中で切れた JSON を完全なデータと誤解して壊れた続きを生成しがち。 *)
+iLocalToolLoopTrim[name_String, text_String] :=
+  Module[{lim = $ClaudeLocalToolLoopMaxResultChars, out},
+    If[! IntegerQ[lim] || lim <= 0, lim = 8000];
+    out = If[StringLength[text] > lim,
+      StringTake[text, lim] <>
+        "\n\n[truncated: " <> ToString[StringLength[text]] <>
+        " chars total, showing first " <> ToString[lim] <>
+        ". Narrow the query if you need more.]",
+      text];
+    If[TrueQ[$ClaudeLocalToolLoopVerbose],
+      Print["  [ToolLoop] " <> name <> " \[Rule] " <>
+        ToString[StringLength[text]] <> " chars" <>
+        If[StringLength[text] > lim, " (truncated to " <> ToString[lim] <> ")", ""]]];
+    out];
+iLocalToolLoopTrim[_, t_] := t;
+
+(* tool_call 1 件を実行。SourceVault の外のツール名は明示エラーを返す
+   (握り潰すとモデルが同じ呼び出しを繰り返して収束しない)。 *)
+iExecSourceVaultToolCall[call_Association] :=
+  Module[{fn, name, argStr, args, res},
+    fn = Lookup[call, "function", <||>];
+    name = ToString @ Lookup[fn, "name", ""];
+    argStr = Lookup[fn, "arguments", "{}"];
+    args = Which[
+      AssociationQ[argStr], argStr,
+      StringQ[argStr],
+        With[{a = Quiet @ Check[Developer`ReadRawJSONString[argStr], $Failed]},
+          If[AssociationQ[a], a, <||>]],
+      True, <||>];
+    If[! MemberQ[Lookup[#["function"], "name", ""] & /@ iSourceVaultOpenAITools[],
+        name],
+      Return["ERROR: unknown tool " <> name]];
+    res = Quiet @ Check[
+      SourceVault`SourceVaultMCPCallTool[name, args], $Failed];
+    If[res === $Failed, Return["ERROR: tool execution failed: " <> name]];
+    iLocalToolLoopTrim[name,
+      If[AssociationQ[res] && TrueQ[Lookup[res, "isError", False]],
+        "ERROR: " <> iMCPResultToText[res],
+        iMCPResultToText[res]]]];
+iExecSourceVaultToolCall[_] := "ERROR: malformed tool call";
+
+(* 1 往復。messages / tools から body を作って POST し、パース済み JSON を返す。 *)
+iLocalToolLoopRound[apiKey_String, model_String, url_String,
+    messages_List, tools_List, temperature_, reasoningEffort_] :=
+  Module[{body, bodyBytes, resp, bodyStr, json},
+    body = <|"model" -> model, "messages" -> messages|>;
+    If[tools =!= {},
+      body = Join[body, <|"tools" -> tools, "tool_choice" -> "auto"|>]];
+    If[NumericQ[temperature],
+      body = Join[body, <|"temperature" -> N[temperature]|>]];
+    If[StringQ[reasoningEffort] && reasoningEffort =!= "",
+      body = Join[body, <|"reasoning_effort" -> reasoningEffort|>]];
+    bodyBytes = Quiet @ Check[
+      ExportByteArray[body, "JSON", "Compact" -> True], $Failed];
+    If[! ByteArrayQ[bodyBytes], Return[$Failed]];
+    resp = Quiet @ Check[URLRead[HTTPRequest[url, <|
+        "Method" -> "POST",
+        "Headers" -> {"Authorization" -> "Bearer " <> apiKey,
+                      "Content-Type" -> "application/json"},
+        "Body" -> bodyBytes|>]], $Failed];
+    If[! MatchQ[resp, _HTTPResponse], Return[$Failed]];
+    bodyStr = iHTTPResponseBodyUTF8[resp];
+    If[! StringQ[bodyStr], bodyStr = ToString[resp["Body"]]];
+    If[resp["StatusCode"] =!= 200,
+      Return["Error: StatusCode=" <> ToString[resp["StatusCode"]] <> " " <>
+        StringTake[bodyStr, UpTo[300]]]];
+    json = Quiet @ Check[Developer`ReadRawJSONString[bodyStr], $Failed];
+    If[! AssociationQ[json],
+      json = Quiet @ Check[ImportString[bodyStr, "RawJSON"], $Failed]];
+    If[! AssociationQ[json], Return[$Failed]];
+    json];
+
+iQueryOpenAIToolLoop[apiKey_String, model_String, prompt_String,
+    url_String, provider_String,
+    temperature_:Automatic, reasoningEffort_:None] :=
+  Module[{tools, messages, iter, max, json, msg, calls, content, preflight},
+    tools = iSourceVaultOpenAITools[];
+    preflight = iCloudSendPreflightDecision[provider, prompt, url];
+    If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
+      Return[iCloudSendPreflightFailure[preflight]]];
+    iLLMBreakpointGate["API sync (tool loop)",
+      <|"Provider" -> provider, "Model" -> model, "URL" -> url,
+        "Prompt" -> prompt, "Tools" -> Length[tools]|>];
+    messages = {<|"role" -> "user", "content" -> prompt|>};
+    max = If[IntegerQ[$ClaudeLocalToolLoopMaxIterations] &&
+             $ClaudeLocalToolLoopMaxIterations > 0,
+      $ClaudeLocalToolLoopMaxIterations, 8];
+    Do[
+      (* 上限に達した最後の 1 往復だけ tools を外し、必ず本文で終わらせる *)
+      json = iLocalToolLoopRound[apiKey, model, url, messages,
+        If[iter > max, {}, tools], temperature, reasoningEffort];
+      If[StringQ[json], Return[json, Module]];
+      If[! AssociationQ[json],
+        Return[iL["Error: ツールループの応答取得に失敗しました",
+                  "Error: tool loop response failed"], Module]];
+      iClaudeEmitLLMCallFromAPI[provider, model, json];
+      msg = Quiet @ Check[First[json["choices"]]["message"], <||>];
+      If[! AssociationQ[msg],
+        Return[iL["Error: 応答に message がありません",
+                  "Error: response has no message"], Module]];
+      calls = Lookup[msg, "tool_calls", {}];
+      If[! ListQ[calls] || calls === {} || iter > max,
+        content = Lookup[msg, "content", ""];
+        Return[If[StringQ[content], content, ToString[content]], Module]];
+      (* assistant の tool_calls をそのまま履歴へ積み、各結果を role:"tool" で返す *)
+      AppendTo[messages, msg];
+      Scan[
+        Function[c,
+          AppendTo[messages, <|
+            "role" -> "tool",
+            "tool_call_id" -> ToString @ Lookup[c, "id", ""],
+            "content" -> iExecSourceVaultToolCall[c]|>]],
+        Select[calls, AssociationQ]],
+      {iter, 1, max + 1}];
+    iL["Error: ツールループが収束しませんでした",
+       "Error: tool loop did not converge"]];
+
+(* ============================================================
+   非同期ツールループ (2026-08-29)
+
+   同期版 (iQueryOpenAIToolLoop) はカーネルを占有するのでパレットの対話セルには
+   使えない。一方で従来の非同期経路は PS1 が「プロンプト文字列 → 本文テキスト」
+   しか運ばず tool_calls を捨てるため、そのままではループできない。
+
+   WL カーネルは単一スレッドなので、ブロックせずに往復するには外部プロセスか
+   URLSubmit のどちらか。URLSubmit ならループ本体を WL 側に置けるので、
+   ツール実行 (in-process) と往復を同じ場所で書ける。
+
+   ジョブは $iToolLoopJobs に持ち、ハンドラが状態を進める。DAG 側は
+   iICollectChunkResult の early branch から status を読むだけ (runState は
+   値渡しなので、可変状態はレジストリに置く必要がある)。
+   ============================================================ *)
+
+If[! AssociationQ[$iToolLoopJobs], $iToolLoopJobs = <||>];
+If[! IntegerQ[$iToolLoopSeq], $iToolLoopSeq = 0];
+
+(* 1 往復を投げる。応答はハンドラで受けて状態を進める。 *)
+iToolLoopSubmitRound[id_String] :=
+  Module[{job, body, bodyBytes, req},
+    job = Lookup[$iToolLoopJobs, id, None];
+    If[! AssociationQ[job], Return[$Failed]];
+    body = <|"model" -> job["model"], "messages" -> job["messages"]|>;
+    (* 上限に達した最後の 1 往復だけ tools を外し、必ず本文で終わらせる *)
+    If[job["iter"] <= job["max"] && job["tools"] =!= {},
+      body = Join[body,
+        <|"tools" -> job["tools"], "tool_choice" -> "auto"|>]];
+    If[NumericQ[job["temperature"]],
+      body = Join[body, <|"temperature" -> N[job["temperature"]]|>]];
+    If[StringQ[job["reasoningEffort"]] && job["reasoningEffort"] =!= "",
+      body = Join[body, <|"reasoning_effort" -> job["reasoningEffort"]|>]];
+    bodyBytes = Quiet @ Check[
+      ExportByteArray[body, "JSON", "Compact" -> True], $Failed];
+    If[! ByteArrayQ[bodyBytes],
+      $iToolLoopJobs[id, "status"] = "Failed";
+      $iToolLoopJobs[id, "error"] = "request serialization failed";
+      Return[$Failed]];
+    req = HTTPRequest[job["url"], <|
+      "Method" -> "POST",
+      "Headers" -> {"Authorization" -> "Bearer " <> job["apiKey"],
+                    "Content-Type" -> "application/json"},
+      "Body" -> bodyBytes|>];
+    $iToolLoopJobs[id, "task"] = URLSubmit[req,
+      HandlerFunctions -> <|
+        "BodyReceived" -> Function[a, iToolLoopOnBody[id, a]],
+        "ConnectionFailed" -> Function[a,
+          $iToolLoopJobs[id, "status"] = "Failed";
+          $iToolLoopJobs[id, "error"] =
+            "connection failed: " <> ToString[job["url"]]]|>,
+      (* "BodyBytes" が必須: "Body" だけだと Latin-1 復号で日本語が化ける *)
+      HandlerFunctionsKeys -> {"Body", "BodyBytes", "StatusCode"}];
+    id];
+iToolLoopSubmitRound[___] := $Failed;
+
+(* 応答 1 件を処理: tool_calls があれば実行して次の往復へ、無ければ完了。 *)
+(* 応答本文を UTF-8 で復号する。URLSubmit の "Body" は charset 未指定の
+   レスポンスを Latin-1 とみなすため、日本語が Ã 混じりに化ける
+   (2026-08-29 実測: 「の」= E3 81 AE が Ã + 0x81 + ® になる)。
+   "BodyBytes" は整数リストで届くので自前で UTF-8 復号する。
+   同期経路が iHTTPResponseBodyUTF8 を通しているのと同じ理由。 *)
+iToolLoopBodyUTF8[a_] :=
+  Module[{bb = Lookup[a, "BodyBytes", None], s},
+    Which[
+      Head[bb] === ByteArray,
+        s = Quiet @ Check[ByteArrayToString[bb, "UTF-8"], $Failed];
+        If[StringQ[s], Return[s]],
+      ListQ[bb] && bb =!= {},
+        s = Quiet @ Check[FromCharacterCode[bb, "UTF-8"], $Failed];
+        If[StringQ[s], Return[s]]];
+    (* フォールバック: 化ける可能性はあるが無いよりまし *)
+    ToString @ Lookup[a, "Body", ""]];
+
+iToolLoopOnBody[id_String, a_] :=
+  Module[{job, code, json, msg, calls, content, bodyStr},
+    job = Lookup[$iToolLoopJobs, id, None];
+    If[! AssociationQ[job], Return[Null]];
+    code = Lookup[a, "StatusCode", 0];
+    bodyStr = iToolLoopBodyUTF8[a];
+    If[code =!= 200,
+      $iToolLoopJobs[id, "status"] = "Failed";
+      $iToolLoopJobs[id, "error"] = "StatusCode=" <> ToString[code] <> " " <>
+        StringTake[bodyStr, UpTo[300]];
+      Return[Null]];
+    json = Quiet @ Check[
+      Developer`ReadRawJSONString[bodyStr], $Failed];
+    If[! AssociationQ[json],
+      $iToolLoopJobs[id, "status"] = "Failed";
+      $iToolLoopJobs[id, "error"] = "response parse failed";
+      Return[Null]];
+    Quiet @ iClaudeEmitLLMCallFromAPI[job["provider"], job["model"], json];
+    msg = Quiet @ Check[First[json["choices"]]["message"], <||>];
+    If[! AssociationQ[msg],
+      $iToolLoopJobs[id, "status"] = "Failed";
+      $iToolLoopJobs[id, "error"] = "response has no message";
+      Return[Null]];
+    calls = Lookup[msg, "tool_calls", {}];
+    If[! ListQ[calls] || calls === {} || job["iter"] > job["max"],
+      content = Lookup[msg, "content", ""];
+      $iToolLoopJobs[id, "result"] =
+        If[StringQ[content], content, ToString[content]];
+      $iToolLoopJobs[id, "status"] = "Done";
+      Return[Null]];
+    (* assistant の tool_calls をそのまま履歴へ積む (同期版と同じ規則:
+       reasoning_content を剥がすと同じツールを再呼び出しして収束しない) *)
+    $iToolLoopJobs[id, "messages"] = Append[job["messages"], msg];
+    Scan[
+      Function[c,
+        $iToolLoopJobs[id, "messages"] = Append[
+          $iToolLoopJobs[id, "messages"],
+          <|"role" -> "tool",
+            "tool_call_id" -> ToString @ Lookup[c, "id", ""],
+            "content" -> iExecSourceVaultToolCall[c]|>]],
+      Select[calls, AssociationQ]];
+    $iToolLoopJobs[id, "iter"] = job["iter"] + 1;
+    iToolLoopSubmitRound[id]];
+iToolLoopOnBody[___] := Null;
+
+iToolLoopStart[provider_String, model_String, prompt_String, url_String,
+    apiKey_String, temperature_:Automatic, reasoningEffort_:None] :=
+  Module[{id},
+    $iToolLoopSeq = $iToolLoopSeq + 1;
+    id = "tl" <> ToString[$iToolLoopSeq] <> "-" <>
+      StringReplace[ToString[Round[1000 AbsoluteTime[]]], "." -> ""];
+    $iToolLoopJobs[id] = <|
+      "provider" -> provider, "model" -> model, "url" -> url,
+      "apiKey" -> apiKey, "temperature" -> temperature,
+      "reasoningEffort" -> reasoningEffort,
+      "tools" -> iSourceVaultOpenAITools[],
+      "messages" -> {<|"role" -> "user", "content" -> prompt|>},
+      "iter" -> 1,
+      "max" -> If[IntegerQ[$ClaudeLocalToolLoopMaxIterations] &&
+                  $ClaudeLocalToolLoopMaxIterations > 0,
+                $ClaudeLocalToolLoopMaxIterations, 8],
+      "status" -> "Running", "result" -> None, "error" -> None,
+      "task" -> None|>;
+    If[iToolLoopSubmitRound[id] === $Failed, Return[$Failed]];
+    id];
+iToolLoopStart[___] := $Failed;
+
+iToolLoopStatus[id_String] :=
+  Module[{job = Lookup[$iToolLoopJobs, id, None]},
+    If[! AssociationQ[job],
+      Return[<|"status" -> "Failed", "result" -> None,
+        "error" -> "unknown tool loop job " <> id|>]];
+    <|"status" -> job["status"], "result" -> job["result"],
+      "error" -> job["error"]|>];
+iToolLoopStatus[___] :=
+  <|"status" -> "Failed", "result" -> None, "error" -> "bad job id"|>;
+
+iToolLoopCleanup[id_String] := (
+  Quiet @ Check[
+    With[{t = Lookup[Lookup[$iToolLoopJobs, id, <||>], "task", None]},
+      If[Head[t] === TaskObject, TaskRemove[t]]], Null];
+  $iToolLoopJobs = KeyDrop[$iToolLoopJobs, id];);
+iToolLoopCleanup[___] := Null;
+
 iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
     customURL_String:"https://api.openai.com/v1/chat/completions",
     temperature_:Automatic, reasoningEffort_:None] :=
@@ -11522,19 +11955,42 @@ iFreeTokenDefaultBaseURL[] :=
     StringTrim[$ClaudeFreeTokenBaseURL],
     "http://127.0.0.1:1919"];
 
+(* ---- llama.cpp llama-server (2026-08-29 追加) ----
+   OpenAI 互換 /v1/chat/completions と /v1/models だけを提供する (LM Studio の
+   /api/v0, /api/v1 系や MCP integrations は無い) ので freetoken と同じ配線で、
+   URL 既定だけ替える。FreeToken との違いは --api-key-file による認証が
+   必須な点 (キー無しは全エンドポイント 401。/health のみ公開)。
+
+   既定は localhost 固定。LAN 上の別機を使う環境でも、このパッケージは
+   GitHub に公開されるのでここに固有 IP を書かない。マシン固有の接続先は
+   起動ファイル (localInit.wl) で $ClaudeLlamaCppBaseURL を上書きするか、
+   model tuple の第 3 要素で指定する ($ClaudeLlamaCppBaseURL::usage 参照)。 *)
+iLlamaCppDefaultBaseURL[] :=
+  If[StringQ[$ClaudeLlamaCppBaseURL] && StringTrim[$ClaudeLlamaCppBaseURL] =!= "",
+    StringTrim[$ClaudeLlamaCppBaseURL],
+    "http://127.0.0.1:8080"];
+
 (* ローカル OpenAI 互換 provider の判定と URL 解決。lmstudio 分岐を
-   freetoken にも開くときは個別比較ではなくこの 2 つを使う。 *)
+   freetoken / llamacpp にも開くときは個別比較ではなくこの 2 つを使う。 *)
 iLocalOAIProviderQ[p_] :=
-  StringQ[p] && MemberQ[{"lmstudio", "freetoken"}, ToLowerCase[p]];
+  StringQ[p] &&
+    MemberQ[{"lmstudio", "freetoken", "llamacpp"}, ToLowerCase[p]];
 
 iLocalOAIDefaultBaseURL[p_] :=
-  If[StringQ[p] && ToLowerCase[p] === "freetoken",
-    iFreeTokenDefaultBaseURL[], iLMStudioDefaultBaseURL[]];
+  Switch[If[StringQ[p], ToLowerCase[p], ""],
+    "freetoken", iFreeTokenDefaultBaseURL[],
+    "llamacpp",  iLlamaCppDefaultBaseURL[],
+    _,           iLMStudioDefaultBaseURL[]];
 
 (* provider 名込みのローカル LLM トークン解決。NBAccess の credential 機構は
    (provider, url) をキーにするので freetoken は freetoken として引く。
    未登録なら従来どおりダミー "lm-studio" (FreeToken は Authorization を
-   要求しないので実害なし)。 *)
+   要求しないので実害なし)。
+   2026-08-29: llamacpp は認証必須なので、未登録だとこのダミーで 401
+   ("Invalid API Key") が返る。$Failed を返さないのは、呼び出し側の一部
+   (iStartFallbackAsync のローカル分岐) が StringQ を検査せずそのまま
+   iPrepareAnthropicPS1 へ渡すため。401 本文はエラーとして表示されるので
+   未登録は必ず気付ける。credential 名の既定は "LLAMACPP_API_KEY"。 *)
 iResolveLocalLLMAPIKey[p_, customURL_String:""] :=
   Module[{prov, effURL, k},
     prov = If[StringQ[p], ToLowerCase[p], "lmstudio"];
@@ -11955,19 +12411,45 @@ $iLMStudioPaletteModelsTTL = 30; (* seconds; newer cache entries are reused *)
 
 (* base URL the palette should probe: prefer an lmstudio tuple's url from
    $ClaudePrivateModel, then $ClaudeModel, else the LM Studio default. *)
-iLMStudioResolvePaletteURL[] :=
-  Which[
-    ListQ[$ClaudePrivateModel] && Length[$ClaudePrivateModel] >= 3 &&
-      StringQ[$ClaudePrivateModel[[1]]] &&
-      ToLowerCase[$ClaudePrivateModel[[1]]] === "lmstudio" &&
-      StringQ[$ClaudePrivateModel[[3]]] && $ClaudePrivateModel[[3]] =!= "",
-      $ClaudePrivateModel[[3]],
-    ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 3 &&
-      StringQ[$ClaudeModel[[1]]] &&
-      ToLowerCase[$ClaudeModel[[1]]] === "lmstudio" &&
-      StringQ[$ClaudeModel[[3]]] && $ClaudeModel[[3]] =!= "",
-      $ClaudeModel[[3]],
-    True, $ClaudeLMStudioBaseURL];
+(* 2026-08-29: provider 引数付きへ一般化。従来 lmstudio 専用だったため、
+   {"llamacpp", model, "http://192.168.1.10:8080"} のように model tuple で
+   URL を上書きしても、パレットのモデル一覧照会だけが provider 既定
+   ($ClaudeLlamaCppBaseURL) を見に行き、実際の送信先とズレていた。
+   照合は「その provider の tuple であること」を要求するので、
+   別 provider のスロットに引きずられることはない。 *)
+iLocalOAITupleURL[spec_, prov_String] :=
+  If[ListQ[spec] && Length[spec] >= 3 && StringQ[spec[[1]]] &&
+     ToLowerCase[spec[[1]]] === prov &&
+     StringQ[spec[[3]]] && spec[[3]] =!= "",
+    spec[[3]], Missing["NoTupleURL"]];
+iLocalOAITupleURL[___] := Missing["NoTupleURL"];
+
+(* パレットが照会すべき base URL。秘密スロット tuple > 標準スロット tuple >
+   provider 既定 ($ClaudeLMStudioBaseURL / $ClaudeLlamaCppBaseURL 等)。 *)
+iLocalOAIResolvePaletteURL[prov_String] :=
+  Module[{p = ToLowerCase[prov], u},
+    u = iLocalOAITupleURL[$ClaudePrivateModel, p];
+    If[StringQ[u], Return[u]];
+    u = iLocalOAITupleURL[$ClaudeModel, p];
+    If[StringQ[u], Return[u]];
+    iLocalOAIDefaultBaseURL[p]];
+iLocalOAIResolvePaletteURL[___] := iLMStudioDefaultBaseURL[];
+
+iLMStudioResolvePaletteURL[] := iLocalOAIResolvePaletteURL["lmstudio"];
+
+(* rule 107 (2026-08-29): アクセスレベル判定へ渡す modelSpec に接続先 URL を
+   詰める。NBAccess は provider 既定 URL ($ClaudeLlamaCppBaseURL 等) を知らない
+   ので、2 要素 tuple のままだと「localhost か別サブネットか」を判定できず
+   強制 0.25 が効かない。URL 解決はこちら (globals の持ち主) の責任。
+
+   注: ここに `iSpecWithResolvedURL[x_] := x` のような「汎用フォールバック」を
+   足さないこと。`spec_` と同じ一般性のパターンなので後勝ちで上書きされ、
+   URL が詰められなくなる (実際に踏んだ)。If が非該当をそのまま返している。 *)
+iSpecWithResolvedURL[spec_] :=
+  If[ListQ[spec] && Length[spec] === 2 && StringQ[spec[[1]]] &&
+     iLocalOAIProviderQ[spec[[1]]],
+    Append[spec, iLocalOAIResolvePaletteURL[ToLowerCase[spec[[1]]]]],
+    spec];
 
 (* model server root: strip any chat / models path + trailing slash *)
 iLMStudioServerRoot[baseURL_String] :=
@@ -12060,28 +12542,41 @@ iLMStudioPaletteModels[] :=
     ids];
 iLMStudioPaletteModels[___] := {};
 
-(* FreeToken のパレット候補: /v1/models の id 一覧 (TTL キャッシュ)。
-   不通時は {} を返し呼び出し側が静的リストへフォールバックする。 *)
-If[!AssociationQ[$iFreeTokenPaletteModelsCache],
-  $iFreeTokenPaletteModelsCache = <||>];
+(* /api/v0, /api/v1 を持たないローカル OpenAI 互換サーバ (freetoken /
+   llamacpp) 共通のパレット候補: /v1/models の id 一覧 (TTL キャッシュ)。
+   不通時は {} を返し呼び出し側が静的リストへフォールバックする。
+   API キーは NBAccess 経由で provider 別に解決する (llama-server は
+   /v1/models も保護されており、キー無しだと 401 → {} になる)。
+   2026-08-29: freetoken 専用だったものを provider 引数付きへ一般化。 *)
+If[!AssociationQ[$iLocalOAIPaletteModelsCache],
+  $iLocalOAIPaletteModelsCache = <||>];
 
-iFreeTokenPaletteModels[] :=
-  Module[{baseURL, now, cached, models, ids},
-    baseURL = iFreeTokenDefaultBaseURL[];
+iLocalOAIPaletteModels[prov_String] :=
+  Module[{p, baseURL, key, now, cached, models, ids},
+    p = ToLowerCase[prov];
+    (* 2026-08-29: model tuple の URL 上書きを尊重する (lmstudio と同じ規則)。 *)
+    baseURL = iLocalOAIResolvePaletteURL[p];
+    key = p <> "|" <> baseURL;
     now = AbsoluteTime[];
-    cached = Lookup[$iFreeTokenPaletteModelsCache, baseURL, Missing[]];
+    cached = Lookup[$iLocalOAIPaletteModelsCache, key, Missing[]];
     If[AssociationQ[cached] && NumberQ[Lookup[cached, "t", 0]] &&
        now - cached["t"] < $iLMStudioPaletteModelsTTL,
       Return[Lookup[cached, "ids", {}]]];
     models = iLMStudioFetchModelsAt[
-      iLMStudioServerRoot[baseURL] <> "/v1/models", "lm-studio"];
+      iLMStudioServerRoot[baseURL] <> "/v1/models",
+      iResolveLocalLLMAPIKey[p, baseURL]];
     ids = If[ListQ[models],
       Select[DeleteDuplicates[DeleteMissing[iLMStudioModelEntryId /@ models]],
         StringQ],
       {}];
-    $iFreeTokenPaletteModelsCache[baseURL] = <|"t" -> now, "ids" -> ids|>;
+    $iLocalOAIPaletteModelsCache[key] = <|"t" -> now, "ids" -> ids|>;
     ids];
+iLocalOAIPaletteModels[___] := {};
+
+iFreeTokenPaletteModels[]    := iLocalOAIPaletteModels["freetoken"];
 iFreeTokenPaletteModels[___] := {};
+iLlamaCppPaletteModels[]     := iLocalOAIPaletteModels["llamacpp"];
+iLlamaCppPaletteModels[___]  := {};
 
 (* ============================================================
    Backend preflight (hardening 04 Inc1, 2026-07-08)
@@ -12096,6 +12591,10 @@ If[! ValueQ[$ClaudeLMStudioBaseURL],
   $ClaudeLMStudioBaseURL = "http://127.0.0.1:1234"];
 If[! ValueQ[$ClaudeFreeTokenBaseURL],
   $ClaudeFreeTokenBaseURL = "http://127.0.0.1:1919"];
+(* localhost 固定。LAN 上の別機は localInit.wl 側で上書きする (GitHub 公開コードに
+   固有 IP を置かない)。ValueQ ガードなので起動ファイルが先に設定していれば残る。 *)
+If[! ValueQ[$ClaudeLlamaCppBaseURL],
+  $ClaudeLlamaCppBaseURL = "http://127.0.0.1:8080"];
 If[! AssociationQ[$iClaudeBackendAvailCache], $iClaudeBackendAvailCache = <||>];
 If[! ValueQ[$iClaudeBackendAvailTTL], $iClaudeBackendAvailTTL = 60];
 
@@ -12174,6 +12673,65 @@ iClaudeBackendAvailCompute["freetoken", spec_List] :=
     If[ok,
       <|"Available" -> True, "Reason" -> "OK", "LoadedModels" -> ids|>,
       <|"Available" -> False, "Reason" -> "ModelNotLoaded",
+        "LoadedModels" -> ids, "BaseURL" -> url|>]];
+
+(* llamacpp (2026-08-29): llama-server は /health だけが公開エンドポイント
+   なので、まず /health で「起動しているか / モデル読み込み中か」を判定する。
+   111GB のモデルは再起動後 3〜5 分ロードにかかり、その間 /health は 503 を
+   返す。ここで弾かないと POST が長時間ぶら下がる (指針 P1-2)。
+   /v1/models は API キー必須。401 は「キー未登録」として即座に落とす
+   (これを StateUnknown で通すと 20 分待たされる代わりに 401 が返るだけで、
+   原因が分かりにくい)。モデル名の照合は freetoken と同じ suffix 一致。 *)
+iClaudeBackendAvailCompute["llamacpp", spec_List] :=
+  Module[{model, url, root, resp, code, models, ids, ok},
+    model = If[Length[spec] >= 2, spec[[2]], Automatic];
+    url = If[Length[spec] >= 3 && StringQ[spec[[3]]] && spec[[3]] =!= "",
+      spec[[3]], iLocalOAIResolvePaletteURL["llamacpp"]];
+    root = iLMStudioServerRoot[url];
+    resp = Quiet @ Check[
+      URLRead[HTTPRequest[root <> "/health", <|Method -> "GET"|>],
+        TimeConstraint -> 6], $Failed];
+    If[Head[resp] =!= HTTPResponse,
+      Return[<|"Available" -> False, "Reason" -> "NotRunning",
+        "BaseURL" -> url|>, Module]];
+    code = resp["StatusCode"];
+    If[code === 503,
+      Return[<|"Available" -> False, "Reason" -> "ModelLoading",
+        "BaseURL" -> url|>, Module]];
+    If[code =!= 200,
+      Return[<|"Available" -> False, "Reason" -> "NotRunning",
+        "BaseURL" -> url|>, Module]];
+    resp = Quiet @ Check[
+      URLRead[HTTPRequest[root <> "/v1/models",
+        <|Method -> "GET",
+          "Headers" -> {"Authorization" ->
+            "Bearer " <> iResolveLocalLLMAPIKey["llamacpp", root]}|>],
+        TimeConstraint -> 6], $Failed];
+    If[Head[resp] === HTTPResponse && resp["StatusCode"] === 401,
+      Return[<|"Available" -> False, "Reason" -> "Unauthorized",
+        "BaseURL" -> url|>, Module]];
+    models = If[Head[resp] === HTTPResponse && resp["StatusCode"] === 200,
+      Module[{json = Quiet @ Check[
+          Developer`ReadRawJSONString[resp["Body"]], $Failed]},
+        If[AssociationQ[json], Lookup[json, "data", $Failed], $Failed]],
+      $Failed];
+    If[! ListQ[models],
+      (* /health は通ったが一覧が取れない: block しない (既知知見と同じ扱い) *)
+      Return[<|"Available" -> True, "Reason" -> "StateUnknown",
+        "BaseURL" -> url|>, Module]];
+    ids = Select[DeleteMissing[
+      iLMStudioModelEntryId /@ Select[models, AssociationQ]], StringQ];
+    If[model === Automatic || ! StringQ[model] || model === "" || ids === {},
+      Return[<|"Available" -> True, "Reason" -> "OK",
+        "LoadedModels" -> ids|>, Module]];
+    ok = MemberQ[ids, model] ||
+      AnyTrue[ids,
+        (StringEndsQ[#, "/" <> model] || StringEndsQ[model, "/" <> #]) &];
+    (* llama-server は 1 モデル常駐で model フィールドを無視するため、
+       名前が食い違っても実行はできる。block せず警告扱いに留める。 *)
+    If[ok,
+      <|"Available" -> True, "Reason" -> "OK", "LoadedModels" -> ids|>,
+      <|"Available" -> True, "Reason" -> "ModelNameMismatch",
         "LoadedModels" -> ids, "BaseURL" -> url|>]];
 
 iClaudeBackendAvailCompute["claudecode", _] :=
@@ -12836,10 +13394,15 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
         (* 2026-08-16: 従来経路もモデル別推奨 temperature を尊重する。
            2026-08-24: freetoken はモデル別 Effort を reasoning_effort として送る。 *)
         Return @ Block[{$iClaudeCurrentAPIProvider = prov},
-          iQueryOpenAIAPI[resolvedKey, model, prompt, url,
-            iResolveLMStudioTemperature[model, temp],
-            If[prov === "freetoken",
-              iResolveFreeTokenReasoning[model, effectiveURL], None]]]
+          Module[{tmp = iResolveLMStudioTemperature[model, temp],
+                  reEff = If[prov === "freetoken",
+                    iResolveFreeTokenReasoning[model, effectiveURL], None]},
+            (* 2026-08-29: /api/v1/chat (LM Studio MCP) を持たない provider は、
+               こちら側でツールループを回して SourceVault MCP を使わせる。 *)
+            If[iLocalToolLoopEnabledQ[prov],
+              iQueryOpenAIToolLoop[resolvedKey, model, prompt, url, prov,
+                tmp, reEff],
+              iQueryOpenAIAPI[resolvedKey, model, prompt, url, tmp, reEff]]]]
       ]
     ];
     (* ―― NBAccess ノートブック課金 API チェック (Phase 28 Paid フラグベース) ――
@@ -14653,7 +15216,8 @@ ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
        (TaskClass \:30c6\:30a3\:30a2\:89e3\:6c7a\:304c\:30af\:30e9\:30a6\:30c9 backend \:3092\:9078\:3093\:3060\:5834\:5408\:3082\:3053\:3053\:3067\:6b62\:307e\:308b) *)
     If[privLevel > 0.5 &&
        ! TrueQ[Quiet @ Check[
-           NBAccess`NBModelCanHandleAccessLevel[modelSpec, privLevel], False]],
+           NBAccess`NBModelCanHandleAccessLevel[
+             iSpecWithResolvedURL[modelSpec], privLevel], False]],
       Return[iL[
         "Error: PrivacyLevel " <> ToString[privLevel] <> " \:306e\:30c7\:30fc\:30bf\:3092 " <>
           ToString[Quiet @ Check[NBAccess`NBModelProviderName[modelSpec], "unknown"]] <>
@@ -14825,9 +15389,9 @@ ClaudeQueryBg[prompt_String, opts:OptionsPattern[]] :=
           If[nonBlock,
             iClaudeQueryRawNonBlocking[prompt, OptionValue[Timeout]],
             iClaudeQueryRaw[prompt]]],
-      hasExplicitModel && providerLower === "lmstudio",
-        (* === LM Studio (\:30ed\:30fc\:30ab\:30eb)\:3001\:8ab2\:91d1\:306a\:3057 === *)
-        (* iClaudeQueryBgAPI \:306f provider-aware \:3067 lmstudio \:30eb\:30fc\:30c8\:3092\:6301\:3064\:304c\:3001
+      hasExplicitModel && iLocalOAIProviderQ[providerLower],
+        (* === LM Studio / FreeToken / llama.cpp (\:30ed\:30fc\:30ab\:30eb)\:3001\:8ab2\:91d1\:306a\:3057 === *)
+        (* iClaudeQueryBgAPI \:306f provider-aware \:3067\:30ed\:30fc\:30ab\:30eb\:30eb\:30fc\:30c8\:3092\:6301\:3064\:304c\:3001
            NBAccess \:30c1\:30a7\:30c3\:30af\:306f Paid=False \:30e2\:30c7\:30eb\:306a\:3089\:30b9\:30ad\:30c3\:30d7\:3055\:308c\:308b\:3002 *)
         iClaudeQueryBgAPI[prompt, modelSpec, OptionValue[Timeout]],
       hasExplicitModel,
@@ -18062,14 +18626,18 @@ iClaudePaidModelGuard[modelSpec_] :=
        providers and are never gated here:
        - "claudecode" is the Claude Code CLI (Anthropic subscription)
        - "chatgptcodex" is the OpenAI Codex CLI (OpenAI subscription)
-       - "lmstudio" is a local model server
+       - "lmstudio" / "freetoken" / "llamacpp" are local model servers
        Both the Claude Code CLI and the OpenAI Codex CLI run on a
        subscription, not on a metered API key, so neither is a paid
        API call. Only the metered HTTP APIs (provider "anthropic" /
        "openai" / ...) are checked against the notebook's paid-API
        permission below. iCodexProviderQ also accepts the Codex
-       aliases "codex" / "chatgpt-codex" / "gptcodex". *)
-    If[MemberQ[{"claudecode", "lmstudio"}, providerLower] ||
+       aliases "codex" / "chatgpt-codex" / "gptcodex".
+       2026-08-29: the local branch went through iLocalOAIProviderQ so that
+       freetoken / llamacpp are covered too -- the literal list only had
+       "lmstudio", which gated the other local servers as if they were
+       metered APIs. *)
+    If[providerLower === "claudecode" || iLocalOAIProviderQ[providerLower] ||
         iCodexProviderQ[providerLower],
       Return[None]];
     (* \:305d\:306e\:4ed6 (anthropic / openai \:7b49 \:8ab2\:91d1 API) \:306f NBAccess \:30c1\:30a7\:30c3\:30af *)
@@ -30406,8 +30974,10 @@ ShowClaudePalette[] := (
                 Appearance -> "Frameless",
                 ImageSize -> {20, 18},
                 FrameMargins -> {{4, 2}, {0, 0}}],
-              iL["LM Studio \:306e\:30ed\:30fc\:30c9\:6e08\:307f\:30e2\:30c7\:30eb\:4e00\:89a7\:3092\:66f4\:65b0",
-                 "Refresh LMStudio loaded-model list"]],
+              iL["\:30ed\:30fc\:30ab\:30eb LLM \:30b5\:30fc\:30d0\:306e\:30e2\:30c7\:30eb\:4e00\:89a7\:3092\:66f4\:65b0 " <>
+                 "(LMStudio \:306f\:30ed\:30fc\:30c9\:6e08\:307f\:3001FreeToken/llama.cpp \:306f /v1/models)",
+                 "Refresh the local LLM server's model list " <>
+                 "(LMStudio: loaded models; FreeToken/llama.cpp: /v1/models)"]],
             Nothing]
         }], SynchronousUpdating -> False],
       (* ---- 標準モデルの Effort (2026-08-16)。モデル行の直下に置く。
@@ -30551,6 +31121,35 @@ ShowClaudePalette[] := (
           ($ClaudeLLMBreakpoint = !TrueQ[$ClaudeLLMBreakpoint];
            iSavePaletteSettings[InputNotebook[]]),
           Appearance -> "Frameless"], SynchronousUpdating -> False],
+      (* \:30b5\:30d6\:30cd\:30c3\:30c8\:4fe1\:7528\:30c8\:30b0\:30eb (2026-08-29, rule 107)\:3002
+         \:65e2\:5b9a\:306f\:300c\:4fe1\:7528\:3057\:306a\:3044\:300d\:3002\:4fe1\:7528\:3057\:306a\:3044\:9593\:306f localhost \:4ee5\:5916\:306e
+         \:30ed\:30fc\:30ab\:30eb LLM \:304c\:540c\:4e00\:30b5\:30d6\:30cd\:30c3\:30c8\:3067\:3042\:3063\:3066\:3082 0.25 \:3078\:5f37\:5236\:9650\:5b9a\:3055\:308c\:308b\:3002
+
+         *** \:610f\:56f3\:7684\:306b iSavePaletteSettings \:3092\:547c\:3070\:306a\:3044 (\:6700\:91cd\:8981) ***
+         \:4ed6\:306e\:30c8\:30b0\:30eb\:3068\:9055\:3044\:3001\:3053\:308c\:3060\:3051\:306f\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:8a18\:61b6\:3055\:305b\:306a\:3044\:3002
+         \:4fdd\:5b58\:3057\:3066\:3057\:307e\:3046\:3068\:3001\:305d\:306e\:30ce\:30fc\:30c8\:3092\:5225\:306e\:30cd\:30c3\:30c8\:30ef\:30fc\:30af\:3067\:958b\:3044\:305f\:77ac\:9593\:306b
+         \:300c\:4fe1\:7528\:3059\:308b\:300d\:304c\:9ed9\:3063\:3066\:5fa9\:6d3b\:3057\:3001\:3053\:306e\:30c8\:30b0\:30eb\:304c\:9632\:3054\:3046\:3068\:3057\:3066\:3044\:308b
+         \:653b\:6483 (\:5225 LAN \:3067\:540c\:3058 IP \:3092\:540d\:4e57\:308b\:30b5\:30fc\:30d0) \:3092\:305d\:306e\:307e\:307e\:901a\:3059\:3002
+         \:30ab\:30fc\:30cd\:30eb\:8d77\:52d5\:306e\:305f\:3073\:306b False \:3078\:623b\:308b\:306e\:304c\:6b63\:3057\:3044\:632f\:308b\:821e\:3044\:3002 *)
+      (* \:30e9\:30d9\:30eb\:3082 NBSubnetTrustActive[] \:7d4c\:7531\:3067\:8aad\:3080\:306e\:3067\:3001\:30d1\:30ec\:30c3\:30c8\:304c\:518d\:8a55\:4fa1\:3055\:308c\:308b
+         \:305f\:3073\:306b IP \:5909\:5316\:3092\:691c\:51fa\:3057\:3066\:8868\:793a\:304c\:300c\:4fe1\:7528\:3057\:306a\:3044\:300d\:3078\:623b\:308b\:3002 *)
+      Dynamic[
+        With[{active = TrueQ @ Quiet @ NBAccess`NBSubnetTrustActive[]},
+          Button[
+            Style["Subnet: " <>
+              If[active,
+                iL["\:4fe1\:7528\:3059\:308b", "Trusted"],
+                iL["\:4fe1\:7528\:3057\:306a\:3044", "Untrusted"]],
+              9, Bold,
+              If[active, RGBColor[0.75, 0.3, 0.1], GrayLevel[0.2]]],
+            (* NBSetSubnetTrust \:7d4c\:7531\:3067\:5207\:308a\:66ff\:3048\:308b: True \:306b\:3059\:308b\:3068\:304d
+               \:73fe\:5728\:306e\:81ea\:6a5f IP \:3092\:63a7\:3048\:3001\:79fb\:52d5\:3057\:305f\:3089\:81ea\:52d5\:5931\:52b9\:3055\:305b\:308b\:305f\:3081\:3002 *)
+            (NBAccess`NBSetSubnetTrust[! active];
+             With[{inb = InputNotebook[]},
+               If[Head[inb] === NotebookObject, SetSelectedNotebook[inb]]]),
+            Appearance -> "Frameless"]],
+        TrackedSymbols :> {NBAccess`$NBTrustCurrentSubnet},
+        SynchronousUpdating -> False],
       (* \[HorizontalLine] routing model policy (power-aware light routing) \[HorizontalLine]
          api.md \:30dc\:30bf\:30f3\:306e\:4e0b\:306b\:79fb\:52d5 (2026-06-29) *)
       Dynamic[
@@ -33686,8 +34285,8 @@ iILaunchChunkAsync[chunk_Association, prompt_String,
             "startTime"->AbsoluteTime[]|>,
           $Failed],
       (* \[HorizontalLine]\[HorizontalLine] Anthropic API / LMStudio / OpenAI: PS1 \:7d4c\:7531 \[HorizontalLine]\[HorizontalLine] *)
-      MemberQ[{"anthropic","lmstudio","freetoken","openai"},
-          ToLowerCase[provider]],
+      iLocalOAIProviderQ[provider] ||
+        MemberQ[{"anthropic","openai"}, ToLowerCase[provider]],
         Module[{apiKey, apiURL},
           apiKey = If[iLocalOAIProviderQ[provider],
             iResolveLocalLLMAPIKey[provider],
@@ -33728,6 +34327,28 @@ iICollectChunkResult[runState_Association, timeout_: Automatic] :=
     outFile = Lookup[runState, "outFile", ""];
     resolvedTimeout = Replace[timeout, Automatic -> $ClaudeTimeout];
     elapsed = AbsoluteTime[] - Lookup[runState, "startTime", AbsoluteTime[]];
+    (* 2026-08-29: 非同期ツールループ (URLSubmit) はプロセスを持たないので、
+       ProcessStatus 判定より前にレジストリを見る。runState は値渡しで
+       更新できないため、可変状態は $iToolLoopJobs 側にある。 *)
+    If[StringQ[Lookup[runState, "toolLoopId", None]],
+      Return[
+        Module[{id = runState["toolLoopId"], st},
+          st = iToolLoopStatus[id];
+          Which[
+            elapsed > resolvedTimeout,
+              iToolLoopCleanup[id];
+              <|"status" -> "Failed", "result" -> None,
+                "error" -> "Timeout (" <> ToString[Round[elapsed]] <> "s)"|>,
+            st["status"] === "Done",
+              iToolLoopCleanup[id];
+              <|"status" -> "Done", "result" -> st["result"], "error" -> None|>,
+            st["status"] === "Failed",
+              Module[{e = st["error"]}, iToolLoopCleanup[id];
+                <|"status" -> "Failed", "result" -> None,
+                  "error" -> "tool loop failed: " <> ToString[e]|>],
+            True,
+              <|"status" -> "Running", "result" -> None, "error" -> None|>]],
+        Module]];
     Which[
       (* \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8 *)
       elapsed > resolvedTimeout,
@@ -33783,8 +34404,14 @@ iICollectChunkResult[runState_Association, timeout_: Automatic] :=
               <|"status"->"Failed", "result"->None,
                 "error"->"Output file not found (exit=" <>
                   ToString[exitCode] <> ", provider=" <> ToString[pk] <>
-                  ", exe=" <> ToString[$ClaudeExe] <> ", exists=" <>
-                  ToString[FileExistsQ[$ClaudeExe]] <>")" <>
+                  (* 2026-08-29: CLI 以外 (ローカル OpenAI 互換 / API 経路) の失敗で
+                     $ClaudeExe を出すのは無関係で、上の provider= 修正と同じ誤認を
+                     招く (llamacpp の接続失敗が "exe=claude.cmd" と表示され、CLI の
+                     問題に見えた)。URL を持つ経路は exe ではなく接続先を出す。 *)
+                  If[StringQ[Lookup[runState, "lmstudioURL", Missing[]]],
+                    ", url=" <> Lookup[runState, "lmstudioURL"],
+                    ", exe=" <> ToString[$ClaudeExe] <> ", exists=" <>
+                      ToString[FileExistsQ[$ClaudeExe]]] <> ")" <>
                   If[StringLength[errTail] > 0,
                     "\nstderr(tail): " <> errTail, ""] <>
                   If[StringLength[batContent] > 0,
@@ -36830,9 +37457,14 @@ ClaudeCode`RefreshLMStudioPaletteModels[] := (
   (* 2026-08-16: reasoning capability もセッションキャッシュなので一緒に落とす。
      モデルの DL 完了前に問い合わせて None を掴むと、以後 Effort が効かなく見える。 *)
   $iLMStudioModelReasoningCache = <||>;
-  (* 2026-08-24: freetoken の候補/effort キャッシュも同時に落とす *)
-  $iFreeTokenPaletteModelsCache = <||>;
+  (* 2026-08-24: freetoken の候補/effort キャッシュも同時に落とす。
+     2026-08-29: 候補キャッシュは freetoken/llamacpp 共通の
+     $iLocalOAIPaletteModelsCache に一本化 (↻ は provider を問わず全部落とす)。 *)
+  $iLocalOAIPaletteModelsCache = <||>;
   $iFreeTokenEffortsCache = <||>;
+  (* backend preflight の 60s キャッシュも落とす: サーバを起こした直後に ↻ を
+     押しても "NotRunning" を掴んだままになるため。 *)
+  $iClaudeBackendAvailCache = <||>;
   iLMStudioPaletteModels[]);
 
 (* ============================================================
@@ -38290,19 +38922,82 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
              StringQ[modelSpec[[1]]] &&
              iLocalOAIProviderQ[modelSpec[[1]]],
             Module[{prov2, lmstudioModel2, customURL2, label2, apiKey2,
-                    prepared2, proc2},
+                    prepared2, proc2, pre2},
               prov2 = ToLowerCase[modelSpec[[1]]];
               lmstudioModel2 = modelSpec[[2]];
               customURL2 = If[Length[modelSpec] >= 3, modelSpec[[3]],
                 iLocalOAIDefaultBaseURL[prov2]];
               label2 = prov2 <> "/" <> lmstudioModel2;
-              
+
+              (* 2026-08-29: preflight。この経路だけ hardening 04 Inc1 の
+                 チェックが抜けており、未起動/ロード中/キー未登録が
+                 「Output file not found」+ PowerShell の HttpClient 例外という
+                 原因の分からない形で出ていた (llamacpp が localhost を指した
+                 まま送信された事例)。結果は 60s キャッシュなので追加コストは
+                 初回のみ。ロード中 (llama.cpp の /health 503) をここで弾くのが
+                 本来の狙い: 弾かないと HTTP timeout まで待たされる。 *)
+              pre2 = Quiet @ Check[
+                ClaudeBackendAvailableQ[{prov2, lmstudioModel2, customURL2}],
+                <||>];
+              If[AssociationQ[pre2] && pre2["Available"] === False,
+                Module[{reason = ToString[Lookup[pre2, "Reason", "?"]],
+                        url = ToString[Lookup[pre2, "BaseURL", customURL2]]},
+                  (* 中断するのは「送っても必ず失敗する」か「送ると待たされる」
+                     状態だけ。ModelNotLoaded で止めないのは、LM Studio が
+                     要求時にモデルを JIT ロードでき、従来この経路で通っていた
+                     ケースを塞ぐため (同じ理由で未知の Reason も通す)。 *)
+                  If[MemberQ[{"NotRunning", "ModelLoading", "Unauthorized"}, reason],
+                    Print["  [RT-Async] ERROR: " <> label2 <>
+                      " preflight failed (" <> reason <> ", url=" <> url <> ") \[LongDash] " <>
+                      Switch[reason,
+                        "NotRunning",
+                          "\:30b5\:30fc\:30d0\:304c\:8d77\:52d5\:3057\:3066\:3044\:307e\:305b\:3093\:3002URL \:8a2d\:5b9a\:3092\:78ba\:8a8d\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+                        "ModelLoading",
+                          "\:30e2\:30c7\:30eb\:3092\:30ed\:30fc\:30c9\:4e2d\:3067\:3059\:3002\:5b8c\:4e86\:5f8c\:306b\:518d\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+                        _,
+                          "API \:30ad\:30fc\:304c\:672a\:767b\:9332\:307e\:305f\:306f\:4e0d\:6b63\:3067\:3059\:3002"]];
+                    Quiet[CurrentValue[nb, WindowStatusArea] =
+                      label2 <> " preflight failed: " <> reason];
+                    Return[$Failed],
+                    (* 警告のみで続行 *)
+                    Print["  [RT-Async] WARN: " <> label2 <>
+                      " preflight " <> reason <> " (url=" <> url <>
+                      ") \[LongDash] \:305d\:306e\:307e\:307e\:9001\:4fe1\:3057\:307e\:3059\:3002"]]]];
+
               Quiet[CurrentValue[nb, WindowStatusArea] =
                 label2 <> " " <> iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s",
                                     " querying... 0s"]];
-              
+
               apiKey2 = iResolveLocalLLMAPIKey[prov2, customURL2];
               If[!StringQ[apiKey2], apiKey2 = "lm-studio"];
+
+              (* 2026-08-29: ツールループ有効な provider は URLSubmit ベースの
+                 非同期ループへ。PS1 は「プロンプト文字列 → 本文テキスト」しか
+                 運ばず tool_calls を捨てるので、この経路では使えない。
+                 runState は proc を持たず toolLoopId を持つ (iICollectChunkResult
+                 の early branch がレジストリを見る)。 *)
+              If[iLocalToolLoopEnabledQ[prov2] && Length[mediaFiles] === 0,
+                Module[{tlId},
+                  tlId = iToolLoopStart[prov2, lmstudioModel2, prompt,
+                    iEnsureChatCompletionsPath[customURL2], apiKey2,
+                    iResolveLMStudioTemperature[lmstudioModel2, Automatic],
+                    If[prov2 === "freetoken",
+                      iResolveFreeTokenReasoning[lmstudioModel2, customURL2],
+                      None]];
+                  If[StringQ[tlId],
+                    Return[<|
+                      "toolLoopId"   -> tlId,
+                      "proc"         -> None,
+                      "outFile"      -> "",
+                      "startTime"    -> AbsoluteTime[],
+                      "timeout"      -> Replace[timeoutOpt,
+                                          Automatic -> $iFallbackTimeout],
+                      "providerKind" -> prov2,
+                      "lmstudioURL"  -> customURL2,
+                      "lmstudioModel"-> lmstudioModel2|>]];
+                  (* 起動に失敗したら従来の PS1 経路へ落とす *)
+                  Print["  [RT-Async] WARN: tool loop start failed; " <>
+                    "falling back to the plain PS1 path"]]];
 
               (* 2026-07-29: multimodal \:5bfe\:5fdc\:3002mediaFiles \:304c\:3042\:308b\:5834\:5408\:306f
                  OpenAI \:4e92\:63db /v1/chat/completions + image_url (data URL) \:3067
@@ -38312,8 +39007,12 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                  PS1 \:81ea\:8eab\:304c choices[0].message.content \:3092\:62bd\:51fa\:3057\:3066 outFile \:306b
                  plain text \:3092\:66f8\:304f\:306e\:3067\:3001collectProvider \:5074\:306f\:305d\:306e\:307e\:307e\:901a\:308b\:3002 *)
               (* freetoken \:306f /api/v1/chat (MCP) \:304c\:7121\:3044\:306e\:3067\:5e38\:306b OpenAI \:4e92\:63db
-                 PS1 \:7d4c\:8def (2026-08-24)\:3002lmstudio \:306f\:5f93\:6765\:3069\:304a\:308a media \:6709\:7121\:3067\:5206\:5c90\:3002 *)
-              prepared2 = If[prov2 === "freetoken" || Length[mediaFiles] > 0,
+                 PS1 \:7d4c\:8def (2026-08-24)\:3002lmstudio \:306f\:5f93\:6765\:3069\:304a\:308a media \:6709\:7121\:3067\:5206\:5c90\:3002
+                 2026-08-29: \:5224\:5b9a\:3092\:300c!= lmstudio\:300d\:306b\:53cd\:8ee2\:3002freetoken \:3092\:540d\:6307\:3057\:3057\:3066\:3044\:305f\:305f\:3081\:3001
+                 /api/v1/chat \:3092\:6301\:305f\:306a\:3044\:65b0\:898f\:306e\:30ed\:30fc\:30ab\:30eb provider (llamacpp) \:304c
+                 \:9ed9\:3063\:3066 MCP \:7d4c\:8def\:3078\:843d\:3061\:3066 404 \:306b\:306a\:308b\:3002MCP integrations \:306f
+                 LM Studio \:5c02\:7528\:306a\:306e\:3067\:3001lmstudio \:4ee5\:5916\:306f\:5e38\:306b OpenAI \:4e92\:63db\:3078\:3002 *)
+              prepared2 = If[prov2 =!= "lmstudio" || Length[mediaFiles] > 0,
                 iPrepareAnthropicPS1[apiKey2, lmstudioModel2, prompt,
                   iEnsureChatCompletionsPath[customURL2], prov2,
                   Replace[timeoutOpt, Automatic -> $iFallbackTimeout],

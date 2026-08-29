@@ -224,6 +224,7 @@ $ClaudeFallbackModels = {
 | `kimi` | Kimi（Moonshot AI）API | あり |
 | `lmstudio` | ローカル LLM（LM Studio 経由） | なし |
 | `freetoken` | ローカル LLM（既定 `http://localhost:1919`、`gpt-oss-120b` 等） | なし |
+| `llamacpp` | LAN 内の別機で動作する `llama-server`（llama.cpp のサーバモード）経由のローカル LLM（API キーによる認証が必須） | なし |
 
 `zai` は z.ai が提供する GLM シリーズ（`glm-5.2`, `glm-5.1`, `glm-5`, `glm-5-turbo`, `glm-4.7`, `glm-4.6`, `glm-4.5-air`, `glm-4.5` など）への API アクセスです。OpenAI 互換 API 形式で動作します。
 
@@ -233,7 +234,9 @@ $ClaudeFallbackModels = {
 
 `freetoken` はローカルで動作する無料枠 LLM エンドポイント（既定 `http://localhost:1919`、モデル例 `gpt-oss-120b`）です。`lmstudio` と同様に OpenAI 互換 API 形式で動作し、`kimi`/`zai` と同じくモデル別の推奨設定表を共有します。モデルごとに推奨される reasoning effort が定義されている場合は `reasoning_effort` として自動的に付与されます（文字列の Effort 指定時のみ送信）。
 
-パレットの `P:` ボタンをクリックすると provider が順に切り替わります。切り替え順は `$iPaletteProviderOrder` で定義されており、現在の順序は `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken` です。`kimi` は `zai` の次、`lmstudio` の前に位置し、`freetoken` は末尾（`lmstudio` の次）に位置します。
+`llamacpp` は LAN 内の別マシンで動作する `llama-server`（llama.cpp のサーバモード）を指す provider です。上記の `lmstudio` 一般化対象（ローカル OpenAI 互換バックエンド）としても扱われますが、`$iPaletteProviderOrder` 上では `freetoken` の次（末尾）に独立した provider として並びます。LAN 内の別機である都合上、ローカルで動く `lmstudio` と異なり接続に API キーによる認証が必須です。キーが未設定のまま送信するとダミーキーで 401 エラーになるため、`$ClaudeFallbackModels` や `$ClaudePrivateModel` で `llamacpp` を指定する場合は API キーを別途登録してください。モデル tuple に URL を含めた場合はその URL が優先される点は `lmstudio` と同じ規則です。
+
+パレットの `P:` ボタンをクリックすると provider が順に切り替わります。切り替え順は `$iPaletteProviderOrder` で定義されており、現在の順序は `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken → llamacpp` です。`kimi` は `zai` の次、`lmstudio` の前に位置し、`freetoken` は `lmstudio` の次、`llamacpp` は末尾（`freetoken` の次）に位置します。
 
 ### 6. ドキュメント生成設定
 
