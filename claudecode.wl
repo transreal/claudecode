@@ -1936,6 +1936,17 @@ $ClaudeLlamaCppBaseURL::usage =
   "  \"llamacpp\", $ClaudeLlamaCppBaseURL, \"LLAMACPP_API_KEY\", \"<key>\"] で登録する\n" <>
   "(未登録なら credential 名は ToUpperCase[provider]<>\"_API_KEY\" にフォールバック)。";
 
+$ClaudeEvalToolIntegrations::usage =
+  "$ClaudeEvalToolIntegrations \[LongDash] ContextPlan の ToolDefinitions ゲート\n" <>
+  "(Mode -> \"None\") が効いている間でも LM Studio へ渡してよい integrations の\n" <>
+  "許可リスト。既定 {\"mcp/sourcevault\"}。\n" <>
+  "\n" <>
+  "ゲートは「mcp/exa のツールスキーマ (約 31K トークン) を ClaudeEval の通常送信で\n" <>
+  "毎回送らない」ためのもので、これが無いと sourcevault まで一律に締め出され、\n" <>
+  "パレットの対話セルからは MCP がまったく使えなくなる (2026-08-30 実機で確認)。\n" <>
+  "{} にすると従来どおり全抑止。個別呼び出しの Integrations -> {...} は\n" <>
+  "このゲートより優先されるので従来どおり。";
+
 $ClaudeLocalToolLoop::usage =
   "$ClaudeLocalToolLoop \[LongDash] ローカル OpenAI 互換 provider で SourceVault MCP の\n" <>
   "ツールをモデルに使わせるか (クライアント側ツールループ)。\n" <>
@@ -2323,6 +2334,10 @@ If[!AssociationQ[$iLLMBreakpointResumedFlags], $iLLMBreakpointResumedFlags = <||
 
 (* --- LM Studio MCP \:7d71\:5408\:5909\:6570\:306e\:65e2\:5b9a\:5024 (2026-04-24 \:8ffd\:52a0) --- *)
 If[!ValueQ[$ClaudeLMStudioIntegrations],     $ClaudeLMStudioIntegrations     = None];
+(* ContextPlan の ToolDefinitions ゲート下でも通す integrations (rule: 高価な
+   exa は抑止したまま、常用する sourcevault だけ通す)。{} で従来の全抑止。 *)
+If[!ValueQ[$ClaudeEvalToolIntegrations],
+  $ClaudeEvalToolIntegrations = {"mcp/sourcevault"}];
 If[!ValueQ[$ClaudeLMStudioAPIToken],         $ClaudeLMStudioAPIToken         = None];
 If[!ValueQ[$ClaudeLMStudioContextLength],    $ClaudeLMStudioContextLength    = None];
 If[!ValueQ[$ClaudeLMStudioTemperature],      $ClaudeLMStudioTemperature      = Automatic];
@@ -4065,12 +4080,27 @@ iWriteCodeCell[nb_NotebookObject, code_String] := (
 
 (* CellPrint\:30d1\:30bf\:30fc\:30f3\:3092\:81ea\:52d5\:691c\:51fa\:3057\:3066\:30b9\:30de\:30fc\:30c8\:306b\:30bb\:30eb\:3092\:66f8\:304d\:8fbc\:3080 \[RightArrow] NBAccess\:306b\:59d4\:8b72 *)
 iWriteSmartCell[nb_, code_String, autoEvaluate_:False] :=
-  Module[{sanitized, effectiveAE},
+  Module[{sanitized, effectiveAE, syntaxBad},
     sanitized = iSanitizeUnderscoreVarNames[code];
+    (* 2026-08-29: single chokepoint for every path that turns an LLM code block
+       into an Input cell (ClaudeQuery sync/queued and iWriteResponseBlocks).
+       A block that does not parse must never be auto-evaluated, and the user
+       must be told WHERE it breaks -- a silently red cell is what made the
+       result4.nb failure invisible. iRuntimeDisplayResult builds its cells
+       directly from the FE parser and carries its own copy of this gate. *)
+    syntaxBad = ! TrueQ[Quiet[SyntaxQ[sanitized]]];
     (* AutoEvaluate \:7981\:6b62\:64cd\:4f5c\:30ac\:30fc\:30c9: \:30bb\:30ad\:30e5\:30ea\:30c6\:30a3\:5883\:754c\:3092\:5909\:66f4\:3059\:308b\:30b3\:30fc\:30c9\:306f\:81ea\:52d5\:5b9f\:884c\:3057\:306a\:3044 *)
-    effectiveAE = TrueQ[autoEvaluate] && !iIsAutoEvalProhibited[sanitized];
+    effectiveAE = TrueQ[autoEvaluate] && !iIsAutoEvalProhibited[sanitized] &&
+      !syntaxBad;
     NBAccess`NBWriteSmartCode[nb, sanitized];
-    If[TrueQ[autoEvaluate] && !effectiveAE,
+    If[syntaxBad,
+      NBAccess`NBWritePrintNotice[nb,
+        iL["\:26a0\:fe0f \:751f\:6210\:30b3\:30fc\:30c9\:306b\:69cb\:6587\:30a8\:30e9\:30fc\:304c\:3042\:308a\:307e\:3059\:3002\:81ea\:52d5\:5b9f\:884c\:3092\:6b62\:3081\:307e\:3057\:305f\:3002\:4ee5\:4e0b\:306e\:4f4d\:7f6e\:3092\:76f4\:3057\:3066\:304b\:3089 Shift+Enter \:3067\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+           "\:26a0\:fe0f Syntax error in the generated code. Auto-evaluation was skipped. Fix the positions below, then press Shift+Enter."] <>
+        With[{rep = Quiet @ Check[iWLSyntaxReport[sanitized], ""]},
+          If[rep =!= "", "\n" <> rep, ""]],
+        RGBColor[0.8, 0.35, 0]]];
+    If[TrueQ[autoEvaluate] && !effectiveAE && !syntaxBad,
       (* \:7981\:6b62\:64cd\:4f5c\:3092\:691c\:51fa: \:30bb\:30eb\:306f\:66f8\:304d\:8fbc\:3080\:304c\:81ea\:52d5\:5b9f\:884c\:3092\:30d6\:30ed\:30c3\:30af *)
       NBAccess`NBWritePrintNotice[nb,
         iL["\:26d4 \:30bb\:30ad\:30e5\:30ea\:30c6\:30a3\:4fdd\:8b77: \:4e0a\:306e\:30bb\:30eb\:306f\:30a2\:30af\:30bb\:30b9\:7bc4\:56f2\:3092\:5909\:66f4\:3059\:308b\:64cd\:4f5c\:3092\:542b\:3080\:305f\:3081\:81ea\:52d5\:5b9f\:884c\:3092\:30d6\:30ed\:30c3\:30af\:3057\:307e\:3057\:305f\:3002\:5185\:5bb9\:3092\:78ba\:8a8d\:3057\:3066\:304b\:3089 Shift+Enter \:3067\:624b\:52d5\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
@@ -7820,6 +7850,75 @@ iParseStreamJsonLine[line_String] :=
 
 (* stream-json \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304b\:3089\:6700\:7d42\:30c6\:30ad\:30b9\:30c8\:7d50\:679c\:3092\:62bd\:51fa\:3059\:308b\:3002
    text_delta \:3092\:7d50\:5408\:3057\:3066\:30c6\:30ad\:30b9\:30c8\:3092\:5fa9\:5143\:3059\:308b\:3002 *)
+(* ---- Non-stream-json body rescue / diagnosis (2026-08-30) ----
+   iPrepareLMStudioMCPPS1's script falls back to writing the WHOLE response
+   JSON to outFile when the response has no output[].message item. The
+   stream-json extractors below then treat every line that does not start with
+   { as a stderr line and return "Error: " <> the entire 65KB body -- which is
+   what the qwen3.8-27b run produced: a wall of JSON instead of a diagnosis.
+   Two things go wrong there and both are fixable here: a message that IS
+   present in a non-stream body should simply be used, and a reasoning-only
+   response should be reported as what it is. *)
+iNonStreamJsonResult[raw_String] := Module[
+  {txt, json, outputs, msgs, kinds, stats, ro, to, choices, cm},
+  txt = StringTrim[raw];
+  If[txt === "" || ! StringStartsQ[txt, "{"], Return[Missing["NotJson"]]];
+  json = Quiet @ Check[Developer`ReadRawJSONString[txt], $Failed];
+  If[! AssociationQ[json],
+    json = Quiet @ Check[ImportString[txt, "RawJSON"], $Failed]];
+  If[! AssociationQ[json], Return[Missing["NotJson"]]];
+
+  (* LM Studio /api/v1/chat shape *)
+  outputs = Lookup[json, "output", None];
+  If[ListQ[outputs],
+    msgs = Select[
+      Map[Function[o,
+        If[AssociationQ[o] && Lookup[o, "type", ""] === "message",
+          Lookup[o, "content", ""], Nothing]],
+        outputs],
+      StringQ[#] && StringTrim[#] =!= "" &];
+    If[Length[msgs] > 0, Return[StringRiffle[msgs, "\n\n"]]];
+    kinds = DeleteDuplicates @ Map[
+      Function[o, ToString @ Lookup[o, "type", "?"]],
+      Select[outputs, AssociationQ]];
+    stats = Lookup[json, "stats", <||>];
+    ro = If[AssociationQ[stats],
+      Lookup[stats, "reasoning_output_tokens", None], None];
+    to = If[AssociationQ[stats],
+      Lookup[stats, "total_output_tokens", None], None];
+    Return[
+      iL["Error: \:30e2\:30c7\:30eb\:304c\:672c\:6587\:3092\:8fd4\:3057\:307e\:305b\:3093\:3067\:3057\:305f (output = ",
+         "Error: the model returned no message (output = "] <>
+      StringRiffle[If[kinds === {}, {"(empty)"}, kinds], ", "] <> ")" <>
+      If[NumericQ[ro] && NumericQ[to] && to > 0 && ro >= 0.9*to,
+        iL["\:3002\:63a8\:8ad6\:3060\:3051\:3067\:51fa\:529b\:4e0a\:9650\:3092\:4f7f\:3044\:5207\:3063\:3066\:3044\:307e\:3059 (reasoning " <>
+             ToString[ro] <> " / \:5408\:8a08 " <> ToString[to] <>
+             " tokens)\:3002$ClaudeLMStudioMaxOutputTokens \:3092\:5f15\:304d\:4e0a\:3052\:308b\:304b\:3001Effort \:3092\:4e0b\:3052\:3066\:518d\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+           ". Reasoning consumed the whole output budget (reasoning " <>
+             ToString[ro] <> " / total " <> ToString[to] <>
+             " tokens). Raise $ClaudeLMStudioMaxOutputTokens or lower Effort, then retry."],
+        ""]]];
+
+  (* OpenAI chat/completions shape, in case another PS1 lands here *)
+  choices = Lookup[json, "choices", None];
+  If[ListQ[choices] && Length[choices] > 0 && AssociationQ[First[choices]],
+    cm = Lookup[First[choices], "message", <||>];
+    If[AssociationQ[cm] && StringQ[Lookup[cm, "content", None]] &&
+       StringTrim[Lookup[cm, "content", ""]] =!= "",
+      Return[Lookup[cm, "content"]]]];
+
+  Missing["NoMessage"]
+  ];
+iNonStreamJsonResult[___] := Missing["NotJson"];
+
+(* A stderr dump is a diagnostic, not a transcript: cap it so a stray response
+   body can never fill the notebook. *)
+iStderrErrorText[stderrLines_List] := Module[{joined},
+  joined = StringJoin[Riffle[stderrLines, "\n"]];
+  "Error: " <> If[StringLength[joined] > 4000,
+    StringTake[joined, 4000] <> "\n...(\:4ee5\:964d\:306f\:7701\:7565)", joined]];
+iStderrErrorText[___] := "Error: (no detail)";
+
 iExtractResultFromStreamJson[outFile_String] :=
   Module[{raw, lines, textDeltas = {}, resultText = None, j, evt, delta,
           stderrLines = {}},
@@ -7855,10 +7954,15 @@ iExtractResultFromStreamJson[outFile_String] :=
     Which[
       StringQ[resultText] && resultText =!= "", resultText,
       Length[textDeltas] > 0, StringJoin[textDeltas],
-      (* JSON\:7d50\:679c\:3082text_delta\:3082\:7121\:3044\:5834\:5408: stderr\:884c\:3092\:30a8\:30e9\:30fc\:30e1\:30c3\:30bb\:30fc\:30b8\:3068\:3057\:3066\:8fd4\:3059 *)
-      Length[stderrLines] > 0,
-        "Error: " <> StringJoin[Riffle[stderrLines, "\n"]],
-      True, ""
+      (* 2026-08-30: stream-json \:3067\:306f\:306a\:304f\:5358\:4e00\:306e JSON \:672c\:6587\:3060\:3063\:305f\:5834\:5408\:3092
+         \:5148\:306b\:6551\:6e08\:3059\:308b\:3002\:6b32\:3057\:3044\:672c\:6587\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:8fd4\:3057\:3001\:7121\:3051\:308c\:3070
+         \:751f JSON \:3092\:6d41\:3059\:4ee3\:308f\:308a\:306b\:539f\:56e0\:3092\:8a00\:3046\:3002 *)
+      True,
+        With[{js = iNonStreamJsonResult[raw]},
+          Which[
+            StringQ[js], js,
+            Length[stderrLines] > 0, iStderrErrorText[stderrLines],
+            True, ""]]
     ]
   ];
 
@@ -7894,9 +7998,14 @@ iExtractResultFromStreamJsonText[raw_String] :=
     Which[
       StringQ[resultText] && resultText =!= "", resultText,
       Length[textDeltas] > 0, StringJoin[textDeltas],
-      Length[stderrLines] > 0,
-        "Error: " <> StringJoin[Riffle[stderrLines, "\n"]],
-      True, ""
+      (* 2026-08-30: \:30d5\:30a1\:30a4\:30eb\:7248\:3068\:540c\:3058\:6551\:6e08\:3002LM Studio \:975e\:540c\:671f\:7d4c\:8def\:306f
+         \:3053\:3061\:3089\:3092\:901a\:308b (collectProvider \[RightArrow] iExtractResultFromStreamJsonText)\:3002 *)
+      True,
+        With[{js = iNonStreamJsonResult[raw]},
+          Which[
+            StringQ[js], js,
+            Length[stderrLines] > 0, iStderrErrorText[stderrLines],
+            True, ""]]
     ]
   ];
 
@@ -9146,7 +9255,26 @@ iExtractRateLimitInfo[text_String] :=
            \:4ee5\:524d\:306f status \:3092\:7121\:8996\:3057\:3066\:3059\:3079\:3066\:8a18\:9332\:3057\:3066\:3044\:305f\:305f\:3081\:3001
            ResetsAt \:306b\:5c06\:6765\:306e\:30d0\:30b1\:30c3\:30c8\:5883\:754c\:304c\:5165\:3063\:3066 \"Rate limit active\"
            \:304c\:8aa4\:3063\:3066\:8868\:793a\:3055\:308c\:308b\:30d0\:30b0\:304c\:3042\:3063\:305f (limit.nb)\:3002 *)
-        If[ToLowerCase[ToString[Lookup[rateInfo, "status", ""]]] === "allowed",
+        (* 2026-08-30 実測修正: CLI 2.1.250 は status に "allowed_warning" を
+           返すようになった (使用量が surpassedThreshold を超えたが、まだ使える
+           状態)。旧コードは `=== "allowed"` の完全一致だけを「使える」と扱って
+           いたため、allowed_warning が制限ヒットとして記録され、
+           ClaudeBackendAvailableQ["claudecode"] が Available->False になり、
+           ClaudeResolveLLMTier が定額 CLI を捨てて従量課金 API
+           ({"anthropic","claude-opus-5"}) へ黙って昇格していた
+           (候補が claudecode のみの "design" は Selected->None で実行不能)。
+
+           判定を反転させ、「制限している status」を明示列挙する方式にする。
+           未知の status は「制限していない」側に倒す — 実際に制限されていれば
+           下の 429/result 経路が確実に捕まえるので自己修復するが、逆に倒すと
+           課金 API への昇格という不可逆な副作用が出るため。
+
+           実測ペイロード (status=allowed_warning):
+             utilization 0.75 / surpassedThreshold 0.75 / rateLimitType seven_day
+             unifiedWindows: five_hour 0.16, seven_day 0.75 *)
+        If[! MemberQ[{"limited", "exceeded", "rejected", "blocked",
+                      "rate_limited", "throttled"},
+             ToLowerCase[ToString[Lookup[rateInfo, "status", ""]]]],
           Return[None]];
         resetsAt = Lookup[rateInfo, "resetsAt", None];
         resetsDate = If[IntegerQ[resetsAt],
@@ -9160,7 +9288,13 @@ iExtractRateLimitInfo[text_String] :=
           "ResetsAt"             -> resetsDate,
           "OverageStatus"        -> Lookup[rateInfo, "overageStatus", None],
           "OverageDisabledReason" -> Lookup[rateInfo, "overageDisabledReason", None],
-          "IsUsingOverage"       -> Lookup[rateInfo, "isUsingOverage", None]|>;
+          "IsUsingOverage"       -> Lookup[rateInfo, "isUsingOverage", None],
+          (* 2026-08-30: CLI が返す余力情報をそのまま載せる (worker dispatch 仕様の
+             Headroom = 1 - Utilization の元データ)。窓は複数あり
+             (five_hour / seven_day)、それぞれ独立の utilization と resetsAt を持つ。 *)
+          "Utilization"          -> Lookup[rateInfo, "utilization", None],
+          "SurpassedThreshold"   -> Lookup[rateInfo, "surpassedThreshold", None],
+          "Windows"              -> Lookup[rateInfo, "unifiedWindows", None]|>;
         Return[info]]];
     
     (* (2) result \:30a4\:30d9\:30f3\:30c8\:306b api_error_status:429 \:304c\:3042\:308c\:3070\:6700\:5c0f\:9650\:306e\:60c5\:5831 *)
@@ -12104,8 +12238,19 @@ iResolveLMStudioIntegrations[model_String, explicitInteg_:Automatic] :=
        tool-use nudge are NOT sent for ordinary ClaudeEval sends. Re-enable per
        call with Integrations -> {...} (above), keep context bounding but allow
        tools via the plan's "ToolDefinitions" -> <|"Mode" -> "Full"|>, or restore
-       all legacy behaviour with $ClaudeEvalContextPlanning = "LegacyFull". *)
-    If[iClaudeEvalToolDefinitionsOffQ[], Return[{}]];
+       all legacy behaviour with $ClaudeEvalContextPlanning = "LegacyFull".
+
+       2026-08-30: このゲートは「高価な exa を毎回送らない」ためのものだったが、
+       安価で常用したい mcp/sourcevault まで一律に締め出していた。実機で
+       パレットの対話セルが「MCP ツールがこのセッションにはない」と答える
+       原因がこれ。ゲート下でも通す許可リスト ($ClaudeEvalToolIntegrations、
+       既定 {"mcp/sourcevault"}) を設け、残りは従来どおり抑止する。
+       空リストにすれば従来の完全抑止に戻る。 *)
+    If[iClaudeEvalToolDefinitionsOffQ[],
+      Return[
+        If[ListQ[$ClaudeEvalToolIntegrations] &&
+           Length[$ClaudeEvalToolIntegrations] > 0,
+          $ClaudeEvalToolIntegrations, {}]]];
     (* 2. \:52d5\:7684\:30b9\:30b3\:30fc\:30d7 override *)
     If[ListQ[$iLMStudioIntegrationsOverride] &&
        Length[$iLMStudioIntegrationsOverride] > 0,
@@ -13369,8 +13514,14 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
         iLocalOAIDefaultBaseURL[prov]];
       (* MCP (/api/v1/chat) \:306f LM Studio \:5c02\:7528\:3002freetoken \:306f\:5e38\:306b
          OpenAI \:4e92\:63db /v1/chat/completions \:7d4c\:8def (2026-08-24)\:3002 *)
+      (* 2026-08-30: $ClaudeLocalToolLoop = True で lmstudio を明示的に
+         クライアント側ループへ倒せるようにする。LM Studio のサーバが API 経由の
+         plugin 利用を拒否する構成 (403 Permission denied to use plugin) では
+         integrations 経路が使えないため、in-process 実行の逃げ道が要る。
+         Automatic (既定) では従来どおり integrations 経路が優先される。 *)
       useMCP = prov === "lmstudio" &&
-        ListQ[integrations] && Length[integrations] > 0;
+        ListQ[integrations] && Length[integrations] > 0 &&
+        ! TrueQ[iLocalToolLoopEnabledQ[prov]];
       If[useMCP,
         (* \:65b0\:7d4c\:8def: /api/v1/chat + MCP *)
         Return @ iQueryLMStudioChat[model, prompt, effectiveURL,
@@ -16698,6 +16849,285 @@ iMergeDependentBlocks[codeList_List] :=
     groups
   ];
 
+(* ---- Syntax diagnostics for LLM-generated Mathematica code (2026-08-29) ----
+   Local small models (llama.cpp / Qwen3 family) lose bracket state in long,
+   deeply nested single-expression proposals. Measured on result4.nb
+   (llamacpp / qwen3.8-flash-next + client-side tool loop): a 40KB proposal
+   contained three closing parens written where a closing bracket was required,
+   one string pattern with no left operand, and one builtin that does not exist
+   (StringEndQ for StringEndsQ). The domain grounding was fine -- every
+   SourceVault symbol it used is real -- the failure is purely surface syntax.
+
+   ToExpression can only say that the code does not parse, and the parser stops
+   at the FIRST defect, so a proposal with several bracket slips would need one
+   repair round per slip. iWLBracketScan is independent of the parser and reports
+   ALL of them with line numbers. Crucially it checks the bracket TYPE on close:
+   the dominant real defect closes an opened [ with a ), which is
+   COUNT-BALANCED and therefore invisible to a counting-only scan.
+   Strings, string escapes and nested comments are skipped.
+   The file-based ancestor of this scanner lives in SVWorkflow_SpecImpl.wl. *)
+iWLBracketScan[code_String] := Module[
+  {cs, n, i = 1, c, nxt, line = 1, instr = False, esc = False, comm = 0,
+   stack = {}, extra = {}, mism = {}, top, want},
+  cs = Characters[code]; n = Length[cs];
+  While[i <= n,
+    c = cs[[i]]; nxt = If[i < n, cs[[i + 1]], ""];
+    Which[
+      c === "\n", line++; i++,
+      ! instr && c === "(" && nxt === "*", comm++; i += 2,
+      ! instr && comm > 0 && c === "*" && nxt === ")", comm--; i += 2,
+      comm > 0, i++,
+      instr && esc, esc = False; i++,
+      instr && c === "\\", esc = True; i++,
+      c === "\"", instr = ! instr; i++,
+      instr, i++,
+      MemberQ[{"[", "{", "("}, c], AppendTo[stack, {c, line}]; i++,
+      MemberQ[{"]", "}", ")"}, c],
+        If[stack === {},
+          AppendTo[extra, {c, line}],
+          top  = Last[stack];
+          want = Switch[First[top], "[", "]", "{", "}", _, ")"];
+          If[want =!= c, AppendTo[mism, {First[top], Last[top], c, line}]];
+          stack = Most[stack]];
+        i++,
+      True, i++]];
+  Join[
+    Map[Function[m, <|"Kind" -> "mismatched-close", "Open" -> m[[1]],
+       "OpenLine" -> m[[2]], "Char" -> m[[3]], "Line" -> m[[4]]|>],
+      Take[mism, UpTo[8]]],
+    Map[Function[e, <|"Kind" -> "extra-close", "Char" -> e[[1]],
+       "Line" -> e[[2]]|>], Take[extra, UpTo[5]]],
+    Map[Function[o, <|"Kind" -> "never-closed", "Char" -> o[[1]],
+       "Line" -> o[[2]]|>], Take[stack, UpTo[5]]]]
+  ];
+iWLBracketScan[___] := {};
+
+iWLSourceLine[lines_List, l_Integer] :=
+  If[1 <= l <= Length[lines],
+    "\n      " <> StringTrim[StringTake[lines[[l]], UpTo[160]]], ""];
+iWLSourceLine[___] := "";
+
+(* First top-level expression that fails to Read. Only a fallback: it points at
+   the START of the failing expression, not at the defect, which is why the
+   bracket scan above and the token scan below run first. *)
+iWLFirstBadLine[code_String] := Module[
+  {strm, prevPos = 0, e, badOff = -1},
+  strm = Quiet @ Check[StringToStream[code], $Failed];
+  If[Head[strm] =!= InputStream, Return[0]];
+  While[badOff < 0,
+    prevPos = Quiet @ Check[StreamPosition[strm], 0];
+    e = Quiet[
+      Check[Read[strm, HoldComplete[Expression]], $Failed,
+        {Read::readt, Syntax::sntx, Syntax::sntxi, Syntax::sntxb,
+         Syntax::bktmcp, Syntax::bktmop, Syntax::tsntxi, Syntax::com,
+         Syntax::snthex}],
+      {Syntax::stresc}];
+    Which[
+      e === EndOfFile, Break[],
+      e === $Failed, badOff = prevPos,
+      Quiet @ Check[StreamPosition[strm], -1] <= prevPos, Break[],
+      True, Null]];
+  Quiet @ Close[strm];
+  If[badOff < 0, 0,
+    1 + StringCount[StringTake[code, UpTo[Max[badOff, 0]]], "\n"]]
+  ];
+iWLFirstBadLine[___] := 0;
+
+(* Token-level slips that are bracket-balanced, so only the parser (which cannot
+   localize them) would otherwise catch them. Measured slip: a StringExpression
+   written with no left operand, e.g. StringMatchQ[s, ~~ "View"] where the model
+   meant ___ ~~ "View". *)
+iWLSuspectTokens[code_String] := Module[{lines, hits = {}},
+  lines = StringSplit[code, "\n"];
+  Do[If[StringContainsQ[lines[[k]],
+        RegularExpression["[\\[,(\\{]\\s*~~"]],
+      AppendTo[hits,
+        "  line " <> ToString[k] <>
+        ": ~~ has no left operand. A string pattern needs an explicit blank, " <>
+        "e.g. ___ ~~ \"View\"" <> iWLSourceLine[lines, k]]],
+    {k, Length[lines]}];
+  Take[hits, UpTo[5]]
+  ];
+iWLSuspectTokens[___] := {};
+
+(* "" when the code parses. Otherwise a positional, machine-actionable report:
+   every bracket defect at once, so one repair round can fix all of them. *)
+iWLSyntaxReport[code_String] := Module[
+  {lines, bad, mism, extra, never, parts = {}, ln},
+  If[StringTrim[code] === "", Return[""]];
+  If[TrueQ[Quiet[SyntaxQ[code]]], Return[""]];
+  lines = StringSplit[code, "\n"];
+  bad   = iWLBracketScan[code];
+  mism  = Select[bad, Lookup[#, "Kind", ""] === "mismatched-close" &];
+  extra = Select[bad, Lookup[#, "Kind", ""] === "extra-close" &];
+  never = Select[bad, Lookup[#, "Kind", ""] === "never-closed" &];
+  Scan[Function[b, AppendTo[parts,
+      "  line " <> ToString[Lookup[b, "Line", 0]] <> ": you wrote " <>
+      Lookup[b, "Char", "?"] <> " where " <>
+      Switch[Lookup[b, "Open", "["], "[", "]", "{", "}", _, ")"] <>
+      " is required (it must close the " <> Lookup[b, "Open", "["] <>
+      " opened on line " <> ToString[Lookup[b, "OpenLine", 0]] <> ")" <>
+      iWLSourceLine[lines, Lookup[b, "Line", 0]]]], mism];
+  Scan[Function[b, AppendTo[parts,
+      "  line " <> ToString[Lookup[b, "Line", 0]] <> ": one " <>
+      Lookup[b, "Char", "?"] <> " too many" <>
+      iWLSourceLine[lines, Lookup[b, "Line", 0]]]], extra];
+  Scan[Function[b, AppendTo[parts,
+      "  line " <> ToString[Lookup[b, "Line", 0]] <> ": this " <>
+      Lookup[b, "Char", "?"] <> " is never closed" <>
+      iWLSourceLine[lines, Lookup[b, "Line", 0]]]], never];
+  parts = Join[parts, iWLSuspectTokens[code]];
+  If[parts === {},
+    ln = iWLFirstBadLine[code];
+    AppendTo[parts,
+      If[ln > 0,
+        "  the parser stops being able to read the code at line " <>
+          ToString[ln] <> iWLSourceLine[lines, ln],
+        "  the expression never completes"]]];
+  "This code does NOT parse as Wolfram Language.\n" <>
+  StringRiffle[parts, "\n"] <>
+  (* Measured on the real 128-line proposal: four independent wrong closers plus
+     two knock-on findings. Saying which is which is impossible from the outside,
+     so say that plainly rather than implying every line listed is a mistake. *)
+  If[Length[parts] > 1,
+    "\n  (Bracket defects cascade: after the first wrong closer the positions " <>
+    "below it may be consequences rather than separate mistakes. Work from the " <>
+    "top down.)",
+    ""]
+  ];
+iWLSyntaxReport[___] := "";
+
+(* ---- Near-miss builtin names ----
+   A head that resolves in no loaded context but is ONE edit away from a real
+   System symbol is a typo, not a symbol the user should be asked to approve
+   (measured: StringEndQ for StringEndsQ). Distance 1 only, so a genuinely new
+   package symbol is never mistaken for a typo. *)
+(* Names["System`*"] returns SHORT names while System` is on $ContextPath and
+   qualified ones otherwise, so strip the prefix conditionally -- an
+   unconditional StringDrop[#, 7] silently produces garbage keys and the whole
+   check goes quiet. *)
+$iWLSystemNameSet = None;
+iWLSystemNameSet[] := (
+  If[! AssociationQ[$iWLSystemNameSet],
+    $iWLSystemNameSet = Quiet @ Check[
+      AssociationThread[
+        (If[StringStartsQ[#, "System`"], StringDrop[#, 7], #] & /@
+          Names["System`*"]) -> True],
+      <||>]];
+  $iWLSystemNameSet);
+
+(* "Does this head name a real function?" -- deliberately NOT just Names[...].
+   ParseProposal calls ToExpression on the block before validation runs, which
+   CREATES Global`StringEndQ as a bare symbol; a name-existence test therefore
+   always answers yes by the time we get here. A symbol with no values, no
+   attributes and no usage message is one the parser just invented. *)
+iWLHeadUndefinedQ[h_String] := Module[{syms},
+  If[TrueQ[Lookup[iWLSystemNameSet[], h, False]], Return[False]];
+  syms = Quiet @ Check[Names["*`" <> h], {}];
+  If[! ListQ[syms] || syms === {}, Return[True]];
+  AllTrue[syms, Function[s,
+    Quiet @ Check[
+      With[{sy = Symbol[s]},
+        Length[OwnValues[sy]] === 0 && Length[DownValues[sy]] === 0 &&
+        Length[SubValues[sy]] === 0 && Length[UpValues[sy]] === 0 &&
+        Attributes[sy] === {} &&
+        ! StringQ[MessageName[sy, "usage"]]],
+      False]]]
+  ];
+iWLHeadUndefinedQ[___] := False;
+
+(* head 1 個に対する「もしかして」候補。
+   (a) 2026-08-30: `$Foo[...]` で `Foo` が実在するなら、$ の付け間違い。
+       $ 付きの名前は変数であって関数ではないので、これはほぼ確実に typo。
+       実機で `$SourceVaultPackageApiIndexStatus[]` (正しくは $ 無し) が
+       修復ターンに乗らず NeedsApproval のハード失敗になっていた。
+   (b) 従来: System シンボルからの最近傍 (綴り誤り)。 *)
+iWLNearMissForHead[h_String] :=
+  Module[{bare, hits, cand},
+    If[StringStartsQ[h, "$"] && StringLength[h] > 1,
+      bare = StringDrop[h, 1];
+      hits = Quiet @ Check[Names["*`" <> bare], {}];
+      If[ListQ[hits] && hits =!= {}, Return[{bare}]]];
+    cand = Quiet @ Check[
+      Nearest[Keys[iWLSystemNameSet[]], h, {3, 1}], {}];
+    cand = If[ListQ[cand], DeleteCases[cand, h], {}];
+    If[cand =!= {}, Return[cand]];
+    (* (c) 2026-08-30: ロード済みパッケージのシンボルからの近傍。
+       System 側は半径 1 (綴り誤り) しか見ないので、SourceVaultCatalog ->
+       SourceVaultMCPCatalog のような「語の抜け」を拾えず、実在しない関数が
+       NeedsApproval のハード失敗になっていた (GLM 5.2 実機)。
+       候補は先頭 8 文字を共有する名前に絞ってから編集距離で選ぶので、
+       全 Names[] を走査するコストと誤提案の両方を抑えられる。 *)
+    iWLPackageNearMiss[h]];
+iWLNearMissForHead[___] := {};
+
+iWLPackageNearMiss[h_String] :=
+  Module[{pool, cand},
+    If[StringLength[h] < 6, Return[{}]];
+    pool = Quiet @ Check[
+      Names["*`" <> StringTake[h, UpTo[8]] <> "*"], {}];
+    If[! ListQ[pool] || pool === {}, Return[{}]];
+    pool = DeleteCases[
+      DeleteDuplicates[Last[StringSplit[#, "`"]] & /@ pool], h];
+    If[pool === {}, Return[{}]];
+    cand = Quiet @ Check[Nearest[pool, h, {3, 6}], {}];
+    If[ListQ[cand], cand, {}]];
+iWLPackageNearMiss[___] := {};
+
+iWLTypoHeads[code_String] := Module[{heads, unknown},
+  (* 2026-08-30: 先頭の $ も head として捕まえる。従来は lookbehind が
+     `$` を除外していたため `$Foo[` が一切検出対象にならなかった。 *)
+  heads = DeleteDuplicates @ StringCases[code,
+    RegularExpression["(?<![A-Za-z0-9`])(\\$?[A-Z][A-Za-z0-9]{2,})\\["] :> "$1"];
+  If[heads === {}, Return[{}]];
+  unknown = Select[heads, iWLHeadUndefinedQ];
+  If[unknown === {}, Return[{}]];
+  DeleteCases[
+    Map[Function[h,
+      Module[{cand = iWLNearMissForHead[h]},
+        If[cand === {}, Nothing, <|"Head" -> h, "DidYouMean" -> cand|>]]],
+      Take[unknown, UpTo[12]]],
+    Nothing]
+  ];
+iWLTypoHeads[___] := {};
+
+iWLTypoHeadReport[code_String] := Module[{t},
+  t = Quiet @ Check[iWLTypoHeads[code], {}];
+  If[t === {}, Return[""]];
+  "These function names exist in NO loaded context and look like typos:\n" <>
+  StringRiffle[
+    Map[Function[e,
+      "  " <> Lookup[e, "Head", "?"] <> "  ->  did you mean " <>
+      StringRiffle[Lookup[e, "DidYouMean", {}], " / "] <> " ?"], t], "\n"]
+  ];
+iWLTypoHeadReport[___] := "";
+
+(* Rules attached to every syntax repair request. Kept short on purpose: a small
+   local model follows three concrete rules better than a long style guide. *)
+iWLSyntaxRepairHint[] :=
+  "Resend the SAME program with these positions repaired. Do NOT write a " <>
+  "different program -- a rewrite only moves the error.\n" <>
+  "Rules that prevent this class of defect:\n" <>
+  "- Every [ is closed by ] and every ( is closed by ). NEVER close a [ with ).\n" <>
+  "- Keep at most three bracket levels on one line. Bind intermediate results " <>
+  "to local variables on their own lines instead of nesting deeper.\n" <>
+  "- A string pattern needs an explicit blank: ___ ~~ \"View\". Prefer " <>
+  "StringEndsQ / StringStartsQ / StringContainsQ over StringMatchQ with a " <>
+  "pattern.\n";
+
+(* Full repair text for one proposed code block: "" when nothing is wrong. *)
+iWLProposalSyntaxRepairText[code_String] := Module[{syn, typo},
+  syn  = Quiet @ Check[iWLSyntaxReport[code], ""];
+  typo = Quiet @ Check[iWLTypoHeadReport[code], ""];
+  (* Only a real parse failure is reported here. A block that parses but names a
+     non-existent function is handled on the validation path, where the head
+     check already runs -- reporting it here too would mislabel the
+     natural-language-leak rejection as a typo. *)
+  If[syn === "", "",
+    syn <> "\n" <> If[typo =!= "", typo <> "\n", ""] <> iWLSyntaxRepairHint[]]
+  ];
+iWLProposalSyntaxRepairText[___] := "";
+
 iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
   Module[{allBlocks, mathBlocks, extBlocks, blocks = {}, ae, mergedCodes},
     allBlocks = iExtractAllCodeBlocks[response];
@@ -16714,9 +17144,11 @@ iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
           If[!TrueQ[Quiet[SyntaxQ[b["code"]]]],
             <|b, "syntaxError" -> True|>, b]
         ], mathBlocks]];
-    (* \:69cb\:6587\:30a8\:30e9\:30fc\:901a\:77e5 *)
-    Scan[If[TrueQ[#["syntaxError"]],
-      nbPrint[nb, iL["\:26a0\:fe0f \:69cb\:6587\:30a8\:30e9\:30fc\:3092\:691c\:51fa: \:751f\:6210\:30b3\:30fc\:30c9\:306e\:6587\:6cd5\:304c\:4e0d\:6b63\:3067\:3059\:3002\:624b\:52d5\:3067\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044\:3002", "\:26a0\:fe0f Syntax error detected: Generated code has invalid syntax. Please fix manually."]]] &, mathBlocks];
+    (* 2026-08-29: the syntax notice used to be printed here, before any cell,
+       and said only that the grammar was invalid. It now comes from
+       iWriteSmartCell, right after the offending cell and with the exact
+       line numbers, so there is no pre-scan notice any more. The syntaxError
+       flag is still computed above because it drives autoEvaluate below. *)
     Which[
       (* Mathematica \:30d6\:30ed\:30c3\:30af\:304c\:3042\:308b\:5834\:5408 *)
       Length[mathBlocks] > 0,
@@ -16725,10 +17157,9 @@ iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
           (* \:69cb\:6587\:30a8\:30e9\:30fc\:306e\:30d6\:30ed\:30c3\:30af\:3082 autoEvaluate \:3092\:6291\:5236 *)
           ae = autoEvaluate && !iIsLongRunningCode[b["code"]] && !TrueQ[b["syntaxError"]];
           iWriteSmartCell[nb, b["code"], ae];
-          If[!ae && autoEvaluate,
-            If[TrueQ[b["syntaxError"]],
-              nbPrint[nb, iL["\:26a1 \:4e0a\:306e\:30bb\:30eb\:306f\:69cb\:6587\:30a8\:30e9\:30fc\:306e\:305f\:3081\:81ea\:52d5\:5b9f\:884c\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3057\:305f\:3002\:4fee\:6b63\:5f8c\:306b Shift+Enter \:3067\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002", "\:26a1 Syntax error: auto-eval skipped. Fix and press Shift+Enter."]],
-              nbPrint[nb, iL["\:26a1 \:4e0a\:306e\:30bb\:30eb\:306f\:5916\:90e8\:30b5\:30fc\:30d3\:30b9\:3078\:306e\:66f8\:304d\:8fbc\:307f\:64cd\:4f5c\:3092\:542b\:3080\:305f\:3081\:81ea\:52d5\:5b9f\:884c\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3057\:305f\:3002Shift+Enter \:3067\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002", "\:26a1 External service writes: auto-eval skipped. Press Shift+Enter."]]]],
+          (* \:69cb\:6587\:30a8\:30e9\:30fc\:306e\:5834\:5408\:306f iWriteSmartCell \:304c\:4f4d\:7f6e\:4ed8\:304d\:3067\:65e2\:306b\:544a\:77e5\:6e08\:307f\:3002 *)
+          If[!ae && autoEvaluate && !TrueQ[b["syntaxError"]],
+            nbPrint[nb, iL["\:26a1 \:4e0a\:306e\:30bb\:30eb\:306f\:5916\:90e8\:30b5\:30fc\:30d3\:30b9\:3078\:306e\:66f8\:304d\:8fbc\:307f\:64cd\:4f5c\:3092\:542b\:3080\:305f\:3081\:81ea\:52d5\:5b9f\:884c\:3092\:30b9\:30ad\:30c3\:30d7\:3057\:307e\:3057\:305f\:3002Shift+Enter \:3067\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002", "\:26a1 External service writes: auto-eval skipped. Press Shift+Enter."]]],
           {b, mathBlocks}];
         iWriteContinueEvalButton[nb, autoEvaluate];
         (* Order 9: default-on auto-save of the prompt + proposed expr as
@@ -16880,6 +17311,24 @@ This is by design to preserve variable scoping and Graphics structures.\n\n\
 CRITICAL: Do NOT put (* comments *) inside ```mathematica code blocks. \
 Comments are stripped by the typesetter. \
 Instead, write explanatory text OUTSIDE code blocks as plain text.\n\
+WOLFRAM SYNTAX DISCIPLINE (this is the #1 cause of rejected code \[LongDash] read it):\n\
+- Every [ is closed by ] and every ( is closed by ). NEVER close a [ with ). \
+The most common failure looks balanced but is not: \
+Lookup[c, \"A\", Lookup[c, \"B\", \"\"]) must end with ]] not ]).\n\
+- Keep at most THREE bracket levels on one line. \
+When an expression needs more, bind the inner parts to local variables on their \
+own short lines first. Long deeply nested one-liners are where bracket state is lost.\n\
+- A string pattern needs an explicit blank on each side: ___ ~~ \"View\". \
+A bare ~~ \"View\" with nothing on its left is a syntax error. \
+Prefer StringEndsQ[s, \"View\"] / StringStartsQ / StringContainsQ over \
+StringMatchQ with a pattern.\n\
+- Use only builtin names that really exist. Frequently mistyped: \
+StringEndsQ (NOT StringEndQ), StringStartsQ, StringContainsQ, StringRiffle, \
+DeleteDuplicatesBy, KeyValueMap, AssociationThread.\n\
+- Do NOT verify brackets by hand in your reasoning and do NOT simulate the \
+parser. The system parses your code mechanically and, if anything is off, \
+sends it back to you with the exact line numbers. Spend your effort on writing \
+lines short enough that they cannot go wrong.\n\
 ABSOLUTE RULE FOR CODE BLOCK CONTENT (this is a hard requirement): \
 Inside a ```mathematica ... ``` block, EVERY non-empty line MUST be a syntactically \
 valid Mathematica expression. NEVER include natural-language prose, step labels \
@@ -17787,6 +18236,21 @@ If[!ValueQ[ClaudeCode`$ClaudeEvalContextSysPromptCharBudget],
   ClaudeCode`$ClaudeEvalContextSysPromptCharBudget = 6000];
 If[!ValueQ[ClaudeCode`$ClaudeEvalPackageDocsCharBudget],
   ClaudeCode`$ClaudeEvalPackageDocsCharBudget = 24000];
+
+(* 2026-08-29: syntax repair loop for LLM-proposed code. Declared with the
+   FULLY-QUALIFIED name so the symbol lands in ClaudeCode` regardless of
+   $ContextPath inside this Private section. *)
+If[!ValueQ[ClaudeCode`$ClaudeSyntaxRepair],
+  ClaudeCode`$ClaudeSyntaxRepair = True];
+ClaudeCode`$ClaudeSyntaxRepair::usage =
+  "$ClaudeSyntaxRepair (default True) makes the Runtime bridge send a proposed " <>
+  "```mathematica block that does not parse back to the model as a repair turn, " <>
+  "with every bracket defect listed by line, instead of silently degrading the " <>
+  "turn to text-only and pasting the broken code into the notebook. It also " <>
+  "routes a head that exists in no loaded context but is one edit away from a " <>
+  "System symbol (a typo such as StringEndQ) to a repair turn rather than an " <>
+  "approval dialog. Repairs are bounded by the runtime's MaxValidationRepairs " <>
+  "budget. Set to False to restore the pre-2026-08-29 behaviour.";
 If[!ValueQ[ClaudeCode`$ClaudeEvalContextHistoryTurns],
   ClaudeCode`$ClaudeEvalContextHistoryTurns = 12];
 If[!ValueQ[ClaudeCode`$ClaudeEvalDefaultContextPlan],
@@ -37666,6 +38130,22 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
       "  ```\n\n" <>
       "You may include brief explanatory text BEFORE your code blocks,\n" <>
       "but the code blocks are MANDATORY \[LongDash] they are your primary output.\n\n" <>
+      (* 2026-08-29: restated here, close to where the model actually writes the
+         block. Measured on result4.nb: a 40KB proposal from a local model had
+         three ) written where ] was required. Code that does not parse costs a
+         whole repair round, so the rule is worth repeating at short range. *)
+      "BRACKETS (checked mechanically before your code is accepted):\n" <>
+      "Every [ is closed by ], every ( is closed by ). NEVER close a [ with ).\n" <>
+      "Keep at most three bracket levels on one line; bind inner parts to local\n" <>
+      "variables on their own lines instead of nesting deeper. A string pattern\n" <>
+      "needs an explicit blank: ___ ~~ \"View\", never a bare ~~ \"View\".\n" <>
+      (* 2026-08-30: say explicitly that the check is ours. Without this a
+         reasoning model reads the rule as a task and hand-audits every line;
+         qwen3.8-27b spent its entire 16k output budget doing exactly that and
+         returned no answer at all. *)
+      "The checker is ours, not yours: do not count brackets by hand in your\n" <>
+      "reasoning. If the code does not parse you get it back with the exact\n" <>
+      "line numbers.\n\n" <>
       "Security note: your code may reference confidential variables (e.g. secretData)\n" <>
       "that exist only in the local kernel. Do NOT try to guess their values.\n\n" <>
       "After the kernel evaluates your code, you will see the result and can write more code.\n" <>
@@ -37689,6 +38169,14 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
           "OR <tool_call> blocks (tool mode). " <>
           "Both are valid. Use tools when you need web search, " <>
           "file access, or other capabilities beyond Mathematica.\n\n"]]];
+          (* 2026-08-30: a "smoke-test your long block with mathematica_eval
+             first" line used to sit here. Removed after the qwen3.8-27b run:
+             the tool path calls NBExecuteHeldExpr with ApprovalMode "None", so
+             any code touching an unlisted head is refused with NeedsApproval and
+             the advice cannot be followed. The model obeyed it, got refused,
+             and then spent thousands of reasoning tokens working out which heads
+             need approval -- it never emitted an answer. Do not reinstate this
+             without an approval-free dry-run tool (parse only, no execution). *)
     
     If[nbCtxMode =!= "None" && (Length[cells] > 0 || totalCellCount > 0),
       AppendTo[parts,
@@ -39370,11 +39858,20 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                     ToExpression[m[[1]]], None]]
               |>, Module]]];
           
-          (* \[HorizontalLine]\[HorizontalLine] 3. \:30c6\:30ad\:30b9\:30c8\:306e\:307f \[HorizontalLine]\[HorizontalLine] *)
+          (* \[HorizontalLine]\[HorizontalLine] 3. \:30c6\:30ad\:30b9\:30c8\:306e\:307f \[HorizontalLine]\[HorizontalLine]
+             2026-08-29: \:3053\:3053\:306b\:306f\:300c\:672c\:5f53\:306b\:30c6\:30ad\:30b9\:30c8\:3060\:3051\:306e\:30bf\:30fc\:30f3\:300d\:3068
+             \:300cmathematica \:30d6\:30ed\:30c3\:30af\:306f\:3042\:308b\:304c parse \:3067\:304d\:306a\:304b\:3063\:305f\:30bf\:30fc\:30f3\:300d\:306e
+             \:4e21\:65b9\:304c\:843d\:3061\:3066\:304d\:3066\:304a\:308a\:3001\:5f8c\:8005\:304c\:9ed9\:3063\:3066 TextOnly \:306b\:964d\:683c\:3055\:308c\:3066\:3044\:305f\:3002
+             \:305d\:306e\:7d50\:679c\:3001\:58ca\:308c\:305f\:30b3\:30fc\:30c9\:304c\:8b66\:544a\:306a\:3057\:3067\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:66f8\:304b\:308c\:3066\:3044\:305f
+             (result4.nb \:3067\:5b9f\:6e2c)\:3002\:4f4d\:7f6e\:4ed8\:304d\:8a3a\:65ad\:3092\:6dfb\:3048\:3001ValidateProposal \:304c
+             \:3053\:308c\:3092\:4fee\:5fa9\:30bf\:30fc\:30f3\:306b\:5909\:63db\:3059\:308b\:3002 *)
           <|"HeldExpr" -> None,
             "TextResponse" -> rawResponse,
             "HasProposal" -> False,
-            "HasToolUse"  -> False|>
+            "HasToolUse"  -> False,
+            "RawCode" -> If[StringQ[code], code, ""],
+            "SyntaxError" -> If[StringQ[code] && StringTrim[code] =!= "",
+              Quiet @ Check[iWLProposalSyntaxRepairText[code], ""], ""]|>
         ]
       ],
       
@@ -39390,9 +39887,22 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
          \:30c4\:30fc\:30eb\:30eb\:30fc\:30d7\:306e mathematica_eval \:3082 iToolExecMathematica \:5185\:3067
          \:540c\:69d8\:306b NBValidateHeldExpr \:3092\:5b9f\:884c\:3059\:308b\:3002 *)
       "ValidateProposal" -> Function[{proposal, contextPacket},
-        Module[{heldExpr, code, heads, denied, needsApproval},
+        Module[{heldExpr, code, heads, denied, needsApproval,
+                synRepair, typoRepair},
           heldExpr = proposal["HeldExpr"];
           code = Lookup[proposal, "RawCode", ""];
+          (* 2026-08-29: syntax / near-miss-symbol repair inputs.
+             synRepair is set by ParseProposal when a ```mathematica block was
+             present but did not parse. typoRepair only fires for a head that
+             resolves in NO loaded context and is one edit from a System symbol
+             (measured: StringEndQ). Both are computed before the Which so the
+             conditions stay side-effect free. *)
+          synRepair = If[TrueQ[ClaudeCode`$ClaudeSyntaxRepair],
+            With[{s = Lookup[proposal, "SyntaxError", ""]},
+              If[StringQ[s], s, ""]], ""];
+          typoRepair = If[TrueQ[ClaudeCode`$ClaudeSyntaxRepair] &&
+              synRepair === "" && StringQ[code] && StringTrim[code] =!= "",
+            Quiet @ Check[iWLTypoHeadReport[code], ""], ""];
           (* \:518d\:5b9f\:884c\:7528: \:63d0\:6848\:5f0f\:3092\:5171\:6709\:5909\:6570\:306b\:683c\:7d0d\:3002ValidateProposal \:306f
              \:5b9f\:884c\:30fb\:30b3\:30fc\:30c9\:63d0\:793a\:306e\:3069\:3061\:3089\:306e\:7d4c\:8def\:3067\:3082\:5fc5\:305a\:901a\:308b\:691c\:8a3c\:30d5\:30a7\:30fc\:30ba\:306a\:306e\:3067\:78ba\:5b9f\:3002
              RawCode (\:751f\:30b3\:30fc\:30c9\:6587\:5b57\:5217) \:3092\:512a\:5148\:3001\:7121\:3051\:308c\:3070 heldExpr \:3092 InputForm \:5316\:3002
@@ -39407,17 +39917,35 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
             ClaudeCode`$ClaudeEvalLastProposedExprString =
               Missing["NotCaptured"]];
           Which[
+            (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:306f\:3042\:308b\:304c parse \:3067\:304d\:306a\:3044 \[RightArrow] \:4fee\:5fa9\:30bf\:30fc\:30f3
+               (\:30d0\:30b8\:30a7\:30c3\:30c8 MaxValidationRepairs)\:3002\:65e7\:6765\:306f\:3053\:308c\:3082 TextOnly \:306b
+               \:843d\:3061\:3001\:58ca\:308c\:305f\:30b3\:30fc\:30c9\:304c\:305d\:306e\:307e\:307e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:66f8\:304b\:308c\:3066\:3044\:305f\:3002
+               ClaudeCode`$ClaudeSyntaxRepair = False \:3067\:65e7\:52d5\:4f5c\:306b\:623b\:308b\:3002 *)
+            heldExpr === None && synRepair =!= "",
+              <|"Decision" -> "RepairNeeded",
+                "ReasonClass" -> "ModelSyntaxError",
+                "VisibleExplanation" -> synRepair|>,
+
             (* HeldExpr \:306a\:3057 \[RightArrow] TextOnly *)
             heldExpr === None,
               <|"Decision" -> "TextOnly"|>,
-            
+
             (* AutoEvaluate \:7981\:6b62\:64cd\:4f5c \[RightArrow] \:627f\:8a8d\:5fc5\:8981 *)
             StringQ[code] && iIsAutoEvalProhibited[code],
               <|"Decision" -> "NeedsApproval",
                 "ReasonClass" -> "AccessEscalationRequired",
                 "VisibleExplanation" ->
                   "Code modifies access scope. Review required."|>,
-            
+
+            (* \:5b58\:5728\:3057\:306a\:3044 head \:304c\:5b9f\:5728\:306e System \:30b7\:30f3\:30dc\:30eb\:304b\:3089 1 \:6587\:5b57\:5dee \[RightArrow]
+               \:7dbb\:308a\:8aa4\:308a\:3068\:3057\:3066\:4fee\:5fa9\:30bf\:30fc\:30f3\:3078\:3002\:30e6\:30fc\:30b6\:30fc\:306b\:627f\:8a8d\:3092\:6c42\:3081\:308b\:3079\:304d
+               \:672a\:77e5 head \:3067\:306f\:306a\:304f\:3001\:5358\:306a\:308b LLM \:306e\:8aa4\:5b57\:3067\:3042\:308b\:305f\:3081\:3002 *)
+            typoRepair =!= "",
+              <|"Decision" -> "RepairNeeded",
+                "ReasonClass" -> "ModelUnknownSymbol",
+                "VisibleExplanation" -> typoRepair <>
+                  "\nUse the correct builtin names and resend the same program."|>,
+
             (* NBAccess の head チェック。Phase C-lite (2026-06-03):
                旧来はここで独自の簡易判定 (Deny/Approval 以外は全て Permit) を
                していたため、NBExecuteHeldExpr の C-lite 再検証と食い違い、
@@ -41320,7 +41848,7 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
     (* \[HorizontalLine]\[HorizontalLine] \:5931\:6557\:6642\:306e\:8868\:793a \[HorizontalLine]\[HorizontalLine] *)
     If[status === "Failed",
       Module[{failDetail = Lookup[st, "LastFailure", <||>], errMsg,
-              isTimeout},
+              isTimeout, isSyntaxFail},
         If[StringQ[jobId] && jobId =!= "",
           NBAccess`NBJobMoveToAnchor[jobId];
           $iJobActiveNb = nb];
@@ -41348,7 +41876,14 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
         (* Phase 29 (2026-05-13): \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:6642\:306f\:5b9f\:884c\:3055\:308c\:305f\:30b3\:30fc\:30c9\:3068\:8abf\:67fb\:30dc\:30bf\:30f3\:3092\:8868\:793a\:3002
            Imai \:5148\:751f\:6307\:91dd: \:300c\:77e5\:308a\:305f\:3044\:306e\:306f\:5b9f\:969b\:306b\:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:3057\:305f\:30b3\:30fc\:30c9\:300d *)
         isTimeout = StringQ[errMsg] && StringContainsQ[errMsg, "timed out"];
-        If[isTimeout,
+        (* 2026-08-29: \:69cb\:6587\:4fee\:5fa9\:304c\:4e88\:7b97\:5207\:308c\:3057\:305f\:5834\:5408\:3082\:540c\:3058\:6271\:3044\:306b\:3059\:308b\:3002
+           \:4fee\:5fa9\:30eb\:30fc\:30d7\:3092\:5165\:308c\:308b\:3068\:3001\:76f4\:3089\:306a\:304b\:3063\:305f\:3068\:304d\:306b Failed \:3067\:65e9\:671f
+           return \:3059\:308b\:305f\:3081\:3001\:5f93\:6765\:306f\:8b66\:544a\:4ed8\:304d\:3067\:6b8b\:3063\:3066\:3044\:305f\:30b3\:30fc\:30c9\:3055\:3048
+           \:6d88\:3048\:3066\:3057\:307e\:3046\:3002\:305d\:308c\:306f\:9000\:5316\:306a\:306e\:3067\:3001\:6700\:5f8c\:306e\:63d0\:6848\:3092
+           \:4f4d\:7f6e\:8a3a\:65ad\:4ed8\:304d\:3067\:5fc5\:305a\:6b8b\:3059\:3002 *)
+        isSyntaxFail = MemberQ[{"ModelSyntaxError", "ModelUnknownSymbol"},
+          Lookup[failDetail, "ReasonClass", ""]];
+        If[isTimeout || isSyntaxFail,
           Module[{lastProp, rawCode, rid},
             lastProp = Lookup[st, "LastProposal", <||>];
             rawCode = If[AssociationQ[lastProp],
@@ -41357,14 +41892,24 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
             (* \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:3057\:305f\:30b3\:30fc\:30c9\:3092\:305d\:306e\:307e\:307e\:30bb\:30eb\:306b\:8868\:793a *)
             If[StringQ[rawCode] && rawCode =!= "",
               NBAccess`NBWriteCell[nb,
-                Cell[iL["\:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:3057\:305f\:30b3\:30fc\:30c9 (LLM \:63d0\:6848):",
-                       "Code that timed out (LLM proposal):"],
+                Cell[If[isSyntaxFail,
+                    iL["\:69cb\:6587\:30a8\:30e9\:30fc\:304c\:76f4\:3089\:306a\:304b\:3063\:305f\:30b3\:30fc\:30c9 (LLM \:63d0\:6848)\:3002\:624b\:52d5\:3067\:4fee\:6b63\:3057\:3066\:304f\:3060\:3055\:3044:",
+                       "Code whose syntax errors could not be repaired (LLM proposal). Fix it manually:"],
+                    iL["\:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:3057\:305f\:30b3\:30fc\:30c9 (LLM \:63d0\:6848):",
+                       "Code that timed out (LLM proposal):"]],
                   "Text", FontSize -> 10, FontWeight -> Bold,
                   FontColor -> RGBColor[0.5, 0.3, 0]]];
               NBAccess`NBWriteCell[nb,
                 Cell[rawCode, "Code", FontSize -> 10,
                   Background -> RGBColor[1.0, 0.97, 0.9],
-                  CellTags -> "claudecode-notice"]]];
+                  CellTags -> "claudecode-notice"]];
+              If[isSyntaxFail,
+                With[{rep = Quiet @ Check[iWLSyntaxReport[rawCode], ""]},
+                  If[rep =!= "",
+                    NBAccess`NBWriteCell[nb,
+                      Cell[rep, "Text", FontSize -> 10,
+                        FontColor -> RGBColor[0.8, 0.35, 0],
+                        CellTags -> "claudecode-notice"]]]]]];
             (* \:8abf\:67fb\:30b3\:30de\:30f3\:30c9\:3092\:30b9\:30cb\:30da\:30c3\:30c8\:3068\:3057\:3066\:8868\:793a (Button \:3067\:306f\:306a\:304f static \:30c6\:30ad\:30b9\:30c8\:3001
                \:30b3\:30d4\:30fc\:3057\:3066\:8a55\:4fa1\:53ef\:80fd) *)
             NBAccess`NBWriteCell[nb,
@@ -41658,7 +42203,28 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
           iL["\:2139\:fe0f \:975e\:540c\:671f\:5b9f\:884c\:6e08\:307f\:3002Input \:30bb\:30eb\:306f\:66f8\:304b\:308c\:307e\:3057\:305f\:304c\:81ea\:52d5\:8a55\:4fa1\:306f\:3055\:308c\:307e\:305b\:3093\:3002\:5fc5\:8981\:306a\:3089\:624b\:52d5\:3067 Shift+Enter \:3057\:3066\:304f\:3060\:3055\:3044\:3002",
              "\:2139\:fe0f Already executed in parallel. Input cells written but not auto-evaluated. Press Shift+Enter manually if needed."],
           GrayLevel[0.4]]]]];
-    
+
+    (* ---- \:69cb\:6587\:30b2\:30fc\:30c8 (2026-08-29) ----
+       \:6700\:5f8c\:306e\:95a2\:6240\:3002\:4fee\:5fa9\:30bf\:30fc\:30f3\:3067\:76f4\:305b\:306a\:304b\:3063\:305f / \:4fee\:5fa9\:3092\:7121\:52b9\:5316\:3057\:305f /
+       \:4e88\:7b97\:5207\:308c\:306e\:5834\:5408\:3001\:58ca\:308c\:305f\:30d6\:30ed\:30c3\:30af\:306f\:305d\:308c\:3067\:3082\:3053\:3053\:307e\:3067\:6765\:308b\:3002
+       \:65e7\:6765\:306f\:7121\:8a00\:3067 Input \:30bb\:30eb\:306b\:66f8\:304d\:8fbc\:307f\:3001\:81ea\:52d5\:8a55\:4fa1\:307e\:3067\:8a66\:307f\:3066\:3044\:305f\:305f\:3081\:3001
+       \:30e6\:30fc\:30b6\:30fc\:306b\:306f\:300c\:8d64\:304f\:306a\:3063\:305f\:30bb\:30eb\:300d\:3060\:3051\:304c\:6b8b\:3063\:3066\:3044\:305f (result4.nb)\:3002
+       \:8a55\:4fa1\:3092\:6b62\:3081\:3001\:3069\:306e\:884c\:304c\:60aa\:3044\:306e\:304b\:3092\:5fc5\:305a\:8868\:793a\:3059\:308b\:3002 *)
+    Module[{badBlocks},
+      badBlocks = Select[blocks,
+        StringQ[#] && ! TrueQ[Quiet[SyntaxQ[#]]] &];
+      If[Length[badBlocks] > 0,
+        effectiveAE = False;
+        AppendTo[queue,
+          With[{rep = StringRiffle[
+              Quiet @ Check[iWLSyntaxReport[#], ""] & /@ badBlocks, "\n"]},
+            Function[
+              NBAccess`NBWritePrintNotice[nb,
+                iL["\:26a0\:fe0f \:751f\:6210\:30b3\:30fc\:30c9\:306b\:69cb\:6587\:30a8\:30e9\:30fc\:304c\:3042\:308a\:307e\:3059\:3002\:81ea\:52d5\:5b9f\:884c\:3092\:6b62\:3081\:307e\:3057\:305f\:3002\:4ee5\:4e0b\:306e\:4f4d\:7f6e\:3092\:76f4\:3057\:3066\:304b\:3089 Shift+Enter \:3067\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+                   "\:26a0\:fe0f Syntax error in the generated code. Auto-evaluation was skipped. Fix the positions below, then press Shift+Enter."] <>
+                If[rep =!= "", "\n" <> rep, ""],
+                RGBColor[0.8, 0.35, 0]]]]]]];
+
     Do[With[{code = blk},
       AppendTo[queue, Function[
         Module[{result, box, cell},
