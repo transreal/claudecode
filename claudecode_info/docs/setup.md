@@ -236,7 +236,39 @@ $ClaudeFallbackModels = {
 
 `llamacpp` は LAN 内の別マシンで動作する `llama-server`（llama.cpp のサーバモード）を指す provider です。上記の `lmstudio` 一般化対象（ローカル OpenAI 互換バックエンド）としても扱われますが、`$iPaletteProviderOrder` 上では `freetoken` の次（末尾）に独立した provider として並びます。LAN 内の別機である都合上、ローカルで動く `lmstudio` と異なり接続に API キーによる認証が必須です。キーが未設定のまま送信するとダミーキーで 401 エラーになるため、`$ClaudeFallbackModels` や `$ClaudePrivateModel` で `llamacpp` を指定する場合は API キーを別途登録してください。モデル tuple に URL を含めた場合はその URL が優先される点は `lmstudio` と同じ規則です。
 
-パレットの `P:` ボタンをクリックすると provider が順に切り替わります。切り替え順は `$iPaletteProviderOrder` で定義されており、現在の順序は `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken → llamacpp` です。`kimi` は `zai` の次、`lmstudio` の前に位置し、`freetoken` は `lmstudio` の次、`llamacpp` は末尾（`freetoken` の次）に位置します。
+パレットの `P:` ボタンをクリックすると provider が順に切り替わります。ただし切り替え候補になるのは、後述の**登録簿に登録した provider だけ**です。並び順は `$iPaletteProviderOrder`（既知 provider とその並び順）で定義されており、`claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken → llamacpp` の順から、登録済みのものだけを抜き出した順序で循環します。登録簿の記述順は循環順に影響しません。
+
+#### パレットの provider 登録簿（`$ClaudePaletteProviders`）
+
+パレットの `P:` ボタンで選択できる provider は、**登録簿に登録したものだけ**です。登録していない provider はトグル候補に現れず、選択できません。
+
+これは、API キーを設定していないメーター制 provider（`zai` を契約していない環境など）や、選んだ瞬間にローカル推論サーバへ接続しにいく provider（`freetoken` / `llamacpp` など。常駐サーバを起こしたくない場合がある）を、環境ごとに候補から締め出すための仕組みです。
+
+| 変数 | 対象 | 既定値 |
+|------|------|--------|
+| `$ClaudePaletteProviders` | 標準モデル枠の `P:` ボタン | `{"claudecode", "chatgptcodex", "anthropic", "openai"}` |
+| `$ClaudePalettePrivateProviders` | 秘密モデル枠（赤枠）の `P:` ボタン | `{"lmstudio"}` |
+
+`zai` / `kimi` / `lmstudio` / `freetoken` / `llamacpp` は **opt-in** です。使用する環境で明示的に登録してください。設定はカーネルセッション限りなので、恒久的に変えたい場合は初期化ファイル（`localInit.wl` 等）に記述します。
+
+```mathematica
+(* 使う provider だけを登録する。ここに無いものはパレットに出ない *)
+ClaudeCode`$ClaudePaletteProviders =
+  {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "lmstudio"};
+
+(* 秘密モデル枠（プライバシーレベル 1.0 のローカル provider のみが対象） *)
+ClaudeCode`$ClaudePalettePrivateProviders = {"lmstudio", "llamacpp"};
+
+(* 既知 provider をすべて解禁する場合 *)
+ClaudeCode`$ClaudePaletteProviders = All;
+```
+
+補足事項：
+
+- 未登録の provider はノートブックに保存された設定（TaggingRules）からも復元されません。登録簿を迂回して未登録 provider が選択状態になり、意図せずローカルサーバへ接続することを防ぐためです。
+- 登録簿が空・不正値・既知 provider と 1 つも一致しない場合は、パレットが操作不能にならないよう標準枠は `{"claudecode"}`、秘密枠は `{"lmstudio"}` にフォールバックします。
+- この制御は**パレット UI の選択候補のみ**に効きます。`Model -> {"zai", "glm-5.2"}` のような明示指定や、`$ClaudeFallbackModels` / `$ClaudePrivateModel` への直接代入、ワークフローからの呼び出しは登録簿の影響を受けず従来どおり動作します。
+- 現在有効な候補は `GetPaletteProviderOrder[]`（秘密枠は `GetPalettePrivateProviderOrder[]`）で確認できます。既知 provider の全一覧は `GetPaletteKnownProviders[]` です（いずれも `ClaudeCode` コンテキスト）。
 
 ### 6. ドキュメント生成設定
 

@@ -719,7 +719,51 @@ $iPaletteModelName = $iPaletteDefaultClaudeModel; (* \:73fe\:30d7\:30ed\:30d0\:3
 (* Provider \:5faa\:74b0\:9806\:5e8f\:3002Phase 5 (2026-05-26): chatgptcodex \:3092
    claudecode \:306e\:6b21\:306b\:8ffd\:52a0\:3002\:3069\:3061\:3089\:3082\:30b5\:30d6\:30b9\:30af\:30ea\:30d7\:30b7\:30e7\:30f3\:7d4c\:7531\:306e
    CLI \:306a\:306e\:3067\:8ab2\:91d1 API \:7981\:6b62\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3067\:3082\:5229\:7528\:53ef\:80fd\:3002 *)
+(* \:3053\:308c\:306f\:300c\:65e2\:77e5\:306e provider \:3068\:305d\:306e\:4e26\:3073\:9806\:300d\:3067\:3042\:3063\:3066\:3001\:5b9f\:969b\:306b\:30d1\:30ec\:30c3\:30c8\:3067\:5faa\:74b0\:3059\:308b
+   \:5019\:88dc\:3067\:306f\:306a\:3044\:3002\:5faa\:74b0\:5019\:88dc\:306f\:767b\:9332\:7c3f $ClaudePaletteProviders \:3067\:6fbe\:3057\:305f
+   iPaletteEnabledProviders[] (2026-08-30)\:3002 *)
 $iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "kimi", "lmstudio", "freetoken", "llamacpp"};
+
+(* ---- provider \:767b\:9332\:7c3f (2026-08-30) ----
+   \:80cc\:666f: P: \:30dc\:30bf\:30f3\:3092\:56de\:3059\:3068\:3001API \:30ad\:30fc\:672a\:8a2d\:5b9a\:306e\:8ab2\:91d1 provider \:3084\:3001
+   \:9078\:3093\:3060\:77ac\:9593\:306b\:30ed\:30fc\:30ab\:30eb\:63a8\:8ad6\:30b5\:30fc\:30d0 (FreeToken \:7b49) \:3092\:53e9\:3044\:3066\:3057\:307e\:3046
+   provider \:307e\:3067\:5019\:88dc\:306b\:51fa\:3066\:3044\:305f\:3002\:74b0\:5883\:3054\:3068\:306b\:4f7f\:308f\:306a\:3044 provider \:306f
+   \:6700\:521d\:304b\:3089\:5019\:88dc\:306b\:51fa\:3055\:306a\:3044\:3002
+   \:65e2\:5b9a\:306f\:300c\:3069\:3053\:306e\:74b0\:5883\:3067\:3082\:6982\:306d\:6210\:7acb\:3059\:308b\:300d\:3082\:306e\:3060\:3051\:3002\:305d\:308c\:4ee5\:5916 (zai / kimi /
+   lmstudio / freetoken / llamacpp) \:306f localInit \:7b49\:3067\:660e\:793a\:767b\:9332\:3059\:308b\:3002
+   \:65e2\:5b58\:5024\:304c\:3042\:308c\:3070\:5c0a\:91cd\:3059\:308b (\:30ea\:30ed\:30fc\:30c9\:3067\:30e6\:30fc\:30b6\:30fc\:8a2d\:5b9a\:3092\:6f70\:3055\:306a\:3044)\:3002 *)
+If[!ValueQ[$ClaudePaletteProviders],
+  $ClaudePaletteProviders =
+    {"claudecode", "chatgptcodex", "anthropic", "openai"}];
+
+If[!ValueQ[$ClaudePalettePrivateProviders],
+  $ClaudePalettePrivateProviders = {"lmstudio"}];
+
+(* \:767b\:9332\:7c3f\:3092\:6b63\:898f\:5316\:3057\:3066\:300c\:6709\:52b9\:306a provider \:5217\:300d\:3092\:8fd4\:3059\:3002
+   - All          \[RightArrow] known \:3092\:305d\:306e\:307e\:307e (\:9006\:6ede\:7528\:306e\:9003\:3052\:9053)
+   - \:6587\:5b57\:5217\:30ea\:30b9\:30c8 \[RightArrow] known \:3068\:306e\:7a4d\:3002\:4e26\:3073\:9806\:306f known \:5074\:306b\:63c3\:3048\:308b
+                    (\:5faa\:74b0\:9806\:304c\:767b\:9332\:9806\:3067\:63fa\:308c\:306a\:3044\:3088\:3046\:306b)
+   - \:305d\:308c\:4ee5\:5916 / \:7a7a / known \:3068\:4ea4\:308f\:3089\:306a\:3044 \[RightArrow] fallback (\:5019\:88dc 0 \:500b\:306f UI \:304c\:58ca\:308c\:308b) *)
+iPaletteFilterProviders[known_List, registry_, fallback_List] :=
+  Module[{reg, sel},
+    If[registry === All, Return[known]];
+    reg = If[ListQ[registry], Select[registry, StringQ], {}];
+    reg = ToLowerCase /@ StringTrim /@ reg;
+    sel = Select[known, MemberQ[reg, ToLowerCase[#]] &];
+    If[sel === {}, fallback, sel]];
+
+(* \:6a19\:6e96\:30e2\:30c7\:30eb\:67a0\:306e\:5faa\:74b0\:5019\:88dc\:3002claudecode \:306f\:6700\:7d42\:9632\:885b\:7dda\:3068\:3057\:3066\:6b8b\:3059\:3002 *)
+iPaletteEnabledProviders[] :=
+  iPaletteFilterProviders[$iPaletteProviderOrder, $ClaudePaletteProviders,
+    {"claudecode"}];
+
+(* \:73fe\:5728\:5024\:304c\:5019\:88dc\:5217\:306b\:7121\:3044\:3068\:304d\:3082\:5148\:982d\:3078\:9001\:308b\:3002\:5019\:88dc\:304c 1 \:500b\:306a\:3089\:305d\:308c\:3092\:8fd4\:3059\:3002 *)
+iPaletteCycleNext[list_List, cur_] :=
+  Module[{idx},
+    If[list === {}, Return[cur]];
+    idx = Position[list, cur, {1}, Heads -> False];
+    If[Length[idx] === 0, Return[First[list]]];
+    list[[Mod[idx[[1, 1]], Length[list]] + 1]]];
 
 (* \:5404 Provider \:306e\:5019\:88dc\:30e2\:30c7\:30eb\:4e00\:89a7 (Phase 28) \:3002
    \:30af\:30ea\:30c3\:30af\:3067\:3053\:306e\:5217\:3092\:5faa\:74b0\:9078\:629e\:3059\:308b\:3002 *)
@@ -934,12 +978,18 @@ iPaletteSyncClaudeModel[] :=
    \:5916\:90e8\:9001\:4fe1\:306f\:767a\:751f\:3057\:306a\:3044\:305f\:3081 PL 1.0 (\:79d8\:5bc6\:30c7\:30fc\:30bf\:53ef) \:6271\:3044\:3002 *)
 $iPalettePrivateProviderOrder = {"lmstudio", "freetoken", "llamacpp"};
 
+(* \:79d8\:5bc6\:67a0\:306e\:5faa\:74b0\:5019\:88dc\:3002\:767b\:9332\:7c3f $ClaudePalettePrivateProviders \:3067\:6fbe\:3059
+   (2026-08-30)\:3002lmstudio \:3092\:6700\:7d42\:9632\:885b\:7dda\:306b\:3059\:308b\:3002 *)
+iPaletteEnabledPrivateProviders[] :=
+  iPaletteFilterProviders[$iPalettePrivateProviderOrder,
+    $ClaudePalettePrivateProviders, {"lmstudio"}];
+
 If[!ValueQ[$iPalettePrivateProvider],
   $iPalettePrivateProvider = If[
     ListQ[$ClaudePrivateModel] && Length[$ClaudePrivateModel] >= 1 &&
       StringQ[$ClaudePrivateModel[[1]]] &&
-      MemberQ[$iPalettePrivateProviderOrder, $ClaudePrivateModel[[1]]],
-    $ClaudePrivateModel[[1]], First[$iPalettePrivateProviderOrder]]];
+      MemberQ[iPaletteEnabledPrivateProviders[], $ClaudePrivateModel[[1]]],
+    $ClaudePrivateModel[[1]], First[iPaletteEnabledPrivateProviders[]]]];
 If[!ValueQ[$iPalettePrivateModelName],
   $iPalettePrivateModelName = If[
     ListQ[$ClaudePrivateModel] && Length[$ClaudePrivateModel] >= 2 &&
@@ -1046,10 +1096,18 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
   ];
   fallbackP = fromCM[[1]];
   fallbackM = fromCM[[2]];
+  (* 2026-08-30: $ClaudeModel 由来のフォールバックも登録簿の外へは出さない。
+     未登録なら先頭の登録済み provider + その先頭モデルに落とす。 *)
+  If[!MemberQ[iPaletteEnabledProviders[], fallbackP],
+    fallbackP = First[iPaletteEnabledProviders[]];
+    fallbackM = Module[{ms = iPaletteModelsFor[fallbackP]},
+      If[ListQ[ms] && Length[ms] >= 1, First[ms], $iPaletteDefaultClaudeModel]]];
 
   Which[
     (* (a) \:65b0\:5f62\:5f0f\:304c\:4fdd\:5b58\:3055\:308c\:3066\:3044\:308b *)
-    StringQ[vP] && MemberQ[$iPaletteProviderOrder, vP] &&
+    (* 2026-08-30: 保存値でも未登録 provider は復元しない (登録簿を迂回して
+       freetoken 等が選択状態になり、起動したくないサーバを叩くのを防ぐ)。 *)
+    StringQ[vP] && MemberQ[iPaletteEnabledProviders[], vP] &&
        StringQ[vM] && vM =!= "" &&
        (* lmstudio/freetoken: accept the saved model without a load-time HTTP
           query, so the palette restores even when that model is not currently
@@ -1099,7 +1157,7 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
   (* $ClaudePrivateModel \:30c8\:30b0\:30eb (PL 1.0 provider \:306e\:307f\:53d7\:7406) *)
   v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode",
     "palettePrivateProvider"}]];
-  If[StringQ[v] && MemberQ[$iPalettePrivateProviderOrder, v],
+  If[StringQ[v] && MemberQ[iPaletteEnabledPrivateProviders[], v],
     $iPalettePrivateProvider = v];
   v = Quiet[CurrentValue[nb, {TaggingRules, "claudecode",
     "palettePrivateModelName"}]];
@@ -1911,6 +1969,23 @@ $ClaudeLMStudioAPIToken::usage =
 $ClaudeLMStudioBaseURL::usage =
   "$ClaudeLMStudioBaseURL \[LongDash] LM Studio の既定 base URL (既定 \"http://127.0.0.1:1234\")。\n" <>
   "model tuple に URL が無い場合の fallback。ポート変更時はこの 1 箇所を変える (hardening 04 Inc1)。";
+
+$ClaudePaletteProviders::usage =
+  "$ClaudePaletteProviders \[LongDash] パレットの P: ボタンで循環選択できる provider の登録簿 (2026-08-30)。\n" <>
+  "ここに登録していない provider はトグル候補に出ない (= 選択できない)。\n" <>
+  "API キー未設定の課金 provider や、選ぶと重いローカルサーバを叩いてしまう provider を\n" <>
+  "環境ごとに締め出すための仕組み。既定は {\"claudecode\", \"chatgptcodex\", \"anthropic\", \"openai\"}。\n" <>
+  "zai / kimi / lmstudio / freetoken / llamacpp は opt-in (使う環境で明示登録する)。\n" <>
+  "例 (localInit 等): $ClaudePaletteProviders = {\"claudecode\", \"anthropic\", \"zai\", \"lmstudio\"};\n" <>
+  "All を入れると既知 provider をすべて有効化する。登録が空/不正なら claudecode のみに落ちる。\n" <>
+  "注意: これはパレット UI の候補制御のみ。Model -> {\"zai\", ...} の明示指定は従来どおり動く。";
+
+$ClaudePalettePrivateProviders::usage =
+  "$ClaudePalettePrivateProviders \[LongDash] パレットの秘密モデル枠 (赤枠 P:) で循環選択できる\n" <>
+  "provider の登録簿 (2026-08-30)。$ClaudePaletteProviders の秘密枠版。\n" <>
+  "秘密データ処理用なのでプライバシーレベル 1.0 のローカル provider のみが対象。\n" <>
+  "既定は {\"lmstudio\"}。freetoken / llamacpp は opt-in (常駐サーバを起こしたくない環境があるため)。\n" <>
+  "例: $ClaudePalettePrivateProviders = {\"lmstudio\", \"llamacpp\"};";
 
 $ClaudeFreeTokenBaseURL::usage =
   "$ClaudeFreeTokenBaseURL \[LongDash] FreeToken (VRAM 超え MoE 用ローカル推論サーバ) の既定 base URL\n" <>
@@ -31377,11 +31452,10 @@ ShowClaudePalette[] := (
         Button[
           Style[iL["P: ", "P: "] <> iPaletteProviderLabel[$iPaletteProvider],
             9, Bold, GrayLevel[0.2]],
-          Module[{idx, nextIdx, nextProvider, models},
-            idx = Position[$iPaletteProviderOrder, $iPaletteProvider];
-            idx = If[Length[idx] >= 1, idx[[1, 1]], 1];
-            nextIdx = Mod[idx, Length[$iPaletteProviderOrder]] + 1;
-            nextProvider = $iPaletteProviderOrder[[nextIdx]];
+          Module[{nextProvider, models},
+            (* 2026-08-30: 登録簿 ($ClaudePaletteProviders) で濾した候補のみ循環 *)
+            nextProvider =
+              iPaletteCycleNext[iPaletteEnabledProviders[], $iPaletteProvider];
             $iPaletteProvider = nextProvider;
             (* \:65b0\:30d7\:30ed\:30d0\:30a4\:30c0\:306e\:5148\:982d\:30e2\:30c7\:30eb\:306b\:30ea\:30bb\:30c3\:30c8 *)
             models = iPaletteModelsFor[nextProvider];
@@ -31478,12 +31552,11 @@ ShowClaudePalette[] := (
                 Style["P: " <>
                   iPaletteProviderLabel[$iPalettePrivateProvider],
                   9, Bold, RGBColor[0.55, 0.15, 0.15]],
-                Module[{idx, nextIdx, nextProvider, models},
-                  idx = Position[$iPalettePrivateProviderOrder,
+                Module[{nextProvider, models},
+                  (* 2026-08-30: 秘密枠も登録簿で濾した候補のみ循環 *)
+                  nextProvider = iPaletteCycleNext[
+                    iPaletteEnabledPrivateProviders[],
                     $iPalettePrivateProvider];
-                  idx = If[Length[idx] >= 1, idx[[1, 1]], 1];
-                  nextIdx = Mod[idx, Length[$iPalettePrivateProviderOrder]] + 1;
-                  nextProvider = $iPalettePrivateProviderOrder[[nextIdx]];
                   $iPalettePrivateProvider = nextProvider;
                   models = iPaletteModelsFor[nextProvider];
                   $iPalettePrivateModelName =
@@ -37855,14 +37928,19 @@ ClaudeCode`GetModelSonnet[] := $iModelSonnet;
    documentation.wl \:7b49\:4ed6\:30d1\:30c3\:30b1\:30fc\:30b8\:304c\:30d1\:30ec\:30c3\:30c8\:30dc\:30bf\:30f3\:3092 2 \:30dc\:30bf\:30f3\:5316\:3059\:308b\:305f\:3081\:306e\:30a4\:30f3\:30bf\:30fc\:30d5\:30a7\:30fc\:30b9\:3002 *)
 ClaudeCode`GetPaletteProvider[]      := $iPaletteProvider;
 ClaudeCode`GetPaletteModelName[]     := $iPaletteModelName;
-ClaudeCode`GetPaletteProviderOrder[] := $iPaletteProviderOrder;
+(* 2026-08-30: 登録簿で濾した「実際に選べる provider 列」を返す。
+   全既知 provider が要るときは ClaudeCode`GetPaletteKnownProviders[]。 *)
+ClaudeCode`GetPaletteProviderOrder[] := iPaletteEnabledProviders[];
+ClaudeCode`GetPaletteKnownProviders[] := $iPaletteProviderOrder;
+ClaudeCode`GetPalettePrivateProviderOrder[] := iPaletteEnabledPrivateProviders[];
 ClaudeCode`GetPaletteModelsByProvider[] := $iPaletteModelsByProvider;
 ClaudeCode`PaletteProviderLabel[p_String]     := iPaletteProviderLabel[p];
 ClaudeCode`PaletteShortenModelName[mn_String] := iPaletteShortenModelName[mn];
 
 (* Provider \:3092\:5207\:308a\:66ff\:3048\:3001\:305d\:306e\:30d7\:30ed\:30d0\:30a4\:30c0\:306e\:5148\:982d\:30e2\:30c7\:30eb\:306b\:30ea\:30bb\:30c3\:30c8 *)
 ClaudeCode`SetPaletteProvider[p_String] := Module[{models},
-  If[MemberQ[$iPaletteProviderOrder, p],
+  (* 2026-08-30: 未登録 provider へは切り替えない (登録簿が唯一の入口) *)
+  If[MemberQ[iPaletteEnabledProviders[], p],
     $iPaletteProvider = p;
     models = iPaletteModelsFor[p];
     $iPaletteModelName = If[Length[models] >= 1, models[[1]], $iPaletteDefaultClaudeModel];
@@ -37892,13 +37970,9 @@ ClaudeCode`CyclePaletteModel[] := Module[{models, idx, nextIdx},
 ];
 
 (* \:6b21\:306e Provider \:306b\:5faa\:74b0 *)
-ClaudeCode`CyclePaletteProvider[] := Module[{idx, nextIdx, nextProvider},
-  idx = Position[$iPaletteProviderOrder, $iPaletteProvider];
-  idx = If[Length[idx] >= 1, idx[[1, 1]], 1];
-  nextIdx = Mod[idx, Length[$iPaletteProviderOrder]] + 1;
-  nextProvider = $iPaletteProviderOrder[[nextIdx]];
-  ClaudeCode`SetPaletteProvider[nextProvider]
-];
+ClaudeCode`CyclePaletteProvider[] :=
+  ClaudeCode`SetPaletteProvider[
+    iPaletteCycleNext[iPaletteEnabledProviders[], $iPaletteProvider]];
 
 ClaudeCode`SetPaletteModel[v_String] := (
   $iPaletteModel = v;

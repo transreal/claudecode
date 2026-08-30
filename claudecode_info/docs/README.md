@@ -316,6 +316,8 @@ ShowClaudePalette[]
 | `$ClaudeNBDirAccess` | `"list"` | NotebookDirectory のアクセスレベル（`"list"` / `"read"` / `"readwrite"`） |
 | `$ClaudeFallbackModels` | `{{"chatgptcodex","gpt-5.6-sol"},{"anthropic","claude-opus-5"},{"openai","gpt-5.5"}}` | フォールバックモデル優先順位。各要素は `{provider, model}` または `{provider, model, url}`。`"lmstudio"` プロバイダーでローカル LLM も、`"zai"` プロバイダーで z.ai（GLM シリーズ）の課金 API も、`"kimi"` プロバイダーで Kimi（Moonshot AI）の課金 API も指定可能。候補を順に試す際は 429・過負荷エラーの連続発生を避けるため指数バックオフ（1秒→2秒→4秒上限）で次候補を起動。Claude Code CLI の OAuth 認証切れ（401 authentication_failed）もレート制限と同格の検出対象としてフォールバック判定に組み込まれる（2026-08-28） |
 | `$ClaudePrivateModel` | `{}` | 秘密データ処理用のローカルモデル指定 |
+| `$ClaudePaletteProviders` | `{"claudecode", "chatgptcodex", "anthropic", "openai"}` | パレットの `P:` ボタンで選択できる provider の登録簿。ここに登録していない provider はトグル候補に出ない。API キー未設定のメーター制 provider や、選んだ瞬間にローカル推論サーバへ接続してしまう provider を環境ごとに締め出すための設定。`zai` / `kimi` / `lmstudio` / `freetoken` / `llamacpp` は opt-in。`All` で既知 provider をすべて解禁。パレット UI の候補制御のみで、`Model -> {provider, model}` の明示指定には影響しない |
+| `$ClaudePalettePrivateProviders` | `{"lmstudio"}` | 秘密モデル枠（赤枠 `P:`）の登録簿。プライバシーレベル 1.0 のローカル provider のみが対象 |
 | `$ClaudeLMStudioIntegrations` | `{}` | LM Studio 使用時に有効にする MCP サーバー ID のリスト（例: `{"mcp/exa"}`）。mcp.json に登録済みのサーバーを指定すると、LM Studio がサーバー側で tool-call を自動実行する |
 | `$ClaudeTestModel` | `$ClaudeModel と同じ` | `ClaudeCheckSeparation` 等のテスト用モデル名。未設定の場合はロード時に `$ClaudeModel` と同じ値に初期化される |
 | `$ClaudeImageModels` | `{{"openai","gpt-image-1"},{"openai","dall-e-3"}}` | 画像生成モデルのリスト |
@@ -556,7 +558,7 @@ ClaudeEval["タスクの説明"]   (* 再び CLI 経由 *)
 | **エフォート** | (Off /) Low / Medium / High / Max | 標準モデルの思考量。claudecode では Think トリガー強度（Low: 思考なし、Max: ultrathink）、lmstudio では `reasoning`（Off = thinking 無効、Max は xhigh があれば xhigh） |
 | **E:** | Off / Low / Medium / High / Max | 秘密モデル `$ClaudePrivateModel` の思考量。標準モデルとは独立。既定 Medium |
 | **課金API** | 禁止 / 許可 | `Fallback -> True/False` を制御 |
-| **P:** | provider 循環切替 | クリックのたびに登録済み provider（claudecode / chatgptcodex / anthropic / openai / zai / kimi / lmstudio 等）の順序で切り替え |
+| **P:** | provider 循環切替 | クリックのたびに provider を切り替え。候補は登録簿 `$ClaudePaletteProviders` に登録したものだけ（既定は claudecode / chatgptcodex / anthropic / openai。zai / kimi / lmstudio / freetoken / llamacpp は opt-in）。秘密モデル枠の `P:` は `$ClaudePalettePrivateProviders`（既定 `{"lmstudio"}`）で制御 |
 | **M:** | モデル候補リスト | provider 別のモデルを選択。ChatGPTCodex 選択時は SourceVault のモデルレジストリから取得され、claudecode/anthropic 選択時も既定候補が SourceVault 経由で動的解決される（解決できない場合は `claude-opus-5` にフォールバック） |
 
 #### セッション セクション

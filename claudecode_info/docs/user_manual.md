@@ -162,9 +162,19 @@ $ClaudeAdvisaryModel = {"chatgptcodex", Automatic}
    アドバイザリーロール ($ClaudeAdvisaryModel) は常に影響を受けない。 *)
 $ClaudeUltraEnabled = False
 
-(* パレットのプロバイダ循環順序 *)
+(* パレットのプロバイダ循環順序(既知プロバイダとその並び順) *)
 (* "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio" | "freetoken" | "llamacpp" *)
 $iPaletteProviderOrder = {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "kimi", "lmstudio", "freetoken", "llamacpp"}
+
+(* パレットの P: ボタンで実際に選択できるプロバイダの登録簿。ここに登録していない
+   プロバイダはトグル候補に出ない。API キー未設定のメーター制プロバイダや、選んだ
+   瞬間にローカル推論サーバへ接続してしまうプロバイダを環境ごとに締め出すための設定。
+   zai / kimi / lmstudio / freetoken / llamacpp は opt-in。
+   All で既知プロバイダをすべて解禁。詳細は「パレットの provider 登録簿」を参照 *)
+$ClaudePaletteProviders = {"claudecode", "chatgptcodex", "anthropic", "openai"}
+
+(* 秘密モデル枠(赤枠 P:)の登録簿。プライバシーレベル 1.0 のローカルプロバイダのみが対象 *)
+$ClaudePalettePrivateProviders = {"lmstudio"}
 
 (* パレットの lmstudio モデル一覧を「現在ロード済みのモデルのみ」に絞るか「LM Studio が
    把握している全モデル」まで含めるかを制御する。LM Studio サーバーに到達できない場合は
@@ -419,13 +429,41 @@ ShowClaudePalette[]
 
 | 設定項目 | 説明 |
 |---|---|
-| **P:** | プロバイダを切り替えます。クリックするたびに `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken → llamacpp` の順で循環します。選択中のプロバイダ名がボタンラベルに表示されます。各プロバイダの特性は下表を参照してください。 |
+| **P:** | プロバイダを切り替えます。クリックするたびに `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken → llamacpp` の順で循環しますが、循環候補になるのは**登録簿 `$ClaudePaletteProviders` に登録したプロバイダだけ**です(既定は `claudecode` / `chatgptcodex` / `anthropic` / `openai` の 4 つ。詳細は「パレットの provider 登録簿」を参照)。選択中のプロバイダ名がボタンラベルに表示されます。各プロバイダの特性は下表を参照してください。 |
 | **M:** | 選択中のプロバイダ内でモデルを切り替えます。クリックするたびに対応するモデル一覧を循環します。短縮名(例: Opus 5、Fable 5)で表示されます。`Automatic` は Codex CLI の既定モデルを使用します(chatgptcodex プロバイダの場合)。SourceVault のモデルレジストリがロードされている場合は、そこからモデル一覧が取得されます。特に `claudecode` / `anthropic` プロバイダの既定モデル(候補一覧の先頭に来るモデル)は、SourceVault がロードされていれば `ClaudeResolveModel` 経由で動的に解決されるため、SourceVault 側でモデルの世代が更新されてもパレット側のコード変更なしに追従します(SourceVault 未ロード時は静的な既定値 `claude-opus-5` にフォールバック)。`lmstudio` / `freetoken` / `llamacpp` プロバイダでは、それぞれのサーバーへの実問い合わせによる候補一覧が優先され、取得できない場合は SourceVault のカタログ、それも無ければ静的リストへ順にフォールバックします(`$ClaudeLMStudioPaletteLoadedOnly` 参照)。 |
 | **エフォート** | 標準モデル (**M:** の直下) の思考量です。`claudecode` では Low / Medium / High / Max で Think トリガーの強度を設定します(Low は思考なし、Medium は `think hard`、High は `think harder`、Max は `ultrathink`)。`lmstudio` を選んでいるときは **Off** が加わって Off / Low / Medium / High / Max の 5 段になり、LM Studio の `reasoning` パラメータに写ります。**Off = thinking 無効**です。Off のまま `claudecode` に戻した場合、CLI には `--effort` を渡さず Medium 相当で動きます。`freetoken`(2026-08-24 追加)でも同様に Off / Low / Medium / High / Max の 5 段になり、モデル別の推奨 Effort 表を lmstudio と共有した上で `reasoning_effort` パラメータとして送信されます(値が文字列型のときのみ送信され、Automatic 等は従来どおり送られません)。`llamacpp`(2026-08-29 追加)を選んでいるときだけは **Off がありません**(Low/Medium/High/Max の 4 段)。これは llama-server のサンプリング・thinking 設定がサーバー起動時に固定され、リクエスト単位で無効化できないためです。 |
 | **E:**(秘密モデル枠内) | 秘密モデル `$ClaudePrivateModel` の思考量です。標準モデルのエフォートとは独立に保持され、Off / Low / Medium / High / Max を循環します。既定は Medium(thinking 有効)。 |
 | **課金API** | 禁止 / 許可 — `Fallback -> True/False` を制御します。「禁止」では Claude Code CLI または Codex CLI(課金なし扱い)のみ使用し、「許可」では CLI 利用不可時に Anthropic API・z.ai API 等へフォールバックします。 |
 
+**パレットの provider 登録簿(2026-08-30 追加)**
+
+`P:` ボタンで選択できるプロバイダは**登録簿に登録したものだけ**です。登録していないプロバイダはトグル候補に現れず、選択できません。API キーを設定していないメーター制プロバイダ(z.ai を契約していない環境など)や、選んだ瞬間にローカル推論サーバへ接続しにいくプロバイダ(`freetoken` / `llamacpp` など、常駐サーバを起こしたくない場合がある)を、環境ごとに候補から締め出すための仕組みです。
+
+| 変数 | 対象 | 既定値 |
+|---|---|---|
+| `$ClaudePaletteProviders` | 標準モデル枠の `P:` | `{"claudecode", "chatgptcodex", "anthropic", "openai"}` |
+| `$ClaudePalettePrivateProviders` | 秘密モデル枠(赤枠)の `P:` | `{"lmstudio"}` |
+
+`zai` / `kimi` / `lmstudio` / `freetoken` / `llamacpp` は **opt-in** です。使う環境で明示的に登録してください(恒久化する場合は `localInit.wl` 等の初期化ファイルに記述します)。
+
+```mathematica
+ClaudeCode`$ClaudePaletteProviders =
+  {"claudecode", "chatgptcodex", "anthropic", "openai", "zai", "lmstudio"};
+ClaudeCode`$ClaudePalettePrivateProviders = {"lmstudio", "llamacpp"};
+
+(* 既知プロバイダをすべて解禁する場合 *)
+ClaudeCode`$ClaudePaletteProviders = All;
+```
+
+- 循環の**並び順は登録簿の記述順ではなく** `$iPaletteProviderOrder`(既知プロバイダの並び順)に従い、そこから登録済みのものだけを抜き出した順になります。
+- 未登録のプロバイダは、ノートブックに保存された設定(TaggingRules)からも復元されません。登録簿を迂回して未登録プロバイダが選択状態になり、意図せずローカルサーバへ接続することを防ぐためです。
+- 登録簿が空・不正値・既知プロバイダと 1 つも一致しない場合は、パレットが操作不能にならないよう標準枠は `{"claudecode"}`、秘密枠は `{"lmstudio"}` にフォールバックします。
+- この制御は**パレット UI の選択候補にのみ**効きます。`Model -> {"zai", "glm-5.2"}` のような明示指定、`$ClaudeFallbackModels` / `$ClaudePrivateModel` への直接代入、ワークフローからの呼び出しは登録簿の影響を受けません。
+- 現在有効な候補は `GetPaletteProviderOrder[]`(秘密枠は `GetPalettePrivateProviderOrder[]`)、既知プロバイダの全一覧は `GetPaletteKnownProviders[]` で確認できます(いずれも `ClaudeCode` コンテキスト)。
+
 **プロバイダ一覧**
+
+下表は claudecode が「知っている」プロバイダの一覧です。パレットで選択できるようにするには、上記の登録簿への登録が別途必要です。
 
 | プロバイダ | 説明 | 課金 |
 |---|---|---|

@@ -147,6 +147,14 @@ True で自然言語ディスパッチのマッチ・実行サマリを表示す
 型: List, 初期値: {}
 ShowClaudePalette の Privacy セクション下に表示するサービストグルのレジストリ。外部パッケージが登録する。各エントリは <|"Id"->id, "RunningQ"->(Function[]->True|False|Missing[]), "Start"->Function[], "Stop"->Function[], "RunningLabel"->label, "StoppedLabel"->label, "UnknownLabel"->label, (opt)"RunningColor"->color, "StoppedColor"->color|>。各 *Label は String または 0 引数 Function (レンダリング時に評価、$Language 対応ラベル用)。
 
+### $ClaudePaletteProviders
+型: List | All, 初期値: {"claudecode", "chatgptcodex", "anthropic", "openai"}
+ShowClaudePalette の標準 (非秘密) Provider サイクルに出す provider の登録簿 (2026-08-30 追加)。背景: P: ボタンを回すと、API キー未設定の課金 provider や、選んだ瞬間にローカル推論サーバー (FreeToken 等) を叩いてしまう provider まで候補に出てしまう問題があった。既定は「どの環境でも概ね成立する」4provider のみ。zai / kimi / lmstudio / freetoken / llamacpp 等はここに未登録なら標準サイクルの候補に出ず、localInit 等での明示登録が必要。All を指定すると既知の全 provider (iPaletteEnabledProviders の縮退動作)。既存値があればロード時に上書きしない (ユーザー設定を保持)。
+
+### $ClaudePalettePrivateProviders
+型: List | All, 初期値: {"lmstudio"}
+ShowClaudePalette の秘密モデル ($ClaudePrivateModel) 側 Provider サイクルに出す provider の登録簿 (2026-08-30 追加、$ClaudePaletteProviders と対になる)。既存値があればロード時に上書きしない。
+
 ### $ClaudeCLIMCPServers
 型: Association, 初期値: <||>
 ヘッドレス claude CLI 実行 (ClaudeQueryBg 等) に組み込む MCP サーバーのレジストリ。形式: <|id -> spec|>。外部パッケージ (SourceVault MCP 等) が ClaudeRegisterCLIMCPServer 経由で登録する。claudecode 本体はパッケージ中立を保つ。
@@ -1226,7 +1234,7 @@ Options: NBAccess`NBEnqueueFinalAction のオプションを継承
 ## パレット・UI
 
 ### ShowClaudePalette[]
-Claude Code コントロールパレットを表示する。Provider 選択 (claudecode/chatgptcodex/anthropic/openai/zai/kimi/lmstudio/freetoken/llamacpp を循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudeLLMBreakpoint トグル ("BreakPtr")、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル順: claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken → llamacpp。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。kimi は Moonshot AI Kimi シリーズ (kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)。freetoken は無料トークンベースのプロバイダー枠 (候補モデル一覧は未確認)。llamacpp はローカル llama.cpp サーバー経由と見られるプロバイダー枠 (候補モデル一覧は未確認、ソース抜粋が lmstudio 候補列の途中で切れており毎回未確認のまま、次回確認事項として継続)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.8-27b/qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する (静的フォールバックは Automatic/gpt-5.6-sol)。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
+Claude Code コントロールパレットを表示する。Provider 選択 (循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudeLLMBreakpoint トグル ("BreakPtr")、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル (2026-08-30 改訂): 標準サイクルは $ClaudePaletteProviders 登録簿の順 (既定 {"claudecode","chatgptcodex","anthropic","openai"})、秘密モデル (Privacy) 側は $ClaudePalettePrivateProviders (既定 {"lmstudio"}) に従う。zai/kimi/freetoken/llamacpp などそれ以外の provider は登録簿に未登録だと候補に出ない — API キー未設定の課金 provider や、選択した瞬間にローカル推論サーバーを起動してしまう provider を誤って回さないための変更で、必要な環境では localInit 等で明示登録する ($ClaudePaletteProviders / $ClaudePalettePrivateProviders に All を指定すると既知の全 provider に戻せる)。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。kimi は Moonshot AI Kimi シリーズ (kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)。freetoken は無料トークンベースのプロバイダー枠 (候補モデル一覧は未確認)。llamacpp はローカル llama.cpp サーバー経由と見られるプロバイダー枠 (候補モデル一覧は未確認)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.8-27b/qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する (静的フォールバックは Automatic/gpt-5.6-sol)。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
 → NotebookObject
 
 ### ClaudeRegisterPaletteServiceControl[spec]
