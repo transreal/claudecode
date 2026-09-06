@@ -555,6 +555,16 @@ Integrations::usage =
   "Automatic (\:30c7\:30d5\:30a9\:30eb\:30c8): \$ClaudeLMStudioIntegrations \[RightArrow] SourceVault \:306e\:9806\:3067\:89e3\:6c7a\:3002\n" <>
   "\:660e\:793a\:30ea\:30b9\:30c8\:3092\:6e21\:3059\:3068\:305d\:308c\:304c\:6700\:512a\:5148\:3055\:308c\:308b\:3002";
 
+ClaudeResponseFormatInstruction::usage =
+  "ClaudeResponseFormatInstruction[fmt] は \"ResponseFormat\" 契約の出力規則文 (プロンプト末尾に付ける)。\n" <>
+  "fmt: \"PlainText\" | \"Markdown\" | \"Cells\" | \"Expression\"。\n" <>
+  "ClaudeQueryAsync[..., \"ResponseFormat\" -> fmt] が自動で付加・検証する。";
+ClaudeResponseFormatValidate::usage =
+  "ClaudeResponseFormatValidate[fmt, text] は LLM 応答 text を契約 fmt で検証・正規化する。\n" <>
+  "戻り値: <|\"Valid\"->bool, \"Text\"->正規化済み, \"Reason\"->違反理由, \"Format\"->fmt|>。\n" <>
+  "PlainText: <tool_call> 等のツール呼び出しテキスト / コードフェンスは違反、見出し・太字記号は黙って剥がす。\n" <>
+  "Expression/Cells: フェンスを剥がして SyntaxQ。違反時 ClaudeQueryAsync は 1 回だけ再問合せし、それでも駄目なら Failure[\"ResponseFormat\", ...] を callback に渡す。";
+
 $ClaudeDocRetryDelay::usage =
   "$ClaudeDocRetryDelay \:306f\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:306e\:30ea\:30c8\:30e9\:30a4\:5f85\:6a5f\:79d2\:6570\:3002\:30c7\:30d5\:30a9\:30eb\:30c8 60\:3002";
 $ClaudeDocMaxRetries::usage =
@@ -669,6 +679,33 @@ $iPaletteEffort = "medium";
    既定 "medium" = thinking 有効。"off" のときだけ thinking を切る。 *)
 $iPalettePrivateEffort = "medium";
 $iPaletteFallback = False;
+
+(* 2026-09-02: TurnWiki (ClaudeOrchestrator_turnwiki.wl) の定期維持 tick
+   (Collect+Maintain のみ、手順書は変えない) を service heartbeat で回すかの ON/OFF。
+   正本は TurnWiki 側の settings.json (Dropbox 共有。headless の service カーネルも
+   同じファイルを読む) で、ここはパレット表示用のセッションミラー。
+   ノートブック TaggingRules には保存しない (ノート単位ではなく環境全体の設定)。
+   TurnWiki 未ロード時は n/a 表示・no-op。弱結合: 文字列経由でしか参照しない
+   (claudecode ロード時に ClaudeOrchestrator`TurnWiki` のシンボルを作らない)。 *)
+$iPaletteTurnWikiAuto = False;
+iPaletteTurnWikiCallableQ[name_String] := Quiet @ Check[
+  Names[name] =!= {} &&
+    With[{h = ToExpression[name, InputForm, Hold]},
+      MatchQ[h, Hold[_Symbol]] && (DownValues @@ h) =!= {}],
+  False];
+iPaletteTurnWikiAvailableQ[] :=
+  iPaletteTurnWikiCallableQ["ClaudeOrchestrator`TurnWiki`ClaudeTurnWikiSetAutoMaintain"];
+iPaletteTurnWikiAutoGet[] :=
+  If[iPaletteTurnWikiCallableQ["ClaudeOrchestrator`TurnWiki`ClaudeTurnWikiAutoMaintainQ"],
+    TrueQ[Quiet @ Check[
+      ToExpression["ClaudeOrchestrator`TurnWiki`ClaudeTurnWikiAutoMaintainQ"][], False]],
+    Missing["TurnWikiNotLoaded"]];
+iPaletteTurnWikiAutoSet[v : (True | False)] :=
+  If[iPaletteTurnWikiAvailableQ[],
+    (Quiet @ Check[
+       ToExpression["ClaudeOrchestrator`TurnWiki`ClaudeTurnWikiSetAutoMaintain"][v], $Failed];
+     True),
+    False];
 
 (* Phase 28+ (2026-05): \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:5358\:4f4d\:306e\:8ab2\:91d1API\:8a31\:53ef\:30d5\:30e9\:30b0\:3092 NBAccess \:7d4c\:7531
    (absolute truth) \:3067\:6271\:3046\:65b9\:91dd\:3060\:304c\:3001Phase 21 fa\[CCedilla]ade pre 5471 \:884c\:7248
@@ -2038,6 +2075,12 @@ $ClaudeLocalToolLoop::usage =
 $ClaudeLocalToolLoopMaxIterations::usage =
   "$ClaudeLocalToolLoopMaxIterations \[LongDash] $ClaudeLocalToolLoop のツール往復上限 (既定 8)。\n" <>
   "上限に達したらツール無しでもう 1 往復し、その応答を返す (無限ループ防止)。";
+
+$ClaudeLocalToolLoopToolTimeoutSeconds::usage =
+  "$ClaudeLocalToolLoopToolTimeoutSeconds \[LongDash] $ClaudeLocalToolLoop \:306e\:30c4\:30fc\:30eb 1 \:4ef6\:3042\:305f\:308a\:306e\:5b9f\:884c\:6642\:9593\:4e0a\:9650 (\:79d2\:3001\:65e2\:5b9a 60)\:3002\n" <>
+  "\:8d85\:904e\:3057\:305f\:30c4\:30fc\:30eb\:306f \"ERROR: tool timeout\" \:3068\:3057\:3066\:30e2\:30c7\:30eb\:3078\:8fd4\:3055\:308c\:3001\:5f80\:5fa9\:306f\:7d9a\:884c\:3059\:308b\:3002\n" <>
+  "\:30c4\:30fc\:30eb\:5185\:3067\:8d77\:304d\:305f Abort (TimeConstrained \:306e\:9045\:5ef6 Abort \:7b49) \:3082 \"ERROR: tool aborted\" \:306b\:5c01\:3058\:8fbc\:3081\:308b\:3002\n" <>
+  "\:3069\:3061\:3089\:3082 freeze \:30ed\:30b0 (toolloop-tool-guard) \:306b\:6b8b\:308b\:3002";
 
 ClaudeBackendAvailableQ::usage =
   "ClaudeBackendAvailableQ[{provider, model, url...}] は LLM backend の事前可用性チェック (preflight)。\n" <>
@@ -6460,38 +6503,94 @@ iClaudeTryExternalizeProposal[heldExpr_, accessSpec_Association, nb_] :=
 If[!ValueQ[$iSharedPollingTask], $iSharedPollingTask = None];
 If[!ListQ[$iSharedPollingTasks], $iSharedPollingTasks = {}];
 
-(* 追跡リスト + 現行参照のうち、実際に生存しているものだけに正規化して返す。 *)
+(* 2026-09-06 (freeze fix 4): 生存判定に ScheduledTasks[] を使わない。
+   Wolfram 15.0 の ScheduledTasks[] はクラウド側のスケジュールタスクを照会する
+   (ネットワーク往復 ~0.9 秒、未接続なら ScheduledTasks::srverr) だけで、
+   レガシー CreateScheduledTask のタスクは一切返さない (Tasks[] にも載らず、
+   ScheduledTaskInformation も未評価で返る)。このため旧 iSharedPollingTasksAlive
+   が常に {} になり、(a) iEnsureSharedPollingTask が呼ばれるたびに共有タスクを
+   新規生成し、(b) 自己停止/全停止/prune が何も止めず旧タスクを「忘れる」だけ
+   になっていた。結果、LLM ジョブ投入ごとに 3 秒間隔の共有タスクが 1 本ずつ孤児
+   として積み上がり (2026-09-06 実例: 3 本の ClaudeUpdateDocumentation 並走で
+   tick が 20 回/分 → 200 回/分)、tick ごとの FE 往復 (WindowStatusArea 更新 /
+   FE probe / SessionSubmit 分身) が FE を飽和させてフリーズした。
+   対策:
+   - 追跡リスト ($iSharedPollingTasks / $iSharedPollingTask) を生存の正本にする。
+     停止・除去した時だけ追跡から外す (iRemoveSharedPollingTask)。
+   - 共有 tick 本体は自分のタスク id ($ScheduledTask[[1]]) が追跡に無ければ
+     孤児とみなして自分を除去する (iSharedPollingTickOrphanGuard)。リロード前に
+     蓄積した追跡外の孤児も、次の発火で新定義を呼ぶため自動消滅する。
+   - 追跡中タスクが外部要因で死んでいた場合の保険として、最終発火からの沈黙が
+     $iSharedPollingStaleSeconds を超えていれば ensure 時に作り直す。 *)
+If[!NumericQ[$iSharedPollingLastTickAt], $iSharedPollingLastTickAt = 0];
+If[!NumericQ[$iSharedPollingCreatedAt], $iSharedPollingCreatedAt = 0];
+If[!NumericQ[$iSharedPollingStaleSeconds], $iSharedPollingStaleSeconds = 120];
+
+iSharedPollingTaskId[t_ScheduledTaskObject] := Quiet @ Check[t[[1]], None];
+iSharedPollingTaskId[_] := None;
+
+(* 追跡中の共有タスク (副作用なし; 表示経路からも使う) *)
+iSharedPollingTasksTracked[] :=
+  DeleteDuplicates @ Select[
+    Join[If[ListQ[$iSharedPollingTasks], $iSharedPollingTasks, {}],
+      If[$iSharedPollingTask === None, {}, {$iSharedPollingTask}]],
+    MatchQ[#, _ScheduledTaskObject] &];
+
+(* 追跡リストに正規化して返す (追跡中 = 生存扱い)。 *)
 iSharedPollingTasksAlive[] :=
-  ($iSharedPollingTasks = DeleteDuplicates @ Select[
-     Join[$iSharedPollingTasks,
-       If[$iSharedPollingTask === None, {}, {$iSharedPollingTask}]],
-     Quiet @ Check[MemberQ[ScheduledTasks[], #], False] &];
-   $iSharedPollingTasks);
+  ($iSharedPollingTasks = iSharedPollingTasksTracked[]; $iSharedPollingTasks);
 
-(* 生存タスクを 1 本だけ残し残りを停止・除去。残した 1 本 (無ければ None) を返す。 *)
+(* 1 本を停止・除去し追跡からも外す *)
+iRemoveSharedPollingTask[t_] :=
+  (Quiet[StopScheduledTask[t]]; Quiet[RemoveScheduledTask[t]];
+   If[ListQ[$iSharedPollingTasks],
+     $iSharedPollingTasks = DeleteCases[$iSharedPollingTasks, t]];
+   If[$iSharedPollingTask === t, $iSharedPollingTask = None]);
+
+(* 追跡タスクを 1 本だけ残し残りを停止・除去。残した 1 本 (無ければ None) を返す。 *)
 iPruneSharedPollingTasks[] :=
-  Module[{alive = iSharedPollingTasksAlive[]},
+  Module[{alive = iSharedPollingTasksAlive[], keep},
+    keep = If[alive === {}, None, First[alive]];
     If[Length[alive] > 1,
-      Scan[(Quiet[StopScheduledTask[#]]; Quiet[RemoveScheduledTask[#]]) &,
-        Rest[alive]]];
-    $iSharedPollingTask = If[alive === {}, None, First[alive]];
-    $iSharedPollingTasks =
-      If[$iSharedPollingTask === None, {}, {$iSharedPollingTask}];
-    $iSharedPollingTask];
+      iClaudeFreezeLog["shared-tick-prune", ToString[Length[alive] - 1]];
+      Scan[iRemoveSharedPollingTask, Rest[alive]]];
+    $iSharedPollingTask = keep;
+    $iSharedPollingTasks = If[keep === None, {}, {keep}];
+    keep];
 
-(* 全共有タスクを停止・除去 (リロード/実行停止用)。 *)
+(* 全共有タスクを停止・除去 (リロード/実行停止用)。追跡中は無条件に止める。 *)
 iStopAllSharedPollingTasks[] :=
-  (Scan[(Quiet[StopScheduledTask[#]]; Quiet[RemoveScheduledTask[#]]) &,
-     iSharedPollingTasksAlive[]];
+  (Scan[iRemoveSharedPollingTask, iSharedPollingTasksTracked[]];
    $iSharedPollingTasks = {}; $iSharedPollingTask = None);
+
+(* 孤児ガード: 共有 tick 本体の先頭で呼ぶ。実行中タスク ($ScheduledTask) の id が
+   追跡に無ければ孤児とみなして自分を停止・除去し True を返す。 *)
+iSharedPollingTickOrphanGuard[] :=
+  Module[{me = $ScheduledTask, myId, ids},
+    If[!MatchQ[me, _ScheduledTaskObject], Return[False, Module]];
+    myId = iSharedPollingTaskId[me];
+    If[myId === None, Return[False, Module]];
+    ids = DeleteCases[iSharedPollingTaskId /@ iSharedPollingTasksTracked[], None];
+    If[MemberQ[ids, myId], Return[False, Module]];
+    iClaudeFreezeLog["shared-tick-orphan-selfremove", ToString[myId]];
+    Quiet[StopScheduledTask[me]]; Quiet[RemoveScheduledTask[me]];
+    True];
 
 (* パッケージリロード時に旧タスク (孤児含む) を全停止 *)
 iStopAllSharedPollingTasks[];
 
 iEnsureSharedPollingTask[] :=
-  Module[{kept = iPruneSharedPollingTasks[]},
-    (* 既に 1 本生存していればそれを使う (重複生成しない) *)
-    If[kept =!= None, Return[kept]];
+  Module[{kept = iPruneSharedPollingTasks[], silent},
+    (* 既に 1 本追跡中ならそれを使う (重複生成しない)。
+       2026-09-06 (freeze fix 4): 追跡が生存の正本。ただし外部から
+       RemoveScheduledTask された等で死んでいる可能性に備え、最終発火 (または
+       生成) から $iSharedPollingStaleSeconds 以上 tick が無ければ作り直す。
+       長い同期評価中は preemptive tick が止まるので閾値は十分長く取っている。 *)
+    If[kept =!= None,
+      silent = AbsoluteTime[] - Max[$iSharedPollingLastTickAt, $iSharedPollingCreatedAt];
+      If[silent < $iSharedPollingStaleSeconds, Return[kept, Module]];
+      iClaudeFreezeLog["shared-tick-stale-recreate", ToString[Round[silent]] <> "s"];
+      iStopAllSharedPollingTasks[]];
     (* Phase 31a-v7: \:9593\:9694\:3092 1.5 \[RightArrow] 3 \:79d2\:306b\:5ef6\:9577\:3002
        \:8907\:6570\:306e\:30b5\:30d6\:30bf\:30fc\:30f3\:304c\:4e26\:884c\:9032\:884c\:3059\:308b\:5834\:5408\:3001tick \:3054\:3068\:306e\:51e6\:7406\:6642\:9593\:304c\:9577\:304f\:306a\:308a
        FrontEnd \:3078\:306e\:5fdc\:7b54\:9045\:5ef6\:304c\:9855\:5728\:5316\:3059\:308b\:30023 \:79d2\:9593\:9694\:306b\:3059\:308b\:3053\:3068\:3067 tick \:9593\:306b
@@ -6504,6 +6603,9 @@ iEnsureSharedPollingTask[] :=
       Block[{$iClaudeInLegacyTask = True}, iSharedPollingTick[]], 3.0];
     StartScheduledTask[$iSharedPollingTask];
     $iSharedPollingTasks = {$iSharedPollingTask};
+    $iSharedPollingCreatedAt = AbsoluteTime[];
+    iClaudeFreezeLog["shared-tick-create",
+      ToString[iSharedPollingTaskId[$iSharedPollingTask]]];
     $iSharedPollingTask];
 
 (* === Public polling tick API (Stage B Day 4b) === *)
@@ -6722,7 +6824,10 @@ iClaudeTickFEBusyNote[k_String] := Module[{c},
    iSharedPollingTick[] を呼び続けるため、レガシー印は関数定義側で包む
    (CreateScheduledTask 側の Block だけでは再作成まで反映されない) *)
 iSharedPollingTick[] :=
-  Block[{$iClaudeInLegacyTask = True}, iSharedPollingTickCore[]];
+  If[TrueQ[iSharedPollingTickOrphanGuard[]],
+    Null,   (* 孤児: 自分を除去済み (freeze fix 4) *)
+    $iSharedPollingLastTickAt = AbsoluteTime[];
+    Block[{$iClaudeInLegacyTask = True}, iSharedPollingTickCore[]]];
 iSharedPollingTickCore[] := Module[{keys, tickFn, entry, suppressible,
                                 highPrio, sortedKeys, nbList},
   keys = Keys[$claudeProgress];
@@ -11692,6 +11797,21 @@ iOpenAIChatBodyBytes[model_String, prompt_String, temperature_,
           <|"reasoning_effort" -> reasoningEffort|>, <||>]],
       "RawJSON", "Compact" -> True],
     $Failed];
+(* 2026-09-05: content ブロック配列版 (vision 入力)。
+   content = {<|"type"->"text","text"->...|>, <|"type"->"image_url","image_url"-><|"url"->"data:image/png;base64,..."|>|>, ...}
+   OpenAI 互換 (LM Studio / llama.cpp / FreeToken / OpenAI) の chat/completions が受ける形式。 *)
+iOpenAIChatBodyBytes[model_String, content_List, temperature_,
+    reasoningEffort_:None] :=
+  Quiet @ Check[
+    ExportByteArray[
+      Join[
+        <|"model" -> model,
+          "messages" -> {<|"role" -> "user", "content" -> content|>}|>,
+        If[NumericQ[temperature], <|"temperature" -> N[temperature]|>, <||>],
+        If[StringQ[reasoningEffort] && reasoningEffort =!= "",
+          <|"reasoning_effort" -> reasoningEffort|>, <||>]],
+      "RawJSON", "Compact" -> True],
+    $Failed];
 
 (* ============================================================
    ローカル OpenAI 互換 provider 用 SourceVault ツールループ (2026-08-29)
@@ -11718,7 +11838,66 @@ If[! IntegerQ[$ClaudeLocalToolLoopMaxIterations],
    (2026-08-29 実測)。切り詰めた旨はモデルにも伝える。 *)
 If[! IntegerQ[$ClaudeLocalToolLoopMaxResultChars],
   $ClaudeLocalToolLoopMaxResultChars = 8000];
+(* ツール 1 件の実行時間上限 (秒)。2026-09-02 実測 (documentation「展開」, qwen3.8-27b):
+   sourcevault_get_document が webingest の TimeConstrained[URLRead / ImportByteArray]
+   内で割り込み不能区間 (native HTML import / SSL read) に入ると、期限の Abort は
+   保留され、区間を抜けてから発火する。発火位置が TimeConstrained の外になると
+   URLSubmit ハンドラから逃げて前面評価が $Aborted になる一方、ジョブは
+   iToolLoopSubmitRound に到達せず "Running" のまま 3600s の監視期限まで固まった。
+   iToolLoopSafeExec で TimeConstrained + CheckAbort に閉じ込め、ツール結果の
+   エラー文字列へ変換して往復を続ける (servicemanager の iSMSafeHook と同じ構図)。 *)
+If[! NumericQ[ClaudeCode`$ClaudeLocalToolLoopToolTimeoutSeconds],
+  ClaudeCode`$ClaudeLocalToolLoopToolTimeoutSeconds = 60];
 If[! ValueQ[$ClaudeLocalToolLoopVerbose], $ClaudeLocalToolLoopVerbose = True];
+(* 2026-09-02: 無益なツール結果 (ERROR / 0 件 / 空) がこの回数連続したら
+   予算を待たずに終端往復へ進む。実機では get_document の abort 2 回 +
+   0 件検索 5 回で 8 往復を使い切り、最後に <tool_call> の生テキストが
+   「本文」として返った。 *)
+If[! IntegerQ[$ClaudeLocalToolLoopMaxUselessResults],
+  $ClaudeLocalToolLoopMaxUselessResults = 3];
+
+(* ---- ツールループ終端の契約ヘルパ (2026-09-02) ----
+   終端往復 (tools を外す往復) には「ツールはもう使えない、手元の情報で
+   最終回答を書け」を明示する。tools を外すだけでは、モデルはまだ検索したい
+   まま <tool_call> を本文に書く (qwen3.8-27b で実測)。 *)
+iToolLoopFinalInstruction[] :=
+  <|"role" -> "user", "content" ->
+    "[System] Tools are no longer available for this task. Using only the " <>
+    "information you already have, write the final answer now, in the format " <>
+    "requested by the original instructions. Do NOT emit <tool_call>, " <>
+    "<function=...> or any other tool-invocation text; if some facts could not " <>
+    "be verified, write the answer without them.\n" <>
+    "[システム] ツールはこれ以上使えません。既に得た情報だけで、元の指示が" <>
+    "求める形式の最終回答を今すぐ書いてください。<tool_call> 等のツール呼び出し" <>
+    "記述を出力に含めてはいけません。"|>;
+iToolLoopFormatViolationMessage[] :=
+  <|"role" -> "user", "content" ->
+    "[System] Your previous message was a tool-call written as text, not an " <>
+    "answer. Tools cannot be used. Reply with the final answer only.\n" <>
+    "[システム] 直前の出力はツール呼び出しのテキストであり回答ではありません。" <>
+    "ツールは使えません。最終回答だけを書いてください。"|>;
+(* 本文が「テキストとして書かれたツール呼び出し」か (回答として受理しない)。 *)
+iToolLoopToolCallTextQ[content_] :=
+  StringQ[content] &&
+  StringContainsQ[content, "<tool_call>" | "<function=" | "</function>" |
+    "<invoke " | "</invoke>"];
+(* ツール結果が無益か: ERROR / 0 件 / 空。 *)
+iToolLoopUselessResultQ[text_] :=
+  ! StringQ[text] || StringTrim[text] === "" ||
+  StringStartsQ[StringTrim[text], "ERROR"] ||
+  StringMatchQ[StringTrim[text],
+    RegularExpression["(?is)^found 0 results\\b.*"]] ||
+  StringMatchQ[StringTrim[text],
+    RegularExpression["(?is)^(no|0) (results?|matches?|documents?) found\\b.*"]];
+(* 同一呼び出し (name + arguments) の署名。再実行せず重複と告げるために使う。 *)
+iToolLoopCallSignature[call_] :=
+  Module[{fn = Lookup[If[AssociationQ[call], call, <||>], "function", <||>]},
+    ToString @ Lookup[fn, "name", "?"] <> "|" <>
+      StringTrim @ ToString @ Lookup[fn, "arguments", ""]];
+iToolLoopDuplicateResult[name_String] :=
+  "ERROR: duplicate tool call (" <> name <> " with the same arguments was " <>
+  "already executed in this task). Do not repeat it. Use the results you " <>
+  "already have and write the final answer.";
 If[! AssociationQ[$iSourceVaultOpenAIToolsCache],
   $iSourceVaultOpenAIToolsCache = <||>];
 
@@ -11825,6 +12004,44 @@ iExecSourceVaultToolCall[call_Association] :=
         iMCPResultToText[res]]]];
 iExecSourceVaultToolCall[_] := "ERROR: malformed tool call";
 
+(* tool_call 1 件を封じ込め付きで実行する。戻り値は必ず文字列。
+   - Message            -> "ERROR: tool failed"
+   - tagged Throw       -> "ERROR: tool failed (throw tag)"
+   - 予算超過           -> "ERROR: tool timeout (Ns): name"
+   - Abort (ツール内の直接 Abort / TimeConstrained の遅延 Abort)
+                        -> "ERROR: tool aborted: name"
+   エラーはそのままモデルへ返して往復を続ける (握り潰すと同じ呼び出しを繰り返して
+   収束しない)。ガードが働いた事実は freeze ログにも残す (フィールドでは
+   fallback-toolloop-failed すら記録されず、原因の切り分けに時間を要した)。 *)
+iToolLoopToolTimeoutSeconds[] :=
+  With[{v = ClaudeCode`$ClaudeLocalToolLoopToolTimeoutSeconds},
+    If[NumericQ[v] && v > 0, N[v], 60.]];
+iToolLoopSafeExec[call_] :=
+  Module[{secs = iToolLoopToolTimeoutSeconds[], name, r, guard = None},
+    name = ToString @ Lookup[
+      Lookup[If[AssociationQ[call], call, <||>], "function", <||>], "name", "?"];
+    r = Quiet @ CheckAbort[
+      TimeConstrained[
+        Check[
+          Catch[iExecSourceVaultToolCall[call], _,
+            Function[{v, t},
+              guard = "throw";
+              "ERROR: tool failed (throw " <> ToString[t] <> ")"]],
+          (guard = "message"; "ERROR: tool failed")],
+        secs,
+        (guard = "timeout";
+         "ERROR: tool timeout (" <> ToString[Round[secs]] <> "s): " <> name)],
+      (guard = "abort"; "ERROR: tool aborted: " <> name)];
+    If[! StringQ[r],
+      guard = "nonstring";
+      r = "ERROR: tool returned " <> ToString[Head[r]]];
+    If[guard =!= None,
+      If[TrueQ[$ClaudeLocalToolLoopVerbose],
+        Print["  [ToolLoop] " <> name <> " \[Rule] " <> r]];
+      Quiet @ iClaudeFreezeLog["toolloop-tool-guard",
+        guard <> " | " <> name <> " | " <> r]];
+    r];
+
 (* 1 往復。messages / tools から body を作って POST し、パース済み JSON を返す。 *)
 iLocalToolLoopRound[apiKey_String, model_String, url_String,
     messages_List, tools_List, temperature_, reasoningEffort_] :=
@@ -11859,7 +12076,8 @@ iLocalToolLoopRound[apiKey_String, model_String, url_String,
 iQueryOpenAIToolLoop[apiKey_String, model_String, prompt_String,
     url_String, provider_String,
     temperature_:Automatic, reasoningEffort_:None] :=
-  Module[{tools, messages, iter, max, json, msg, calls, content, preflight},
+  Module[{tools, messages, iter, max, json, msg, calls, content, preflight,
+          terminal, sigs = {}, useless = 0, formatRetry = 0},
     tools = iSourceVaultOpenAITools[];
     preflight = iCloudSendPreflightDecision[provider, prompt, url];
     If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
@@ -11871,10 +12089,19 @@ iQueryOpenAIToolLoop[apiKey_String, model_String, prompt_String,
     max = If[IntegerQ[$ClaudeLocalToolLoopMaxIterations] &&
              $ClaudeLocalToolLoopMaxIterations > 0,
       $ClaudeLocalToolLoopMaxIterations, 8];
-    Do[
-      (* 上限に達した最後の 1 往復だけ tools を外し、必ず本文で終わらせる *)
+    (* 2026-09-02: 終端契約。
+       - 終端往復 (iter > max) は tools を外すだけでなく「最終回答を書け」を明示
+       - 本文が <tool_call> テキストなら回答として受理せず 1 回だけ再要求、
+         それでも駄目なら Error (呼び出し側の型検証へ)
+       - 同一 (name+arguments) の再呼び出しは実行せず重複と告げる
+       - 無益な結果 (ERROR / 0 件 / 空) が連続したら予算を待たず終端へ *)
+    iter = 1;
+    While[iter <= max + 2,
+      terminal = iter > max;
+      If[terminal && ! iToolLoopEndsWithSystemQ[messages],
+        AppendTo[messages, iToolLoopFinalInstruction[]]];
       json = iLocalToolLoopRound[apiKey, model, url, messages,
-        If[iter > max, {}, tools], temperature, reasoningEffort];
+        If[terminal, {}, tools], temperature, reasoningEffort];
       If[StringQ[json], Return[json, Module]];
       If[! AssociationQ[json],
         Return[iL["Error: ツールループの応答取得に失敗しました",
@@ -11885,19 +12112,42 @@ iQueryOpenAIToolLoop[apiKey_String, model_String, prompt_String,
         Return[iL["Error: 応答に message がありません",
                   "Error: response has no message"], Module]];
       calls = Lookup[msg, "tool_calls", {}];
-      If[! ListQ[calls] || calls === {} || iter > max,
+      If[! ListQ[calls] || calls === {} || terminal,
         content = Lookup[msg, "content", ""];
-        Return[If[StringQ[content], content, ToString[content]], Module]];
+        content = If[StringQ[content], content, ToString[content]];
+        If[iToolLoopToolCallTextQ[content],
+          If[formatRetry < 1,
+            formatRetry++;
+            Quiet @ iClaudeFreezeLog["toolloop-format-retry", "sync " <> model];
+            AppendTo[messages, msg];
+            AppendTo[messages, iToolLoopFormatViolationMessage[]];
+            iter = max + 1;
+            Continue[]];
+          Return[iL["Error: モデルが回答ではなくツール呼び出しのテキストを返しました",
+                    "Error: model returned tool-call text instead of an answer"],
+            Module]];
+        Return[content, Module]];
       (* assistant の tool_calls をそのまま履歴へ積み、各結果を role:"tool" で返す *)
       AppendTo[messages, msg];
       Scan[
         Function[c,
-          AppendTo[messages, <|
-            "role" -> "tool",
-            "tool_call_id" -> ToString @ Lookup[c, "id", ""],
-            "content" -> iExecSourceVaultToolCall[c]|>]],
-        Select[calls, AssociationQ]],
-      {iter, 1, max + 1}];
+          Module[{sig = iToolLoopCallSignature[c], name, res},
+            name = ToString @ Lookup[Lookup[c, "function", <||>], "name", "?"];
+            If[MemberQ[sigs, sig],
+              res = iToolLoopDuplicateResult[name];
+              Quiet @ iClaudeFreezeLog["toolloop-duplicate-call", "sync | " <> name],
+              AppendTo[sigs, sig];
+              res = iToolLoopSafeExec[c]];
+            useless = If[iToolLoopUselessResultQ[res], useless + 1, 0];
+            AppendTo[messages, <|
+              "role" -> "tool",
+              "tool_call_id" -> ToString @ Lookup[c, "id", ""],
+              "content" -> res|>]]],
+        Select[calls, AssociationQ]];
+      iter = If[useless >= iToolLoopMaxUseless[],
+        (Quiet @ iClaudeFreezeLog["toolloop-useless-streak", "sync " <> model];
+         max + 1),
+        iter + 1]];
     iL["Error: ツールループが収束しませんでした",
        "Error: tool loop did not converge"]];
 
@@ -11921,10 +12171,26 @@ If[! AssociationQ[$iToolLoopJobs], $iToolLoopJobs = <||>];
 If[! IntegerQ[$iToolLoopSeq], $iToolLoopSeq = 0];
 
 (* 1 往復を投げる。応答はハンドラで受けて状態を進める。 *)
+(* 履歴の末尾が [System] 指示 (終端指示 / 形式違反通告) か。二重付加を防ぐ。 *)
+iToolLoopEndsWithSystemQ[msgs_List] :=
+  Length[msgs] > 0 && AssociationQ[Last[msgs]] &&
+  Lookup[Last[msgs], "role", ""] === "user" &&
+  StringStartsQ[ToString[Lookup[Last[msgs], "content", ""]], "[System]"];
+iToolLoopEndsWithSystemQ[___] := False;
+iToolLoopMaxUseless[] :=
+  Max[1, Replace[$ClaudeLocalToolLoopMaxUselessResults,
+    Except[_Integer?Positive] -> 3]];
+
 iToolLoopSubmitRound[id_String] :=
   Module[{job, body, bodyBytes, req},
     job = Lookup[$iToolLoopJobs, id, None];
     If[! AssociationQ[job], Return[$Failed]];
+    (* 2026-09-02: 終端往復は tools を外すだけでなく最終回答を明示する
+       (同期版 iQueryOpenAIToolLoop と同じ契約)。 *)
+    If[job["iter"] > job["max"] && ! iToolLoopEndsWithSystemQ[job["messages"]],
+      $iToolLoopJobs[id, "messages"] =
+        Append[job["messages"], iToolLoopFinalInstruction[]];
+      job = $iToolLoopJobs[id]];
     body = <|"model" -> job["model"], "messages" -> job["messages"]|>;
     (* 上限に達した最後の 1 往復だけ tools を外し、必ず本文で終わらせる *)
     If[job["iter"] <= job["max"] && job["tools"] =!= {},
@@ -11975,7 +12241,9 @@ iToolLoopBodyUTF8[a_] :=
     (* フォールバック: 化ける可能性はあるが無いよりまし *)
     ToString @ Lookup[a, "Body", ""]];
 
-iToolLoopOnBody[id_String, a_] :=
+(* ハンドラ本体。ここで起きた Abort / Throw は入口の iToolLoopOnBody が受けて
+   ジョブを Failed にする (監視側 iFallbackToolLoopWatch が即座に次候補へ進む)。 *)
+iToolLoopOnBodyCore[id_String, a_] :=
   Module[{job, code, json, msg, calls, content, bodyStr},
     job = Lookup[$iToolLoopJobs, id, None];
     If[! AssociationQ[job], Return[Null]];
@@ -12001,8 +12269,25 @@ iToolLoopOnBody[id_String, a_] :=
     calls = Lookup[msg, "tool_calls", {}];
     If[! ListQ[calls] || calls === {} || job["iter"] > job["max"],
       content = Lookup[msg, "content", ""];
-      $iToolLoopJobs[id, "result"] =
-        If[StringQ[content], content, ToString[content]];
+      content = If[StringQ[content], content, ToString[content]];
+      (* 2026-09-02: <tool_call> の生テキストは回答として受理しない。
+         1 回だけ「回答を書け」と再要求し、それでも駄目なら Failed。
+         実機: 予算切れの終端往復でモデルが XML 形式のツール呼び出しを本文に
+         書き、そのまま documentation のセルへ流れた。 *)
+      If[iToolLoopToolCallTextQ[content],
+        If[Lookup[job, "formatRetry", 0] < 1,
+          $iToolLoopJobs[id, "formatRetry"] = Lookup[job, "formatRetry", 0] + 1;
+          $iToolLoopJobs[id, "messages"] =
+            Join[job["messages"], {msg, iToolLoopFormatViolationMessage[]}];
+          $iToolLoopJobs[id, "iter"] = job["max"] + 1;
+          Quiet @ iClaudeFreezeLog["toolloop-format-retry", id];
+          iToolLoopSubmitRound[id];
+          Return[Null]];
+        $iToolLoopJobs[id, "status"] = "Failed";
+        $iToolLoopJobs[id, "error"] =
+          "model returned tool-call text instead of an answer";
+        Return[Null]];
+      $iToolLoopJobs[id, "result"] = content;
       $iToolLoopJobs[id, "status"] = "Done";
       Return[Null]];
     (* assistant の tool_calls をそのまま履歴へ積む (同期版と同じ規則:
@@ -12010,14 +12295,59 @@ iToolLoopOnBody[id_String, a_] :=
     $iToolLoopJobs[id, "messages"] = Append[job["messages"], msg];
     Scan[
       Function[c,
-        $iToolLoopJobs[id, "messages"] = Append[
-          $iToolLoopJobs[id, "messages"],
-          <|"role" -> "tool",
-            "tool_call_id" -> ToString @ Lookup[c, "id", ""],
-            "content" -> iExecSourceVaultToolCall[c]|>]],
+        Module[{sig = iToolLoopCallSignature[c], name, res},
+          name = ToString @ Lookup[Lookup[c, "function", <||>], "name", "?"];
+          (* 同一呼び出しは実行せず重複と告げる (同じ検索の連打を止める) *)
+          If[MemberQ[Lookup[$iToolLoopJobs[id], "sigs", {}], sig],
+            res = iToolLoopDuplicateResult[name];
+            Quiet @ iClaudeFreezeLog["toolloop-duplicate-call", id <> " | " <> name],
+            $iToolLoopJobs[id, "sigs"] =
+              Append[Lookup[$iToolLoopJobs[id], "sigs", {}], sig];
+            res = iToolLoopSafeExec[c]];
+          $iToolLoopJobs[id, "useless"] =
+            If[iToolLoopUselessResultQ[res],
+              Lookup[$iToolLoopJobs[id], "useless", 0] + 1, 0];
+          $iToolLoopJobs[id, "messages"] = Append[
+            $iToolLoopJobs[id, "messages"],
+            <|"role" -> "tool",
+              "tool_call_id" -> ToString @ Lookup[c, "id", ""],
+              "content" -> res|>]]],
       Select[calls, AssociationQ]];
-    $iToolLoopJobs[id, "iter"] = job["iter"] + 1;
+    (* 無益な結果が連続したら予算を待たず終端往復へ *)
+    $iToolLoopJobs[id, "iter"] =
+      If[Lookup[$iToolLoopJobs[id], "useless", 0] >= iToolLoopMaxUseless[],
+        (Quiet @ iClaudeFreezeLog["toolloop-useless-streak", id]; job["max"] + 1),
+        job["iter"] + 1];
     iToolLoopSubmitRound[id]];
+iToolLoopOnBodyCore[___] := Null;
+
+(* Running のジョブだけ Failed へ倒す (Done / 既に Failed の結果は上書きしない)。 *)
+iToolLoopFailJob[id_String, err_String] :=
+  Module[{job = Lookup[$iToolLoopJobs, id, None]},
+    If[AssociationQ[job] && job["status"] === "Running",
+      $iToolLoopJobs[id, "status"] = "Failed";
+      $iToolLoopJobs[id, "error"] = err;
+      Quiet @ iClaudeFreezeLog["fallback-toolloop-handler-failed",
+        id <> " | " <> err]];
+    Null];
+iToolLoopFailJob[___] := Null;
+
+(* URLSubmit の "BodyReceived" ハンドラ入口 (2026-09-02)。ツール実行は
+   iToolLoopSafeExec が個別に封じ込めるが、ハンドラのどこで Abort / Throw が
+   起きても外 (前面評価) へ逃がさず、ジョブを Failed にして監視側を即時に
+   進める。これが無いと監視は resolvedTimeout ($iFallbackTimeout, 3600s) まで
+   "Running" を見続ける。内側の Catch は tagged Throw、外側の Catch は
+   untagged Throw を受ける (rule 86 原則 11)。 *)
+iToolLoopOnBody[id_String, a_] :=
+  Module[{outcome},
+    outcome = Quiet @ CheckAbort[
+      Catch[
+        Catch[iToolLoopOnBodyCore[id, a]; iToolLoopHandlerOK, _,
+          Function[{v, t}, "handler throw (" <> ToString[t] <> ")"]]],
+      "handler aborted"];
+    If[outcome =!= iToolLoopHandlerOK,
+      iToolLoopFailJob[id, "tool loop " <> ToString[outcome]]];
+    Null];
 iToolLoopOnBody[___] := Null;
 
 iToolLoopStart[provider_String, model_String, prompt_String, url_String,
@@ -12037,6 +12367,8 @@ iToolLoopStart[provider_String, model_String, prompt_String, url_String,
                   $ClaudeLocalToolLoopMaxIterations > 0,
                 $ClaudeLocalToolLoopMaxIterations, 8],
       "status" -> "Running", "result" -> None, "error" -> None,
+      (* 2026-09-02: 終端契約用 (重複署名 / 無益連続 / 形式違反再要求回数) *)
+      "sigs" -> {}, "useless" -> 0, "formatRetry" -> 0,
       "task" -> None|>;
     If[iToolLoopSubmitRound[id] === $Failed, Return[$Failed]];
     id];
@@ -12059,18 +12391,28 @@ iToolLoopCleanup[id_String] := (
   $iToolLoopJobs = KeyDrop[$iToolLoopJobs, id];);
 iToolLoopCleanup[___] := Null;
 
-iQueryOpenAIAPI[apiKey_String, model_String, prompt_String,
+(* 2026-09-05: prompt は文字列 (従来) または OpenAI 互換の content ブロック配列
+   ({<|"type"->"text",...|>, <|"type"->"image_url",...|>}: LM Studio 等への vision 入力)。
+   preflight / ブレークポイントにはテキスト部分だけを渡す。 *)
+iOpenAIContentText[prompt_String] := prompt;
+iOpenAIContentText[content_List] :=
+  StringRiffle[
+    Cases[content, a_Association /; Lookup[a, "type", ""] === "text" :> ToString[Lookup[a, "text", ""]]],
+    "\n\n"];
+iOpenAIContentText[x_] := ToString[x];
+
+iQueryOpenAIAPI[apiKey_String, model_String, prompt_ /; (StringQ[prompt] || ListQ[prompt]),
     customURL_String:"https://api.openai.com/v1/chat/completions",
     temperature_:Automatic, reasoningEffort_:None] :=
   Module[{url, bodyBytes, resp, bodyStr, json, choices, msg, preflight},
     url = customURL;
-    preflight = iCloudSendPreflightDecision["openai", prompt, url];
+    preflight = iCloudSendPreflightDecision["openai", iOpenAIContentText[prompt], url];
     If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
       Return[iCloudSendPreflightFailure[preflight]]];
 
     (* BreakPtr: 送信直前ブレーク (同期 openai 互換 API) *)
     iLLMBreakpointGate["API sync (openai-compat)", <|"Provider" -> "openai-compat",
-      "Model" -> model, "URL" -> url, "Prompt" -> prompt|>];
+      "Model" -> model, "URL" -> url, "Prompt" -> iOpenAIContentText[prompt]|>];
 
     bodyBytes = iOpenAIChatBodyBytes[model, prompt, temperature,
       reasoningEffort];
@@ -12285,6 +12627,11 @@ iResolveFreeTokenReasoning[___] := None;
    Block[{$iLMStudioIntegrationsOverride = ...}, ...] \:3067\:5305\:3093\:3067\:4e0b\:4f4d\:306b\:4f1d\:64ad\:3059\:308b\:3002
    \:3053\:308c\:306b\:3088\:308a iStartFallbackAsync \:306e\:9577\:3044\:518d\:5e30\:30b7\:30b0\:30cd\:30c1\:30e3\:3092\:5909\:3048\:305a\:306b\:6e08\:3080\:3002 *)
 If[!ValueQ[$iLMStudioIntegrationsOverride], $iLMStudioIntegrationsOverride = None];
+(* 2026-09-02: LM Studio が API 経由の plugin 利用を拒否したとき
+   ("Permission denied to use plugin ...", HTTP 400) に、同じモデルへ
+   integrations を外して 1 回だけ再送するための Block 用フラグ。
+   iPrepareLMStudioMCPPS1 が True を見たら integrations を付けない。 *)
+If[!ValueQ[$iLMStudioSuppressIntegrations], $iLMStudioSuppressIntegrations = False];
 
 (* X0a: ContextPlan ToolDefinitions gate predicate. True when context planning
    is active and the active default plan disables tool definitions. Applied at
@@ -14054,7 +14401,8 @@ iPrepareLMStudioMCPPS1[apiKey_String, model_String, prompt_String,
     (* 2026-06-01: integrations \:89e3\:6c7a\:3092\:4e00\:5143\:5316\:3002\:5f93\:6765\:306f $ClaudeLMStudioIntegrations \:306e\:307f\:3092
        \:53c2\:7167\:3057\:3066\:3044\:305f\:305f\:3081\:3001override / SourceVault \:7d4c\:7531\:3067 exa \:3092\:6709\:52b9\:5316\:3067\:304d\:306a\:304b\:3063\:305f\:3002
        iResolveLMStudioIntegrations \:306f override > \:30b0\:30ed\:30fc\:30d0\:30eb > SourceVault \:306e\:9806\:3067\:89e3\:6c7a\:3059\:308b\:3002 *)
-    integrations = iResolveLMStudioIntegrations[model, Automatic];
+    integrations = If[TrueQ[$iLMStudioSuppressIntegrations], {},
+      iResolveLMStudioIntegrations[model, Automatic]];
     ctxLen       = $ClaudeLMStudioContextLength;
     (* Stage 9 P1.5: SourceVault \:304c\:30e2\:30c7\:30eb\:5225 ContextLength \:3092\:7ba1\:7406\:3002
        \:30b0\:30ed\:30fc\:30d0\:30eb\:304c\:672a\:8a2d\:5b9a\:306a\:3089 SourceVault \:30ec\:30b8\:30b9\:30c8\:30ea\:3092\:53c2\:7167\:3002 *)
@@ -14297,6 +14645,35 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
           FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]],
       iFallbackNotifyAndLog[nb, noticeText, RGBColor[0.8, 0.4, 0]]]];
     (* \[HorizontalLine]\[HorizontalLine] PS1 \:6e96\:5099: lmstudio \:306f MCP \:5bfe\:5fdc\:7248 (/api/v1/chat), \:305d\:308c\:4ee5\:5916\:306f\:5f93\:6765\:7248 \[HorizontalLine]\[HorizontalLine] *)
+    (* 2026-09-02: クライアント側ツールループ (URLSubmit) 経路。
+       8/30 の $ClaudeLocalToolLoop 対応は同期経路と ClaudeEval の RT-Async 経路
+       にしか入っておらず、ClaudeQueryAsync → iStartFallbackAsync (documentation.wl
+       の展開/翻訳等) は PS1 で /api/v1/chat に integrations を送り続けていた。
+       LM Studio が API 経由の plugin 利用を拒否する構成では
+       "Permission denied to use plugin 'mcp/sourcevault'" (HTTP 400) で必ず
+       失敗し、documentation 側では「LLM 応答を取得できませんでした」しか
+       出ない。RT-Async (iICollectChunkResult) と同じ条件でループへ倒す。
+       ループ起動に失敗したら従来の PS1 経路へ落とす。 *)
+    If[iLocalOAIProviderQ[provider] && Length[mediaFiles] === 0 &&
+       TrueQ[iLocalToolLoopEnabledQ[provider]],
+      Module[{tlId, tlURL, prov = ToLowerCase[provider]},
+        tlURL = iEnsureChatCompletionsPath[
+          If[customURL =!= "", customURL, iLocalOAIDefaultBaseURL[prov]]];
+        (* Check で包まない: 内部の無害なメッセージ (headless の
+           FrontEndObject::notavail 等) で $Failed 扱いにすると、URLSubmit 済みの
+           ジョブを放置したまま PS1 経路も走り二重送信になる。
+           iToolLoopStart は送信失敗時に自分で $Failed を返す。 *)
+        tlId = iToolLoopStart[prov, model, prompt, tlURL, apiKey,
+          iResolveLMStudioTemperature[model, Automatic],
+          If[prov === "freetoken",
+            iResolveFreeTokenReasoning[model, customURL], None]];
+        If[StringQ[tlId],
+          iClaudeFreezeLog["fallback-toolloop-start", prov <> "/" <> model];
+          iFallbackToolLoopWatch[tlId, prompt, nb, callback, models, modelIdx,
+            jobId, timeout, mediaFiles, provider, model, resolvedTimeout];
+          Return[]];
+        iClaudeFreezeLog["fallback-toolloop-start-failed",
+          prov <> "/" <> model <> " -> PS1"]]];
     prepared = If[ToLowerCase[provider] === "lmstudio" && Length[mediaFiles] === 0,
       (* LM Studio MCP \:7d4c\:8def: /api/v1/chat + integrations \:5bfe\:5fdc\:3002
          StartProcess / ScheduledTask \:306f\:65e2\:5b58\:30ed\:30b8\:30c3\:30af\:3092\:305d\:306e\:307e\:307e\:4f7f\:3046\:305f\:3081
@@ -14350,7 +14727,8 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
             td = prepared["tmpDir"], cb = callback, pmt = prompt, pNb = nb,
             mods = models, mIdx = modelIdx, sym = gSym, t0 = startTime,
             pk = progKey, prov = provider, mdl = model,
-            jid = jobId, uj = useJob, rto = resolvedTimeout, tmo = timeout, mf = mediaFiles},
+            jid = jobId, uj = useJob, rto = resolvedTimeout, tmo = timeout, mf = mediaFiles,
+            sup = TrueQ[$iLMStudioSuppressIntegrations]},
         Module[{status, text, elapsed},
           (* \:65e2\:306b\:4ed6\:306e\:30e2\:30c7\:30eb\:3067\:6210\:529f\:6e08\:307f\:306a\:3089\:505c\:6b62 *)
           If[TrueQ[$iFallbackDone],
@@ -14418,13 +14796,124 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
                       Scan[Function[thk, Quiet[thk[]]], queue]]]],
                 (* \:30a8\:30e9\:30fc: \:6700\:5f8c\:306e\:30a8\:30e9\:30fc\:3092\:4fdd\:5b58\:3057\:3066\:6b21\:306e\:30e2\:30c7\:30eb\:3078 *)
                 If[StringQ[text], $iFallbackLastError = text];
-                (* hardening P1-6: 実試行失敗 → バックオフ後に次候補 *)
-                iFallbackScheduleNext[
-                  iStartFallbackAsync[pmt, pNb, cb, mods, mIdx + 1, jid, tmo, mf],
-                  mIdx]
+                (* 2026-09-02: LM Studio の plugin 拒否 (HTTP 400
+                   "Permission denied to use plugin ...") は integrations を
+                   付けたことが唯一の原因なので、同じモデルへ integrations を
+                   外して即再送する (1 回だけ: sup=True で再発したら次候補へ)。
+                   決定的な 400 なのでバックオフは不要。 *)
+                If[StringQ[text] && !sup && ToLowerCase[prov] === "lmstudio" &&
+                   StringContainsQ[text, "Permission denied to use plugin"],
+                  iClaudeFreezeLog["lmstudio-plugin-denied-retry",
+                    prov <> "/" <> mdl <> " (integrations off)"];
+                  Block[{$iLMStudioSuppressIntegrations = True},
+                    iStartFallbackAsync[pmt, pNb, cb, mods, mIdx, jid, tmo, mf]],
+                  (* hardening P1-6: 実試行失敗 → バックオフ後に次候補 *)
+                  iFallbackScheduleNext[
+                    iStartFallbackAsync[pmt, pNb, cb, mods, mIdx + 1, jid, tmo, mf],
+                    mIdx]]
               ]
             ]
           ]
+        ]
+      ]],
+      1
+    ];
+    AppendTo[$iFallbackActiveTasks, gSym];
+    StartScheduledTask[gSym];
+    ]
+  ];
+
+(* 2026-09-02: iStartFallbackAsync のクライアント側ツールループ版監視タスク。
+   iToolLoopStart で起動した URLSubmit ジョブ (tlId) を 1 秒毎に見て、
+   Done なら PS1 経路と同じ完了処理 (通知 + callback[text])、
+   Failed / タイムアウトなら $iFallbackLastError を残して次候補へ進む。
+   進捗表示・Job スロット・$iFallbackActiveTasks の扱いは PS1 版と揃える。 *)
+iFallbackToolLoopWatch[tlId_String, prompt_String, nb_NotebookObject, callback_,
+    models_List, modelIdx_Integer, jobId_String, timeout_, mediaFiles_List,
+    provider_String, model_String, resolvedTimeout_] :=
+  Module[{ts, startTime, progKey, useJob = (jobId =!= ""), label},
+    label = "Fallback: " <> provider <> "/" <> model <> " (tool loop)";
+    startTime = AbsoluteTime[];
+    ts = ToString[UnixTime[]] <> "tl" <> ToString[RandomInteger[99999]];
+    progKey = ts;
+    If[useJob,
+      $iFallbackProgress[progKey] = <|"disp" ->
+        label <> " " <> iL["に問い合わせ中... 0s", "querying... 0s"]|>;
+      Quiet @ NBAccess`NBWriteSlot[jobId, 1,
+        Cell[label <> " " <> iL["に問い合わせ中... 0s", "querying... 0s"],
+          "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]],
+      Quiet @ iFallbackInsertProgress[nb, progKey, provider, model]];
+    With[{gSym = Symbol["ClaudeCode`Private`$fbTask" <> ts]},
+    gSym = CreateScheduledTask[
+      Block[{$iClaudeInLegacyTask = True},
+      With[{id = tlId, cb = callback, pmt = prompt, pNb = nb,
+            mods = models, mIdx = modelIdx, sym = gSym, t0 = startTime,
+            pk = progKey, prov = provider, mdl = model, lbl = label,
+            jid = jobId, uj = useJob, rto = resolvedTimeout, tmo = timeout,
+            mf = mediaFiles},
+        Module[{st, elapsed, text, done},
+          If[TrueQ[$iFallbackDone],
+            Quiet[StopScheduledTask[sym]];
+            Quiet[RemoveScheduledTask[sym]];
+            $iFallbackActiveTasks = DeleteCases[$iFallbackActiveTasks, sym];
+            iToolLoopCleanup[id];
+            If[!uj, Quiet @ iFallbackDeleteProgress[pNb, pk]];
+            Return[]];
+          elapsed = Round[AbsoluteTime[] - t0, 1];
+          If[KeyExistsQ[$iFallbackProgress, pk],
+            $iFallbackProgress[pk] = <|"disp" ->
+              lbl <> " " <> iL["に問い合わせ中... ", "querying... "] <> ToString[elapsed] <> "s"|>;
+            iSafeSetWindowStatus[pNb,
+              lbl <> " " <> iL["に問い合わせ中... ", "querying... "] <> ToString[elapsed] <> "s"];
+            Quiet @ If[uj,
+              NBAccess`NBWriteSlot[jid, 1,
+                Cell[$iFallbackProgress[pk]["disp"],
+                  "Print", FontWeight -> Bold, FontColor -> RGBColor[0.8, 0.4, 0], FontSize -> 11]]]];
+          st = iToolLoopStatus[id];
+          done = !AssociationQ[st] || st["status"] =!= "Running" || elapsed > rto;
+          If[done,
+            Quiet[StopScheduledTask[sym]];
+            Quiet[RemoveScheduledTask[sym]];
+            $iFallbackActiveTasks = DeleteCases[$iFallbackActiveTasks, sym];
+            iSafeSetWindowStatus[pNb, ""];
+            If[!uj,
+              Quiet @ iFallbackDeleteProgress[pNb, pk],
+              $iFallbackProgress = KeyDrop[$iFallbackProgress, pk];
+              Quiet @ NBAccess`NBWriteSlot[jid, 1,
+                Cell["\[Checkmark] " <> lbl <> " " <> iL["からの応答を取得。出力を書き込み中...", "response obtained. Writing output..."],
+                  "Print", FontWeight -> Bold, FontColor -> RGBColor[0.3, 0.6, 0.3], FontSize -> 11]];
+              Quiet @ NBAccess`NBJobResetSlotWritten[jid, 1]];
+            text = If[AssociationQ[st] && st["status"] === "Done", st["result"], None];
+            If[StringQ[text] && !StringStartsQ[text, "Error:"],
+              iToolLoopCleanup[id];
+              If[!TrueQ[$iFallbackDone],
+                $iFallbackDone = True;
+                If[uj,
+                  Quiet @ NBAccess`NBWriteSlot[jid, 2,
+                    Cell["\[Checkmark] " <> mods[[mIdx, 1]] <> "/" <> mods[[mIdx, 2]] <>
+                      " " <> iL["で応答を取得しました。", " response obtained."], "Print",
+                      FontWeight -> Bold, FontColor -> RGBColor[0, 0.5, 0.2], FontSize -> 11]],
+                  Quiet @ iFallbackNotifyAndLog[pNb,
+                    "\[Checkmark] " <> mods[[mIdx, 1]] <> "/" <> mods[[mIdx, 2]] <>
+                    " " <> iL["で応答を取得しました。", " response obtained."], RGBColor[0, 0.5, 0.2]];
+                  Quiet[SelectionMove[pNb, After, Notebook]]];
+                Module[{queue = cb[text]},
+                  If[ListQ[queue],
+                    Scan[Function[thk, Quiet[thk[]]], queue]]]],
+              (* 失敗 / タイムアウト: エラーを残して次候補へ *)
+              $iFallbackLastError = Which[
+                AssociationQ[st] && st["status"] === "Running",
+                  iL["Error: タイムアウト（", "Error: Timeout ("] <> ToString[rto] <>
+                    iL["秒） - ", " sec) - "] <> prov <> "/" <> mdl <> " (tool loop)",
+                StringQ[text], text,
+                True,
+                  "Error: " <> prov <> "/" <> mdl <> " tool loop: " <>
+                    ToString[If[AssociationQ[st], st["error"], st]]];
+              iClaudeFreezeLog["fallback-toolloop-failed", $iFallbackLastError];
+              iToolLoopCleanup[id];
+              iFallbackScheduleNext[
+                iStartFallbackAsync[pmt, pNb, cb, mods, mIdx + 1, jid, tmo, mf],
+                mIdx]]]
         ]
       ]],
       1
@@ -14549,14 +15038,9 @@ iClaudeSafeKernels[] :=
    iSharedPollingTasksAlive[] は $iSharedPollingTasks を再代入する副作用があるため、
    Dynamic 描画経路では使わない (描画中の共有状態変更は tick と競合しうる)。 *)
 iClaudeSharedTasksForDisplay[] :=
-  Module[{cand, active},
-    cand = DeleteDuplicates @ Join[
-      If[ListQ[$iSharedPollingTasks], $iSharedPollingTasks, {}],
-      If[ValueQ[$iSharedPollingTask] && $iSharedPollingTask =!= None,
-        {$iSharedPollingTask}, {}]];
-    active = Quiet @ Check[TimeConstrained[ScheduledTasks[], 0.4, $Failed], $Failed];
-    If[ListQ[active], Select[cand, MemberQ[active, #] &], cand]
-  ];
+  (* 2026-09-06 (freeze fix 4): ScheduledTasks[] はクラウド照会 (~0.9 秒) で
+     レガシータスクを返さないため使わない。追跡リストが生存の正本。 *)
+  iSharedPollingTasksTracked[];
 
 (* ---- 種別ごとの列挙関数 ---- *)
 
@@ -14980,6 +15464,8 @@ ClaudeAbort[] :=
     $iDocUpdateActive = <||>;
     (* \:5171\:6709\:30dd\:30fc\:30ea\:30f3\:30b0\:30bf\:30b9\:30af\:3092\:505c\:6b62 (\:5b64\:5150\:542b\:3081\:5168\:90e8) *)
     iStopAllSharedPollingTasks[];
+    (* 席待ち中の外部ドキュメント更新も破棄 (freeze fix 4c) *)
+    $iClaudeDocExtPending = <||>;
     (* Orchestrator \:306e wolframscript \:30c9\:30e9\:30a4\:30d0 (spec-review / spec-impl) \:3082\:505c\:6b62\:3002
        $claudeProgress \:3092\:7a7a\:306b\:3057\:305f\:6642\:70b9\:3067 poller tick \:306f\:6d88\:3048\:308b\:304c\:3001
        \:80cc\:666f\:30d7\:30ed\:30bb\:30b9\:81ea\:4f53\:306f\:5b64\:5150\:5316\:3057\:3066\:8d70\:308a\:7d9a\:3051\:308b\:305f\:3081 KillProcess \:3059\:308b\:3002 *)
@@ -15925,8 +16411,11 @@ iClaudeQueryBgAPIMultimodal[items_List, modelSpec_, timeoutSpec_] :=
     If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
       Return[iCloudSendPreflightFailure[preflight]]];
 
-    (* multimodal \:306f\:73fe\:6642\:70b9 Anthropic \:306e\:307f\:5bfe\:5fdc *)
+    (* 2026-09-05: OpenAI 互換 (LM Studio / llama.cpp / FreeToken / OpenAI) は image_url 形式で送る
+       (iClaudeQueryBgAPIMultimodalOpenAI)。それ以外 (zai / kimi 等) は従来どおり明示エラー。 *)
     If[providerLower =!= "anthropic",
+      If[iLocalOAIProviderQ[providerLower] || providerLower === "openai",
+        Return[iClaudeQueryBgAPIMultimodalOpenAI[items, providerLower, modelSpec, timeout]]];
       Return[
         "Error: multimodal API \:306f\:73fe\:5728 Anthropic \:307e\:305f\:306f Claude Code CLI (provider 'claudecode') \:306e\:307f\:5bfe\:5fdc\:3057\:3066\:3044\:307e\:3059\:3002\n" <>
         "\:8a73\:7d30: provider '" <> provider <> "' \:306e multimodal API \:5f62\:5f0f (\:4f8b: OpenAI \:306f image_url \:65b9\:5f0f) \:306f\n" <>
@@ -16051,6 +16540,154 @@ iClaudeQueryBgAPIMultimodal[items_List, modelSpec_, timeoutSpec_] :=
         Return["Error: API \:547c\:3073\:51fa\:3057\:5931\:6557"]];
       iParseAnthropicBgResponse[rb]]
   ];
+
+(* ============================================================
+   OpenAI 互換 provider (LM Studio / llama.cpp / FreeToken / OpenAI) の vision 入力
+   (2026-09-05)
+   ------------------------------------------------------------
+   ClaudeQueryBg[{prompt, image, ...}] が LM Studio 等のモデルで呼ばれたとき、
+   従来は「Anthropic のみ対応」のエラーを返していた。非同期経路 (PS1) には既に
+   image_url (data URI) 形式の実装があったので、同期経路にも同じ形式を用意する。
+     messages[0].content = { {type: text, text}, {type: image_url, image_url: {url: data:image/png;base64,...}} }
+   LM Studio では /api/v1/models の capabilities.vision を先に見て、vision を申告して
+   いないモデルには送らず "Error: NoVision: ..." を即返す (呼び出し側はテキストのみへ
+   フォールバックできる。documentation_paper2nb.wl がこれを使う)。
+   PDF / 音声など画像以外のメディアはこの形式では送れないので注記だけ残す。
+   ============================================================ *)
+
+(* /api/v1/models の capabilities をモデル単位で取得 (LM Studio のみ)。
+   Association / List = capabilities あり、None = 一覧にあるが capabilities 無し、
+   $Failed = 不明 (サーバー不通・一覧に無い)。iGetLMStudioModelReasoning と同じ 3 値。 *)
+If[!AssociationQ[$iLMStudioModelCapabilitiesCache], $iLMStudioModelCapabilitiesCache = <||>];
+
+iGetLMStudioModelCapabilities[model_String, baseURL_String] :=
+  Module[{cacheKey, modelsURL, apiKey, resp, body, json, models, entry, caps},
+    cacheKey = baseURL <> "|" <> model;
+    If[KeyExistsQ[$iLMStudioModelCapabilitiesCache, cacheKey],
+      Return[$iLMStudioModelCapabilitiesCache[cacheKey]]];
+    modelsURL = StringReplace[baseURL,
+      {"/api/v1/chat" -> "/api/v1/models", "/v1/chat/completions" -> "/api/v1/models"}];
+    If[!StringContainsQ[modelsURL, "/api/v1/models"],
+      modelsURL = StringTrim[baseURL, "/"] <> "/api/v1/models"];
+    apiKey = iResolveLMStudioAPIKey[
+      StringReplace[baseURL, {"/api/v1/chat" -> "", "/v1/chat/completions" -> ""}]];
+    resp = Quiet @ Check[
+      URLRead[HTTPRequest[modelsURL,
+        <|Method -> "GET", "Headers" -> {"Authorization" -> "Bearer " <> apiKey}|>],
+        TimeConstraint -> 15], $Failed];
+    If[Head[resp] =!= HTTPResponse || resp["StatusCode"] =!= 200,
+      Return[$iLMStudioModelCapabilitiesCache[cacheKey] = $Failed]];
+    body = resp["Body"];
+    json = Quiet @ Check[Developer`ReadRawJSONString[body], $Failed];
+    If[!AssociationQ[json], json = Quiet @ Check[ImportString[body, "RawJSON"], $Failed]];
+    If[!AssociationQ[json], Return[$iLMStudioModelCapabilitiesCache[cacheKey] = $Failed]];
+    models = Lookup[json, "models", {}];
+    If[!ListQ[models], Return[$iLMStudioModelCapabilitiesCache[cacheKey] = $Failed]];
+    entry = FirstCase[models,
+      e_ /; AssociationQ[e] && Lookup[e, "key", ""] === model :> e, None];
+    If[!AssociationQ[entry], Return[$iLMStudioModelCapabilitiesCache[cacheKey] = $Failed]];
+    caps = Lookup[entry, "capabilities", None];
+    $iLMStudioModelCapabilitiesCache[cacheKey] =
+      If[AssociationQ[caps] || ListQ[caps], caps, None]];
+iGetLMStudioModelCapabilities[___] := $Failed;
+
+(* True = vision 対応を申告 / False = 一覧にあるが vision 無し (非対応確定) / $Failed = 不明 *)
+iLMStudioModelVisionQ[model_String, baseURL_String] :=
+  Module[{caps = iGetLMStudioModelCapabilities[model, baseURL], v},
+    Which[
+      caps === $Failed, $Failed,
+      caps === None, False,
+      ListQ[caps], MemberQ[caps, "vision"],
+      AssociationQ[caps],
+        v = Lookup[caps, "vision", Missing["KeyAbsent"]];
+        Which[MissingQ[v], False, v === False || v === Null, False, True, True],
+      True, $Failed]];
+iLMStudioModelVisionQ[___] := $Failed;
+
+(* 画像 → OpenAI 互換 image_url ブロック (data URI)。幅 1568px を上限に縮小 (Anthropic 経路と同じ) *)
+iOpenAIImageBlockFromImage[img_?ImageQ] :=
+  Module[{im = img, w = ImageDimensions[img][[1]], b64},
+    If[w > 1568, im = ImageResize[img, {1568}]];
+    b64 = BaseEncode[ExportByteArray[im, "PNG"]];
+    <|"type" -> "image_url", "image_url" -> <|"url" -> "data:image/png;base64," <> b64|>|>];
+iOpenAIImageBlockFromFile[path_String] :=
+  Module[{mt = iMediaTypeForExt[FileExtension[path]], b64 = BaseEncode[ReadByteArray[path]]},
+    <|"type" -> "image_url", "image_url" -> <|"url" -> "data:" <> mt <> ";base64," <> b64|>|>];
+
+iClaudeQueryBgAPIMultimodalOpenAI[items_List, providerLower_String, modelSpec_, timeout_] :=
+  Module[{model, customURL, baseURL, url, apiKey, accessLevel, targetNb, nbAllowed,
+          visionQ, contentBlocks = {}, temperature, reasoning},
+    model = Which[
+      ListQ[modelSpec] && Length[modelSpec] >= 2 && StringQ[modelSpec[[2]]], modelSpec[[2]],
+      ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 2 && StringQ[$ClaudeModel[[2]]], $ClaudeModel[[2]],
+      True, ""];
+    If[model === "",
+      Return["Error: OpenAI 互換 multimodal: モデル名を解決できません (provider '" <> providerLower <> "')"]];
+    (* 課金 API (openai) はノートブックの許可を確認。ローカル provider は課金なしで素通し。
+       (Return は最内 Module からしか返らないので、ここでは入れ子 Module を使わない) *)
+    If[providerLower === "openai",
+      targetNb = Quiet[EvaluationNotebook[]];
+      If[Head[targetNb] =!= NotebookObject, targetNb = Quiet[InputNotebook[]]];
+      nbAllowed = TrueQ @ Quiet @ NBAccess`NBGetNotebookPaidAPIAllowed[targetNb];
+      If[!nbAllowed,
+        Return["Error: このノートブックでは課金 API 呼び出しが禁止されています。\n" <>
+          "要求されたモデル: {openai, " <> model <> "} (multimodal, Paid=True)。\n" <>
+          "パレットの「課金API」ボタンで「許可」に切り替えるか、" <>
+          "NBAccess`NBSetNotebookPaidAPIAllowed[nb, True] で許可してください。"]]];
+    (* 権限 (provider-level access check) *)
+    accessLevel = Quiet @ NBAccess`NBGetProviderMaxAccessLevel[providerLower];
+    If[!NumericQ[accessLevel], accessLevel = 0.5];
+    If[!TrueQ @ Quiet @ NBAccess`NBProviderCanAccess[providerLower, accessLevel],
+      Return["Error: プロバイダ '" <> providerLower <> "' は外部 API 呼び出し権限がありません。" <>
+        " Provider MaxAccessLevel = " <> ToString[accessLevel]]];
+    (* URL / API キー *)
+    customURL = If[ListQ[modelSpec] && Length[modelSpec] >= 3 && StringQ[modelSpec[[3]]] &&
+                   StringTrim[modelSpec[[3]]] =!= "", modelSpec[[3]], ""];
+    baseURL = Which[
+      customURL =!= "", customURL,
+      providerLower === "openai", "https://api.openai.com",
+      True, iLocalOAIDefaultBaseURL[providerLower]];
+    url = iEnsureChatCompletionsPath[baseURL];
+    apiKey = If[iLocalOAIProviderQ[providerLower],
+      iResolveLocalLLMAPIKey[providerLower, customURL],
+      Quiet[NBAccess`NBGetAPIKey["openai", PrivacySpec -> <|"AccessLevel" -> 1.0|>]]];
+    If[!StringQ[apiKey] || apiKey === "",
+      Return["Error: " <> providerLower <> " API キーを取得できませんでした。"]];
+    (* LM Studio: capabilities.vision を確認。非対応確定なら送らずに NoVision を返す *)
+    If[providerLower === "lmstudio",
+      visionQ = iLMStudioModelVisionQ[model, url];
+      If[visionQ === False,
+        Return["Error: NoVision: LM Studio モデル '" <> model <>
+          "' は capabilities に vision を申告していないため、画像は送りません。" <>
+          "テキストのみで問い合わせてください。"]]];
+    (* content ブロック配列 *)
+    Scan[Function[item, Which[
+      StringQ[item] && (!FileExistsQ[item] || !iIsMediaFile[item]),
+        AppendTo[contentBlocks, <|"type" -> "text", "text" -> item|>],
+      ImageQ[item],
+        AppendTo[contentBlocks, iOpenAIImageBlockFromImage[item]],
+      MatchQ[item, File[_String]] && FileExistsQ[item[[1]]] &&
+        iIsImageMediaType[iMediaTypeForExt[FileExtension[item[[1]]]]],
+        AppendTo[contentBlocks, iOpenAIImageBlockFromFile[item[[1]]]],
+      StringQ[item] && FileExistsQ[item] && iIsImageMediaType[iMediaTypeForExt[FileExtension[item]]],
+        AppendTo[contentBlocks, iOpenAIImageBlockFromFile[item]],
+      StringQ[item] || MatchQ[item, File[_String]],
+        (* PDF / 音声など画像以外のメディアは OpenAI 互換 chat では送れない: 注記だけ残す *)
+        AppendTo[contentBlocks, <|"type" -> "text",
+          "text" -> "[attached file not sent (unsupported media type for this provider): " <>
+            ToString[item /. File[p_String] :> p] <> "]"|>],
+      True,
+        AppendTo[contentBlocks, <|"type" -> "text", "text" -> ToString[item]|>]
+    ]], items];
+    temperature = If[iLocalOAIProviderQ[providerLower],
+      iResolveLMStudioTemperature[model, Automatic], Automatic];
+    reasoning = If[providerLower === "freetoken", iResolveFreeTokenReasoning[model], None];
+    Block[{$iClaudeCurrentAPIProvider = providerLower},
+      TimeConstrained[
+        iQueryOpenAIAPI[apiKey, model, contentBlocks, url, temperature, reasoning],
+        timeout,
+        "Error: タイムアウト (" <> ToString[Round[timeout]] <> "秒)"]]
+  ];
 (* Anthropic \:30ec\:30b9\:30dd\:30f3\:30b9 JSON \[RightArrow] \:30c6\:30ad\:30b9\:30c8\:6587\:5b57\:5217 *)
 
 (* ByteArray \:76f4\:63a5\:7248 (SKILL \:6e96\:62e0: ImportByteArray["RawJSON"] \:3067\:5909\:63db\:306a\:3057\:30d1\:30fc\:30b9) *)
@@ -16137,10 +16774,140 @@ Options[ClaudeQueryAsync] = {
   Timeout -> Automatic,
   Integrations -> Automatic,
   AutoCellize -> True,
-  "TaskClass" -> Automatic   (* hardening 04 Inc2b *)
+  "TaskClass" -> Automatic,   (* hardening 04 Inc2b *)
+  "ResponseFormat" -> Automatic,   (* 2026-09-02: 応答型契約 *)
+  "ResponseFormatRetry" -> 0       (* 内部用: 形式違反の再問合せ回数 *)
 };
 
+(* ============================================================
+   ResponseFormat 契約 (2026-09-02)
+   ClaudeEval は式を返す契約だが、それ以外の LLM 呼び出し (documentation の
+   展開/翻訳等) は「文字列なら何でも」受理していた。実機では予算切れの
+   ツールループが <tool_call> の生テキストを返し、そのまま段落として
+   セルに書かれた。呼び出し側が期待する型を "ResponseFormat" で申告し、
+   この層が (a) 形式指示の付加、(b) 応答の検証と正規化、(c) 違反時の
+   1 回再問合せ → それでも駄目なら型付き Failure、を行う。
+   形式: "PlainText" | "Markdown" | "Cells" | "Expression"。Automatic は無検証。
+   まずは非同期境界 (ClaudeQueryAsync) に置く。同期 ClaudeQuery は今後。
+   ============================================================ *)
+$iResponseFormats = {"PlainText", "Markdown", "Cells", "Expression"};
+iResponseFormatQ[f_] := StringQ[f] && MemberQ[$iResponseFormats, f];
+iResponseFormatMarker[fmt_String] := "[ResponseFormat: " <> fmt <> "]";
+
+ClaudeCode`ClaudeResponseFormatInstruction[fmt_String] :=
+  iResponseFormatMarker[fmt] <> " " <> Switch[fmt,
+    "PlainText",
+      "Output rules (mandatory): reply with plain prose text only. No markdown " <>
+      "(no headings, bullet markers, bold/italic markers, tables, or code fences), " <>
+      "no XML/HTML tags, no tool-call text, no preamble or commentary. The reply " <>
+      "must consist solely of the requested text.",
+    "Markdown",
+      "Output rules (mandatory): reply in Markdown only. No tool-call text, no " <>
+      "preamble or commentary outside the document.",
+    "Expression",
+      "Output rules (mandatory): reply with a single syntactically valid Wolfram " <>
+      "Language expression and nothing else. No prose, no tool-call text. A " <>
+      "```mathematica code fence around the expression is acceptable.",
+    "Cells",
+      "Output rules (mandatory): reply with Wolfram Language Cell[...] expressions " <>
+      "only (a list of cells or a single cell). No prose, no tool-call text.",
+    _, ""];
+ClaudeCode`ClaudeResponseFormatInstruction[___] := "";
+
+iResponseFormatStripFences[t_String] :=
+  StringTrim @ StringReplace[t, {
+    StartOfString ~~ "```" ~~ Except["\n"]... ~~ "\n" -> "",
+    "\n```" ~~ WhitespaceCharacter... ~~ EndOfString -> ""}];
+(* 軽い markdown 装飾は黙って剥がす (再問合せの往復を増やさない)。 *)
+iResponseFormatStripSoftMarkdown[t_String] :=
+  StringTrim @ StringReplace[t, {
+    StartOfLine ~~ ("#" ..) ~~ (" " | "\t") .. -> "",
+    "**" ~~ x : Shortest[Except["\n"] ..] ~~ "**" :> x,
+    "__" ~~ x : Shortest[Except["\n"] ..] ~~ "__" :> x}];
+
+ClaudeCode`ClaudeResponseFormatValidate[fmt_String, text_String] :=
+  Module[{t = StringTrim[text], reason = None, norm = StringTrim[text]},
+    Switch[fmt,
+      "PlainText",
+        Which[
+          t === "", reason = "empty response",
+          iToolLoopToolCallTextQ[t], reason = "tool-call text instead of an answer",
+          StringContainsQ[t, "```"], reason = "code fence in plain text"];
+        If[reason === None, norm = iResponseFormatStripSoftMarkdown[t]],
+      "Markdown",
+        Which[
+          t === "", reason = "empty response",
+          iToolLoopToolCallTextQ[t], reason = "tool-call text instead of an answer"],
+      "Expression",
+        norm = iResponseFormatStripFences[t];
+        Which[
+          norm === "", reason = "empty response",
+          iToolLoopToolCallTextQ[norm], reason = "tool-call text instead of an answer",
+          ! SyntaxQ[norm], reason = "not a syntactically valid expression"],
+      "Cells",
+        norm = iResponseFormatStripFences[t];
+        Which[
+          norm === "", reason = "empty response",
+          iToolLoopToolCallTextQ[norm], reason = "tool-call text instead of an answer",
+          ! SyntaxQ[norm], reason = "not a syntactically valid cell expression"],
+      _, Null];
+    <|"Valid" -> (reason === None), "Text" -> norm,
+      "Reason" -> If[reason === None, "", reason], "Format" -> fmt|>];
+ClaudeCode`ClaudeResponseFormatValidate[fmt_, _] :=
+  <|"Valid" -> False, "Text" -> "", "Reason" -> "non-string response",
+    "Format" -> ToString[fmt]|>;
+
+iResponseFormatFailure[fmt_String, reason_String, text_] :=
+  Failure["ResponseFormat", <|
+    "MessageTemplate" -> "LLM response violated the required format `1`: `2`",
+    "MessageParameters" -> {fmt, reason},
+    "Format" -> fmt, "Reason" -> reason,
+    "Text" -> If[StringQ[text], StringTake[text, UpTo[2000]], ToString[text]]|>];
+iResponseFormatViolationNote[fmt_String, reason_String] :=
+  "\n\n[System] Your previous reply violated the required output format (" <>
+  fmt <> ": " <> reason <> "). Reply again following the output rules exactly.\n" <>
+  "[システム] 直前の回答は要求された出力形式 (" <> fmt <> ": " <> reason <>
+  ") に違反しました。出力規則に厳密に従って書き直してください。";
+
+(* 判定核 (テスト可能): 応答を見て callback / retryFn のどちらかを呼ぶ。
+   "Error..." / "[ERROR]..." / Failure / 非文字列は契約の対象外でそのまま通す。 *)
+iResponseFormatHandle[fmt_, retryCount_Integer, resp_, retryFn_, callback_] :=
+  Module[{v},
+    If[! iResponseFormatQ[fmt] || ! StringQ[resp] ||
+       StringStartsQ[StringTrim[resp], "Error"] ||
+       StringStartsQ[StringTrim[resp], "[ERROR]"],
+      Return[callback[resp]]];
+    v = ClaudeCode`ClaudeResponseFormatValidate[fmt, resp];
+    Which[
+      TrueQ[v["Valid"]], callback[v["Text"]],
+      retryCount < 1,
+        Quiet @ iClaudeFreezeLog["response-format-retry", fmt <> " | " <> v["Reason"]];
+        retryFn[iResponseFormatViolationNote[fmt, v["Reason"]]],
+      True,
+        Quiet @ iClaudeFreezeLog["response-format-failed", fmt <> " | " <> v["Reason"]];
+        callback[iResponseFormatFailure[fmt, v["Reason"], resp]]]];
+
+(* 公開入口: 契約が無ければそのまま core へ。あれば指示を付け、callback を
+   検証層で包む。再問合せは同じ opts で自分を呼び直す (回数は opts で伝搬)。 *)
 ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPattern[]] :=
+  Module[{fmt = OptionValue["ResponseFormat"], retry, promptEff, cbEff},
+    retry = Replace[OptionValue["ResponseFormatRetry"], Except[_Integer] -> 0];
+    If[! iResponseFormatQ[fmt],
+      Return[iClaudeQueryAsyncCore[prompt, callback, nb, opts]]];
+    promptEff = If[StringContainsQ[prompt, iResponseFormatMarker[fmt]], prompt,
+      prompt <> "\n\n" <> ClaudeCode`ClaudeResponseFormatInstruction[fmt]];
+    cbEff = With[{f = fmt, r = retry, p = promptEff, cb = callback, nb2 = nb,
+                  o = FilterRules[{opts}, Except["ResponseFormatRetry"]]},
+      Function[resp,
+        iResponseFormatHandle[f, r, resp,
+          Function[note,
+            ClaudeQueryAsync[p <> note, cb, nb2,
+              "ResponseFormatRetry" -> r + 1, Sequence @@ o]],
+          cb]]];
+    iClaudeQueryAsyncCore[promptEff, cbEff, nb, opts]];
+
+iClaudeQueryAsyncCore[prompt_String, callback_, nb_NotebookObject,
+    opts:OptionsPattern[ClaudeQueryAsync]] :=
   Block[{$iLMStudioIntegrationsOverride =
       With[{ig = OptionValue[Integrations]},
         If[ListQ[ig] && Length[ig] > 0, ig, $iLMStudioIntegrationsOverride]]},
@@ -22970,7 +23737,35 @@ iDocGlobalInstructionPrompt[packageName_String] :=
   ];
 
 (* $packageDirectory \:5185\:306e\:5168\:30d1\:30c3\:30b1\:30fc\:30b8\:306e GitHub URL \:4e00\:89a7\:3092\:30d7\:30ed\:30f3\:30d7\:30c8\:7528\:306b\:69cb\:7bc9 *)
+(* 2026-09-06 (freeze fix 4b): GitHubPackageURLs は全パッケージ (127 本) の
+   owner 解決で RepoDB 未登録分ごとに GET /user を発行し 55 秒前後かかっていた
+   (headless 実測 55.99 s)。ドキュメント更新チェーンでは各 doc step の
+   プロンプト構築 (callback 内 = メインカーネル同期) で毎回呼ばれ、その間 FE への
+   応答が止まっていた (freeze log: recv-cb-start→end が 57 s × 7 回)。
+   結果は滅多に変わらないのでセッション内 TTL キャッシュにする。github.wl 側でも
+   GET /user をトークン別にキャッシュし初回も 1〜2 秒に収める。 *)
+ClaudeCode`$ClaudeGitHubLinksCacheSeconds::usage =
+  "$ClaudeGitHubLinksCacheSeconds はドキュメント生成プロンプトに添える GitHub リポジトリ URL 一覧 (GitHubPackageURLs) のセッション内キャッシュ保持秒数 (既定 1800)。0 で毎回再取得 (全パッケージの owner 解決で数十秒かかる)。";
+If[!NumericQ[ClaudeCode`$ClaudeGitHubLinksCacheSeconds],
+  ClaudeCode`$ClaudeGitHubLinksCacheSeconds = 1800];
+If[!AssociationQ[$iGitHubLinksCache], $iGitHubLinksCache = <||>];
+
 iBuildGitHubLinksContext[] :=
+  Module[{c = $iGitHubLinksCache, now = AbsoluteTime[], txt, t0},
+    If[AssociationQ[c] && StringQ[Lookup[c, "Text"]] && NumericQ[Lookup[c, "At"]] &&
+       now - c["At"] < ClaudeCode`$ClaudeGitHubLinksCacheSeconds,
+      Return[c["Text"], Module]];
+    t0 = AbsoluteTime[];
+    txt = Quiet @ Check[iBuildGitHubLinksContextUncached[], ""];
+    If[!StringQ[txt], txt = ""];
+    iClaudeFreezeLog["github-links-rebuild",
+      ToString[Round[AbsoluteTime[] - t0, 0.1]] <> "s len=" <> ToString[StringLength[txt]]];
+    (* 空 (トークン未設定/一時失敗) は 60 秒だけ保持して早期に再試行する *)
+    $iGitHubLinksCache = <|"Text" -> txt,
+      "At" -> If[txt === "", now - ClaudeCode`$ClaudeGitHubLinksCacheSeconds + 60, now]|>;
+    txt];
+
+iBuildGitHubLinksContextUncached[] :=
   Module[{urls, lines},
     urls = Quiet @ Check[GitHubREST`GitHubPackageURLs[], <||>];
     If[!AssociationQ[urls] || Length[urls] === 0, Return[""]];
@@ -24673,7 +25468,16 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     If[!iDocAuthPreflightOK[nb], Return[$Failed]];
     If[iDocExternalEligibleQ[{}] &&
        iDocExternalDispatch[packageName, nb, docsDir, autoInstruction, allDocs,
-         diffText, srcFile, "Update", designContext] =!= $Failed,
+         diffText, srcFile, "Update", designContext,
+         (* 席待ちタイムアウト時のカーネル内フォールバック (freeze fix 4c) *)
+         With[{sc = sourceCode, pn = packageName, nb2 = nb, dd = docsDir,
+               ai = autoInstruction, ad = allDocs, dt = diffText, sf = srcFile,
+               dc = designContext},
+           Function[Null,
+             If[Length[Select[ad, # =!= "README.md" &]] >= $iDocParallelThreshold,
+               iUpdateDocsParallel[sc, pn, nb2, dd, ai, ad, dt, sf, <||>, "Update", dc],
+               iUpdateDocNext[sc, pn, nb2, dd, ai, ad, 1, dt, sf, <||>, "Update", {}, dc]]]]
+       ] =!= $Failed,
       Return[]];
     (* README 以外が閾値以上なら LLM へ並列投入、未満は従来の逐次 *)
     If[Length[Select[allDocs, # =!= "README.md" &]] >= $iDocParallelThreshold,
@@ -24825,7 +25629,16 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       If[!iDocAuthPreflightOK[nb], Return[$Failed]];
       If[mf === {} && iDocExternalEligibleQ[mf] &&
          iDocExternalDispatch[packageName, nb, docsDir, enrichedInstruction,
-           targetDocs, diffText, srcFile, mode, designContext] =!= $Failed,
+           targetDocs, diffText, srcFile, mode, designContext,
+           (* 席待ちタイムアウト時のカーネル内フォールバック (freeze fix 4c) *)
+           With[{sc = sourceCode, pn = packageName, nb2 = nb, dd = docsDir,
+                 ei = enrichedInstruction, td = targetDocs, dt = diffText,
+                 sf = srcFile, md = mode, dc = designContext},
+             Function[Null,
+               If[Length[Select[td, # =!= "README.md" &]] >= $iDocParallelThreshold,
+                 iUpdateDocsParallel[sc, pn, nb2, dd, ei, td, dt, sf, <||>, md, dc],
+                 iUpdateDocNext[sc, pn, nb2, dd, ei, td, 1, dt, sf, <||>, md, {}, dc]]]]
+         ] =!= $Failed,
         Return[]];
       (* README 以外が閾値以上 かつ 画像添付なし なら並列投入、それ以外は逐次 (画像経路は逐次のみ) *)
       If[mf === {} && Length[Select[targetDocs, # =!= "README.md" &]] >= $iDocParallelThreshold,
@@ -25751,10 +26564,24 @@ iDocParallelFinalizeFailed[jobId_String] :=
    ════════════════════════════════════════════════════════ *)
 
 ClaudeCode`$ClaudeDocUpdateExternal::usage =
-  "$ClaudeDocUpdateExternal は ClaudeUpdateDocumentation を外部 wolframscript ワーカーで実行するトグル (既定 True)。False で従来のカーネル内非同期経路に戻す。外部実行は FE メインカーネルを塞がない。席枯渇・spawn 失敗・非 claude CLI モデル・画像添付時は自動的に従来経路へフォールバックする。";
+  "$ClaudeDocUpdateExternal は ClaudeUpdateDocumentation を外部 wolframscript ワーカーで実行するトグル (既定 True)。False で従来のカーネル内非同期経路に戻す。外部実行は FE メインカーネルを塞がない。ライセンス席枯渇時は $ClaudeDocExtSeatWaitSeconds の間 席が空くのを待ってから起動し (待機中も FE は塞がない)、待機上限超過・spawn 失敗・非 claude CLI モデル・画像添付時は従来経路へフォールバックする。";
 If[!ValueQ[ClaudeCode`$ClaudeDocUpdateExternal],
   ClaudeCode`$ClaudeDocUpdateExternal = True];
 If[!AssociationQ[$iClaudeDocExtJobs], $iClaudeDocExtJobs = <||>];
+
+(* 2026-09-06 (freeze fix 4c): 席枯渇時の「即カーネル内フォールバック」を廃し、
+   席待ちキューにする。2026-09-06 の実例: 3 ノートブックで
+   ClaudeUpdateDocumentation を並走 → 1 本目は外部プロセス、2〜3 本目は
+   ライセンス席 (controller 4 席、SourceVault サービス等で常時 3 席使用) が
+   無くカーネル内逐次経路に落ち、その doc step ごとの同期処理がメインカーネル
+   を塞いで FE がフリーズした。外部ワーカーは 10 分前後で終わり席を返すので、
+   待てば FE を塞がずに実行できる。0 で従来どおり即フォールバック。 *)
+ClaudeCode`$ClaudeDocExtSeatWaitSeconds::usage =
+  "$ClaudeDocExtSeatWaitSeconds は ClaudeUpdateDocumentation の外部プロセス起動時にライセンス席が空いていない場合、席が空くのを待つ最大秒数 (既定 1800)。待機中は共有 polling tick で 15 秒ごとに再試行し FE は塞がない。上限を超えると従来のカーネル内更新へフォールバックする。0 で待たずに即フォールバック。";
+If[!NumericQ[ClaudeCode`$ClaudeDocExtSeatWaitSeconds],
+  ClaudeCode`$ClaudeDocExtSeatWaitSeconds = 1800];
+If[!NumericQ[$iClaudeDocExtSeatRetrySeconds], $iClaudeDocExtSeatRetrySeconds = 15];
+If[!AssociationQ[$iClaudeDocExtPending], $iClaudeDocExtPending = <||>];
 
 iClaudeDocExtJobRoot[] :=
   Module[{root},
@@ -26095,16 +26922,20 @@ iDocWorkerRunCore[jobDir_String, job_Association] :=
    従来のカーネル内経路にフォールバックする。 *)
 iDocExternalDispatch[packageName_String, nb_, docsDir_String, instruction_String,
     targetDocs_List, diffText_String, srcFile_String, mode_String,
-    designContext_String] :=
-  Module[{jobId, jobDir, job, scriptPath, exe, seat, proc, state, running, claim, strm},
-    (* 二重起動防止 1: このカーネルが把握している進行中ジョブ *)
-    running = If[AssociationQ[$iClaudeDocExtJobs],
-      Select[$iClaudeDocExtJobs,
-        Lookup[#, "Package", ""] === packageName &&
-        !FileExistsQ[FileNameJoin[{Lookup[#, "JobDir", ""], "done.json"}]] &],
-      <||>];
+    designContext_String, fallbackFn_:None] :=
+  Module[{jobId, jobDir, job, scriptPath, exe, seat, state, running, claim, strm},
+    (* 二重起動防止 1: このカーネルが把握している進行中ジョブ (席待ち中を含む) *)
+    running = Join[
+      If[AssociationQ[$iClaudeDocExtJobs],
+        Select[$iClaudeDocExtJobs,
+          Lookup[#, "Package", ""] === packageName &&
+          !FileExistsQ[FileNameJoin[{Lookup[#, "JobDir", ""], "done.json"}]] &],
+        <||>],
+      If[AssociationQ[$iClaudeDocExtPending],
+        Select[$iClaudeDocExtPending, Lookup[#, "Package", ""] === packageName &],
+        <||>]];
     If[Length[running] > 0,
-      nbPrint[nb, "⚠️ " <> packageName <> " の外部ドキュメント更新が既に進行中です (" <>
+      nbPrint[nb, "⚠️ " <> packageName <> " の外部ドキュメント更新が既に進行中/席待ち中です (" <>
         First[Keys[running]] <> ")。完了をお待ちください。"];
       Return[First[Keys[running]], Module]];
     (* 二重起動防止 2: claim ファイル (FE 再起動後もワーカー生存を検知) *)
@@ -26169,9 +27000,26 @@ iDocExternalDispatch[packageName_String, nb_, docsDir_String, instruction_String
       "TTLSeconds" -> 7200, "JobId" -> jobId];
     If[FailureQ[seat],
       iClaudeFreezeLog["docext-seat-denied", jobId];
+      (* 2026-09-06 (freeze fix 4c): 席が空くのを待つ (FE を塞がない)。
+         0 指定時のみ従来どおり即カーネル内フォールバック。 *)
+      If[TrueQ[ClaudeCode`$ClaudeDocExtSeatWaitSeconds > 0],
+        Return[iDocExtEnqueueSeatWait[jobId, jobDir, nb, packageName, targetDocs,
+          exe, scriptPath, fallbackFn], Module]];
       nbPrint[nb, Style["⚠ ライセンス席が空いていないため外部プロセスを起動できません。従来のカーネル内更新で続行します。",
         FontColor -> RGBColor[0.8, 0.4, 0]]];
       Return[$Failed, Module]];
+    If[iDocExtSpawn[jobId, jobDir, nb, packageName, targetDocs, exe, scriptPath, seat] === $Failed,
+      nbPrint[nb, Style["⚠ 従来のカーネル内更新で続行します。",
+        FontColor -> RGBColor[0.8, 0.4, 0]]];
+      Return[$Failed, Module]];
+    jobId
+  ];
+
+(* ── 席確保済みジョブの spawn + 登録 (直接経路と席待ち経路の共通部) ──
+   成功時 jobId、失敗時 $Failed (席は返却済み)。 *)
+iDocExtSpawn[jobId_String, jobDir_String, nb_, packageName_String, targetDocs_List,
+    exe_, scriptPath_String, seat_] :=
+  Module[{proc},
     proc = iClaudeSupervisedStart[{exe, "-file", scriptPath}, "DocUpdate",
       "JobId" -> jobId,
       "DoneMarker" -> FileNameJoin[{jobDir, "done.json"}],
@@ -26183,7 +27031,7 @@ iDocExternalDispatch[packageName_String, nb_, docsDir_String, instruction_String
       iClaudeDiagEmit["SpawnFailed",
         <|"Purpose" -> "DocUpdate", "Exe" -> ToString[exe], "JobId" -> jobId|>,
         "error"];
-      nbPrint[nb, Style["⚠ 外部プロセス (wolframscript) の起動に失敗しました。従来のカーネル内更新で続行します。",
+      nbPrint[nb, Style["⚠ 外部プロセス (wolframscript) の起動に失敗しました。",
         FontColor -> RGBColor[0.8, 0.4, 0]]];
       Return[$Failed, Module]];
     $iClaudeDocExtJobs[jobId] = <|"JobDir" -> jobDir, "Nb" -> nb,
@@ -26203,6 +27051,93 @@ iDocExternalDispatch[packageName_String, nb_, docsDir_String, instruction_String
     iSafeSetWindowStatus[nb, "ドキュメント更新 (外部) 準備中... " <>
       ToString[Length[targetDocs]] <> " 件"];
     jobId
+  ];
+
+(* ── 席待ちキュー (freeze fix 4c) ──
+   job.json / run.wls は書き出し済み。席が空くまで共有 polling tick で
+   $iClaudeDocExtSeatRetrySeconds ごとに再試行し、確保できたら iDocExtSpawn。
+   $ClaudeDocExtSeatWaitSeconds を超えたら fallbackFn (カーネル内更新) があれば
+   それを実行、無ければ中断を報告する。待機中はメインカーネルを一切塞がない。 *)
+iDocExtEnqueueSeatWait[jobId_String, jobDir_String, nb_, packageName_String,
+    targetDocs_List, exe_, scriptPath_String, fallbackFn_] :=
+  Module[{now = AbsoluteTime[]},
+    $iClaudeDocExtPending[jobId] = <|"JobDir" -> jobDir, "Nb" -> nb,
+      "Package" -> packageName, "TargetDocs" -> targetDocs,
+      "Exe" -> exe, "ScriptPath" -> scriptPath,
+      "QueuedAt" -> now, "LastTry" -> now, "Fallback" -> fallbackFn|>;
+    $iDocUpdateActive[packageName] = now;
+    If[Length[DownValues[ClaudeRegisterPollingTick]] > 0,
+      Quiet @ Check[
+        ClaudeRegisterPollingTick["docext-seatwait",
+          Function[Null, iClaudeDocExtSeatWaitTick[]],
+          "Caller" -> "DocUpdate", "Phase" -> "external"], Null]];
+    nbPrint[nb, Style["⏳ ライセンス席が空いていないため外部プロセスの起動を待機します (最大 " <>
+      ToString[Round[ClaudeCode`$ClaudeDocExtSeatWaitSeconds/60]] <> " 分、" <>
+      ToString[Round[$iClaudeDocExtSeatRetrySeconds]] <> " 秒ごとに再試行、ジョブ: " <> jobId <>
+      ")。席が空き次第 FE を塞がずに開始します。待たずに従来のカーネル内更新へ切り替えるには " <>
+      "$ClaudeDocExtSeatWaitSeconds = 0 を設定して再実行してください。",
+      FontColor -> RGBColor[0.8, 0.4, 0]]];
+    iSafeSetWindowStatus[nb, "ドキュメント更新: ライセンス席待ち..."];
+    iClaudeFreezeLog["docext-seat-wait", jobId];
+    jobId
+  ];
+
+iClaudeDocExtSeatWaitTick[] :=
+  Quiet @ Check[
+    Module[{pend = $iClaudeDocExtPending, now = AbsoluteTime[]},
+      If[!AssociationQ[pend] || Length[pend] === 0,
+        If[Length[DownValues[ClaudeUnregisterPollingTick]] > 0,
+          Quiet @ ClaudeUnregisterPollingTick["docext-seatwait"]];
+        Return[Null, Module]];
+      KeyValueMap[Function[{jid, p}, iClaudeDocExtSeatWaitOne[jid, p, now]], pend]],
+    Null];
+
+iClaudeDocExtSeatWaitOne[jid_String, p_Association, now_?NumericQ] :=
+  Module[{nb = Lookup[p, "Nb", None], pkg = Lookup[p, "Package", ""],
+          waited = now - Lookup[p, "QueuedAt", now], seat, e, r},
+    If[now - Lookup[p, "LastTry", 0] < $iClaudeDocExtSeatRetrySeconds,
+      Return[Null, Module]];
+    e = $iClaudeDocExtPending[jid];
+    If[AssociationQ[e], e["LastTry"] = now; $iClaudeDocExtPending[jid] = e];
+    If[pkg =!= "", $iDocUpdateActive[pkg] = now];
+    seat = iClaudeSeatTryAcquire["DocUpdate", "Priority" -> 90,
+      "TTLSeconds" -> 7200, "JobId" -> jid];
+    Which[
+      !FailureQ[seat],
+        $iClaudeDocExtPending = KeyDrop[$iClaudeDocExtPending, jid];
+        iClaudeFreezeLog["docext-seat-wait-acquired",
+          jid <> " " <> ToString[Round[waited]] <> "s"];
+        nbPrint[nb, "ライセンス席を確保しました (" <> ToString[Round[waited]] <>
+          " 秒待ち)。外部プロセスを起動します。"];
+        r = iDocExtSpawn[jid, Lookup[p, "JobDir", ""], nb, pkg,
+          Replace[Lookup[p, "TargetDocs", {}], Except[_List] -> {}],
+          Lookup[p, "Exe", None], Lookup[p, "ScriptPath", ""], seat];
+        If[r === $Failed, iDocExtSeatWaitGiveUp[jid, p, "spawn-failed"]],
+      waited > ClaudeCode`$ClaudeDocExtSeatWaitSeconds,
+        $iClaudeDocExtPending = KeyDrop[$iClaudeDocExtPending, jid];
+        iDocExtSeatWaitGiveUp[jid, p, "timeout"],
+      True,
+        If[MatchQ[nb, _NotebookObject],
+          iSafeSetWindowStatus[nb, "ドキュメント更新: ライセンス席待ち " <>
+            ToString[Round[waited]] <> "s / " <>
+            ToString[Round[ClaudeCode`$ClaudeDocExtSeatWaitSeconds]] <> "s"]]]
+  ];
+
+iDocExtSeatWaitGiveUp[jid_String, p_Association, why_String] :=
+  Module[{nb = Lookup[p, "Nb", None], pkg = Lookup[p, "Package", ""],
+          fb = Lookup[p, "Fallback", None]},
+    iClaudeFreezeLog["docext-seat-wait-giveup", jid <> " " <> why];
+    If[pkg =!= "", $iDocUpdateActive = KeyDrop[$iDocUpdateActive, pkg]];
+    If[Head[fb] === Function,
+      nbPrint[nb, Style["⚠ ライセンス席の待機が" <>
+        If[why === "timeout", "上限に達しました", "外部プロセスの起動失敗で終わりました"] <>
+        "。従来のカーネル内更新で続行します (完了まで FE の応答が重くなることがあります)。",
+        FontColor -> RGBColor[0.8, 0.4, 0]]];
+      Quiet @ Check[fb[], Null],
+      nbPrint[nb, Style["⛔ ライセンス席が空かず外部ドキュメント更新を開始できませんでした (" <>
+        jid <> ")。他のカーネル/ジョブの終了後に再実行してください (SourceVaultSystemDoctor[] で確認可)。",
+        FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+      iSafeSetWindowStatus[nb, "⛔ ドキュメント更新: 席待ちタイムアウト"]]
   ];
 
 (* ── FE 側: 軽量 poll tick (status.json/done.json を読むだけ) ── *)
@@ -30830,6 +31765,34 @@ iPaletteNewNotebook[] := If[
     "SourceVault \:306e\:65b0\:898f\:30ce\:30fc\:30c8\:6a5f\:80fd\:304c\:5229\:7528\:3067\:304d\:307e\:305b\:3093 (SourceVault \:672a\:30ed\:30fc\:30c9)\:3002",
     "SourceVault new-notebook support is not available (SourceVault not loaded)."]]];
 
+(* ---- palette entry: insert a SourceVaultNewTodo[<|...|>] template cell ----
+   \:5f0f\:4e2d\:5fc3 UI: \:8a18\:5165\:6e08\:307f\:5f15\:6570\:30c6\:30f3\:30d7\:30ec\:30fc\:30c8 1 \:30bb\:30eb\:3092\:633f\:5165\:3057\:3066\:8a55\:4fa1\:3057\:3066\:3082\:3089\:3046
+   (SourceVault_todo \:672a\:30ed\:30fc\:30c9\:6642\:306f Names \:30ac\:30fc\:30c9\:3067\:843d\:3068\:3059 = rule 11)\:3002 *)
+iPaletteNewTodo[] := If[
+  Length[Names["SourceVault`SourceVaultNewTodoTemplate"]] > 0 &&
+    Length[DownValues[SourceVault`SourceVaultNewTodoTemplate]] > 0,
+  Quiet @ Check[
+    SourceVault`SourceVaultNewTodoTemplate[],
+    MessageDialog[iL["Todo \:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:3092\:633f\:5165\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002",
+      "Could not insert the todo template."]]],
+  MessageDialog[iL[
+    "SourceVault \:306e Todo \:6a5f\:80fd\:304c\:5229\:7528\:3067\:304d\:307e\:305b\:3093 (SourceVault_todo \:672a\:30ed\:30fc\:30c9)\:3002",
+    "SourceVault todo support is not available (SourceVault_todo not loaded)."]]];
+
+(* ---- palette entry: open the unified todo list ---- *)
+iShowTodoPanel[] := If[
+  Length[Names["SourceVault`SourceVaultTodosView"]] > 0 &&
+    Length[DownValues[SourceVault`SourceVaultTodosView]] > 0,
+  Quiet @ Check[
+    CreateDocument[
+      ExpressionCell[SourceVault`SourceVaultTodosView[], "Output"],
+      WindowTitle -> "SourceVault Todos"],
+    MessageDialog[iL["Todo \:4e00\:89a7\:3092\:958b\:3051\:307e\:305b\:3093\:3067\:3057\:305f\:3002",
+      "Could not open the todo panel."]]],
+  MessageDialog[iL[
+    "SourceVault \:306e Todo \:6a5f\:80fd\:304c\:5229\:7528\:3067\:304d\:307e\:305b\:3093 (SourceVault_todo \:672a\:30ed\:30fc\:30c9)\:3002",
+    "SourceVault todo support is not available (SourceVault_todo not loaded)."]]];
+
 (* ---- status display (FE-side; SourceVault version chain + background jobs) ---- *)
 iSpecStatusRow[proj_String] := Module[{sh, rh, lastV, jobs, pending},
   sh = With[{h = Quiet @ SourceVault`SourceVaultPointerHistory["orch/" <> proj <> "/spec"]},
@@ -31357,6 +32320,8 @@ ShowClaudePalette[] := (
   (* \:73fe\:5728\:306e\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:304b\:3089\:8a2d\:5b9a\:3092\:8aad\:307f\:8fbc\:307f *)
   Quiet[iLoadPaletteSettings[InputNotebook[]]];
   Quiet[iSyncCloudPaletteState[]];   (* Stage 9 P1 Step 2: \:30af\:30e9\:30a6\:30c9\:516c\:958b\:5ba3\:8a00\:3082\:540c\:671f *)
+  (* TurnWiki 定期維持トグルのミラーを正本 (settings.json) から復元 *)
+  $iPaletteTurnWikiAuto = TrueQ[Quiet @ Check[iPaletteTurnWikiAutoGet[], False]];
   $claudePalette = CreatePalette[
     DynamicModule[{lastNb = InputNotebook[], svcTick = 0},
     Dynamic[
@@ -31411,6 +32376,15 @@ ShowClaudePalette[] := (
         iClaudePaletteButton2["ChatCell",
           RGBColor[0.3, 0.43, 0.7],
           iInsertChatCell[]]],
+      (* Todo \:5c64 (SourceVault_todo, 2026-09-01): \:65b0\:898f Todo \:30c6\:30f3\:30d7\:30ec\:30fc\:30c8\:633f\:5165 +
+         \:7d71\:5408 Todo \:4e00\:89a7\:3002\:65b0\:898f\:30ce\:30fc\:30c8\:306e\:76f4\:4e0b (\:30e6\:30fc\:30b6\:30fc\:6307\:5b9a\:306e\:914d\:7f6e)\:3002 *)
+      iClaudePaletteButtonRow[
+        iClaudePaletteButton2[iL["\:65b0\:898fTodo", "New Todo"],
+          RGBColor[0.55, 0.35, 0.55],
+          iPaletteNewTodo[]],
+        iClaudePaletteButton2[iL["Todo\:4e00\:89a7", "Todos"],
+          RGBColor[0.45, 0.35, 0.6],
+          iShowTodoPanel[]]],
       iClaudePaletteButtonRow[
         iClaudePaletteButton2[iL["\[FilledRightTriangle] Eval", "\[FilledRightTriangle] Eval"],
           RGBColor[0.2, 0.55, 0.35],
@@ -31636,6 +32610,23 @@ ShowClaudePalette[] := (
           ($iPaletteFallback = !TrueQ[$iPaletteFallback];
            iSavePaletteSettings[InputNotebook[]]),
           Appearance -> "Frameless"], SynchronousUpdating -> False],
+      (* TurnWiki 定期維持トグル (2026-09-02)。ON = service heartbeat が
+         ClaudeTurnWikiMaintainTick[] (Collect+Maintain) を定期実行しパターン集を
+         育てる。手順書 (skill) の提案/昇格は含まない。正本は TurnWiki settings.json。 *)
+      Dynamic[
+        Button[
+          Style["Wiki: " <>
+            If[iPaletteTurnWikiAvailableQ[],
+              If[TrueQ[$iPaletteTurnWikiAuto],
+                iL["\:81ea\:52d5\:7dad\:6301", "Auto"],
+                iL["\:624b\:52d5", "Manual"]],
+              "n/a"],
+            9, Bold,
+            If[TrueQ[$iPaletteTurnWikiAuto],
+              RGBColor[0.1, 0.45, 0.3], GrayLevel[0.2]]],
+          Module[{v = !TrueQ[$iPaletteTurnWikiAuto]},
+            If[TrueQ[iPaletteTurnWikiAutoSet[v]], $iPaletteTurnWikiAuto = v]],
+          Appearance -> "Frameless"], SynchronousUpdating -> False],
       Dynamic[
         Button[
           Style["api.md: " <>
@@ -31804,7 +32795,7 @@ ShowClaudePalette[] := (
 
     }, Alignment -> Center, Spacings -> 0],
     TrackedSymbols :> {$iPaletteModel, $iPaletteEffort, $iPalettePrivateEffort,
-      $iPaletteFallback, $iPaletteUpdateApiMd},
+      $iPaletteFallback, $iPaletteUpdateApiMd, $iPaletteTurnWikiAuto},
     (* 2026-06-12 (freeze fix 3): パレットは常時表示のため、同期 Dynamic だと
        カーネルが長時間評価 (承認済み提案コードの同期実行等) で占有されている間、
        FE が再描画のたびに Dynamic 応答を待って UI スレッドごとブロックし

@@ -29,7 +29,7 @@ description: |
 - `SourceVaultBackfillSourceSummaries[opts]` (2026-08-29 追加) — **web / local ソース**用。arXiv のようなアブストラクト API が無いので、**ingest 済み snapshot の本文 (plaintext) を LLM で要約**して `meta["Summary"]` に書く。本体は `iSVSourceAttachSummary`。
   - Options: `"Kind" -> {"web","local"}` (既定。`All` で arxiv も)、`"Sources" -> All|{sourceId...}`、`"Force"`、`"Limit" -> 10`、`"Model" -> Automatic`、`"MaxChars" -> Automatic` (`$SourceVaultSourceSummaryMaxChars`=12000)、`"TimeoutSeconds" -> 120`
   - 戻り値: `<|"Candidates", "Updated", "AlreadyPresent", "NoText", "Quarantined", "Failed", "Remaining", "Language", "Results"|>`
-  - **モデルは行の PrivacyLevel で決まる** (`iCallSummaryLLM`: `PL > 0.5` → `$ClaudePrivateModel` = ローカル、以下 → クラウド CLI)。**PL 不明は fail-safe で 1.0 = ローカル**。
+  - **モデルは行の PrivacyLevel で決まる** (`iCallSummaryLLM`: `PL >= 0.5` → `$ClaudePrivateModel` = ローカル (不在時は fail-closed で `Failed["PrivateModelUnavailable"]`、クラウドへ落とさない)、`PL < 0.5` → クラウド CLI)。**PL 不明は fail-safe で 1.0 = ローカル**。境界 0.5 込みのルーティングは `test codes/SourceVault_summaryhub_routing_test.wls` が検証 (2026-09-01 に厳密不等号 `> 0.5` から是正)。
   - **本文は UNTRUSTED データ境界で包んでから渡す** (`SourceVaultWrapUntrustedText` へ弱結合、未ロード時は内蔵 preamble)。prescan が quarantined と判定したら **LLM へ渡さず** `Status -> "Quarantined"`。これは webingest `SourceVaultSummarizeText` の既定 `QuarantinePolicy -> "Block"` と同方針。
   - 本文抽出は `iExtractTextPages` (pdf/html/txt/md)。`TimeConstrained` で `"TimeoutSeconds"` を上限にし、超えたら `NoText` (巨大 PDF で止めない)。
   - 書き込むキー: `Summary` / `SummarySource`(`"DocumentText"`) / `SummaryLanguage` / `SummaryModel` / `SummaryInputChars` / `SummaryFetchedAt`。

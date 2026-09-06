@@ -30,7 +30,7 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 パッケージ管理機能 (`ClaudeUpdatePackage`, `ClaudeRestorePackage`) では、既存の .wl パッケージを Claude の支援で更新し、差分ベースの自動バックアップにより安全なイテレーションを実現します。バックアップシステムは `SequenceAlignment` ベースの差分保存を採用し、`.cz`（ベースライン）・`.cdiff`（差分）・`.unchanged`（参照）の3形式でストレージ消費を大幅に削減します。差分チェーンの中間ノードを削除する際も依存関係を自動解決し、復元不能になることを防止します。既存の生バックアップは `ClaudeMigrateBackupHistory` で差分形式に一括変換できます。コード生成・マージ後には検証テストが自動生成・実行され（`===BEGIN_TESTS===` ～ `===END_TESTS===` ブロック）、意図した変更が正しく反映されているか確認します。LLM レスポンスは「連続した行のかたまり（セグメント）」単位でマージされるため、マージ精度が大幅に向上しています。`パッケージ名\`関数名` / `パッケージ名\`Private\`内部関数名` のような完全修飾定義も正しく認識されます。
 
-パッケージキーワード自動注入システムにより、各外部パッケージが `$ClaudePackageKeywordMap` を通じて独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。これにより claudecode.wl はパッケージ非依存を保ちつつ、必要な API ドキュメントを自動的に提供できます。さらに `$ClaudePackageAuxKeywordMap` により、パッケージ本体とは別に提供される補助 API ドキュメント（`api_<aux>.md` 形式）ごとに注入条件となるキーワードを個別指定することも可能です。複数パッケージのキーワードが同一タスクに同時一致した場合は、各パッケージの api.md がタスク文中でそのパッケージ名・キーワードが最初に言及された位置（mention 順）でコンテキストに注入され、その際キーワード一致した補助ドキュメントが対応する本体 api.md より先に優先注入されます（この順序制御は自動で、追加設定は不要です）。
+パッケージキーワード自動注入システムにより、各外部パッケージが `$ClaudePackageKeywordMap` を通じて独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。これにより claudecode.wl はパッケージ非依存を保ちつつ、必要な API ドキュメントを自動的に提供できます。さらに `$ClaudePackageAuxKeywordMap` により、パッケージ本体とは別に提供される補助 API ドキュメント（`api_<aux>.md` 形式。例えば claudecode_directives の `api_directives.md`）ごとに注入条件となるキーワードを個別指定することも可能です。複数パッケージのキーワードが同一タスクに同時一致した場合は、各パッケージの api.md がタスク文中でそのパッケージ名・キーワードが最初に言及された位置（mention 順）でコンテキストに注入され、その際キーワード一致した補助ドキュメントが対応する本体 api.md より先に優先注入されます（この順序制御は自動で、追加設定は不要です）。
 
 ドキュメント生成機能 (`ClaudeCreateDocumentation`, `ClaudeUpdateDocumentation`) では、ソースコードから API リファレンス・使用例・セットアップガイドなどの文書一式を自動生成します。ドキュメント更新時はノートブックの現在のコンテキストも参照でき、「上で議論された内容を反映して」といった自然な指示が可能です。`TargetFiles` オプションでは `api`・`setup`・`user_manual`・`example`・`README` の5種類の .md ファイルのみが許可リストとして設定されており、拡張子 `.md` は省略可能（自動補完）です。`Baseline` オプションにより差分検出の基準を選択でき、`"LastDocUpdate"`（直近のドキュメント更新バックアップ）と `"Github"`（GitHub コミット版）のいずれかを指定できます。`"Github"` を指定すると、コミット版以降のソースコード変更に加えて `_info/design` 配下の新規設計ドキュメントも加味した更新が行われます。ドキュメント更新チェーンの多重起動防止ガードにより、同一パッケージに対して複数の更新チェーンが同時起動することを防ぎます。チェーンが異常終了した場合も `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放されます。更新失敗は「システム的失敗（fail-fast でチェーンを即中断）」と「品質ゲート失敗（切り詰め・サイズ退行・タイトル不整合。当該ファイルのみスキップして次へ進む）」に明確に分類されるため、1 ファイルの持続的な品質失敗が残り全ファイルの更新を巻き添えにすることがなくなりました。品質ゲート失敗時はまず 1 回だけ自動リトライが行われ（単一応答での出力・ツール不使用・コードフェンスの正しい閉じを明示する RETRY NOTICE をプロンプトに追加注入）、それでも同じ理由で失敗した場合にのみ当該ファイルをスキップします。品質ゲート失敗時のリトライ・スキップ経路においても、共有ポーリングタスクの再発火や派生クエリの二重起動によってドキュメント更新チェーンが分岐（fork）してしまう不具合を防ぐため、各ステップに一意のシリアルトークンを発行し最初のコールバックのみを有効化する二重発火ガードが導入されています。既存ファイルへの上書き時には、新しい内容が既存内容の 40% 未満に縮小した場合は書き込み自体を拒否するサイズ退行ガードも機能します。また `docs/` 配下に同期事故等で生じた `docs/docs/` ネスト重複ドキュメントを自動検出し、更新対象から除外した上で削除を推奨する警告を表示します。さらに `docs/examples/` 配下の使用例ドキュメント（`*.md`）は、既定（Automatic）モードでの自動更新対象から除外されます。使用例ドキュメントの多くは手作業で作成された内容であり、毎回自動再生成すると数が多い場合に更新が終わらなくなるための設計で、更新する場合は `TargetFiles` オプションで明示的に指定する必要があります。`Disclaimer`・`License`・`Acknowledgments` 等のオプションで免責事項・ライセンス情報・謝辞を指定でき、`References` オプションで参考文献リストを、`Demos` オプションでデモ動画や使用例のリンクを README に追加できます。これらは `doc_options.json` に永続化されて以降の更新でも保持され、README 本文の書き込み後にこれらの法的節がコード側で決定的（verbatim）に追記されるため、LLM 出力の切り詰めの影響を受けません。補助 API ドキュメント（`api_<aux>.md`）の再生成要否判定は、更新日時（mtime）比較からコンテンツハッシュ比較へ段階的に移行しており、Dropbox 同期や複数 PC 環境による mtime のずれだけでは不要な再生成が発生しないようになっています。ドキュメント生成にはトークン節約のためソースコードのチャンク化が行われ、ドキュメント種別ごとに関連セクションのみを選択的に送信します。ドキュメント生成専用モデル (`$ClaudeDocModel`) を指定でき、Sonnet クラスの安価なモデルでコスト効率よく生成できます。リミット到達時は自動停止し、再実行で未生成分のみ続行します。20 ファイル以上の一括更新時は、README を除くドキュメントを LLM へ並列投入し、ウィンドウステータスバーにリアルタイム進捗（完了数・並列実行数・経過時間）を表示します。API エラー等で中断した場合も、サイクル再開（resumption）機能により同一サイクル内の更新済みファイルをスキップして効率的に継続できます。条件を満たす場合はドキュメント更新パイプライン全体を外部 wolframscript ワーカープロセスへ退避して実行する仕組み（`$ClaudeDocUpdateExternal`、既定 `True`）も備えており、複数のドキュメント更新を並走させた際のメインカーネル飽和によるフリーズを防止します（ライセンス席の枯渇・画像添付タスク・非 claude CLI モデル使用時は自動的に従来のカーネル内非同期経路にフォールバックします）。ディレクティブファイルの書き込みには、サイズ退行・タイトル整合性・スキル名保持を検証するガード機構 (`iSafeWriteDirective`) が組み込まれています。
 
@@ -74,11 +74,11 @@ AI 生成機能として、OpenAI Images API による画像生成（`ClaudeImag
 
 | 項目 | バージョン |
 |------|-----------|
-| Mathematica | 13.0 以上（14.x 推奨） |
-| Node.js | 18 以上 |
+| Wolfram Language | 12.0 以上（Mathematica または Wolfram Engine、14.x 推奨） |
+| Node.js | 16 以上 |
 | Claude Code CLI | 最新版 |
 | ChatGPT Codex CLI | 最新版（オプション・`chatgptcodex` provider 利用時） |
-| OS | Windows 11（macOS/Linux ではパス区切りやシェルコマンドを適宜読み替えてください） |
+| OS | Windows 10/11（現在 Windows 専用実装。macOS/Linux ではパス区切りやシェルコマンドを適宜読み替えてください） |
 
 ### インストール
 
@@ -125,7 +125,7 @@ codex login
 | `claudecode.wl` | 本体 |
 | `NBAccess.wl` | ノートブック読み書き・プライバシー管理（[GitHub](https://github.com/transreal/NBAccess)） |
 | `github.wl` | GitHub REST API 連携（[GitHub](https://github.com/transreal/github)） |
-| `cuda.wl` | CUDA 拡張（オプション・[GitHub](https://github.com/transreal/cuda)）。CUDA 関連プロンプト時に自動ロード |
+| `cuda.wl` | CUDA 拡張(オプション・[GitHub](https://github.com/transreal/cuda))。CUDA 関連プロンプト時に自動ロード |
 | `claudecode_directives.wl` | rules/skills ディレクティブ管理・投影レイヤー（オプション・[GitHub](https://github.com/transreal/claudecode_directives)）。ロードすると `rules/` および `skills/` のデフォルトセットが自動インストールされ、Claude Code CLI のコンテキストに rules/ の制約と skills/ の手順が自動注入される。モデル能力・ロール（Plan/Draft/Verify/Commit/Explore/Reduce）に応じた投影モード選択と Claude CLI / Codex CLI 双方のハーネス生成を担う |
 | `ClaudeRuntime` | 永続ランタイム機能（オプション・[GitHub](https://github.com/transreal/ClaudeRuntime)）。`$UseClaudeRuntime = True` 時に有効化 |
 | `ClaudeOrchestrator` | 複数 Claude セッションのオーケストレーション（オプション・[GitHub](https://github.com/transreal/ClaudeOrchestrator)）。ロードすると ClaudeEval が非同期実行モードに切り替わり、呼び出しはジョブキューに追加されて即座に返りカーネルをブロックしない。レート制限の自動検出・復旧・リトライスケジューリングを担う上位レイヤーとして機能する |
@@ -772,6 +772,7 @@ ClaudeUpdateDocumentation["claudecode", "最新版に追従して",
 | ファイル | 内容 |
 |---------|------|
 | `api.md` | API リファレンス（全関数・変数・オプションの詳細仕様） |
+| `api_directives.md` | claudecode_directives 補助 API リファレンス（ディレクティブリポジトリ読込・モデル能力管理・Bundle/Projection・Inventory/Manifest/Hash） |
 | `setup.md` | セットアップガイド（インストール手順・トラブルシューティング） |
 | `user_manual.md` | ユーザーマニュアル（機能別の詳細な使い方） |
 | `example.md` | 使用例集（代表的なユースケースとコード例） |

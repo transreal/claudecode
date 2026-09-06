@@ -570,6 +570,8 @@ $ClaudeAdvisaryModel = {"chatgptcodex", "gpt-5.6-sol"}
 
 `$ClaudeAdvisaryModel` を明示的に設定しない場合、ワークフロー実行時に `{"chatgptcodex", "Automatic"}` が自動的に使用されます。なお、ベア文字列 `"chatgptcodex"` も後方互換のため引き続き受け付けます。
 
+注意：`$ClaudeAdvisaryModel` への単純な代入はカーネルセッション限りで、次回のカーネル起動時にはデフォルトへ戻り、仕様ワークフローは静かに Codex を再び使用します。恒久的に設定を固定したい場合は、ディスクに永続化されロード毎に再適用される SourceVault のインテントマップを使用してください：`SourceVaultSetModelIntent["$ClaudeAdvisaryModel", {"claudecode", "code-heavy"}]`（インテント指定）または `{"claudecode", "claude-opus-5"}`（固定モデル ID 指定）。セッション内の手動代入はこのレイヤーによって上書きされません。
+
 #### ウルトラモデルクラスの設定（仕様実装ワークフロー用）
 
 `$ClaudeUltraEnabled` は、仕様生成・仕様実装ワークフローにおいて実装担当役を SourceVault モデルレジストリのウルトラモデルクラス（intent `"code-ultra"` / `"ultra"`、例: `claude-fable-5`）にアップグレードするかどうかを制御します（既定 `False`。2026-08-03 のオーナー方針変更により、暗黙のアップグレードで共有 fable セッション利用枠を消費してしまう事故を防ぐため、既定は明示的な `$ClaudeModel` / `$ClaudeAdvisaryModel` 尊重に切り替わりました）。アドバイザリー役（`$ClaudeAdvisaryModel`）は影響を受けません。

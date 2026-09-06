@@ -20,7 +20,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **自動実行安全ガード**: `ClaudeEval` の `AutoEvaluate -> True` で生成コードを自動実行する際、`NBAutoEvalProhibitedPatterns` に定義された禁止パターンに該当するコードの自動実行をブロックします。これにより、ファイル削除や危険なシステム操作などを含むコードが意図せず実行されることを防止します。
 - **共有ポーリングタスク**: 複数の非同期ジョブが実行中の場合、すべてのジョブが単一の共有ポーリングタスクを利用します。旧実装のようにジョブごとに個別の `ScheduledTask` を作成しないため、多数のジョブを並列実行した際のオーバーヘッドが大幅に削減されます。`iEnsureSharedPollingTask` により共有タスクのライフサイクルが管理され、パッケージリロード時には旧タスクが自動的に停止されます。フリーズ(数十秒単位でメインカーネルをブロックする不具合)を根絶するため、FE 応答性プローブと handler 個別タイムアウトの二段構えの防御も導入されています(詳細は「高度な非同期処理システム」を参照)。
 - **非同期スケジューリング規約の自動注入**: `ClaudeUpdatePackage` のプロンプトに、非同期タスクのスケジューリング規約(claudecode/NBAccess 公開 API の使用義務・例外条件・根拠)を自動注入します。LLM が生成するパッケージコードが正しい非同期パターンに従うよう誘導します。
-- **Windows エンコーディング安全な API 通信(マルチモーダル対応)**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス(`Fallback -> True`)では Anthropic API のマルチモーダル `content` 配列を構築して送信します。LM Studio プロバイダに対してもマルチモーダル入力が可能になり(2026-07-29)、OpenAI 互換の chat/completions エンドポイント経由で画像を含むクエリを送信します。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換(ShiftJIS 等)による日本語文字化けが発生しません。2026-08-04 の改訂では、OpenAI 互換 chat/completions API(openai / zai / kimi プロバイダ)のリクエスト本文生成にも同様の対策が適用され、文字列連結による手組み JSON ではなく Association から `ExportByteArray["RawJSON"]` で直接 UTF-8 ByteArray を生成する方式に統一されました(詳細は「OpenAI 互換 API 通信の Windows エンコーディング対応」を参照)。
+- **Windows エンコーディング安全な API 通信(マルチモーダル対応)**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス(`Fallback -> True`)では Anthropic API のマルチモーダル `content` 配列を構築して送信します。LM Studio プロバイダに対してもマルチモーダル入力が可能になり(2026-07-29)、OpenAI 互換の chat/completions エンドポイント経由で画像を含むクエリを送信します。さらに 2026-09-05 の改訂では、この OpenAI 互換マルチモーダル送信経路が LM Studio 専用の実装から一般化され、OpenAI 互換 chat/completions API を使うプロバイダ(LM Studio・llama.cpp・freetoken・openai)すべてで `image_url` 形式の content ブロック配列による画像送信に対応しました。内部的にはプロンプトを従来どおりの文字列として渡すことも、OpenAI 互換の content ブロック配列(vision 入力用)として渡すことも可能になっています。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換(ShiftJIS 等)による日本語文字化けが発生しません。2026-08-04 の改訂では、OpenAI 互換 chat/completions API(openai / zai / kimi プロバイダ)のリクエスト本文生成にも同様の対策が適用され、文字列連結による手組み JSON ではなく Association から `ExportByteArray["RawJSON"]` で直接 UTF-8 ByteArray を生成する方式に統一されました(詳細は「OpenAI 互換 API 通信の Windows エンコーディング対応」を参照)。
 - **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすると、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、危険な操作に対して承認フロー(`NeedsApproval`)を提供します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、`ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode 単独ロード時はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。
 - **ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすると、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。rate-limit 検出・自動待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断します。
 - **SourceVault 連携(PromptRouter ブリッジ)**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`(`HoldComplete`)の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず(rule 11)、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター(spec 5.3 / 24.3)にフォールバックします。SourceVault をロードすると、仕様書の審査・実装ワークフロー化 API(`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`・`ClaudeImplStatus`・`ClaudeImplMonitor`)も利用可能になります。`CreateImplementationWorkflow` が完了すると、生成されたワークフローの起動関数がスラッグ・表示名をキーワードとして PromptRouter に自動登録されるため、以降は `ClaudeEval` でスラッグ名を呼び出すだけでワークフローを起動できます。`CreateImplementationWorkflow` の実装者ロールは、`$ClaudeUltraEnabled`(デフォルト `False`)を `True` に設定した場合に限り ultra モデルクラス(`ClaudeUltraModelSpec` で解決; CLI 優先・paid-API ゲート付き)を優先し、利用できない場合は `$ClaudeModel` にフォールバックします。既定(`$ClaudeUltraEnabled = False`)では `$ClaudeModel` / `$ClaudeAdvisaryModel` の指定がそのまま尊重され、ultra への暗黙アップグレードは行われません(2026-08-03: 暗黙アップグレードが共有 fable セッション使用枠を消費してしまう事故が発生したための方針変更)。検証者ロールには `$ClaudeAdvisaryModel` が使われます。承認にはパッケージのテストが新規カーネルで合格すること(proven-code ゲート)も条件となります(サマリーキー: `TestGate` / `Proven`)。`MaxRounds` オプションは既定で 3 に設定されています。実装(implement)と検証(verify)を 1 ラウンドとすると実測で概ね 13〜15 分を要するため、既定値 3 で妥当な運用時間に収まるよう調整されています。また実行全体には約 90 分の全体デッドラインが設けられており、超過した場合は残りのラウンドを打ち切って失敗として扱います。また、claudecode/anthropic プロバイダのパレット既定モデル(いわゆる「ヒープモデル」)や lmstudio プロバイダのモデル候補一覧も、SourceVault のモデルレジストリからの動的解決を優先します(詳細は「操作パレット」を参照)。
@@ -525,6 +525,17 @@ LM Studio は `/api/v1/chat` エンドポイント経由でサーバー側が MC
 - 内部実装は `URLSubmit` ベースの非同期往復(応答をハンドラで受け取り、ツールを実行して次の往復を自動送信する)で、カーネルをブロックしません。カーネルをブロックする同期的な実装(`RunProcess` 相当)も内部に残されており状況に応じて使い分けられますが、いずれも上記 2 つの公開変数で制御されるため、ユーザーから見た挙動・設定方法は共通です。
 - **ツール結果の切り詰め**: 1 回のツール呼び出しの戻り値は既定で 8000 文字を超えると切り詰められます。SourceVault のようなツールはカタログや検索結果を丸ごと返すことがあり、切り詰めずに履歴へ積み続けると 128k トークンの文脈を圧迫したうえ、モデルの出力が壊れて(未収束のツール呼び出し表現が繰り返される等)応答が収束しなくなる不具合が実際に確認されたための対策です。切り詰めが発生した場合は「切り詰めた事実」がモデルにも明示され、必要であればより絞り込んだクエリで再度ツールを呼び出すよう促されます。
 
+**終端往復の契約(2026-09-02 強化)**
+
+上記ツールループが往復上限に達した場合や、モデルが有用な情報を得られないまま同じ検索を繰り返す場合に、無限に近い往復を消費してしまう不具合(実測: 0 件検索を 5 回繰り返して 8 往復すべてを使い切り、最後に `<tool_call>` の生テキストがそのまま「本文」として応答に採用されてしまう事故)への対策として、以下の終端契約が追加されました。
+
+- **重複呼び出しの検出**: 直前までに実行済みのツール呼び出しと同一の呼び出し(同じツール名・同じ引数)を再度要求した場合、実行はせずに「重複呼び出しである」旨をツール結果として返し、同じ検索の連打による往復の浪費を防ぎます。
+- **無益な結果の連続による早期終端**: ツール結果が ERROR・0 件・空のいずれかである状態が既定回数連続すると、残りの往復予算を使い切るのを待たずに、往復上限時と同じ終端往復(ツール定義を外し、必ず本文で回答させる)へ早期に切り替えます。
+- **本文としてのツール呼び出しテキストの拒否**: モデルの最終応答が `<tool_call>...` のような「テキストとして書かれたツール呼び出し」であった場合、これは正規の回答として受理されません。「直前の出力はツール呼び出しのテキストであり回答ではない」ことを明示した上で 1 回だけ再問い合わせを行い(ツールは使用不可・最終回答のみを書くよう指示)、それでも同じ違反が続く場合は型付きの `Failure` を返します(壊れた生テキストがそのままユーザーへの回答として採用されることを防ぎます)。
+- **LM Studio の plugin 拒否(HTTP 400)への対応**: LM Studio が API 経由の plugin(MCP integrations)利用を拒否する決定的な 400 エラーを返した場合、1 回だけ integrations/tools を外して即座に再送信します。再送信後も同じ拒否が再発した場合は、この種の 400 は決定的でありバックオフしても解決しないため、バックオフを挟まず次のフォールバック候補へ進みます。
+
+これらはいずれもクライアント側ツールループ(`$ClaudeLocalToolLoop`)の内部的な信頼性強化であり、新しい公開 API の追加はありません。
+
 **サブネット信用トグル**
 
 パレットには `Subnet: 信用する` / `Subnet: Untrusted` と表示されるトグルボタンがあり、既定は「信用しない」です。ローカル LLM プロバイダ(lmstudio・freetoken・llamacpp)は、ノートブックが起動時と異なるサブネットに接続していると判定された場合、たとえ実際には同一サブネット上のサーバーに到達できていてもプライバシーレベルが 0.25 に強制されます。このトグルを明示的に「信用する」に切り替えることで、その場限り制限を緩和できます。
@@ -809,6 +820,7 @@ ClaudeCode`$ClaudeDocUpdateExternal = False
 - 進捗マーカー(`.docupdate_progress.json`)とサイクルキーはメインカーネル経路と共有されるため、ワーカーが中断した場合の再実行でも、通常の「サイクル再開(resumption)」機能がそのまま働き、同一サイクル内の更新済みファイルはスキップされます。
 - ハートビート付きの claim ファイル(`.docupdate_worker.json`)により、FrontEnd 再起動後に外部ワーカーが生存しているかどうかを検知し、二重ワーカー起動を防止します(claim が一定時間更新されない場合は stale とみなして自動失効)。加えて、メインカーネル自身が把握している進行中ジョブによる二重起動防止も併用され、二重の安全策になっています。
 - パイプライン全体には超過時に残りのファイルを失敗として扱い抜ける全体デッドラインが設定されており、ワーカーが応答を返さないまま無期限に居座ることを防ぎます。ワーカーが完了マーカーを残さず終了した場合(Claude Code CLI のライセンス席枯渇などが疑われるケース)も、メインカーネル側は自動的に失敗として扱い次に進みます。
+- 2026-09-06(freeze fix 4c)の改訂により、外部ワーカー起動前の席(seat)確認で空きがない場合、従来は即座にカーネル内フォールバックしていましたが、現在は FrontEnd をブロックしない待機ループで席が空くのを待ってから外部プロセスを起動するようになりました(詳細は「高度な非同期処理システム」の「共有ポーリングタスクの生存判定改善と seat 待機」を参照)。子プロセスの spawn 自体に失敗した場合(OS リソース不足など)は、従来どおりカーネル内フォールバックします。
 
 #### 自動フォールバック
 
@@ -820,7 +832,9 @@ ClaudeCode`$ClaudeDocUpdateExternal = False
 | 画像添付あり | マルチモーダル入力は外部ワーカーでは扱えないため従来経路を使用 |
 | ドキュメント生成モデルが Claude Code CLI 以外 | `$ClaudeDocModel` / `Model` オプションの解決結果が `{"claudecode", ...}` 以外の provider の場合 |
 | `$packageDirectory` に `claudecode.wl` / `NBAccess.wl` が見つからない | ヘッドレスロードに必要な基盤パッケージが揃っていない環境 |
-| 実行席(seat)の枯渇・子プロセス spawn 失敗 | ライセンス席や OS リソースが確保できない場合 |
+| 子プロセス spawn 失敗 | OS リソース不足等で子プロセス自体の起動に失敗した場合 |
+
+実行席(seat)の枯渇そのものは、2026-09-06(freeze fix 4c)以降はこの表の対象外です。前述のとおり即座のカーネル内フォールバックではなく、席が空くまで非ブロッキングで待機してから外部プロセスを起動する挙動に変更されています。
 
 いずれの場合も、ユーザーが意識することなく品質ゲート・進捗表示・サイクル再開などの挙動は従来どおり保たれます。
 
@@ -1009,7 +1023,7 @@ ClaudeCode は書き込みキュー方式を採用し、各セル書き込みを
 
 複数のジョブが同時実行中の場合、すべてのジョブが **共有ポーリングタスク** を利用します。旧実装ではジョブごとに個別の `ScheduledTask` を作成していましたが、現在は `iEnsureSharedPollingTask` によって管理される単一の共有タスクがすべてのジョブのキューを一括処理します。これにより、多数の並列ジョブ実行時のスケジューラーへの負荷を大幅に削減しています。パッケージリロード時には旧タスクが自動的に停止されます。
 
-#### フリーズ対策(2026-07-08〜09、2026-07-29 強化、2026-08-04 追加対策)
+#### フリーズ対策(2026-07-08〜09、2026-07-29 強化、2026-08-04 追加対策、2026-09-02〜09-06 追加対策)
 
 数十秒単位でメインカーネルをブロックしてしまうフリーズループの再発防止として、以下の二段構えの防御が組み込まれています。
 
@@ -1025,6 +1039,15 @@ tasklist /FI "IMAGENAME eq WolframKernel.exe"
 ```
 
 一覧取得を明示的に再度有効化したい場合は内部フラグを `True` に設定できますが、上記のブロッキングリスクがあるため、通常は端末での確認を推奨します。この変更は内部的な信頼性強化であり、新しい公開 API の追加はありません。
+
+**共有ポーリングタスクの生存判定改善と seat 待機(2026-09-02〜2026-09-06)**
+
+複数の `ClaudeUpdateDocumentation` 等を同時に実行する運用が増えるにつれ、以下の追加フリーズ要因が実測で確認され、順次対策されました。
+
+- **生存判定から `ScheduledTasks[]` 照会を撤去(2026-09-06、freeze fix 4)**: 共有ポーリングタスクや外部ドキュメント更新ジョブの「生存しているか」の判定に `ScheduledTasks[]` を都度照会する実装が残っていましたが、共有カーネル環境ではこの照会がクラウド照会(実測 ~0.9 秒)としてブロックすることがあり、複数ノートブックで同時に `ClaudeUpdateDocumentation` を実行した際(2026-09-06 の実例では 3 ノートブックで発生)、席待ちキューが積み上がりメインカーネルが長時間ブロックされる不具合につながっていました。この対策として、生存判定はもっぱら claudecode 自身が保持する**追跡リスト**(実行中ジョブの内部台帳。追跡中 = 生存扱い)を正本とする方式に統一され、`ScheduledTasks[]` への問い合わせを伴わなくなりました。追跡リストに載っていない孤児タスクも、次回発火時に新しい(リロード後の)定義を呼び出すため自動的に消滅します。
+- **席(seat)枯渇時の待機化(2026-09-06、freeze fix 4c)**: ドキュメント更新の外部プロセス実行(前述「ドキュメント更新の外部プロセス実行」)で Claude Code CLI の実行席が確保できない場合、従来は即座に(品質の劣る)カーネル内フォールバック経路に切り替えていましたが、これを廃止し、席が空くのを FrontEnd をブロックしない待機ループで待ってから外部プロセスを起動するように変更されました。子プロセスの spawn 自体が失敗した場合(OS リソース不足など)は、引き続きカーネル内フォールバックします。
+
+いずれも内部的な信頼性強化であり、新しい公開 API の追加はありません。
 
 なお、フォールバックモデルへの切替(多段フォールバック)についても、429(レート制限)やサーバー過負荷エラーが短時間に連続した際にモデル切替そのものが負荷を増大させないよう、次候補の起動を指数バックオフ(1秒→2秒→4秒を上限とする遅延)で行うよう改善されています。
 
@@ -1051,10 +1074,10 @@ result = ClaudeQueryBg[{"この PDF の要点を教えて", File["C:\\...\\doc.p
 |---|---|---|
 | メディアなし(文字列のみ) | CLI または API(テキスト) | 従来どおりテキストを結合して送信 |
 | メディアあり + provider = `claudecode`、`Fallback -> False`(デフォルト) | CLI パス | `iNormalizePrompt` で `Image` を PNG ファイルに保存し、`--image` フラグ経由で CLI に渡す |
-| メディアあり + provider = `lmstudio` | OpenAI 互換 chat/completions パス | OpenAI 互換のマルチモーダル形式 (`content` 配列) で LM Studio へ直接送信。2026-07-29 以前は `/api/v1/chat` がテキスト専用のため画像が破棄されていた。 |
+| メディアあり + provider = `lmstudio` / `freetoken` / `llamacpp`(OpenAI 互換 chat/completions 系) | OpenAI 互換 chat/completions パス | OpenAI 互換のマルチモーダル形式(`content` 配列、`image_url` ブロック)で直接送信。2026-07-29 に LM Studio で先行対応し、2026-09-05 の改訂で freetoken・llamacpp にも同じ経路が一般化された。2026-07-29 以前は `/api/v1/chat` がテキスト専用のため画像が破棄されていた。 |
 | メディアあり + `Fallback -> True`、provider = `anthropic` 等 | Anthropic API マルチモーダルパス | `content` 配列にテキストブロックと画像ブロックを組み立てて API に直接送信 |
 
-CLI パスでは画像ファイルが一時ディレクトリに保存され(最大 1024 px にリサイズ)、Claude Code CLI が `--image` フラグでそれを参照します。API パスでは PNG バイト列を Base64 エンコードした `image` コンテンツブロックを `content` 配列に追加して送信します。LM Studio パスでは OpenAI 互換の chat/completions エンドポイントにマルチモーダルリクエストを送信します。
+CLI パスでは画像ファイルが一時ディレクトリに保存され(最大 1024 px にリサイズ)、Claude Code CLI が `--image` フラグでそれを参照します。API パスでは PNG バイト列を Base64 エンコードした `image` コンテンツブロックを `content` 配列に追加して送信します。LM Studio・freetoken・llamacpp パスでは OpenAI 互換の chat/completions エンドポイントにマルチモーダルリクエストを送信します。
 
 #### Anthropic API 通信の Windows エンコーディング対応
 
@@ -1075,7 +1098,7 @@ Anthropic API 経由のフォールバック通信(`ClaudeQueryBg`)では、Wind
 - `model` 変数がそのまま JSON 文字列に埋め込まれるため、モデル名に JSON エスケープが必要な文字が含まれていた場合に不正な JSON が生成され得る。
 - 手組みした JSON 文字列を String として `Body` に渡すため、送信層で再度エンコード処理が行われ、Windows 環境で ShiftJIS 等への暗黙変換(送信層での再符号化 = 二重エンコード)が発生し得る。
 
-現在は内部関数 `iOpenAIChatBodyBytes[model, prompt, temperature]` が、文字列連結ではなく Association(`<|"model" -> model, "messages" -> {<|"role" -> "user", "content" -> prompt|>}|>`、`temperature` が数値のときのみ `"temperature"` キーを追加)から直接 `ExportByteArray["RawJSON", "Compact" -> True]` で UTF-8 ByteArray を生成し、それを `Body` に渡すよう変更されました。これにより、`model` 側の JSON エスケープも正しく行われ、送信層での再符号化(二重エンコード)も発生しなくなりました。JSON の直列化自体が失敗した場合は `"Error: OpenAI API リクエスト JSON の直列化に失敗しました"` が返されます。2026-08-16 の改訂で LM Studio 経路にモデル別推奨 temperature が導入された際も、`Automatic` / `None` 指定時は温度パラメータを送信しないという従来の挙動がそのまま維持されています。
+現在は内部関数 `iOpenAIChatBodyBytes[model, prompt, temperature]` が、文字列連結ではなく Association(`<|"model" -> model, "messages" -> {<|"role" -> "user", "content" -> prompt|>}|>`、`temperature` が数値のときのみ `"temperature"` キーを追加)から直接 `ExportByteArray["RawJSON", "Compact" -> True]` で UTF-8 ByteArray を生成し、それを `Body` に渡すよう変更されました。これにより、`model` 側の JSON エスケープも正しく行われ、送信層での再符号化(二重エンコード)も発生しなくなりました。JSON の直列化自体が失敗した場合は `"Error: OpenAI API リクエスト JSON の直列化に失敗しました"` が返されます。2026-08-16 の改訂で LM Studio 経路にモデル別推奨 temperature が導入された際も、`Automatic` / `None` 指定時は温度パラメータを送信しないという従来の挙動がそのまま維持されています。`prompt` は文字列(従来形式)、または OpenAI 互換の content ブロック配列(vision 入力用、2026-09-05 の改訂で一般化)のいずれの形式でも受け付けます。
 
 この変更は内部的な信頼性強化であり、新しい公開 API の追加はありません。
 

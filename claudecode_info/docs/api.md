@@ -408,15 +408,22 @@ Options: Fallback -> False, Model -> Automatic, PrivacySpec -> Automatic, Privac
 Options: Fallback -> False, Model -> Automatic, Timeout -> Automatic, NonBlocking -> False (True でノンブロッキング), "TaskClass" -> Automatic
 
 ### ClaudeQueryAsync[task, callback, nb, opts]
-非同期クエリ。Job システム経由で実行し完了時に callback[応答文字列] を呼ぶ。
+非同期クエリ。Job システム経由で実行し完了時に callback[応答文字列] を呼ぶ。"ResponseFormat" 指定時は ClaudeResponseFormatInstruction[fmt] のプロンプト規則を自動付加し、応答を ClaudeResponseFormatValidate で検証。違反時は 1 回だけ再問合せし、それでも駄目なら Failure["ResponseFormat", ...] を callback に渡す。
 → Null
-Options: Fallback -> False, Model -> Automatic, PrivacyLevel -> Automatic, Timeout -> Automatic, Integrations -> Automatic, AutoCellize -> True, "TaskClass" -> Automatic
+Options: Fallback -> False, Model -> Automatic, PrivacyLevel -> Automatic, Timeout -> Automatic, Integrations -> Automatic, AutoCellize -> True, "TaskClass" -> Automatic, "ResponseFormat" -> None ("PlainText" | "Markdown" | "Cells" | "Expression")
 
 ### ClaudeQueryAsyncSilent[prompt, callback, opts]
 notebook 引数なしで非同期に問い合わせる (hidden な評価用ノートブックを内部で確保し ClaudeQueryAsync に委譲)。Workflow handler 内から呼ぶ「Z 案」パターンの主要 API。ScheduledTask 内で直接 CreateNotebook すると不安定なため、メインスレッドで一度 ClaudeEnsureSilentNotebook[] を呼んでおくことを推奨。
 → Null
 Options: ClaudeQueryAsync と同じ
 例: ClaudeQueryAsyncSilent[prompt, callback]; ClaudeQueryAsyncSilent[prompt, callback, Model -> {"anthropic", "claude-opus-5"}]
+
+### ClaudeResponseFormatInstruction[fmt] → String
+"ResponseFormat" 契約の出力規則文を返す (プロンプト末尾に付ける)。fmt: "PlainText" | "Markdown" | "Cells" | "Expression"。ClaudeQueryAsync[..., "ResponseFormat" -> fmt] が自動で付加する。
+
+### ClaudeResponseFormatValidate[fmt, text] → Association
+LLM 応答 text を契約 fmt で検証・正規化する。PlainText は <tool_call> 等のツール呼び出しテキストやコードフェンスを違反とし、見出し・太字記号は黙って剥がす。Expression/Cells はフェンスを剥がして SyntaxQ で検証。
+→ <|"Valid"->True|False, "Text"->正規化済み文字列, "Reason"->違反理由 (違反時), "Format"->fmt|>
 
 ### ClaudeWriteResponse[nb, text, opts]
 テキストをノートブック nb のセルに書き込む。
@@ -1387,6 +1394,7 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 - `ReferenceText` → None: ClaudeEval に追加参照テキストを渡す
 - `"TaskClass"` → Automatic: $ClaudeLLMTierTable / $ClaudeTaskClassTable に基づくバックエンド自動選択クラス (ClaudeQuerySync/ClaudeQueryBg/ClaudeQueryAsync)
 - `"Validator"` → None: ClaudeQuerySync の応答検証関数 validator[response] -> True | Failure[tag,...]
+- `"ResponseFormat"` → None: ClaudeQueryAsync の出力形式契約 ("PlainText" | "Markdown" | "Cells" | "Expression")。指定時は ClaudeResponseFormatInstruction をプロンプトに自動付加し、応答を ClaudeResponseFormatValidate で検証・正規化する (違反時は 1 回だけ再問合せ)
 - `References` → {}: ClaudeCreateDocumentation/ClaudeUpdateDocumentation の参照 URL / 書籍リスト
 - `Demos` → {}: デモ URL リスト
 - `Disclaimer` → {}: 免責事項テキストリスト (README.md のみ)
