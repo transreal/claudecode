@@ -13,7 +13,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **AI 生成機能**: OpenAI Images API による画像生成(`ClaudeImageGenerate`)と OpenAI TTS API による音声生成(`ClaudeSpeech`)を統合しています。
 - **プロジェクト固有ディレクティブ**: ノートブックディレクトリごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。
 - **claudecode_directives 連携**: オプションの独立パッケージ [claudecode_directives](https://github.com/transreal/claudecode_directives) をロードすることで、`rules/` および `skills/` ディレクトリのデフォルトセットが自動的にインストールされます。ロード後は Claude Code CLI のコンテキストに rules/ の制約と skills/ の手順が自動的に注入され、Claude がスキルを呼び出せるようになります。claudecode.wl 本体はディレクティブの内容に非依存であり、claudecode_directives がその管理を担います。
-- **ディレクティブ投影レイヤー (ClaudeDirectives)**: rules/skills を含む正規ディレクティブ・リポジトリを読み込み、モデルの能力(コンテキスト長・課金有無)・ロール・タスクに応じて、投影モード(Full / Summary / Index / Lazy)と適用するスキル・ルールを in-memory で動的に選択します。さらに、単一の正規リポジトリから Claude CLI 用(`.claude/`)と Codex CLI 用(`AGENTS.md` / `.agents/`)のハーネスを生成・実体化する機能を備えます。ファイル形式は Claude Code 互換を維持し、claudecode.wl / NBAccess.wl への依存を持たない純 Wolfram Language 実装(Rule 11)として、claudecode.wl 側から optional に統合されます。
+- **ディレクティブ投影レイヤー (ClaudeDirectives)**: rules/skills を含む正規ディレクティブ・リポジトリを読み込み、モデルの能力(コンテキスト長・課金有無)・ロール・タスクに応じて、投影モード(Full / Summary / Index / Lazy)と適用するスキル・ルールを in-memory で動的に選択します。2026-09-08 の改訂では、これに加えてモデルの「世代・能力」に応じた投影の強度(DirectiveLevel: Minimal / Standard / Full)という直交軸が導入され、Claude 5 系のような高性能な生成モデルにはガードレール系ルールを索引だけ渡してツール経由でオンデマンド取得させる一方、小型・旧世代・ローカルモデルには従来どおり全文を渡す、という使い分けが可能になりました(詳細は「ディレクティブ強度制御(DirectiveLevel)」を参照)。さらに、単一の正規リポジトリから Claude CLI 用(`.claude/`)と Codex CLI 用(`AGENTS.md` / `.agents/`)のハーネスを生成・実体化する機能を備えます。ファイル形式は Claude Code 互換を維持し、claudecode.wl / NBAccess.wl への依存を持たない純 Wolfram Language 実装(Rule 11)として、claudecode.wl 側から optional に統合されます。
 - **スマートドキュメント管理**: ドキュメント生成・更新時のモード制御(新規作成・既存更新)、部分更新対象の指定、差分検出による効率的な更新処理を提供します。`ClaudeUpdateDocumentation` の `Baseline` オプションにより、差分の基準を「直近の更新バックアップ(`"LastDocUpdate"`)」と「GitHub コミット版(`"Github"`)」から選択でき、後者では `_info/design` の新規設計内容も加味した更新が行えます。20 ファイル以上の一括更新時は、README を除くドキュメントを LLM へ並列投入し、ウィンドウステータスバーにリアルタイム進捗(「完了 N/M • K 並列実行中 • 経過 Ts」)を表示します。サイクル再開(resumption)機能により、API エラーで中断後に再実行しても同一サイクル内の更新済みファイルをスキップして効率的に継続できます。2026-07-09 の改訂により、更新失敗は「システム的失敗(fail-fast でチェーン即中断)」と「品質ゲート失敗(切り詰め・サイズ退行・タイトル不整合。当該ファイルをスキップして次に進む)」に明確に分類され、1 ファイルの持続的な品質失敗が残り全部の更新を巻き添えにしなくなりました。品質ゲート失敗が発生した場合はまず 1 回だけ自動リトライが行われ、その際は「単一応答で出力すること・ツールを使用しないこと・コードフェンスを正しく閉じること」を明示する RETRY NOTICE がプロンプトに追加注入されます。リトライ後も同じ理由で失敗した場合は当該ファイルをスキップして次のファイルに進み、進捗表示には切り詰め文字数・サイズ退行前後の文字数と割合・タイトル不一致内容などの具体的な失敗理由が付記されます。既存ファイルへの上書き時には、新しい内容の文字数が既存内容の 40% 未満に縮小した場合は書き込み自体を拒否するサイズ退行ガードも機能します(閾値 40%)。リトライ実行時はこの比率ガードが緩和され、stub(空同然の応答)防止のための絶対値床(600 文字未満のみ拒否)に切り替わります。これは RETRY NOTICE により意図的に簡潔な応答が返ってくることを想定した調整です。また、サイクル再開(resumption)機能についても、前回実行の残存カウンタにより初回試行が誤ってスキップされてしまう不具合が修正され、より正確に継続できるようになりました。品質ゲート失敗時のリトライ・スキップ経路で、共有ポーリングタスクの再発火や派生クエリの二重起動によりドキュメント更新チェーンが分岐(fork)してしまう不具合を防ぐため、各ステップに一意のシリアルトークンを発行し最初のコールバックのみを有効化する二重発火ガードも導入されています。また `docs/` 配下に同期事故等で生じた `docs/docs/` ネスト重複ドキュメントを自動検出し、更新対象から除外した上で削除を推奨する警告を表示します。2026-07-09 の改訂では、`docs/examples/` 配下の `*.md`(使用例ドキュメント)も `Automatic`(既定)モードでの自動更新対象から除外されるようになりました。これは、examples は手作業内容が主であり毎回再生成すると多数作成した場合に更新が終わらなくなるためで、更新するには `TargetFiles` オプションで明示的に指定する必要があります(詳細は「ドキュメント更新対象ファイルの指定(TargetFiles)」を参照)。ドキュメント更新チェーンの多重起動防止ガードにより、同一パッケージに対して複数の更新チェーンが同時起動することを防ぎます。チェーンが異常終了した場合も `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放されます。補助 API ドキュメント(`api_<aux>.md`)の再生成要否判定は、更新日時(mtime)比較からコンテンツハッシュ比較へ段階的に移行しており、Dropbox 同期や複数 PC 環境による mtime の揺れだけでは不要な再生成が発生しないようになっています。2026-07-10 の改訂では、条件を満たす場合にドキュメント更新パイプライン全体を外部 wolframscript ワーカープロセスへ退避して実行する仕組み(`$ClaudeDocUpdateExternal`)が導入され、複数のドキュメント更新を並走させた際のメインカーネル飽和によるフリーズが根絶されました(詳細は「ドキュメント更新の外部プロセス実行」を参照)。2026-07-13 の改訂では、README.md の「## 謝辞」「## 免責事項」「## ライセンス」節を LLM には書かせず、`Acknowledgments` / `Disclaimer` / `License` オプションと `doc_options.json` の既定値から書き込み直前にコード側で決定的に(verbatim で)追記する方式へ変更されました。これにより法的節の文言が LLM の出力切り詰めの影響を受けなくなります。追記前には本文が必須の「## 使用例」節まで到達しているか、および本文自体が途中で切れていないかを検証する専用ガードが働き、いずれかに該当する場合は書き込みが拒否されます。同じく 2026-07-13 の改訂で、複数パッケージが同時に言及されるタスクにおける API ドキュメントの注入順序とコンテキスト予算の割り当ても再設計されています(詳細は「複数パッケージ言及時の注入順序とコンテキスト予算」を参照)。2026-08-28 の改訂では、Claude Code CLI の OAuth 認証切れ(401 authentication_failed)を検出した場合、レート制限と同格の投入前ゲートとして扱われ、新規ドキュメントを 1 件も投入せずに中断して再ログインを促すようになりました(詳細は「認証切れ検出とドキュメント更新の投入前ゲート」を参照)。
 - **分離原則検証**: NBAccess パッケージとの適切な分離を維持するため、コード内の分離原則違反を自動検出・修正する機能を備えています。
 - **パッケージキーワード自動注入**: 各パッケージが独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。パッケージ単位(`$ClaudePackageKeywordMap`)に加え、補助ドキュメント単位(`$ClaudePackageAuxKeywordMap`)でも注入条件を制御できます。
@@ -186,6 +186,17 @@ $ClaudeLMStudioPaletteLoadedOnly = True
    第 3 要素(カスタム URL)で呼び出しごとに上書き可能。詳細は「llamacpp プロバイダ」を参照 *)
 $ClaudeLlamaCppBaseURL = "http://127.0.0.1:8080"
 
+(* このマシン自身 (localhost) で動かすローカル LLM エンジンの明示指定 (2026-09-08)。
+   "lmstudio" | "llamacpp" | "freetoken" のいずれか 1 つ、または All (排他を解除)。
+   Automatic (既定) は $ClaudeMachineLocalLLMProvider の対応表 → 既定 "lmstudio" の順で解決する。
+   詳細は「ローカル LLM エンジンのマシン別排他」を参照 *)
+$ClaudeLocalLLMProvider = Automatic
+
+(* マシン名 → そのマシン自身で動かすローカル LLM エンジンの対応表 (2026-09-08、localInit.wl 推奨)。
+   キーは $MachineName (大文字小文字は無視)。表に無いマシンは既定 "lmstudio"。 *)
+ClaudeCode`$ClaudeMachineLocalLLMProvider = <|
+  "strixhalo128" -> "lmstudio", "raptorlake" -> "llamacpp"|>
+
 (* /api/v1/chat のようなサーバー側ツールループ用エンドポイントを持たないローカル
    OpenAI 互換プロバイダ (freetoken・llamacpp) 向けの、クライアント側非同期ツールループの制御。
    Automatic (デフォルト): 該当プロバイダにのみ自動適用し、サーバー側ループを持つ lmstudio は対象外。
@@ -196,6 +207,14 @@ $ClaudeLocalToolLoop = Automatic
 (* 上記ツールループの最大往復回数(デフォルト 8)。上限到達時は最後の 1 往復のみ
    ツール定義を外して問い合わせ、必ず本文で応答を終わらせる(無限ループ防止) *)
 $ClaudeLocalToolLoopMaxIterations = 8
+
+(* ローカルツールループの 1 ツール呼び出しあたりの実行時間上限(秒、既定 60) *)
+$ClaudeLocalToolLoopToolTimeoutSeconds = 60
+
+(* クラウド API プロバイダ(openai/zai/kimi)にディレクティブ専用ツールループを与えるか
+   (デフォルト Automatic = SourceVault ロード時のみ有効)。
+   詳細は「ディレクティブ強度制御(DirectiveLevel)」を参照 *)
+ClaudeCode`$ClaudeCloudToolLoop = Automatic
 ```
 
 ### パッケージキーワード自動注入システム
@@ -296,6 +315,12 @@ ClaudePrepareCommit["MyPackage"]
 | **プライバシー** | `$ClaudePrivateModel` | ローカルモデル設定 |
 | | `AutoPrivate -> True` | 機密データ自動ルーティング |
 | | `PrivacySpec` オプション | アクセスレベル明示指定 |
+| **ローカル/クラウド実行制御** | `$ClaudeLocalLLMProvider` | このマシンで動かすローカル LLM エンジンの明示指定(マシン別排他) |
+| | `$ClaudeMachineLocalLLMProvider` | マシン名 → ローカル LLM エンジンの対応表 |
+| | `ClaudeLocalLLMProvider` | 実効ローカル LLM provider の取得 |
+| | `ClaudeSetLocalLLMProvider` | ローカル LLM provider をこのカーネルで切替 |
+| | `$ClaudeCloudToolLoop` | クラウド API プロバイダのディレクティブオンデマンド取得の有効/無効 |
+| | `$ClaudeCloudToolLoopTools` | クラウド API プロバイダに許可する SourceVault MCP ツール名 |
 | **セッション** | `CreateClaudeSession` | 名前付きセッション作成 |
 | | `ClaudeShowHistory` | 履歴表示 |
 | | `ClaudeCompactHistory` | 履歴コンパクション |
@@ -313,6 +338,9 @@ ClaudePrepareCommit["MyPackage"]
 | | `ClaudePromoteProjectDirectives` | ローカルディレクティブをグローバルに昇格 |
 | **ディレクティブ投影** | `ClaudeResolveDirectiveBundle` | task/role/model 別の directive bundle 解決 |
 | | `ClaudeBuildDirectivePromptForSingle` | 単一エージェント用 directive 投影 |
+| | `ClaudeResolveDirectiveLevel` | モデル世代に応じた DirectiveLevel(Minimal/Standard/Full)解決 |
+| | `ClaudeSetDirectiveLevelOverride` | DirectiveLevel の明示上書きを登録 |
+| | `ClaudeEffectiveDirectiveLevel` | 現在のターンで実際に使われる DirectiveLevel を確認 |
 | | `ClaudeDirectiveMaterializeCodexHarness` | Codex 用ハーネスの生成 |
 | | `ClaudeDirectiveMaterializeClaudeHarness` | Claude CLI 用ハーネスの生成 |
 | | `ClaudeDirectiveMigrationReport` | 正規/従来ハーネスの移行ゲート(他 API は専用セクション参照) |
@@ -429,7 +457,7 @@ ShowClaudePalette[]
 
 | 設定項目 | 説明 |
 |---|---|
-| **P:** | プロバイダを切り替えます。クリックするたびに `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken → llamacpp` の順で循環しますが、循環候補になるのは**登録簿 `$ClaudePaletteProviders` に登録したプロバイダだけ**です(既定は `claudecode` / `chatgptcodex` / `anthropic` / `openai` の 4 つ。詳細は「パレットの provider 登録簿」を参照)。選択中のプロバイダ名がボタンラベルに表示されます。各プロバイダの特性は下表を参照してください。 |
+| **P:** | プロバイダを切り替えます。クリックするたびに `claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken → llamacpp` の順で循環しますが、循環候補になるのは**登録簿 `$ClaudePaletteProviders` に登録したプロバイダだけ**です(既定は `claudecode` / `chatgptcodex` / `anthropic` / `openai` の 4 つ。詳細は「パレットの provider 登録簿」を参照)。ローカル provider を複数登録している場合でも、**このマシン自身を指す接続は `$ClaudeLocalLLMProvider` によるマシン別排他でさらに 1 つに絞られます**(詳細は「ローカル LLM エンジンのマシン別排他」を参照)。選択中のプロバイダ名がボタンラベルに表示されます。各プロバイダの特性は下表を参照してください。 |
 | **M:** | 選択中のプロバイダ内でモデルを切り替えます。クリックするたびに対応するモデル一覧を循環します。短縮名(例: Opus 5、Fable 5)で表示されます。`Automatic` は Codex CLI の既定モデルを使用します(chatgptcodex プロバイダの場合)。SourceVault のモデルレジストリがロードされている場合は、そこからモデル一覧が取得されます。特に `claudecode` / `anthropic` プロバイダの既定モデル(候補一覧の先頭に来るモデル)は、SourceVault がロードされていれば `ClaudeResolveModel` 経由で動的に解決されるため、SourceVault 側でモデルの世代が更新されてもパレット側のコード変更なしに追従します(SourceVault 未ロード時は静的な既定値 `claude-opus-5` にフォールバック)。`lmstudio` / `freetoken` / `llamacpp` プロバイダでは、それぞれのサーバーへの実問い合わせによる候補一覧が優先され、取得できない場合は SourceVault のカタログ、それも無ければ静的リストへ順にフォールバックします(`$ClaudeLMStudioPaletteLoadedOnly` 参照)。 |
 | **エフォート** | 標準モデル (**M:** の直下) の思考量です。`claudecode` では Low / Medium / High / Max で Think トリガーの強度を設定します(Low は思考なし、Medium は `think hard`、High は `think harder`、Max は `ultrathink`)。`lmstudio` を選んでいるときは **Off** が加わって Off / Low / Medium / High / Max の 5 段になり、LM Studio の `reasoning` パラメータに写ります。**Off = thinking 無効**です。Off のまま `claudecode` に戻した場合、CLI には `--effort` を渡さず Medium 相当で動きます。`freetoken`(2026-08-24 追加)でも同様に Off / Low / Medium / High / Max の 5 段になり、モデル別の推奨 Effort 表を lmstudio と共有した上で `reasoning_effort` パラメータとして送信されます(値が文字列型のときのみ送信され、Automatic 等は従来どおり送られません)。`llamacpp`(2026-08-29 追加)を選んでいるときだけは **Off がありません**(Low/Medium/High/Max の 4 段)。これは llama-server のサンプリング・thinking 設定がサーバー起動時に固定され、リクエスト単位で無効化できないためです。 |
 | **E:**(秘密モデル枠内) | 秘密モデル `$ClaudePrivateModel` の思考量です。標準モデルのエフォートとは独立に保持され、Off / Low / Medium / High / Max を循環します。既定は Medium(thinking 有効)。 |
@@ -460,6 +488,45 @@ ClaudeCode`$ClaudePaletteProviders = All;
 - 登録簿が空・不正値・既知プロバイダと 1 つも一致しない場合は、パレットが操作不能にならないよう標準枠は `{"claudecode"}`、秘密枠は `{"lmstudio"}` にフォールバックします。
 - この制御は**パレット UI の選択候補にのみ**効きます。`Model -> {"zai", "glm-5.2"}` のような明示指定、`$ClaudeFallbackModels` / `$ClaudePrivateModel` への直接代入、ワークフローからの呼び出しは登録簿の影響を受けません。
 - 現在有効な候補は `GetPaletteProviderOrder[]`(秘密枠は `GetPalettePrivateProviderOrder[]`)、既知プロバイダの全一覧は `GetPaletteKnownProviders[]` で確認できます(いずれも `ClaudeCode` コンテキスト)。
+
+**ローカル LLM エンジンのマシン別排他($ClaudeLocalLLMProvider、2026-09-08)**
+
+`$ClaudePaletteProviders` の登録簿は「この環境に *存在する* provider」を列挙するものであり、「このマシン自身で *動かす* provider」を意味しません。たとえば LM Studio 専用機で `lmstudio` と `llamacpp` の両方を登録簿に登録していると、パレットの `P:` を回すことで誤って `llamacpp` を選んでしまい、実際には起動していない自機の localhost:8080 を叩いてしまう(あるいは別の意図しないローカルサーバに繋がってしまう)事故が起こり得ます。`$ClaudeLocalLLMProvider` はこれを防ぐための、**「自機の localhost / 自機 IP を指す接続」だけに効く排他指定**です。
+
+- `$ClaudeLocalLLMProvider`(既定 `Automatic`): `"lmstudio"` | `"llamacpp"` | `"freetoken"` のいずれか 1 つを明示指定します。`Automatic` は次の優先順で解決されます。
+  1. `$ClaudeMachineLocalLLMProvider`(マシン別対応表)に現在の `$MachineName` のエントリがあればそれ
+  2. 表に無ければ既定 `"lmstudio"`
+  `All` を指定すると排他そのものを解除し、従来どおり複数のローカル provider を自由に選べる動作に戻ります。
+- `$ClaudeMachineLocalLLMProvider`(既定 `<||>`): マシン名 → provider の対応表。キーは `$MachineName`(大文字小文字は無視)。`localInit.wl` の `Needs["ClaudeCode\`"]` より前に置くことを想定しています。
+
+  ```mathematica
+  (* localInit.wl の例: 2 台のマシンでそれぞれ異なるローカルエンジンを動かす *)
+  ClaudeCode`$ClaudeMachineLocalLLMProvider = <|
+    "strixhalo128" -> "lmstudio", "raptorlake" -> "llamacpp"|>;
+  ```
+
+- 排他の対象は**あくまで「自機の localhost を指す接続」だけ**です。接続先ホストは URL のホスト部(`localhost` / `127.*` / `::1` / `$MachineAddresses` / `$MachineName`)で判定されます。指定外のローカル provider であっても、接続先が LAN 上の別マシン(例: `192.168.x.x` の `llama-server`)であれば従来どおり利用できます(可否は URL と NBAccess の信頼判定に従う、詳細は「サブネット信用トグル」を参照)。`claudecode` / `chatgptcodex` / `anthropic` / `openai` / `zai` / `kimi` のようなクラウド provider は対象外です。
+- 自機を指す指定外のローカル provider は以下のように扱われます。
+  - パレットの `P:` / 秘密 `P:` の循環候補から消えます(ノートブックに保存済みの設定からも復元されません)。
+  - preflight(`ClaudeBackendAvailableQ`)が理由 `"ProviderNotDesignated"` とともに `Available -> False` を返します。
+  - 同期(`ClaudeQuery` 等)・非同期(`ClaudeQueryAsync`、ClaudeRuntime 経由の非同期実行)いずれの送信経路も、実際に HTTP を送信する前に停止します。
+  - フォールバック候補表(`$ClaudeLLMTierTable`)にあれば、指定 provider へ自動的に読み替えられます(`{prov, Automatic}`)。
+
+```mathematica
+(* 現在の実効ローカル provider を確認 *)
+ClaudeLocalLLMProvider[]
+(* → "lmstudio" (または "llamacpp" | "freetoken" | All) *)
+
+(* このカーネルセッション限りで切り替える(preflight キャッシュを破棄し、
+   パレットの P: が指定外のローカル provider を指していれば寄せ直す) *)
+ClaudeSetLocalLLMProvider["llamacpp"]
+(* → 実効 provider、不正な値は $Failed (設定は変えない) *)
+
+(* 恒久設定はマシン別対応表に書く (localInit.wl) *)
+ClaudeCode`$ClaudeMachineLocalLLMProvider["strixhalo128"] = "lmstudio";
+```
+
+`ClaudeSetLocalLLMProvider[prov]` はカーネルセッション限りの切替であり、次回カーネル起動時には `$ClaudeMachineLocalLLMProvider` の対応表(または既定 `"lmstudio"`)に戻ります。恒久的に切り替えたい場合は対応表を編集してください。
 
 **プロバイダ一覧**
 
@@ -522,10 +589,11 @@ LM Studio は `/api/v1/chat` エンドポイント経由でサーバー側が MC
 
 - `$ClaudeLocalToolLoop`(既定 `Automatic`): `Automatic` は、`/api/v1/chat` のようなサーバー側ツールループ用エンドポイントを持たないプロバイダ(freetoken・llamacpp)にのみクライアント側ツールループを自動適用します。既にサーバー側ループを持つ lmstudio は既定では対象外です。`True` を指定すると lmstudio を含め常にクライアント側ツールループが使われ、`False` では常に無効になります。
 - `$ClaudeLocalToolLoopMaxIterations`(既定 `8`): ツール呼び出し→実行→再送信の往復回数の上限です。上限に達すると、最後の 1 往復だけツール定義を送らずに問い合わせ、必ず本文で応答を終わらせます(無限ループ防止)。
-- 内部実装は `URLSubmit` ベースの非同期往復(応答をハンドラで受け取り、ツールを実行して次の往復を自動送信する)で、カーネルをブロックしません。カーネルをブロックする同期的な実装(`RunProcess` 相当)も内部に残されており状況に応じて使い分けられますが、いずれも上記 2 つの公開変数で制御されるため、ユーザーから見た挙動・設定方法は共通です。
+- `$ClaudeLocalToolLoopToolTimeoutSeconds`(既定 `60`): ツール呼び出し 1 件あたりの実行時間上限(秒)です。単一のツール実行がこれを超えて応答しない場合、ループ全体が無期限に止まることを防ぎます。
+- 内部実装は `URLSubmit` ベースの非同期往復(応答をハンドラで受け取り、ツールを実行して次の往復を自動送信する)で、カーネルをブロックしません。カーネルをブロックする同期的な実装(`RunProcess` 相当)も内部に残されており状況に応じて使い分けられますが、いずれも上記の公開変数で制御されるため、ユーザーから見た挙動・設定方法は共通です。
 - **ツール結果の切り詰め**: 1 回のツール呼び出しの戻り値は既定で 8000 文字を超えると切り詰められます。SourceVault のようなツールはカタログや検索結果を丸ごと返すことがあり、切り詰めずに履歴へ積み続けると 128k トークンの文脈を圧迫したうえ、モデルの出力が壊れて(未収束のツール呼び出し表現が繰り返される等)応答が収束しなくなる不具合が実際に確認されたための対策です。切り詰めが発生した場合は「切り詰めた事実」がモデルにも明示され、必要であればより絞り込んだクエリで再度ツールを呼び出すよう促されます。
 
-**終端往復の契約(2026-09-02 強化)**
+**終端往復の契約(2026-09-02 強化、2026-09-09 拡張)**
 
 上記ツールループが往復上限に達した場合や、モデルが有用な情報を得られないまま同じ検索を繰り返す場合に、無限に近い往復を消費してしまう不具合(実測: 0 件検索を 5 回繰り返して 8 往復すべてを使い切り、最後に `<tool_call>` の生テキストがそのまま「本文」として応答に採用されてしまう事故)への対策として、以下の終端契約が追加されました。
 
@@ -533,6 +601,7 @@ LM Studio は `/api/v1/chat` エンドポイント経由でサーバー側が MC
 - **無益な結果の連続による早期終端**: ツール結果が ERROR・0 件・空のいずれかである状態が既定回数連続すると、残りの往復予算を使い切るのを待たずに、往復上限時と同じ終端往復(ツール定義を外し、必ず本文で回答させる)へ早期に切り替えます。
 - **本文としてのツール呼び出しテキストの拒否**: モデルの最終応答が `<tool_call>...` のような「テキストとして書かれたツール呼び出し」であった場合、これは正規の回答として受理されません。「直前の出力はツール呼び出しのテキストであり回答ではない」ことを明示した上で 1 回だけ再問い合わせを行い(ツールは使用不可・最終回答のみを書くよう指示)、それでも同じ違反が続く場合は型付きの `Failure` を返します(壊れた生テキストがそのままユーザーへの回答として採用されることを防ぎます)。
 - **LM Studio の plugin 拒否(HTTP 400)への対応**: LM Studio が API 経由の plugin(MCP integrations)利用を拒否する決定的な 400 エラーを返した場合、1 回だけ integrations/tools を外して即座に再送信します。再送信後も同じ拒否が再発した場合は、この種の 400 は決定的でありバックオフしても解決しないため、バックオフを挟まず次のフォールバック候補へ進みます。
+- **thinking runaway ガード(2026-09-09 追加)**: 実機で、ローカルモデル(LM Studio 上の qwen3.8-27b)が「フォトンの二重スリットシミュレーションコード」というタスクに対して 22,430 reasoning トークン(約 35 分、10.8 tok/s)を消費し、本文もツール呼び出しも一切生成しないまま終了する事例が確認されました。この対策として、API 応答の `finish_reason` が `"length"` であり、かつ本文(content)・ツール呼び出し(tool_calls)のいずれも空である状態(= 出力予算がすべて内部の reasoning に費やされた状態)を検出すると、「思考だけで出力上限を使い切り回答が得られなかった」ことを明示するメッセージを会話に追加した上で、reasoning effort を `"none"` に強制して 1 回だけ再問い合わせを行います。再度同じ状態になった場合は、非同期ジョブ経路ではウォッチャー/DAG が最大寿命まで待ち続けずに次へ進めるよう型付きの `Failed` として扱われます。
 
 これらはいずれもクライアント側ツールループ(`$ClaudeLocalToolLoop`)の内部的な信頼性強化であり、新しい公開 API の追加はありません。
 
@@ -615,6 +684,7 @@ ClaudeCode は機密データを含むタスクに対して、自動的にロー
 - **`PrivacySpec`**: アクセスレベルを明示的に制御します
 - **3段階フォールバック**: Claude Code CLI → アクセスレベル対応フォールバックモデル → エラーの順で試行します。次のフォールバック候補への切替は、429(レート制限)や過負荷エラーが連続発生する事態を避けるため、指数バックオフ(1秒→2秒→4秒を上限とする遅延)で行われます。
 - **サブネット信用トグル**: ローカルプロバイダ(lmstudio・freetoken・llamacpp)は、ノートブックが起動時と異なるサブネットで開かれていると判定されるとプライバシーレベルが 0.25 に強制されます。パレットの「Subnet: 信用する」トグルで一時的に緩和できますが、この状態はノートブックには保存されません(詳細は「操作パレット」の「サブネット信用トグル」を参照)。
+- **ローカル LLM エンジンのマシン別排他**: `$ClaudeLocalLLMProvider` / `$ClaudeMachineLocalLLMProvider` により、複数台のマシンで異なるローカル LLM エンジンを併用している環境でも、各マシンが「自機の localhost」に対しては常に指定した 1 つのエンジンだけに接続するよう強制できます(詳細は「操作パレット」の「ローカル LLM エンジンのマシン別排他」を参照)。
 
 ### LM Studio の直接使用
 
@@ -650,6 +720,20 @@ ClaudeQueryAsync["最新ニュースを調べて", Integrations -> {"mcp/exa"}]
 | 文字列リスト | `{"mcp/exa"}` | `mcp.json` に登録済みの MCP サーバー ID を指定 |
 | Plugin 形式 | `{<|"type"->"plugin","id"->"mcp/exa",...|>}` | 詳細オプション付きで指定 |
 | Ephemeral MCP 形式 | `{<|"type"->"ephemeral_mcp",...|>}` | 一時的な MCP サーバーをインライン定義 |
+
+#### ContextPlan の ToolDefinitions ゲートと \$ClaudeEvalToolIntegrations(2026-08-30)
+
+`ClaudeEval` のコンテキスト予算管理(ContextPlan)は、状況に応じてツール定義自体の送信を止める `Mode -> "None"` のゲートを持っています。これは主に、`mcp/exa` のようなツールスキーマ(実測で約 31,000 トークン)を `ClaudeEval` の通常送信のたびに毎回送信しないようにするためのものです。
+
+このゲートをそのまま適用すると、`mcp/sourcevault` のような軽量な integrations まで一律に締め出されてしまい、パレットの対話セルから MCP が一切使えなくなる不具合が 2026-08-30 に実機で確認されました。この対策として `$ClaudeEvalToolIntegrations`(既定 `{"mcp/sourcevault"}`)が導入され、このゲートが効いている間でも、ここに列挙された integrations だけは LM Studio へ送信されるようになりました。
+
+- `{}` に設定すると従来どおりゲート中は全 integrations を抑止します。
+- 個別呼び出しで `Integrations -> {...}` を明示した場合は、このゲートより常に優先されます(従来どおり)。
+
+```mathematica
+(* ゲート中でも許可する integrations を追加する *)
+ClaudeCode`$ClaudeEvalToolIntegrations = {"mcp/sourcevault", "mcp/exa"}
+```
 
 #### 認証設定(Require Authentication)
 
@@ -733,6 +817,76 @@ ClaudeCode は Wolfram Language の `$Language` 変数を参照して、Claude �
 
 この切り替えはプロンプト生成時に自動で行われるため、ユーザーが明示的に設定する必要はありません。Mathematica の言語設定に合わせて適切な応答言語が選択されます。
 
+### ディレクティブ強度制御(DirectiveLevel)とクラウド API のディレクティブオンデマンド取得(2026-09-08)
+
+[claudecode_directives](https://github.com/transreal/claudecode_directives)(ClaudeDirectives)は 2026-09-08 の改訂で、rules/skills の投影モード(Full / Summary / Index / Lazy)とは別に、モデルの世代・能力に応じて**ディレクティブの投影の厳格さそのもの**を切り替える DirectiveLevel という軸を導入しました。投影モードが「どれだけの量を渡すか」を制御するのに対し、DirectiveLevel は「どこまで詳しく渡すか(判断を任せてよいか)」を制御します。
+
+#### DirectiveLevel の3段階
+
+`$ClaudeDirectiveLevels`(既定 `{"Minimal", "Standard", "Full"}`)がこの順序を定義します。
+
+| レベル | 方針 |
+|---|---|
+| `"Minimal"` | 判断力ベース。安全系ルール(tier: `safety`)は全文投影するが、ガードレール系(tier: `guardrail`)は 1 行索引のみ渡し、本文は必要な時にツール経由で取得させる。手順(`procedure`)・スタイル(`style`)系ルールは渡さない。Claude 5 系のような高性能な生成モデル向け。 |
+| `"Standard"` | 安全系 + ガードレール系 + タスクに一致した手順系ルールを投影。 |
+| `"Full"` | スタイル系ルールを含めすべてを投影。小型・旧世代・ローカルモデル向け。 |
+
+#### レベルの解決順序
+
+`ClaudeResolveDirectiveLevel[modelSpec]` は以下の優先順で DirectiveLevel を決定し、`<|"Level" -> level, "Source" -> "override"|"resolver"|"capability"|"class"|"default", "Provider" -> ..., "Model" -> ...|>` を返します。`modelSpec` は `{provider, model}`・`{provider, model, url}`・`"provider/model"` 文字列・素のモデル名のいずれでも指定できます。
+
+1. **`$ClaudeDirectiveLevelOverrides`**: `{provider, model}` | provider 単体 | model 単体をキーとする明示上書き Association。最優先。`ClaudeOrchestrator`TurnWiki`` のような適応的チューニング層が `ClaudeSetDirectiveLevelOverride` 経由で書き込む想定です。
+2. **`$ClaudeDirectiveLevelResolver`**(既定 `None`): `f[{provider, model}] -> level | None` という関数を設定すると、適応的なレベル決定ロジックを差し込めます。
+3. **モデル能力テーブル**(`$ClaudeModelCapabilities` の各エントリが持つ `"DirectiveLevel"` フィールド)。
+4. **モデルクラス**(能力テーブルに `"DirectiveLevel"` が無い場合、`"Class"` から導出)。
+5. **`$ClaudeDirectiveDefaultLevel`**(既定 `"Standard"`)。
+
+```mathematica
+(* 特定モデルの DirectiveLevel を手動で固定する *)
+ClaudeDirectives`ClaudeSetDirectiveLevelOverride[{"lmstudio", "qwen3.6-27b"}, "Full"]
+
+(* 上書きを解除する (level に None を渡す) *)
+ClaudeDirectives`ClaudeSetDirectiveLevelOverride[{"lmstudio", "qwen3.6-27b"}, None]
+
+(* 現在のターンで実際に使われる DirectiveLevel を claudecode.wl 側から確認する
+   (実効モデル仕様を自動解決し、ClaudeResolveDirectiveLevel の結果に
+   ToolAccess・ModelSpec・LastPrompt を付加して返す) *)
+ClaudeEffectiveDirectiveLevel[]
+(* → <|"Level"->"Minimal", "Source"->"capability",
+       "ModelSpec"->{"claudecode","claude-opus-5"}, "ToolAccess"->True, ...|> *)
+```
+
+#### ルールの tier とレベルポリシー
+
+各 rule の frontmatter の `tier:` キー(`safety` | `guardrail` | `procedure` | `style` | `evolved`)がそのルールの重要度区分を表します。`tier:` が無いルールは `$ClaudeDefaultRuleTier`(既定 `"guardrail"`)として扱われます。`$ClaudeRuleTierPolicy`(Association: level -> `<|tier -> "Full" | "Index" | None|>`)が、各 DirectiveLevel でどの tier をフル投影・索引のみ・完全除外にするかを定義します。`ClaudeDirectiveRuleTier[ruleAssoc]` で個々のルールの tier を取得できます。
+
+`ClaudeApplyDirectiveLevel[rules, level]` はこのポリシーに従ってルール一覧をフィルタし、各ルールに `"Projection"`(`"Full"` | `"Index"`)キーを付与して返す純関数です。この処理は `ClaudeResolveDirectiveBundle` の内部でも自動的に適用されます。
+
+ルールの frontmatter に `models:` / `exclude_models:`(要素は `"provider:model"` | `"provider:*"` | `"*:model"` | `"model"` の形式)を指定すると、特定モデルにのみ適用・除外することもできます。`ClaudeDirectiveRuleAppliesToModelQ[ruleAssoc, modelSpec]` で判定できます。
+
+#### モデル仕様の正規化と診断
+
+`ClaudeNormalizeModelSpec[spec]` は `{provider, model}` タプル・`"provider/model"` 文字列・タプルを文字列化したもの・素のモデル名のいずれからも `{provider | None, model}` を正規化します。DirectiveLevel の解決・上書きキーの生成などで内部的に使われます。
+
+`ClaudeDirectiveBundleDiagnostics[modelSpec, taskHint, opts]` は実際にプロンプトへ投影する前に、解決される DirectiveLevel・投影モード・採用/除外されたルール名(tier 付き)・推定トークン数を確認できます。ディレクティブが期待どおりに絞り込まれているかのデバッグに使用します。
+
+#### クラウド API プロバイダのディレクティブオンデマンド取得(\$ClaudeCloudToolLoop)
+
+openai / zai / kimi のような課金 API 経由のクラウドプロバイダには、SourceVault のデータ系ツール(メール本文・セッションログ・ノートブックセル等、機密性を伴うもの)は意図的に一切公開されません。しかし CLAUDE.md / rules / skills などのディレクティブ本体は設計上 PrivacyLevel 0.0(公開可能)であり、Claude Code CLI・Codex(AGENTS.md)・LM Studio(`mcp/sourcevault` integration)には既に渡っています。DirectiveLevel `"Minimal"` のモデルにガードレール系ルールを「名前だけ」渡す設計と対になる形で、この非対称を埋めるため、2026-09-08 の改訂でクラウド API プロバイダにも同じクライアント側ツールループが、ディレクティブ専用ツールのみに絞ったアローリストで有効になりました。
+
+- **`$ClaudeCloudToolLoop`**(既定 `Automatic`): `Automatic` は SourceVault ロード時のみ有効。`True` で常時有効、`False` で常時無効。
+- **`$ClaudeCloudToolLoopTools`**(既定 `{"sourcevault_directives", "sourcevault_directive_body"}`、いずれも PrivacyLevel 0.0): クラウドモデルが呼び出せる SourceVault MCP ツール名のアローリストです。このアローリストはツール定義(スキーマ)段階だけでなく実行時(`iExecSourceVaultToolCall`)にも強制されるため、モデルがスキーマ外のツール名を偽って呼び出そうとしても実行されません。SourceVault のデータ系ツールはこの経路には決して含まれません。
+
+```mathematica
+(* クラウド API プロバイダのディレクティブオンデマンド取得を無効化する *)
+ClaudeCode`$ClaudeCloudToolLoop = False
+
+(* 許可するツールを絞り込む *)
+ClaudeCode`$ClaudeCloudToolLoopTools = {"sourcevault_directives"}
+```
+
+モデル側への案内は ClaudeDirectives の `"ToolAccess"` プロンプト断片経由で行われます。DirectiveLevel `"Minimal"` のモデルは、ガードレール系ルールをまず名前だけの索引として受け取り、必要と判断した場合のみツール経由で本文を取得する形になります。前述の `ClaudeEffectiveDirectiveLevel[]` の `"ToolAccess"` フィールドで、現在のターンでオンデマンドツールアクセスが有効かどうかを確認できます。
+
 ### 自動実行安全ガード(NBAutoEvalProhibitedPatterns)
 
 `ClaudeEval` の `AutoEvaluate -> True`(デフォルト)では、LLM が生成したコードが自動的に実行されます。安全性を確保するため、`NBAutoEvalProhibitedPatterns` に定義された禁止パターンに該当するコードの自動実行はブロックされます。
@@ -791,7 +945,7 @@ ClaudeUpdateDocumentation["MyPackage", TargetFiles -> {"examples/*"}]
 
 #### マーカー展開の詳細
 
-- **`"api.md"` マーカー**: `TargetFiles` に `"api.md"` が含まれる場合、パッケージの補助 API ドキュメント(`api_<aux>.md`)のうち、対応するソースコードが `api.md` 本体より新しい(コンテンツハッシュが未記録、または記録済みハッシュと不一致な)ものが自動的に追加対象へ加えられます。ソースに変更が無い補助 API ドキュメントは対象に含まれません。
+- **`"api.md"` マーカー**: `TargetFiles` に `"api.md"` が含まれる場合、パッケージの補助 API ドキュメント(`api_<aux>.md`)のうち、対応するソースコードが `api.md` 本体より新しい(コンテンツハッシュが未記録、または記録済みハッシュと不一致な)ものが自動的に追加対象へ加えられます。ソースに変更が無い補助 API ドキュメントは対象に含まれません。差分検出の結果、対象になる補助 API と対象から外れる(ハッシュ一致でスキップされる)補助 API の両方が進捗表示に明示されるため、「api.md を指定したのに特定の補助 API ドキュメントだけ更新されない」状態が意図的なスキップなのか見落としなのかを判別できます。
 - **`"examples/*"` マーカー**: `TargetFiles` に `"examples/*"` が含まれる場合、`docsDir/examples` フォルダ内に実在する `*.md` 全件が個別のターゲットファイルへ展開されます。フォルダが存在しない場合は展開結果は空になります。
 
 #### examples/*.md の自動更新対象からの除外(2026-07-09〜)
@@ -1098,7 +1252,7 @@ Anthropic API 経由のフォールバック通信(`ClaudeQueryBg`)では、Wind
 - `model` 変数がそのまま JSON 文字列に埋め込まれるため、モデル名に JSON エスケープが必要な文字が含まれていた場合に不正な JSON が生成され得る。
 - 手組みした JSON 文字列を String として `Body` に渡すため、送信層で再度エンコード処理が行われ、Windows 環境で ShiftJIS 等への暗黙変換(送信層での再符号化 = 二重エンコード)が発生し得る。
 
-現在は内部関数 `iOpenAIChatBodyBytes[model, prompt, temperature]` が、文字列連結ではなく Association(`<|"model" -> model, "messages" -> {<|"role" -> "user", "content" -> prompt|>}|>`、`temperature` が数値のときのみ `"temperature"` キーを追加)から直接 `ExportByteArray["RawJSON", "Compact" -> True]` で UTF-8 ByteArray を生成し、それを `Body` に渡すよう変更されました。これにより、`model` 側の JSON エスケープも正しく行われ、送信層での再符号化(二重エンコード)も発生しなくなりました。JSON の直列化自体が失敗した場合は `"Error: OpenAI API リクエスト JSON の直列化に失敗しました"` が返されます。2026-08-16 の改訂で LM Studio 経路にモデル別推奨 temperature が導入された際も、`Automatic` / `None` 指定時は温度パラメータを送信しないという従来の挙動がそのまま維持されています。`prompt` は文字列(従来形式)、または OpenAI 互換の content ブロック配列(vision 入力用、2026-09-05 の改訂で一般化)のいずれの形式でも受け付けます。
+現在は内部関数 `iOpenAIChatBodyBytes[model, prompt, temperature]` が、文字列連結ではなく Association(`<|"model" -> model, "messages" -> {<|"role" -> "user", "content" -> prompt|>}|>`、`temperature` が数値のときのみ `"temperature"` キーを追加)から直接 `ExportByteArray["RawJSON", "Compact" -> True]` で UTF-8 ByteArray を生成し、それを `Body` に渡すよう変更されました。これにより、`model` 側の JSON エスケープも正しく行われ、送信層での再符号化(二重エンコード)も発生しなくなりました。JSON の直列化自体が失敗した場合は `"Error: OpenAI API リクエスト JSON の直列化に失敗しました"` が返されます。2026-08-16 の改訂で LM Studio 経路にモデル別推奨 temperature が導入された際も、`Automatic` / `None` 指定時は温度パラメータを送信しないという従来の挙動がそのまま維持されています。`prompt` は文字列(従来形式)、または OpenAI 互換の content ブロック配列(vision 入力用、2026-09-05 の改訂で一般化)のいずれの形式でも受け付けます。さらに 2026-09-08 の改訂では、この OpenAI 互換リクエスト構築に任意の `sysPrompt`(`role: "system"` として送信)と `toolsIn`(送信するツール定義)も渡せるようになり、`openai` / `zai` / `kimi` プロバイダがクラウド版ツールループ(前述「ディレクティブ強度制御(DirectiveLevel)」の `$ClaudeCloudToolLoop` を参照)を駆動できる基盤になっています。`toolsIn` を省略(`Automatic`)した場合は provider ごとの既定(ローカル provider は SourceVault の全ツール、クラウド provider はディレクティブ専用ツールのサブセット)が使われます。
 
 この変更は内部的な信頼性強化であり、新しい公開 API の追加はありません。
 
@@ -1188,6 +1342,8 @@ CreateImplementationWorkflow["my-feature", specText,
 | `$ClaudeAdvisaryModel` | アドバイザリーロールのモデル指定。`{"chatgptcodex", Automatic}` がデフォルト。 |
 | `$ClaudeUltraEnabled` | ultra モデルへの自動アップグレード制御(デフォルト `False`)。 |
 | `ClaudeUltraModelSpec[]` | ultra クラスモデルの `{provider, modelId}` 解決。解決不可時は `$Failed`。 |
+| `$ClaudeCloudToolLoop` | クラウド API プロバイダ(openai/zai/kimi)にディレクティブ専用ツールループを与えるか(詳細は「ディレクティブ強度制御(DirectiveLevel)」を参照)。 |
+| `$ClaudeCloudToolLoopTools` | クラウド API プロバイダが呼び出せる SourceVault MCP ツール名のアローリスト。 |
 | `ClaudeSpecStatus[]` | spec/consensus 状態の確認。 |
 | `ClaudeSpecVersions[]` | spec/review バージョン一覧(Dataset)。 |
 | `ClaudeSpecText[uri]` | sv:// URI から spec/review 本文を取得。 |

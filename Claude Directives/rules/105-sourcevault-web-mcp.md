@@ -1,4 +1,5 @@
 ---
+tier: procedure
 paths:
   - "**/SourceVault_webingest.wl"
   - "**/SourceVault_mcp.wl"

@@ -790,8 +790,112 @@ iPaletteFilterProviders[known_List, registry_, fallback_List] :=
     If[sel === {}, fallback, sel]];
 
 (* \:6a19\:6e96\:30e2\:30c7\:30eb\:67a0\:306e\:5faa\:74b0\:5019\:88dc\:3002claudecode \:306f\:6700\:7d42\:9632\:885b\:7dda\:3068\:3057\:3066\:6b8b\:3059\:3002 *)
+(* ---- ローカル LLM エンジンのマシン別排他指定 (2026-09-08) ----
+   背景: LM Studio 機でパレットの P: を回すと llama.cpp を選べてしまい、
+   自機の localhost を指す指定外サーバが叩かれる/起きる事故。登録簿
+   ($ClaudePaletteProviders) は「環境に存在する provider」の列挙であって、
+   自機でどのエンジンを動かすかは決めていなかった。ここで「マシン自身で
+   動かすローカル LLM エンジンは 1 つ」を宣言し、自機を指す指定外の
+   ローカル provider はパレット候補・preflight・送信経路のすべてで止める。
+   排他の単位は「接続先が自機か」であって provider 名ではない: LAN 上の
+   別機 (raptorlake の llama-server 等) は指定外 provider でもそのまま使える
+   (可否は URL と NBAccess rule 107 の信頼判定)。クラウド provider は対象外。
+   解決順: $ClaudeLocalLLMProvider (String / All)
+         > $ClaudeMachineLocalLLMProvider[$MachineName]
+         > "lmstudio"。
+   $ClaudeLocalLLMProvider::usage / $ClaudeMachineLocalLLMProvider::usage 参照。 *)
+If[!ValueQ[$ClaudeLocalLLMProvider], $ClaudeLocalLLMProvider = Automatic];
+If[!AssociationQ[$ClaudeMachineLocalLLMProvider],
+  $ClaudeMachineLocalLLMProvider = <||>];
+$iLocalLLMDefaultProvider = "lmstudio";
+
+(* provider 名の正規化。ローカル OpenAI 互換 provider 以外は None。 *)
+iLocalLLMNormalizeProvider[p_] :=
+  If[StringQ[p] && iLocalOAIProviderQ[StringTrim[p]],
+    ToLowerCase[StringTrim[p]], None];
+
+(* マシン別表の引き当て (キーの大文字小文字・前後空白は無視)。 *)
+iLocalLLMMachineLookup[tbl_Association, machine_] :=
+  Module[{m = ToLowerCase[StringTrim[ToString[machine]]], hit},
+    hit = SelectFirst[Normal[tbl],
+      StringQ[First[#]] && ToLowerCase[StringTrim[First[#]]] === m &, None];
+    If[hit === None, None, Last[hit]]];
+iLocalLLMMachineLookup[___] := None;
+
+ClaudeLocalLLMProvider[] :=
+  Module[{explicit, byMachine},
+    If[$ClaudeLocalLLMProvider === All, Return[All, Module]];
+    explicit = iLocalLLMNormalizeProvider[$ClaudeLocalLLMProvider];
+    If[StringQ[explicit], Return[explicit, Module]];
+    byMachine = iLocalLLMNormalizeProvider[
+      iLocalLLMMachineLookup[$ClaudeMachineLocalLLMProvider, $MachineName]];
+    If[StringQ[byMachine], byMachine, $iLocalLLMDefaultProvider]];
+
+(* URL のホスト部 (小文字)。scheme / path / port / IPv6 の [] を剥がす。 *)
+iLocalLLMURLHost[url_String] :=
+  Module[{u = StringTrim[url], h},
+    u = StringReplace[u, StartOfString ~~
+      (LetterCharacter | DigitCharacter | "+" | "-" | ".") .. ~~ "://" -> ""];
+    u = First[StringSplit[u, "/"], ""];
+    h = If[StringStartsQ[u, "["],
+      First[StringCases[u, "[" ~~ x__ ~~ "]" :> x], ""],
+      First[StringSplit[u, ":"], ""]];
+    ToLowerCase[StringTrim[h]]];
+iLocalLLMURLHost[___] := "";
+
+(* url がこのマシン自身 (loopback / 自機 IP / 自機ホスト名) を指すか。
+   判定できない (空 / 不正な URL) ものは False (= 自機ではない) 側に倒す:
+   この表は「自機で 2 つ目のエンジンを起こさない」ための運用設定であって
+   セキュリティ境界ではない (別機への送信可否は NBAccess rule 107 が見る)。 *)
+iLocalLLMSelfHostURLQ[url_] :=
+  Module[{h = iLocalLLMURLHost[url], mine},
+    If[h === "", Return[False, Module]];
+    If[h === "localhost" || h === "::1" || h === "0.0.0.0" ||
+       StringStartsQ[h, "127."] ||
+       h === ToLowerCase[ToString[$MachineName]], Return[True, Module]];
+    mine = Quiet @ Check[ToLowerCase /@ Select[$MachineAddresses, StringQ], {}];
+    MemberQ[mine, h]];
+
+(* model spec {prov, model, url} の接続先。第 3 要素が無ければパレットと同じ
+   解決 (秘密 tuple > 標準 tuple > provider 既定) で「実際に叩く URL」を返す。 *)
+iLocalLLMSpecURL[spec_List, prov_String] :=
+  If[Length[spec] >= 3 && StringQ[spec[[3]]] && StringTrim[spec[[3]]] =!= "",
+    StringTrim[spec[[3]]], iLocalOAIResolvePaletteURL[ToLowerCase[prov]]];
+iLocalLLMSpecURL[_, prov_String] := iLocalOAIResolvePaletteURL[ToLowerCase[prov]];
+
+(* p を url へ向けて使ってよいか。ローカル OpenAI 互換 provider だけが対象で、
+   それ以外 (クラウド / CLI / 非文字列) は常に True。指定 provider 以外でも、
+   接続先が自機 (localhost / 自機 IP) でなければ True (LAN 上の別機の
+   llama-server 等はこの表の管轄外)。url 省略時 (Automatic) はパレットが
+   照会する URL (iLocalOAIResolvePaletteURL) で判定する。 *)
+iLocalLLMProviderEnabledQ[p_, url_:Automatic] :=
+  Module[{d, pl, effURL},
+    If[!StringQ[p] || !iLocalOAIProviderQ[StringTrim[p]], Return[True, Module]];
+    d = ClaudeLocalLLMProvider[];
+    pl = ToLowerCase[StringTrim[p]];
+    If[d === All || pl === d, Return[True, Module]];
+    effURL = If[StringQ[url] && StringTrim[url] =!= "", StringTrim[url],
+      iLocalOAIResolvePaletteURL[pl]];
+    !iLocalLLMSelfHostURLQ[effURL]];
+
+(* 候補列から「自機を指す指定外のローカル provider」を落とす。空になれば fallback。 *)
+iLocalLLMFilterExclusive[list_List, fallback_List] :=
+  Module[{sel = Select[list, iLocalLLMProviderEnabledQ]},
+    If[sel === {}, fallback, sel]];
+
+(* 秘密枠の最終防衛線: 指定 provider (排他解除中は lmstudio)。 *)
+iLocalLLMPrivateFallback[] :=
+  Module[{d = ClaudeLocalLLMProvider[]},
+    {If[StringQ[d], d, $iLocalLLMDefaultProvider]}];
+
+(* 標準モデル枠の循環候補。claudecode は最終防衛線として残す。
+   2026-09-08: 登録簿で濾した後、マシン別排他で指定外のローカル provider を
+   落とす (指定 provider を勝手に足すことはしない: 標準枠にローカルを出すか
+   どうかは登録簿の判断)。 *)
 iPaletteEnabledProviders[] :=
-  iPaletteFilterProviders[$iPaletteProviderOrder, $ClaudePaletteProviders,
+  iLocalLLMFilterExclusive[
+    iPaletteFilterProviders[$iPaletteProviderOrder, $ClaudePaletteProviders,
+      {"claudecode"}],
     {"claudecode"}];
 
 (* \:73fe\:5728\:5024\:304c\:5019\:88dc\:5217\:306b\:7121\:3044\:3068\:304d\:3082\:5148\:982d\:3078\:9001\:308b\:3002\:5019\:88dc\:304c 1 \:500b\:306a\:3089\:305d\:308c\:3092\:8fd4\:3059\:3002 *)
@@ -1018,8 +1122,12 @@ $iPalettePrivateProviderOrder = {"lmstudio", "freetoken", "llamacpp"};
 (* \:79d8\:5bc6\:67a0\:306e\:5faa\:74b0\:5019\:88dc\:3002\:767b\:9332\:7c3f $ClaudePalettePrivateProviders \:3067\:6fbe\:3059
    (2026-08-30)\:3002lmstudio \:3092\:6700\:7d42\:9632\:885b\:7dda\:306b\:3059\:308b\:3002 *)
 iPaletteEnabledPrivateProviders[] :=
-  iPaletteFilterProviders[$iPalettePrivateProviderOrder,
-    $ClaudePalettePrivateProviders, {"lmstudio"}];
+  (* 2026-09-08: 秘密枠は「指定 provider が必ず残る」。登録簿に無くても
+     指定 provider を最終防衛線にする (秘密データ処理の唯一の受け皿なので)。 *)
+  iLocalLLMFilterExclusive[
+    iPaletteFilterProviders[$iPalettePrivateProviderOrder,
+      $ClaudePalettePrivateProviders, iLocalLLMPrivateFallback[]],
+    iLocalLLMPrivateFallback[]];
 
 If[!ValueQ[$iPalettePrivateProvider],
   $iPalettePrivateProvider = If[
@@ -2047,6 +2155,47 @@ $ClaudeLlamaCppBaseURL::usage =
   "llama-server は --api-key-file で認証必須。キーは NBAccess`NBStoreLocalLLMAPIKey[\n" <>
   "  \"llamacpp\", $ClaudeLlamaCppBaseURL, \"LLAMACPP_API_KEY\", \"<key>\"] で登録する\n" <>
   "(未登録なら credential 名は ToUpperCase[provider]<>\"_API_KEY\" にフォールバック)。";
+
+$ClaudeLocalLLMProvider::usage =
+  "$ClaudeLocalLLMProvider \[LongDash] このマシン自身 (localhost / 自機 IP) で動かすローカル LLM エンジンの\n" <>
+  "明示指定 (2026-09-08)。\"lmstudio\" | \"llamacpp\" | \"freetoken\" のいずれか 1 つ。Automatic (既定) は\n" <>
+  "マシン別表 $ClaudeMachineLocalLLMProvider → 既定 \"lmstudio\" の順で解決する。All は排他を解除する\n" <>
+  "(従来挙動)。実効値は ClaudeLocalLLMProvider[]、切替は ClaudeSetLocalLLMProvider[prov]。\n" <>
+  "\n" <>
+  "排他の対象は「自機の localhost を指す接続」だけ。指定外のローカル provider でも、接続先が\n" <>
+  "LAN 上の別機 (例: 192.168.x.x の llama-server) なら従来どおり使える (その可否は URL と\n" <>
+  "NBAccess の信頼判定に従う)。自機を指す指定外 provider は\n" <>
+  "  - パレットの P: / 秘密 P: の循環候補から消える (保存済み設定からも復元しない)\n" <>
+  "  - preflight (ClaudeBackendAvailableQ) が Reason \"ProviderNotDesignated\" で Available -> False\n" <>
+  "  - 同期 (ClaudeQuery 等) / 非同期 (ClaudeQueryAsync, RT-Async) の送信経路が送信前に止まる\n" <>
+  "  - $ClaudeLLMTierTable の候補にあれば指定 provider へ写される ({prov, Automatic})\n" <>
+  "クラウド provider (claudecode / anthropic / openai / zai / kimi) は対象外。\n" <>
+  "LM Studio 機で llama.cpp を選んでしまい localhost の別サーバが叩かれる/起きる事故を、\n" <>
+  "環境設定の段階で塞ぐための仕組み。接続先の判定は URL のホスト部 (localhost / 127.* / ::1 /\n" <>
+  "$MachineAddresses / $MachineName)。";
+
+$ClaudeMachineLocalLLMProvider::usage =
+  "$ClaudeMachineLocalLLMProvider \[LongDash] マシン名 → そのマシン自身で動かすローカル LLM エンジンの\n" <>
+  "対応表 (2026-09-08)。例 (localInit.wl、Needs[\"ClaudeCode`\"] の前に置く):\n" <>
+  "  ClaudeCode`$ClaudeMachineLocalLLMProvider = <|\n" <>
+  "    \"strixhalo128\" -> \"lmstudio\", \"raptorlake\" -> \"llamacpp\"|>;\n" <>
+  "キーは $MachineName (大文字小文字は無視)。表に無いマシンは \"lmstudio\"。\n" <>
+  "$ClaudeLocalLLMProvider が String / All のときはそちらが優先。\n" <>
+  "LAN 上の別機のサーバはこの表の管轄外 (URL で指定すれば使える)。$ClaudePaletteProviders /\n" <>
+  "$ClaudePalettePrivateProviders に lmstudio と llamacpp を両方登録したままでも、自機を指す\n" <>
+  "方だけが表で指定した 1 つに絞られる (登録簿 = 環境に存在するもの、表 = 自機で動かすもの)。";
+
+ClaudeLocalLLMProvider::usage =
+  "ClaudeLocalLLMProvider[] はこのマシン自身で動かすローカル LLM エンジンの provider 名\n" <>
+  "(\"lmstudio\" 等) を返す。排他解除 ($ClaudeLocalLLMProvider = All) のときは All。\n" <>
+  "解決順は $ClaudeLocalLLMProvider::usage 参照。";
+
+ClaudeSetLocalLLMProvider::usage =
+  "ClaudeSetLocalLLMProvider[prov] は自機のローカル LLM エンジン指定をこのカーネルで切り替える\n" <>
+  "(\"lmstudio\" | \"llamacpp\" | \"freetoken\" | All | Automatic)。preflight キャッシュを捨て、\n" <>
+  "パレットの P: / 秘密 P: が自機を指す指定外 provider になっていれば指定 provider へ寄せる。\n" <>
+  "戻り値は実効 provider (ClaudeLocalLLMProvider[])。不正な値は $Failed (設定は変えない)。\n" <>
+  "恒久設定は $ClaudeMachineLocalLLMProvider (localInit.wl) に書く。";
 
 $ClaudeEvalToolIntegrations::usage =
   "$ClaudeEvalToolIntegrations \[LongDash] ContextPlan の ToolDefinitions ゲート\n" <>
@@ -4067,11 +4216,67 @@ iLoadClaudeMD[] := Module[{candidates, found, nbf, workDir},
 iLoadClaudeMD[];
 
 (* \:30d7\:30ed\:30f3\:30d7\:30c8\:5148\:982d\:306b CLAUDE.md \:3092\:7d44\:307f\:8fbc\:3080\:30d8\:30eb\:30d1\:30fc *)
+(* ---- effective model for the current turn (2026-09-08) ----
+   The directive projection must be built for the model that will actually
+   answer, not always for $ClaudeModel:
+     1. $iClaudeEvalCurrentModelSpec  (set by ClaudeEval from the privacy
+        guard's effective ModelSpec)
+     2. required level >= 0.5 -> $ClaudePrivateModel (privacy routing)
+     3. $ClaudeModel (tuple or legacy String)
+   Previously ToString[$ClaudeModel] = "{lmstudio, qwen3.8-27b}" was handed to
+   the capability table, which could never match. *)
+If[!ValueQ[$iClaudeEvalCurrentModelSpec], $iClaudeEvalCurrentModelSpec = None];
+If[!ValueQ[$iClaudeLastDirectiveLevel], $iClaudeLastDirectiveLevel = None];
+
+iValidModelTupleQ[m_] :=
+  ListQ[m] && Length[m] >= 2 && StringQ[m[[1]]] && StringQ[m[[2]]] &&
+  StringTrim[m[[1]]] =!= "" && StringTrim[m[[2]]] =!= "";
+
+iClaudeEvalEffectiveModelSpec[] :=
+  Module[{lvl},
+    If[iValidModelTupleQ[$iClaudeEvalCurrentModelSpec],
+      Return[$iClaudeEvalCurrentModelSpec]];
+    lvl = If[NumericQ[$iClaudeEvalCurrentRequiredLevel],
+      $iClaudeEvalCurrentRequiredLevel, 0.0];
+    If[lvl >= 0.5 && iValidModelTupleQ[$ClaudePrivateModel],
+      Return[$ClaudePrivateModel]];
+    Which[
+      iValidModelTupleQ[$ClaudeModel], $ClaudeModel,
+      StringQ[$ClaudeModel] && StringTrim[$ClaudeModel] =!= "", $ClaudeModel,
+      True, "claude-opus-5"]];
+
+(* does the turn's provider have on-demand access to the directive tools?
+   (client-side tool loop, local or cloud, or LM Studio server-side MCP) *)
+iDirectiveToolAccessQ[spec_] :=
+  Module[{prov},
+    prov = Which[
+      iValidModelTupleQ[spec], ToLowerCase[spec[[1]]],
+      StringQ[spec] && StringContainsQ[spec, "/"],
+        ToLowerCase[First[StringSplit[spec, "/"]]],
+      True, "claudecode"];
+    Which[
+      iCloudOAIProviderQ[prov], TrueQ[iCloudToolLoopEnabledQ[prov]],
+      iLocalOAIProviderQ[prov],
+        TrueQ[iLocalToolLoopEnabledQ[prov]] ||
+        (prov === "lmstudio" && ListQ[$ClaudeEvalToolIntegrations] &&
+         MemberQ[$ClaudeEvalToolIntegrations, "mcp/sourcevault"]),
+      True, False]];
+
+(* public: what level / projection the current turn would get *)
+ClaudeCode`ClaudeEffectiveDirectiveLevel[] :=
+  Module[{spec = iClaudeEvalEffectiveModelSpec[]},
+    If[Length[Names["ClaudeDirectives`ClaudeResolveDirectiveLevel"]] > 0,
+      Append[
+        Quiet @ Check[ClaudeDirectives`ClaudeResolveDirectiveLevel[spec], <||>],
+        <|"ModelSpec" -> spec, "ToolAccess" -> iDirectiveToolAccessQ[spec],
+          "LastPrompt" -> $iClaudeLastDirectiveLevel|>],
+      <|"Level" -> Missing["DirectivesNotLoaded"], "ModelSpec" -> spec|>]];
+
 iClaudeSysPrompt[] :=
   Module[{base, mode, budget},
     base = Which[
       iClaudeDirectivesAvailableQ[],
-        iClaudeSysPromptViaDirectives[ToString[$ClaudeModel], ""],
+        iClaudeSysPromptViaDirectives[iClaudeEvalEffectiveModelSpec[], ""],
       $ClaudeMDContent =!= "",
         "## Project guidelines (CLAUDE.md)\n\n" <> $ClaudeMDContent <> "\n\n---\n\n",
       True,
@@ -11856,6 +12061,158 @@ If[! ValueQ[$ClaudeLocalToolLoopVerbose], $ClaudeLocalToolLoopVerbose = True];
 If[! IntegerQ[$ClaudeLocalToolLoopMaxUselessResults],
   $ClaudeLocalToolLoopMaxUselessResults = 3];
 
+(* ---- thinking runaway guard (2026-09-09) ----
+   Field: qwen3.8-27b on LM Studio spent 22,430 reasoning tokens (~35 min at
+   10.8 tok/s) on "photon double-slit simulation code", produced no content and
+   no tool call, and ran into the 40K context (truncated = 1). The DAG job hit
+   its 1800 s max-lifetime long before; nothing bounded the round.
+   - max_tokens caps ONE round (thinking counts); a capped round returns
+     finish_reason "length" with empty content ...
+   - ... which the loop detects (iToolLoopThinkingExhaustedQ) and retries ONCE
+     with reasoning_effort "none" + an explicit "answer directly" note.
+   - reasoning_effort is now resolved for lmstudio too (palette private
+     effort "off" -> "none", else iResolveLMStudioReasoning), not only freetoken.
+   - $ClaudeLocalToolLoopReasoningEffort: Automatic (per provider) | None
+     (never send) | "none"|"low"|... (force for every loop round). *)
+(* public, fully qualified (rule: new public symbols are declared as
+   ClaudeCode`$... rather than added to the export list) *)
+If[! IntegerQ[ClaudeCode`$ClaudeLocalToolLoopMaxCompletionTokens],
+  ClaudeCode`$ClaudeLocalToolLoopMaxCompletionTokens = 8192];
+If[! ValueQ[ClaudeCode`$ClaudeLocalToolLoopReasoningEffort],
+  ClaudeCode`$ClaudeLocalToolLoopReasoningEffort = Automatic];
+ClaudeCode`$ClaudeLocalToolLoopMaxCompletionTokens::usage =
+  "$ClaudeLocalToolLoopMaxCompletionTokens (8192) is the max_tokens sent with every client-side tool-loop round (thinking tokens count). None disables the cap.";
+ClaudeCode`$ClaudeLocalToolLoopReasoningEffort::usage =
+  "$ClaudeLocalToolLoopReasoningEffort: Automatic (resolve per provider: lmstudio palette private effort \"off\" -> \"none\", else iResolveLMStudioReasoning; freetoken -> iResolveFreeTokenReasoning), None (never send), or a string such as \"none\" forced on every loop round.";
+
+iToolLoopMaxTokens[] :=
+  With[{n = ClaudeCode`$ClaudeLocalToolLoopMaxCompletionTokens},
+    If[IntegerQ[n] && n > 0, n, None]];
+
+iToolLoopBaseURL[url_String] :=
+  StringReplace[url, RegularExpression["/v1/chat/completions/?$"] -> ""];
+iToolLoopBaseURL[x_] := ToString[x];
+
+(* The loop talks to /v1/chat/completions, whose reasoning_effort vocabulary is
+   none | minimal | low | medium | high | xhigh (LM Studio 2026-09-09:
+   "Invalid 'reasoning_effort' value: 'on'" -> HTTP 400). iResolveLMStudioReasoning
+   was written for /api/v1/chat where "on"/"off" are valid, so normalize:
+   off/none -> "none", on -> None (model default), else pass the known values. *)
+iToolLoopNormalizeEffort[v_] :=
+  Module[{s = If[StringQ[v], ToLowerCase[StringTrim[v]], ""]},
+    Which[
+      s === "", None,
+      MemberQ[{"off", "none", "disabled", "false"}, s], "none",
+      MemberQ[{"minimal", "low", "medium", "high", "xhigh"}, s], s,
+      True, None]];
+
+iToolLoopResolveReasoning[provider_, model_, url_, given_] :=
+  Module[{p = ToLowerCase[ToString[provider]],
+          setting = ClaudeCode`$ClaudeLocalToolLoopReasoningEffort},
+    iToolLoopNormalizeEffort @ Which[
+      StringQ[given] && given =!= "", given,
+      StringQ[setting] && setting =!= "", setting,
+      setting === None, None,
+      p === "lmstudio",
+        If[ToLowerCase[ToString[$iPalettePrivateEffort]] === "off", "none",
+          Quiet @ Check[
+            iResolveLMStudioReasoning[ToString[model], iToolLoopBaseURL[url]], None]],
+      p === "freetoken",
+        Quiet @ Check[
+          iResolveFreeTokenReasoning[ToString[model], iToolLoopBaseURL[url]], None],
+      True, None]];
+
+(* finish_reason "length" with neither content nor tool calls = the whole
+   output budget went into reasoning *)
+iToolLoopThinkingExhaustedQ[json_Association, msg_Association] :=
+  Module[{choice, finish, content, calls},
+    choice = Quiet @ Check[First[Lookup[json, "choices", {}]], <||>];
+    finish = ToString @ Lookup[If[AssociationQ[choice], choice, <||>], "finish_reason", ""];
+    content = Lookup[msg, "content", ""];
+    content = If[StringQ[content], content, ""];
+    calls = Lookup[msg, "tool_calls", {}];
+    finish === "length" && StringTrim[content] === "" &&
+      (! ListQ[calls] || calls === {})];
+iToolLoopThinkingExhaustedQ[___] := False;
+
+iToolLoopThinkingExhaustedMessage[] :=
+  <|"role" -> "user", "content" ->
+    "[System] Your previous attempt used the entire output budget on internal " <>
+    "reasoning and produced no answer. Do not deliberate at length. Write the " <>
+    "answer directly now (call a tool only if strictly necessary).\n" <>
+    "[システム] 直前の試行は思考だけで出力上限を使い切り回答がありませんでした。" <>
+    "長考せず、今すぐ回答本文を書いてください。"|>;
+
+(* ============================================================
+   Cloud (API) tool loop = directives on demand (2026-09-08)
+
+   Cloud providers deliberately get NO SourceVault data tools (tool results
+   leave the machine: mail bodies, session logs, notebook cells). But the
+   directives (CLAUDE.md / rules / skills) are PrivacyLevel 0.0 by design
+   (retrieval spec P4) and are what Claude Code CLI, Codex (AGENTS.md) and
+   LM Studio (mcp/sourcevault) already receive. So the OpenAI-compatible
+   cloud providers (openai / zai / kimi) get the SAME client-side loop with
+   an ALLOWLIST restricted to the directive tools. The allowlist is enforced
+   at execution time (iExecSourceVaultToolCall), not only at schema time.
+
+     $ClaudeCloudToolLoop        Automatic (= on when SourceVault is loaded) | True | False
+     $ClaudeCloudToolLoopTools   tool names a cloud model may call
+   The prompt side is told about the tools via ClaudeDirectives "ToolAccess"
+   (a Minimal-level model receives guardrails by name and pulls the body).
+   ============================================================ *)
+(* public symbols (fully qualified: the package export list is not touched) *)
+ClaudeCode`$ClaudeCloudToolLoop::usage =
+  "$ClaudeCloudToolLoop controls the directives-on-demand tool loop for OpenAI-compatible cloud providers (openai / zai / kimi): Automatic (default; on when SourceVault is loaded), True, or False. Only the tools in $ClaudeCloudToolLoopTools are exposed and executable; SourceVault data tools never reach a cloud model.";
+ClaudeCode`$ClaudeCloudToolLoopTools::usage =
+  "$ClaudeCloudToolLoopTools is the list of SourceVault MCP tool names a cloud model may call through the client-side tool loop (default {\"sourcevault_directives\", \"sourcevault_directive_body\"}, both PrivacyLevel 0.0).";
+ClaudeCode`ClaudeEffectiveDirectiveLevel::usage =
+  "ClaudeEffectiveDirectiveLevel[] returns the DirectiveLevel (Minimal | Standard | Full), its source, the effective model spec of the current turn and whether the model has on-demand directive tool access.";
+If[! ValueQ[ClaudeCode`$ClaudeCloudToolLoop], ClaudeCode`$ClaudeCloudToolLoop = Automatic];
+If[! ListQ[ClaudeCode`$ClaudeCloudToolLoopTools],
+  ClaudeCode`$ClaudeCloudToolLoopTools = {"sourcevault_directives", "sourcevault_directive_body"}];
+(* dynamic (Block) allowlist for the executing loop: None = every SourceVault tool *)
+If[! ValueQ[$iToolLoopAllowedTools], $iToolLoopAllowedTools = None];
+
+iCloudOAIProviderQ[p_] :=
+  StringQ[p] && MemberQ[{"openai", "zai", "kimi"}, ToLowerCase[p]];
+
+iCloudToolLoopEnabledQ[prov_] :=
+  Module[{p = If[StringQ[prov], ToLowerCase[prov], ""], flag = ClaudeCode`$ClaudeCloudToolLoop},
+    Which[
+      flag === False, False,
+      ! iCloudOAIProviderQ[p], False,
+      iCloudToolLoopTools[] === {}, False,
+      TrueQ[flag] || flag === Automatic, True,
+      True, False]];
+
+(* the OpenAI tools subset a cloud model may see *)
+iCloudToolLoopTools[] :=
+  Select[iSourceVaultOpenAITools[],
+    MemberQ[ClaudeCode`$ClaudeCloudToolLoopTools, Lookup[#["function"], "name", ""]] &];
+
+(* tools + allowlist for a provider: local = everything, cloud = directive subset *)
+iToolLoopToolsFor[prov_] :=
+  If[iCloudOAIProviderQ[prov], iCloudToolLoopTools[], iSourceVaultOpenAITools[]];
+iToolLoopAllowlistFor[prov_] :=
+  If[iCloudOAIProviderQ[prov],
+    Lookup[#["function"], "name", ""] & /@ iCloudToolLoopTools[], None];
+
+(* absolute local paths in a directive listing are not something a cloud model
+   needs; strip "path" fields when an allowlist (= cloud) is active *)
+iToolLoopSanitizeForCloud[text_String] :=
+  If[ListQ[$iToolLoopAllowedTools],
+    StringReplace[text, RegularExpression["\"path\":\"(?:[^\"\\\\]|\\\\.)*\",?"] -> ""],
+    text];
+iToolLoopSanitizeForCloud[t_] := t;
+
+(* system message for a tool loop: the directives / system prompt, when the
+   caller has one that is not already inlined in the user prompt *)
+iToolLoopMessages[prompt_, sysPrompt_] :=
+  If[StringQ[sysPrompt] && StringTrim[sysPrompt] =!= "",
+    {<|"role" -> "system", "content" -> sysPrompt|>,
+     <|"role" -> "user", "content" -> prompt|>},
+    {<|"role" -> "user", "content" -> prompt|>}];
+
 (* ---- ツールループ終端の契約ヘルパ (2026-09-02) ----
    終端往復 (tools を外す往復) には「ツールはもう使えない、手元の情報で
    最終回答を書け」を明示する。tools を外すだけでは、モデルはまだ検索したい
@@ -11995,10 +12352,17 @@ iExecSourceVaultToolCall[call_Association] :=
     If[! MemberQ[Lookup[#["function"], "name", ""] & /@ iSourceVaultOpenAITools[],
         name],
       Return["ERROR: unknown tool " <> name]];
+    (* 2026-09-08: execution-time allowlist (cloud loops see only directive
+       tools; a hallucinated data tool name must fail here, not run) *)
+    If[ListQ[$iToolLoopAllowedTools] && ! MemberQ[$iToolLoopAllowedTools, name],
+      Quiet @ iClaudeFreezeLog["toolloop-tool-denied", name];
+      Return["ERROR: tool not available for this provider: " <> name <>
+        ". Available: " <> StringRiffle[$iToolLoopAllowedTools, ", "]]];
     res = Quiet @ Check[
       SourceVault`SourceVaultMCPCallTool[name, args], $Failed];
     If[res === $Failed, Return["ERROR: tool execution failed: " <> name]];
     iLocalToolLoopTrim[name,
+      iToolLoopSanitizeForCloud @
       If[AssociationQ[res] && TrueQ[Lookup[res, "isError", False]],
         "ERROR: " <> iMCPResultToText[res],
         iMCPResultToText[res]]]];
@@ -12053,6 +12417,8 @@ iLocalToolLoopRound[apiKey_String, model_String, url_String,
       body = Join[body, <|"temperature" -> N[temperature]|>]];
     If[StringQ[reasoningEffort] && reasoningEffort =!= "",
       body = Join[body, <|"reasoning_effort" -> reasoningEffort|>]];
+    If[IntegerQ[iToolLoopMaxTokens[]],
+      body = Join[body, <|"max_tokens" -> iToolLoopMaxTokens[]|>]];
     bodyBytes = Quiet @ Check[
       ExportByteArray[body, "JSON", "Compact" -> True], $Failed];
     If[! ByteArrayQ[bodyBytes], Return[$Failed]];
@@ -12073,19 +12439,31 @@ iLocalToolLoopRound[apiKey_String, model_String, url_String,
     If[! AssociationQ[json], Return[$Failed]];
     json];
 
+(* 2026-09-08: optional sysPrompt (sent as role:"system") and toolsIn
+   (Automatic = iToolLoopToolsFor[provider]: every SourceVault tool for local
+   providers, the directive subset for cloud ones). The allowlist is Block-ed
+   around the loop so iExecSourceVaultToolCall enforces it. *)
 iQueryOpenAIToolLoop[apiKey_String, model_String, prompt_String,
     url_String, provider_String,
-    temperature_:Automatic, reasoningEffort_:None] :=
+    temperature_:Automatic, reasoningEffort_:None,
+    sysPrompt_:None, toolsIn_:Automatic] :=
+  Block[{$iToolLoopAllowedTools = iToolLoopAllowlistFor[provider]},
   Module[{tools, messages, iter, max, json, msg, calls, content, preflight,
-          terminal, sigs = {}, useless = 0, formatRetry = 0},
-    tools = iSourceVaultOpenAITools[];
-    preflight = iCloudSendPreflightDecision[provider, prompt, url];
+          terminal, sigs = {}, useless = 0, formatRetry = 0, thinkRetry = 0,
+          reff},
+    reff = iToolLoopResolveReasoning[provider, model, url, reasoningEffort];
+    tools = If[toolsIn === Automatic, iToolLoopToolsFor[provider], toolsIn];
+    If[ListQ[$iToolLoopAllowedTools],
+      $iToolLoopAllowedTools = Lookup[#["function"], "name", ""] & /@ tools];
+    preflight = iCloudSendPreflightDecision[provider,
+      If[StringQ[sysPrompt], sysPrompt <> "\n\n" <> prompt, prompt], url];
     If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
-      Return[iCloudSendPreflightFailure[preflight]]];
+      Return[iCloudSendPreflightFailure[preflight], Block]];
     iLLMBreakpointGate["API sync (tool loop)",
       <|"Provider" -> provider, "Model" -> model, "URL" -> url,
-        "Prompt" -> prompt, "Tools" -> Length[tools]|>];
-    messages = {<|"role" -> "user", "content" -> prompt|>};
+        "Prompt" -> prompt, "Tools" -> Length[tools],
+        "AllowedTools" -> $iToolLoopAllowedTools|>];
+    messages = iToolLoopMessages[prompt, sysPrompt];
     max = If[IntegerQ[$ClaudeLocalToolLoopMaxIterations] &&
              $ClaudeLocalToolLoopMaxIterations > 0,
       $ClaudeLocalToolLoopMaxIterations, 8];
@@ -12101,7 +12479,7 @@ iQueryOpenAIToolLoop[apiKey_String, model_String, prompt_String,
       If[terminal && ! iToolLoopEndsWithSystemQ[messages],
         AppendTo[messages, iToolLoopFinalInstruction[]]];
       json = iLocalToolLoopRound[apiKey, model, url, messages,
-        If[terminal, {}, tools], temperature, reasoningEffort];
+        If[terminal, {}, tools], temperature, reff];
       If[StringQ[json], Return[json, Module]];
       If[! AssociationQ[json],
         Return[iL["Error: ツールループの応答取得に失敗しました",
@@ -12111,6 +12489,17 @@ iQueryOpenAIToolLoop[apiKey_String, model_String, prompt_String,
       If[! AssociationQ[msg],
         Return[iL["Error: 応答に message がありません",
                   "Error: response has no message"], Module]];
+      (* 2026-09-09: thinking runaway -> one retry without reasoning *)
+      If[iToolLoopThinkingExhaustedQ[json, msg],
+        If[thinkRetry < 1,
+          thinkRetry++;
+          reff = "none";
+          Quiet @ iClaudeFreezeLog["toolloop-thinking-exhausted-retry", "sync " <> model];
+          AppendTo[messages, iToolLoopThinkingExhaustedMessage[]];
+          Continue[]];
+        Return[iL["Error: モデルが思考だけで出力上限を使い切り回答を返しませんでした",
+                  "Error: model exhausted its output budget while thinking (no answer)"],
+          Module]];
       calls = Lookup[msg, "tool_calls", {}];
       If[! ListQ[calls] || calls === {} || terminal,
         content = Lookup[msg, "content", ""];
@@ -12149,7 +12538,7 @@ iQueryOpenAIToolLoop[apiKey_String, model_String, prompt_String,
          max + 1),
         iter + 1]];
     iL["Error: ツールループが収束しませんでした",
-       "Error: tool loop did not converge"]];
+       "Error: tool loop did not converge"]]];
 
 (* ============================================================
    非同期ツールループ (2026-08-29)
@@ -12200,6 +12589,8 @@ iToolLoopSubmitRound[id_String] :=
       body = Join[body, <|"temperature" -> N[job["temperature"]]|>]];
     If[StringQ[job["reasoningEffort"]] && job["reasoningEffort"] =!= "",
       body = Join[body, <|"reasoning_effort" -> job["reasoningEffort"]|>]];
+    If[IntegerQ[iToolLoopMaxTokens[]],
+      body = Join[body, <|"max_tokens" -> iToolLoopMaxTokens[]|>]];
     bodyBytes = Quiet @ Check[
       ExportByteArray[body, "JSON", "Compact" -> True], $Failed];
     If[! ByteArrayQ[bodyBytes],
@@ -12266,6 +12657,22 @@ iToolLoopOnBodyCore[id_String, a_] :=
       $iToolLoopJobs[id, "status"] = "Failed";
       $iToolLoopJobs[id, "error"] = "response has no message";
       Return[Null]];
+    (* 2026-09-09: thinking runaway (finish_reason length, no content, no
+       tool call) -> one retry with reasoning_effort "none"; then Failed so the
+       watcher / DAG moves on instead of waiting for max-lifetime *)
+    If[iToolLoopThinkingExhaustedQ[json, msg],
+      If[Lookup[job, "thinkRetry", 0] < 1,
+        $iToolLoopJobs[id, "thinkRetry"] = Lookup[job, "thinkRetry", 0] + 1;
+        $iToolLoopJobs[id, "reasoningEffort"] = "none";
+        $iToolLoopJobs[id, "messages"] =
+          Append[job["messages"], iToolLoopThinkingExhaustedMessage[]];
+        Quiet @ iClaudeFreezeLog["toolloop-thinking-exhausted-retry", id];
+        iToolLoopSubmitRound[id];
+        Return[Null]];
+      $iToolLoopJobs[id, "status"] = "Failed";
+      $iToolLoopJobs[id, "error"] =
+        "model exhausted its output budget while thinking (no answer)";
+      Return[Null]];
     calls = Lookup[msg, "tool_calls", {}];
     If[! ListQ[calls] || calls === {} || job["iter"] > job["max"],
       content = Lookup[msg, "content", ""];
@@ -12293,6 +12700,9 @@ iToolLoopOnBodyCore[id_String, a_] :=
     (* assistant の tool_calls をそのまま履歴へ積む (同期版と同じ規則:
        reasoning_content を剥がすと同じツールを再呼び出しして収束しない) *)
     $iToolLoopJobs[id, "messages"] = Append[job["messages"], msg];
+    (* 2026-09-08: the job's allowlist (cloud = directive tools only) is
+       enforced while the calls execute *)
+    Block[{$iToolLoopAllowedTools = Lookup[job, "allowedTools", None]},
     Scan[
       Function[c,
         Module[{sig = iToolLoopCallSignature[c], name, res},
@@ -12312,7 +12722,7 @@ iToolLoopOnBodyCore[id_String, a_] :=
             <|"role" -> "tool",
               "tool_call_id" -> ToString @ Lookup[c, "id", ""],
               "content" -> res|>]]],
-      Select[calls, AssociationQ]];
+      Select[calls, AssociationQ]]];
     (* 無益な結果が連続したら予算を待たず終端往復へ *)
     $iToolLoopJobs[id, "iter"] =
       If[Lookup[$iToolLoopJobs[id], "useless", 0] >= iToolLoopMaxUseless[],
@@ -12350,19 +12760,27 @@ iToolLoopOnBody[id_String, a_] :=
     Null];
 iToolLoopOnBody[___] := Null;
 
+(* 2026-09-08: sysPrompt (role:"system") and toolsIn (Automatic = per provider:
+   every SourceVault tool locally, the directive subset for cloud providers)
+   plus the matching execution allowlist stored on the job. *)
 iToolLoopStart[provider_String, model_String, prompt_String, url_String,
-    apiKey_String, temperature_:Automatic, reasoningEffort_:None] :=
-  Module[{id},
+    apiKey_String, temperature_:Automatic, reasoningEffort_:None,
+    sysPrompt_:None, toolsIn_:Automatic] :=
+  Module[{id, tools, allowed},
+    tools = If[toolsIn === Automatic, iToolLoopToolsFor[provider], toolsIn];
+    allowed = If[ListQ[iToolLoopAllowlistFor[provider]],
+      Lookup[#["function"], "name", ""] & /@ tools, None];
     $iToolLoopSeq = $iToolLoopSeq + 1;
     id = "tl" <> ToString[$iToolLoopSeq] <> "-" <>
       StringReplace[ToString[Round[1000 AbsoluteTime[]]], "." -> ""];
     $iToolLoopJobs[id] = <|
       "provider" -> provider, "model" -> model, "url" -> url,
       "apiKey" -> apiKey, "temperature" -> temperature,
-      "reasoningEffort" -> reasoningEffort,
-      "tools" -> iSourceVaultOpenAITools[],
-      "messages" -> {<|"role" -> "user", "content" -> prompt|>},
-      "iter" -> 1,
+      "reasoningEffort" -> iToolLoopResolveReasoning[provider, model, url, reasoningEffort],
+      "tools" -> tools,
+      "allowedTools" -> allowed,
+      "messages" -> iToolLoopMessages[prompt, sysPrompt],
+      "iter" -> 1, "thinkRetry" -> 0,
       "max" -> If[IntegerQ[$ClaudeLocalToolLoopMaxIterations] &&
                   $ClaudeLocalToolLoopMaxIterations > 0,
                 $ClaudeLocalToolLoopMaxIterations, 8],
@@ -12384,10 +12802,15 @@ iToolLoopStatus[id_String] :=
 iToolLoopStatus[___] :=
   <|"status" -> "Failed", "result" -> None, "error" -> "bad job id"|>;
 
+(* 2026-09-09: abort before remove so the HTTP connection closes and the local
+   server (llama.cpp / LM Studio) stops generating ("Client disconnected");
+   otherwise a killed job leaves the slot busy for the rest of the round. *)
 iToolLoopCleanup[id_String] := (
   Quiet @ Check[
     With[{t = Lookup[Lookup[$iToolLoopJobs, id, <||>], "task", None]},
-      If[Head[t] === TaskObject, TaskRemove[t]]], Null];
+      If[Head[t] === TaskObject,
+        Quiet @ TaskAbort[t];
+        Quiet @ TaskRemove[t]]], Null];
   $iToolLoopJobs = KeyDrop[$iToolLoopJobs, id];);
 iToolLoopCleanup[___] := Null;
 
@@ -12545,8 +12968,17 @@ iLocalOAIDefaultBaseURL[p_] :=
 iResolveLocalLLMAPIKey[p_, customURL_String:""] :=
   Module[{prov, effURL, k},
     prov = If[StringQ[p], ToLowerCase[p], "lmstudio"];
-    If[prov === "lmstudio", Return[iResolveLMStudioAPIKey[customURL]]];
     effURL = If[customURL =!= "", customURL, iLocalOAIDefaultBaseURL[prov]];
+    (* 2026-09-08: マシン別排他の最終防衛線。自機を指す指定外のローカル
+       provider にはキーを渡さない ($Failed)。StartProcess 系の送信経路
+       (秘密ノード / 一括 / 翻訳 等) は StringQ[apiKey] で止まる。主要経路
+       (同期 BgAPI / 非同期 fallback / preflight) はこの手前で明示メッセージ
+       付きで止まる。別機 (LAN) 宛はここを素通りする。 *)
+    If[!iLocalLLMProviderEnabledQ[prov, effURL],
+      Message[ClaudeLocalLLMProvider::notdesignated, prov, effURL, $MachineName,
+        ClaudeLocalLLMProvider[]];
+      Return[$Failed, Module]];
+    If[prov === "lmstudio", Return[iResolveLMStudioAPIKey[customURL]]];
     k = Quiet @ NBAccess`NBGetLocalLLMAPIKey[prov, effURL,
           PrivacySpec -> <|"AccessLevel" -> 1.0|>];
     If[StringQ[k] && k =!= "", k, "lm-studio"]
@@ -13123,6 +13555,8 @@ iLocalOAIPaletteModels[prov_String] :=
     p = ToLowerCase[prov];
     (* 2026-08-29: model tuple の URL 上書きを尊重する (lmstudio と同じ規則)。 *)
     baseURL = iLocalOAIResolvePaletteURL[p];
+    (* 2026-09-08: 自機を指す指定外のローカル provider は照会しない (静的リストへ) *)
+    If[!iLocalLLMProviderEnabledQ[p, baseURL], Return[{}, Module]];
     key = p <> "|" <> baseURL;
     now = AbsoluteTime[];
     cached = Lookup[$iLocalOAIPaletteModelsCache, key, Missing[]];
@@ -13169,6 +13603,21 @@ ClaudeBackendAvailableQ[spec_List, opts___Rule] :=
   Module[{provider, refresh, key, now, cached, res},
     provider = ToLowerCase[ToString[First[spec, ""]]];
     refresh = TrueQ[Lookup[<|opts|>, "Refresh", False]];
+    (* 2026-09-08: マシン別排他。自機を指す指定外のローカル provider は HTTP を
+       打たずに即 False。キャッシュには入れない (指定は実行時に切り替わり得る)。
+       別機 (LAN) 宛はここを素通りして通常の preflight へ。 *)
+    If[iLocalOAIProviderQ[provider] &&
+       !iLocalLLMProviderEnabledQ[provider, iLocalLLMSpecURL[spec, provider]],
+      res = <|"Available" -> False, "Reason" -> "ProviderNotDesignated",
+        "Designated" -> ClaudeLocalLLMProvider[],
+        "Machine" -> ToString[$MachineName],
+        "BaseURL" -> iLocalLLMSpecURL[spec, provider]|>;
+      iClaudeDiagEmit["PreflightFailed",
+        <|"Backend" -> provider, "Reason" -> "ProviderNotDesignated",
+          "Designated" -> ToString[ClaudeLocalLLMProvider[]],
+          "BaseURL" -> iLocalLLMSpecURL[spec, provider],
+          "Model" -> ToString[If[Length[spec] >= 2, spec[[2]], Automatic]]|>];
+      Return[res, Module]];
     key = provider <> "|" <> ToString[spec, InputForm];
     now = AbsoluteTime[];
     cached = Lookup[$iClaudeBackendAvailCache, key, Missing[]];
@@ -13182,6 +13631,76 @@ ClaudeBackendAvailableQ[spec_List, opts___Rule] :=
         <|"Backend" -> provider, "Reason" -> Lookup[res, "Reason", "?"],
           "Model" -> ToString[If[Length[spec] >= 2, spec[[2]], Automatic]]|>]];
     res];
+
+(* ---- ローカル LLM provider 排他指定: 切替と関所用メッセージ (2026-09-08) ---- *)
+ClaudeLocalLLMProvider::notdesignated =
+  "Local LLM provider `1` at `2` targets this machine (`3`), whose local engine is fixed to `4`. Point it at another host's URL (model tuple 3rd element / $Claude<Provider>BaseURL), or change the designation with $ClaudeMachineLocalLLMProvider (localInit.wl) / ClaudeSetLocalLLMProvider[\"`1`\"].";
+ClaudeSetLocalLLMProvider::badprov =
+  "`1` is not a local LLM provider. Use \"lmstudio\" | \"llamacpp\" | \"freetoken\" | All | Automatic.";
+
+iLocalLLMNotDesignatedMessage[prov_, url_:""] :=
+  Module[{p = ToString[prov], d = ToString[ClaudeLocalLLMProvider[]],
+          m = ToString[$MachineName],
+          u = If[StringQ[url] && url =!= "", url,
+                 iLocalOAIResolvePaletteURL[ToLowerCase[ToString[prov]]]]},
+    "Error: " <> iL[
+      "ローカル LLM provider '" <> p <> "' の接続先 " <> u <>
+        " はこのマシン (" <> m <> ") 自身です。自機で動かすローカル LLM " <>
+        "エンジンは '" <> d <> "' に固定されています " <>
+        "($ClaudeMachineLocalLLMProvider)。LAN 上の別機を使うならその機の URL を " <>
+        "model tuple の第 3 要素か provider 既定 URL ($ClaudeLlamaCppBaseURL 等) に" <>
+        "指定してください。一時的に切り替えるなら ClaudeSetLocalLLMProvider[\"" <>
+        p <> "\"]。",
+      "Local LLM provider '" <> p <> "' at " <> u <> " targets this machine (" <>
+        m <> "), whose local engine is fixed to '" <> d <>
+        "' ($ClaudeMachineLocalLLMProvider). To use another host, put its URL in " <>
+        "the model tuple's 3rd element or the provider default " <>
+        "($ClaudeLlamaCppBaseURL etc.); to switch temporarily, " <>
+        "ClaudeSetLocalLLMProvider[\"" <> p <> "\"]."]];
+
+(* パレットの P: / 秘密 P: が指定外のローカル provider を指していたら寄せる。
+   寄せ先は指定 provider が候補にあればそれ、無ければ候補の先頭。
+   iPaletteModelsFor は指定 provider のライブ一覧を照会する (明示操作なので可)。 *)
+iLocalLLMRehomePaletteSlots[] :=
+  Module[{d = ClaudeLocalLLMProvider[], enabled, target, models},
+    enabled = iPaletteEnabledProviders[];
+    If[StringQ[$iPaletteProvider] && !MemberQ[enabled, $iPaletteProvider],
+      target = If[StringQ[d] && MemberQ[enabled, d], d, First[enabled]];
+      $iPaletteProvider = target;
+      models = iPaletteModelsFor[target];
+      $iPaletteModelName = If[ListQ[models] && Length[models] >= 1,
+        First[models], $iPaletteDefaultClaudeModel];
+      $iPaletteModel = Which[
+        target === "claudecode" && StringContainsQ[$iPaletteModelName, "opus"],   "opus",
+        target === "claudecode" && StringContainsQ[$iPaletteModelName, "sonnet"], "sonnet",
+        True, "default"];
+      iPaletteSyncClaudeModel[]];
+    enabled = iPaletteEnabledPrivateProviders[];
+    If[StringQ[$iPalettePrivateProvider] &&
+       !MemberQ[enabled, $iPalettePrivateProvider],
+      target = If[StringQ[d] && MemberQ[enabled, d], d, First[enabled]];
+      $iPalettePrivateProvider = target;
+      models = iPaletteModelsFor[target];
+      $iPalettePrivateModelName = If[ListQ[models] && Length[models] >= 1,
+        First[models], ""];
+      iPaletteSyncPrivateModel[]];
+  ];
+
+ClaudeSetLocalLLMProvider[p_] :=
+  Module[{norm, eff},
+    norm = Which[
+      p === All || p === Automatic, p,
+      StringQ[p] && iLocalOAIProviderQ[StringTrim[p]], ToLowerCase[StringTrim[p]],
+      True, $Failed];
+    If[norm === $Failed,
+      Message[ClaudeSetLocalLLMProvider::badprov, p];
+      Return[$Failed, Module]];
+    $ClaudeLocalLLMProvider = norm;
+    (* preflight 結果は provider 単位でキャッシュされているので捨てる *)
+    $iClaudeBackendAvailCache = <||>;
+    eff = ClaudeLocalLLMProvider[];
+    Quiet @ Check[iLocalLLMRehomePaletteSlots[], Null];
+    eff];
 
 iClaudeBackendAvailCompute["lmstudio", spec_List] :=
   Module[{model, url, models, chat, hasState, loadedIds, ok},
@@ -13375,6 +13894,7 @@ ClaudeResolveLLMTier[class_] := Module[
   If[cands === Automatic || ! ListQ[cands],
     Return[<|"TaskClass" -> eff, "Selected" -> Automatic,
       "Candidates" -> Automatic, "Rejected" -> {}|>]];
+  cands = iLocalLLMRemapTierCandidates[cands];   (* 2026-09-08 マシン別排他 *)
   Scan[Function[cand, Module[{pre},
       If[selected === None,
         If[iClaudeSpendBlockedQ[cand],   (* hardening 04 Inc5 *)
@@ -13388,6 +13908,27 @@ ClaudeResolveLLMTier[class_] := Module[
     cands];
   <|"TaskClass" -> eff, "Selected" -> selected,
     "Candidates" -> cands, "Rejected" -> rejected|>];
+
+(* 2026-09-08: tier 表の候補のうち「自機を指す指定外のローカル provider」を、
+   このマシンの指定 provider へ写す (lmstudio 前提で書かれた既定表を llama.cpp
+   機でもそのまま使えるように)。モデル名は provider 固有なので Automatic に
+   戻し、preflight の LoadedModels で具体化させる (iClaudeMaterializeTierModel)。
+   別機 (LAN) 宛の候補と排他解除 (All) 中は写さない。明示 Model -> {"llamacpp",
+   ...} 指定は写さずに止める (iClaudeQueryBgAPI 等の関所) — 宣言的な tier 表
+   とは扱いを分ける。 *)
+iLocalLLMRemapTierCandidates[cands_List] :=
+  Module[{d = ClaudeLocalLLMProvider[]},
+    If[!StringQ[d], Return[cands, Module]];
+    DeleteDuplicates @ Map[
+      Function[cand,
+        If[ListQ[cand] && Length[cand] >= 1 && StringQ[First[cand]] &&
+           iLocalOAIProviderQ[First[cand]] &&
+           !iLocalLLMProviderEnabledQ[First[cand],
+             iLocalLLMSpecURL[cand, First[cand]]],
+          {d, Automatic},
+          cand]],
+      cands]];
+iLocalLLMRemapTierCandidates[x_] := x;
 
 (* 2026-07-08 fix (Inc2b 由来バグ): {"lmstudio", Automatic} のまま返すと
    iResolveDefaultModelSpec の StringQ 条件を通らず既定モデル (CLI) へ
@@ -13557,6 +14098,7 @@ iClaudeTierNextCandidate[tcEff_String, current_] := Module[
   {cands, pos, rest, found = None},
   cands = Lookup[$ClaudeLLMTierTable, tcEff, Automatic];
   If[! ListQ[cands], Return[None, Module]];
+  cands = iLocalLLMRemapTierCandidates[cands];   (* 2026-09-08 マシン別排他 *)
   pos = FirstPosition[cands, current, None];
   rest = If[pos === None, cands, Drop[cands, First[pos]]];
   Scan[Function[cand, Module[{pre},
@@ -13974,7 +14516,7 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
                こちら側でツールループを回して SourceVault MCP を使わせる。 *)
             If[iLocalToolLoopEnabledQ[prov],
               iQueryOpenAIToolLoop[resolvedKey, model, prompt, url, prov,
-                tmp, reEff],
+                tmp, reEff, If[StringQ[sysPrompt], sysPrompt, None]],
               iQueryOpenAIAPI[resolvedKey, model, prompt, url, tmp, reEff]]]]
       ]
     ];
@@ -14023,24 +14565,42 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
     Switch[prov,
       "anthropic",
         iQueryAnthropicAPI[apiKey, model, prompt],
+      (* 2026-09-08: OpenAI-compatible cloud providers run the client-side
+         tool loop restricted to the directive tools (iCloudToolLoopEnabledQ),
+         so an API model can pull rules / skills on demand exactly like
+         LM Studio (mcp/sourcevault) and Codex (AGENTS.md index) do. *)
       "openai",
-        If[customURL =!= "",
-          iQueryOpenAIAPI[apiKey, model, prompt, customURL],
-          iQueryOpenAIAPI[apiKey, model, prompt]],
+        With[{u = If[customURL =!= "", customURL,
+                     "https://api.openai.com/v1/chat/completions"]},
+          If[iCloudToolLoopEnabledQ[prov],
+            Block[{$iClaudeCurrentAPIProvider = prov},
+              iQueryOpenAIToolLoop[apiKey, model, prompt, u, prov,
+                Automatic, None, If[StringQ[sysPrompt], sysPrompt, None]]],
+            If[customURL =!= "",
+              iQueryOpenAIAPI[apiKey, model, prompt, customURL],
+              iQueryOpenAIAPI[apiKey, model, prompt]]]],
       "zai",
         (* z.ai (GLM) \:306f OpenAI \:4e92\:63db\:3002customURL \:6307\:5b9a\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:512a\:5148\:3057\:3001
            \:306a\:3051\:308c\:3070 z.ai \:306e\:65e2\:5b9a\:30a8\:30f3\:30c9\:30dd\:30a4\:30f3\:30c8\:3092\:4f7f\:3046 *)
-        iQueryOpenAIAPI[apiKey, model, prompt,
-          If[customURL =!= "",
-            iEnsureChatCompletionsPath[customURL],
-            $iZAIChatCompletionsURL]],
+        With[{u = If[customURL =!= "",
+                     iEnsureChatCompletionsPath[customURL],
+                     $iZAIChatCompletionsURL]},
+          If[iCloudToolLoopEnabledQ[prov],
+            Block[{$iClaudeCurrentAPIProvider = prov},
+              iQueryOpenAIToolLoop[apiKey, model, prompt, u, prov,
+                Automatic, None, If[StringQ[sysPrompt], sysPrompt, None]]],
+            iQueryOpenAIAPI[apiKey, model, prompt, u]]],
       "kimi",
         (* Kimi (Moonshot AI) \:3082 OpenAI \:4e92\:63db\:3002customURL \:6307\:5b9a\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:512a\:5148\:3057\:3001
            \:306a\:3051\:308c\:3070 Kimi \:306e\:65e2\:5b9a\:30a8\:30f3\:30c9\:30dd\:30a4\:30f3\:30c8\:3092\:4f7f\:3046 *)
-        iQueryOpenAIAPI[apiKey, model, prompt,
-          If[customURL =!= "",
-            iEnsureChatCompletionsPath[customURL],
-            $iKimiChatCompletionsURL]],
+        With[{u = If[customURL =!= "",
+                     iEnsureChatCompletionsPath[customURL],
+                     $iKimiChatCompletionsURL]},
+          If[iCloudToolLoopEnabledQ[prov],
+            Block[{$iClaudeCurrentAPIProvider = prov},
+              iQueryOpenAIToolLoop[apiKey, model, prompt, u, prov,
+                Automatic, None, If[StringQ[sysPrompt], sysPrompt, None]]],
+            iQueryOpenAIAPI[apiKey, model, prompt, u]]],
       _,
         iL["Error: \:672a\:5bfe\:5fdc\:30d7\:30ed\:30d0\:30a4\:30c0: ", "Error: Unsupported provider: "] <> provider]
   ];
@@ -14630,6 +15190,18 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
         Return[]]];
 
     (* API \:30ad\:30fc\:53d6\:5f97: lmstudio/freetoken \:306f NBAccess \:7d4c\:7531\:3067\:89e3\:6c7a (Auth ON \:5bfe\:5fdc) *)
+    (* 2026-09-08: マシン別排他。自機を指す指定外のローカル provider は叩かずに
+       次候補へ (API キー無しの課金 provider と同じ pre-attempt skip、
+       バックオフ無し)。別機 (LAN) 宛は素通り。 *)
+    If[iLocalOAIProviderQ[provider] &&
+       !iLocalLLMProviderEnabledQ[provider, If[customURL =!= "", customURL, Automatic]],
+      $iFallbackLastError = iLocalLLMNotDesignatedMessage[provider,
+        If[customURL =!= "", customURL, Automatic]];
+      AppendTo[$iFallbackLog, {$iFallbackLastError, Red}];
+      iClaudeFreezeLog["fallback-skip-not-designated",
+        ToString[provider] <> "/" <> ToString[model]];
+      iStartFallbackAsync[prompt, nb, callback, models, modelIdx + 1, jobId, timeout, mediaFiles];
+      Return[]];
     If[iLocalOAIProviderQ[provider],
       apiKey = iResolveLocalLLMAPIKey[provider, customURL],
       apiKey = Quiet[NBAccess`NBGetAPIKey[provider,
@@ -14673,6 +15245,28 @@ iStartFallbackAsync[prompt_String, nb_NotebookObject, callback_, models_List,
             jobId, timeout, mediaFiles, provider, model, resolvedTimeout];
           Return[]];
         iClaudeFreezeLog["fallback-toolloop-start-failed",
+          prov <> "/" <> model <> " -> PS1"]]];
+    (* 2026-09-08: OpenAI-compatible cloud providers (openai / zai / kimi) get
+       the same URLSubmit loop with the directive-only tool subset
+       (iCloudToolLoopEnabledQ), so API models can pull rules / skills on
+       demand. Preflight + API key were resolved above; the job carries the
+       execution allowlist. Failure to start falls back to the PS1 path. *)
+    If[iCloudOAIProviderQ[provider] && Length[mediaFiles] === 0 &&
+       TrueQ[iCloudToolLoopEnabledQ[provider]],
+      Module[{tlId, tlURL, prov = ToLowerCase[provider]},
+        tlURL = Which[
+          customURL =!= "", iEnsureChatCompletionsPath[customURL],
+          prov === "zai", $iZAIChatCompletionsURL,
+          prov === "kimi", $iKimiChatCompletionsURL,
+          True, "https://api.openai.com/v1/chat/completions"];
+        tlId = iToolLoopStart[prov, model, prompt, tlURL, apiKey,
+          Automatic, None, None, iToolLoopToolsFor[prov]];
+        If[StringQ[tlId],
+          iClaudeFreezeLog["fallback-cloudtoolloop-start", prov <> "/" <> model];
+          iFallbackToolLoopWatch[tlId, prompt, nb, callback, models, modelIdx,
+            jobId, timeout, mediaFiles, provider, model, resolvedTimeout];
+          Return[]];
+        iClaudeFreezeLog["fallback-cloudtoolloop-start-failed",
           prov <> "/" <> model <> " -> PS1"]]];
     prepared = If[ToLowerCase[provider] === "lmstudio" && Length[mediaFiles] === 0,
       (* LM Studio MCP \:7d4c\:8def: /api/v1/chat + integrations \:5bfe\:5fdc\:3002
@@ -16178,6 +16772,17 @@ iClaudeQueryBgAPI[prompt_String, modelSpec_, timeoutSpec_] :=
         "https://api.anthropic.com/v1/messages",
       True,
         Automatic];
+    (* 2026-09-08: マシン別排他。自機を指す指定外のローカル provider は送信前に
+       止める。別機 (LAN) 宛は素通り (可否は下の cloud-send preflight / rule 107)。 *)
+    If[iLocalOAIProviderQ[providerLower] &&
+       !iLocalLLMProviderEnabledQ[providerLower,
+         iLocalLLMSpecURL[modelSpec, providerLower]],
+      iClaudeDiagEmit["PreflightFailed",
+        <|"Backend" -> providerLower, "Reason" -> "ProviderNotDesignated",
+          "Designated" -> ToString[ClaudeLocalLLMProvider[]],
+          "BaseURL" -> iLocalLLMSpecURL[modelSpec, providerLower], "Model" -> model|>];
+      Return[iLocalLLMNotDesignatedMessage[providerLower,
+        iLocalLLMSpecURL[modelSpec, providerLower]]]];
     preflight = iCloudSendPreflightDecision[providerLower, prompt, preflightURL];
     If[Lookup[preflight, "Decision", "Deny"] =!= "Permit",
       Return[iCloudSendPreflightFailure[preflight]]];
@@ -18443,6 +19048,10 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
     iLLMBreakpointSyncFromNotebook[nb];
     (* \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306e\:89e3\:6c7a: PrivacySpec \:3068 Model \:306e\:4e21\:65b9\:3092\:8003\:616e *)
     accessLevel = iResolveAccessLevel[privSpec, modelSpec];
+    (* 2026-09-08: the model this turn will use, for the directive projection
+       (iClaudeSysPrompt -> iClaudeEvalEffectiveModelSpec). Automatic -> None
+       (privacy-level routing decides between $ClaudeModel / $ClaudePrivateModel). *)
+    $iClaudeEvalCurrentModelSpec = If[iValidModelTupleQ[modelSpec], modelSpec, None];
     (* Stage 9 P1.5: Private \:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30e2\:30c7\:30eb\:691c\:8a3c (NBAccess \:7ba1\:8f44)\:3002
        Private (\:8981\:6c42 1.0) \:3067\:30af\:30e9\:30a6\:30c9\:30e2\:30c7\:30eb\:306f\:62d2\:5426\:3001Model \:7121\:6307\:5b9a\:306f
        $ClaudePrivateModel \:306b\:5207\:308a\:66ff\:3048\:308b\:3002 *)
@@ -25181,6 +25790,112 @@ iLoadBackupWlFromPath[filePath_String] :=
   ];
 
 (* \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:5f8c\:306e\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:4f5c\:6210 *)
+(* ============================================================
+   補助モジュール <pkg>_<aux>.wl の差分と公開インタフェース (2026-09-06)
+   ClaudeUpdateDocumentation は主ソース <pkg>.wl の差分だけを見ていたため、
+   (1) 補助モジュールだけが変わった場合に「ソースコードに変更がありません」で
+       早期終了する、(2) LLM へ渡す差分に補助モジュールの変更が含まれない、
+   (3) user_manual/setup のプロンプトに補助モジュールの公開関数が一切載らない、
+   の 3 点で補助モジュール (例: documentation_paper2nb.wl) の機能がドキュメントに
+   取り込まれなかった。バックアップにも補助ソースを保存し (次回以降の差分基準)、
+   差分と公開部をプロンプトに供給する。
+   ============================================================ *)
+ClaudeCode`$ClaudeDocAuxPublicMaxChars::usage =
+  "$ClaudeDocAuxPublicMaxChars は ClaudeUpdateDocumentation / ClaudeCreateDocumentation が user_manual.md / setup.md 等のプロンプトに添える補助モジュール (<pkg>_<aux>.wl) 公開インタフェース (usage 部) の合計上限文字数 (既定 30000)。0 で添付しない。";
+If[!IntegerQ[ClaudeCode`$ClaudeDocAuxPublicMaxChars],
+  ClaudeCode`$ClaudeDocAuxPublicMaxChars = 30000];
+If[!AssociationQ[$iAuxPublicCache], $iAuxPublicCache = <||>];
+
+(* 補助ソースの公開部 (Begin["`Private`"] より前 = ヘッダ + usage メッセージ群)。
+   ファイルサイズ + mtime をキーにセッション内キャッシュ。 *)
+iAuxPublicSection[af_String] :=
+  Module[{key, ent, txt, pub},
+    key = ToString[Quiet @ Check[FileByteCount[af], 0]] <> "|" <>
+      ToString[Quiet @ Check[AbsoluteTime[FileDate[af, "Modification"]], 0]];
+    ent = Lookup[$iAuxPublicCache, af, None];
+    If[AssociationQ[ent] && ent["Key"] === key && StringQ[ent["Public"]],
+      Return[ent["Public"], Module]];
+    txt = Quiet @ Check[Import[af, "Text"], ""];
+    pub = If[StringQ[txt] && txt =!= "",
+      Quiet @ Check[Lookup[iSplitSource[txt], "public", ""], ""], ""];
+    If[!StringQ[pub], pub = ""];
+    $iAuxPublicCache[af] = <|"Key" -> key, "Public" -> pub|>;
+    pub];
+iAuxPublicSection[___] := "";
+
+(* api 系と README 以外のプロンプトに添える補助モジュール公開インタフェースのブロック。
+   モジュール数で予算を等分し、合計は $ClaudeDocAuxPublicMaxChars で頭打ち。無ければ ""。 *)
+iAuxPublicInterfaceBlock[packageName_String] :=
+  Module[{auxNames = iScanAuxPackages[packageName], entries, perCap, parts, body, maxC},
+    maxC = ClaudeCode`$ClaudeDocAuxPublicMaxChars;
+    If[!IntegerQ[maxC] || maxC <= 0 || auxNames === {}, Return["", Module]];
+    entries = Select[
+      Map[Function[aux, With[{af = iFindAuxPackageSource[packageName, aux]},
+        If[StringQ[af] && FileExistsQ[af], {aux, af, iAuxPublicSection[af]}, Nothing]]],
+        auxNames],
+      StringQ[#[[3]]] && StringTrim[#[[3]]] =!= "" &];
+    If[entries === {}, Return["", Module]];
+    perCap = Max[1500, Floor[maxC / Length[entries]]];
+    parts = Map[Function[e,
+      "--- " <> FileNameTake[e[[2]]] <> " (auxiliary module; full API reference: api_" <>
+        e[[1]] <> ".md) ---\n" <>
+      StringTake[e[[3]], UpTo[perCap]] <>
+      If[StringLength[e[[3]]] > perCap, "\n(* ... truncated *)", ""] <> "\n\n"], entries];
+    body = StringJoin[parts];
+    If[StringLength[body] > maxC,
+      body = StringTake[body, maxC] <> "\n(* ... auxiliary interface list truncated *)\n\n"];
+    "=== AUXILIARY MODULES OF THIS PACKAGE (public interface) ===\n" <>
+    "The package also consists of the following auxiliary source files, loaded automatically " <>
+    "together with the main file. Their public interface (exported symbols and usage messages) " <>
+    "is shown so that THIS document covers their functionality too: mention these functions where " <>
+    "relevant, explain how they fit into the workflows, and keep them in sync with the source. " <>
+    "Detailed per-function references live in api_<module>.md; do not paste those verbatim.\n\n" <>
+    body];
+iAuxPublicInterfaceBlock[___] := "";
+
+(* 補助モジュールごとの差分。baseDir は前回 _documentupdate バックアップまたは
+   GithubRepositories/<pkg>。基準に補助ソースが無い (今回の変更以前の履歴) 場合は
+   内容ハッシュ基準 (iIsAuxApiFresh = api_<aux>.md 生成時と内容が異なる/未生成) で
+   「変更あり」と判定し、差分の代わりに公開部を添える。
+   戻り値 <|"Changed" -> {auxName..}, "Text" -> String|> (変更なしなら Text は "")。 *)
+iComputeAuxSourceDiffs[packageName_String, baseDir_, docsDir_String] :=
+  Module[{auxNames = iScanAuxPackages[packageName], changed = {}, parts = {}},
+    Do[
+      Module[{af = iFindAuxPackageSource[packageName, aux], base, d, hasBase, diffed = False},
+        If[StringQ[af] && FileExistsQ[af],
+          base = If[StringQ[baseDir] && DirectoryQ[baseDir],
+            FileNameJoin[{baseDir, FileNameTake[af]}], None];
+          hasBase = StringQ[base] && AnyTrue[
+            {base, base <> ".cz", base <> ".cdiff", base <> ".unchanged"}, FileExistsQ];
+          If[hasBase,
+            d = Quiet @ Check[iComputeSourceDiff[base, af], "(変更なし)"];
+            If[StringQ[d] && d =!= "(変更なし)",
+              diffed = True;
+              AppendTo[changed, aux];
+              AppendTo[parts, "=== AUXILIARY MODULE DIFF: " <> FileNameTake[af] <>
+                " (since last documentation update) ===\n" <> d <> "\n"]]];
+          If[!diffed && !hasBase && TrueQ[iIsAuxApiFresh[packageName, aux, docsDir]],
+            AppendTo[changed, aux];
+            AppendTo[parts, "=== AUXILIARY MODULE (new or changed since its API doc was generated; " <>
+              "no previous snapshot to diff): " <> FileNameTake[af] <> " ===\n" <>
+              StringTake[iAuxPublicSection[af], UpTo[6000]] <> "\n"]]]],
+      {aux, auxNames}];
+    <|"Changed" -> changed, "Text" -> StringJoin[Riffle[parts, "\n"]]|>];
+iComputeAuxSourceDiffs[___] := <|"Changed" -> {}, "Text" -> ""|>;
+
+(* 補助 api_<aux>.md が内容ハッシュ一致で更新対象から外れたことを可視化する。
+   「api.md を指定したのに api_paper2nb.md が更新されない」が意図的なスキップだと分かるように。 *)
+iNoteSkippedAuxApi[nb_, packageName_String, docs_List] :=
+  Module[{skipped},
+    If[!MemberQ[docs, "api.md"], Return[Null, Module]];
+    skipped = Select[iScanAuxPackages[packageName],
+      !MemberQ[docs, "api_" <> # <> ".md"] &];
+    If[skipped =!= {},
+      nbPrint[nb, Style["補助 API はソース内容が前回生成時と同じためスキップ: " <>
+        StringRiffle[("api_" <> # <> ".md") & /@ skipped, ", "] <>
+        " (再生成するには TargetFiles で明示指定)", FontColor -> GrayLevel[0.5]]]]];
+iNoteSkippedAuxApi[___] := Null;
+
 iCreateDocUpdateBackup[packageName_String, srcFile_String, docsDir_String,
     instruction_String:""] :=
   Module[{bdir, timestamp, histDir},
@@ -25189,6 +25904,14 @@ iCreateDocUpdateBackup[packageName_String, srcFile_String, docsDir_String,
     histDir = FileNameJoin[{bdir, timestamp <> "_documentupdate"}];
     CreateDirectory[histDir, CreateIntermediateDirectories -> True];
     Quiet[iSaveBackupWl[histDir, srcFile, packageName]];
+    (* 2026-09-06: 補助モジュール <pkg>_<aux>.wl も同じ履歴に保存し、次回の
+       ClaudeUpdateDocumentation が補助ソースの差分を取れるようにする。 *)
+    Scan[Function[aux,
+        Module[{af = iFindAuxPackageSource[packageName, aux]},
+          If[StringQ[af] && FileExistsQ[af] &&
+             ExpandFileName[af] =!= ExpandFileName[srcFile],
+            Quiet[iSaveBackupWl[histDir, af, packageName]]]]],
+      iScanAuxPackages[packageName]];
     If[DirectoryQ[docsDir],
       Scan[Function[f,
         Quiet[iSaveBackupFileRelative[histDir, f, docsDir, packageName]]],
@@ -25345,6 +26068,17 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
         Return[$Failed]];
       prevSrcFile = FileNameJoin[{prevBackup, FileNameTake[srcFile]}];
       diffText = iComputeSourceDiff[prevSrcFile, srcFile]];
+    (* 2026-09-06: 補助モジュール <pkg>_<aux>.wl の差分も取り込む (前回バックアップ /
+       GithubRepositories 基準)。補助だけが変わった場合も「変更あり」として進み、
+       LLM へ渡す差分にも補助モジュールの変更を含める。 *)
+    Module[{auxDiff = iComputeAuxSourceDiffs[packageName,
+        If[baseline === "Github", iGithubRepoDir[packageName],
+          If[StringQ[prevBackup], prevBackup, None]], docsDir]},
+      If[Lookup[auxDiff, "Changed", {}] =!= {},
+        nbPrint[nb, "補助モジュールの変更を検出: " <>
+          StringRiffle[(packageName <> "_" <> # <> ".wl") & /@ auxDiff["Changed"], ", "]];
+        diffText = If[!StringQ[diffText] || diffText === "(変更なし)", "",
+            diffText <> "\n\n"] <> auxDiff["Text"]]];
     (* ソース差分も design 新規内容も無ければ何もしない。
        ただし TargetFiles 明示指定時は早期リターンしない: 主ソース ClaudeOrchestrator.wl 等が
        未変更でも、補助 <pkg>_<aux>.wl が変わって api_<aux>.md が古くなる場合があり、
@@ -25454,6 +26188,7 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     If[baseline =!= "Github" && StringQ[prevBackup],
       nbPrint[nb, iL["\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Previous backup: "] <> prevBackup]];
     nbPrint[nb, "\:66f4\:65b0\:5bfe\:8c61: " <> StringRiffle[allDocs, ", "]];
+    iNoteSkippedAuxApi[nb, packageName, allDocs];
     iWarnConflictedCopies[nb, packageName, docsDir];
     nbPrint[nb, "\:30bd\:30fc\:30b9\:5dee\:5206: " <> StringTake[diffText, UpTo[200]] <> "\n"];
     If[StringQ[designContext] && designContext =!= "",
@@ -25570,6 +26305,15 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
         nbPrint[nb, iL["\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: ", "Previous backup: "] <> prevBackup];
         iComputeSourceDiff[prevSrcFile, srcFile],
         "(\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306a\:3057 \[LongDash] \:5168\:30bd\:30fc\:30b9\:3092\:53c2\:7167)"]];
+    (* 2026-09-06: 補助モジュールの差分も取り込む (1 引数版と同じ) *)
+    Module[{auxDiff = iComputeAuxSourceDiffs[packageName,
+        If[baseline === "Github", iGithubRepoDir[packageName],
+          If[StringQ[prevBackup], prevBackup, None]], docsDir]},
+      If[Lookup[auxDiff, "Changed", {}] =!= {},
+        nbPrint[nb, "補助モジュールの変更を検出: " <>
+          StringRiffle[(packageName <> "_" <> # <> ".wl") & /@ auxDiff["Changed"], ", "]];
+        diffText = If[!StringQ[diffText] || diffText === "(変更なし)", "",
+            diffText <> "\n\n"] <> auxDiff["Text"]]];
     (* Mode \:3092\:5148\:306b\:89e3\:6c7a *)
     Module[{mode = Replace[OptionValue[ClaudeUpdateDocumentation, {opts}, Mode],
               Except["Create" | "Update"] -> "Update"],
@@ -25616,6 +26360,7 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     nbPrint[nb, Style[iL["\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:958b\:59cb: ", "Doc update started: "] <> packageName <>
       If[mode === "Create", " [\:65b0\:898f\:4f5c\:6210\:30e2\:30fc\:30c9]", ""], Bold]];
     nbPrint[nb, "\:66f4\:65b0\:5bfe\:8c61: " <> StringRiffle[targetDocs, ", "]];
+    iNoteSkippedAuxApi[nb, packageName, targetDocs];
     nbPrint[nb, "\:30bd\:30fc\:30b9\:5dee\:5206: " <> StringTake[diffText, UpTo[100]] <> "..."];
     nbPrint[nb, "\:6307\:793a: " <> StringTake[instruction, UpTo[200]] <> "\n"];
     (* \:5dee\:5206\:4ed8\:304d\:3067\:9806\:6b21\:66f4\:65b0 *)
@@ -25833,6 +26578,10 @@ iBuildDocPrompt[sourceCode_String, packageName_String, docsDir_String, docFile_S
       chunkedSource = iBuildChunkedSource[split, docFile];
       AppendTo[promptParts,
         "PACKAGE SOURCE CODE (chunked for token efficiency):\n" <> chunkedSource <> "\n\n"];
+      (* 2026-09-06: 補助モジュールの公開インタフェース (iUpdateDocNext と同じ) *)
+      If[!isApi,
+        With[{auxBlk = iAuxPublicInterfaceBlock[packageName]},
+          If[StringQ[auxBlk] && auxBlk =!= "", AppendTo[promptParts, auxBlk <> "\n"]]]];
       AppendTo[promptParts,
         iBuildGitHubLinksContext[] <>
         "\nCRITICAL RULE: \:8b1d\:8f9e (Acknowledgments), \:514d\:8cac\:4e8b\:9805 (Disclaimer) and \:30e9\:30a4\:30bb\:30f3\:30b9 (License) sections MUST ONLY exist in README.md.\n" <>
@@ -26084,6 +26833,11 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       chunkedSource = iBuildChunkedSource[split, docFile];
       AppendTo[promptParts,
         "PACKAGE SOURCE CODE (chunked for token efficiency):\n" <> chunkedSource <> "\n\n"];
+      (* 2026-09-06: 補助モジュールの公開インタフェースを添える (api 系は自分のソースを
+         既に持つので除外。README は兄弟 doc から構築するので対象外) *)
+      If[!isApi,
+        With[{auxBlk = iAuxPublicInterfaceBlock[packageName]},
+          If[StringQ[auxBlk] && auxBlk =!= "", AppendTo[promptParts, auxBlk <> "\n"]]]];
       (* README \:4ee5\:5916\:3067\:3082\:30ea\:30f3\:30af\:634f\:9020\:9632\:6b62\:306e\:305f\:3081 URL \:30ea\:30b9\:30c8\:3092\:63d0\:4f9b *)
       AppendTo[promptParts,
         iBuildGitHubLinksContext[] <>
@@ -32345,7 +33099,6 @@ ShowClaudePalette[] := (
       iClaudePaletteButton[iL["\[RightTriangle] \:30b9\:30ad\:30e3\:30f3", "\[RightTriangle] Scan"],
         RGBColor[0.4, 0.4, 0.65],
         iScanAndReport[]],
-      Spacer[2],
 
       (* \[HorizontalLine]\[HorizontalLine] \:30af\:30e9\:30a6\:30c9\:516c\:958b\:5ba3\:8a00 (Stage 9 P1 Step 2) \[HorizontalLine]\[HorizontalLine] *)
       Style[iL[" \:30d7\:30e9\:30a4\:30d0\:30b7\:30fc", " Privacy"], Bold, 8, GrayLevel[0.3]],
@@ -32363,7 +33116,6 @@ ShowClaudePalette[] := (
           Method -> "Queued"],
         TrackedSymbols :> {$iPaletteCloudState},
         SynchronousUpdating -> False],
-      Spacer[2],
 
       (* \[HorizontalLine]\[HorizontalLine] Claude \:64cd\:4f5c \[HorizontalLine]\[HorizontalLine] *)
       Style[" Claude", Bold, 8, GrayLevel[0.3]],
@@ -32414,7 +33166,6 @@ ShowClaudePalette[] := (
           RGBColor[0.48, 0.38, 0.42],
           iShowIssuePanel[]],
         Spacer[54]],
-      Spacer[2],
 
       (* \[HorizontalLine]\[HorizontalLine] \:8a2d\:5b9a \[HorizontalLine]\[HorizontalLine] *)
       Style[iL[" \:8a2d\:5b9a", " Settings"], Bold, 8, GrayLevel[0.3]],
@@ -32710,7 +33461,6 @@ ShowClaudePalette[] := (
       Dynamic[svcTick; iClaudePaletteServiceSection[((svcTick++) &)],
         TrackedSymbols :> {svcTick, $ClaudePaletteServiceControls},
         SynchronousUpdating -> False],
-      Spacer[2],
 
       (* \[HorizontalLine]\[HorizontalLine] \:30d7\:30ed\:30bb\:30b9 \[HorizontalLine]\[HorizontalLine] *)
       Style[iL[" \:30d7\:30ed\:30bb\:30b9", " Processes"], Bold, 8, GrayLevel[0.3]],
@@ -32736,7 +33486,6 @@ ShowClaudePalette[] := (
              iL["\:30ad\:30e3\:30f3\:30bb\:30eb", "Cancel"] -> False},
             WindowTitle -> iL["\:5168\:30d7\:30ed\:30bb\:30b9\:505c\:6b62\:306e\:78ba\:8a8d", "Confirm: Stop All Processes"]],
           ClaudeCode`ClaudeAbort[]]]],
-      Spacer[2],
 
       (* \[HorizontalLine]\[HorizontalLine] \:30bb\:30c3\:30b7\:30e7\:30f3 \[HorizontalLine]\[HorizontalLine] *)
       Style[iL[" \:30bb\:30c3\:30b7\:30e7\:30f3", " Sessions"], Bold, 8, GrayLevel[0.3]],
@@ -37990,7 +38739,15 @@ iLLMGraphDAGTick[jobId_String] :=
                  MemberQ[{"pending", "running"}, Lookup[nd, "status", ""]],
                 If[Lookup[nd, "status", ""] === "running",
                   Quiet @ KillProcess[
-                    Lookup[Lookup[nd, "runState", <||>], "proc", None]]];
+                    Lookup[Lookup[nd, "runState", <||>], "proc", None]];
+                  (* 2026-09-09: a URLSubmit tool-loop node has no proc; abort
+                     its task too, or the local LLM keeps generating for the
+                     whole round after the job is already dead (field: LM Studio
+                     saw no disconnect and stayed busy 7 more minutes). *)
+                  With[{tl = Lookup[Lookup[nd, "runState", <||>], "toolLoopId", None]},
+                    If[StringQ[tl],
+                      Quiet @ iClaudeFreezeLog["dag-kill-toolloop", tl];
+                      Quiet @ iToolLoopCleanup[tl]]]];
                 nd["status"] = "cancelled";
                 nd["error"]  = "DAG force-stopped (" <> reason <> ", " <>
                   ToString[elapsed] <> "s)";
@@ -39035,6 +39792,21 @@ If[!AssociationQ[$ClaudeRoutingProviders],
   |>];
 
 (* \[HorizontalLine]\[HorizontalLine] RouteAdvice \:306b\:57fa\:3065\:304f provider \:547c\:3073\:51fa\:3057 \[HorizontalLine]\[HorizontalLine] *)
+(* which {Provider, Model} an adapter query used (2026-09-08; for the runtime
+   ProviderQueried event). modelSpec explicit -> that tuple; Automatic -> the
+   effective default model of the turn. *)
+iAdapterProviderModelUsed[modelSpec_] :=
+  Module[{spec},
+    spec = If[iValidModelTupleQ[modelSpec], modelSpec, iClaudeEvalEffectiveModelSpec[]];
+    Which[
+      iValidModelTupleQ[spec], <|"Provider" -> ToLowerCase[spec[[1]]], "Model" -> spec[[2]]|>,
+      StringQ[spec] && StringContainsQ[spec, "/"],
+        With[{p = StringSplit[spec, "/", 2]},
+          <|"Provider" -> ToLowerCase[p[[1]]], "Model" -> Last[p]|>],
+      StringQ[spec], <|"Provider" -> "claudecode", "Model" -> spec|>,
+      True, <||>]];
+iAdapterProviderModelUsed[___] := <||>;
+
 iAdapterSelectProvider[prompt_String, routeAdvice_Association, useFallback_] :=
   Module[{route, providerSpec, modelSpec},
     route = Lookup[routeAdvice, "Route", "CloudLLM"];
@@ -40420,20 +41192,24 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                 iL["Claude: \:5fdc\:7b54\:53d7\:4fe1\:5b8c\:4e86 (" <> ToString[Round[AbsoluteTime[] - t0, 1]] <> "s) \[LongDash] \:51e6\:7406\:4e2d...",
                    "Claude: Response received (" <> ToString[Round[AbsoluteTime[] - t0, 1]] <> "s) \[LongDash] processing..."]]
             ];
-            If[StringQ[response],
-              If[AssociationQ[codexMeta],
-                <|"response" -> response,
-                  "ProviderResultMetadata" -> codexMeta|>,
-                <|"response" -> response|>],
-              If[AssociationQ[codexMeta],
-                <|"response" -> "",
-                  "Error" -> "Provider returned non-string: " <>
-                    ToString[Short[response, 2]],
-                  "ProviderResultMetadata" -> codexMeta|>,
-                <|"response" -> "",
-                  "Error" -> "Provider returned non-string: " <>
-                    ToString[Short[response, 2]]|>]
-            ]
+            (* 2026-09-08: report which provider / model answered so the
+               runtime trace (ProviderQueried) can carry it *)
+            Join[
+              If[StringQ[response],
+                If[AssociationQ[codexMeta],
+                  <|"response" -> response,
+                    "ProviderResultMetadata" -> codexMeta|>,
+                  <|"response" -> response|>],
+                If[AssociationQ[codexMeta],
+                  <|"response" -> "",
+                    "Error" -> "Provider returned non-string: " <>
+                      ToString[Short[response, 2]],
+                    "ProviderResultMetadata" -> codexMeta|>,
+                  <|"response" -> "",
+                    "Error" -> "Provider returned non-string: " <>
+                      ToString[Short[response, 2]]|>]
+              ],
+              iAdapterProviderModelUsed[modelSpec]]
           ]
         ]
       ],
@@ -40499,7 +41275,8 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                      状態だけ。ModelNotLoaded で止めないのは、LM Studio が
                      要求時にモデルを JIT ロードでき、従来この経路で通っていた
                      ケースを塞ぐため (同じ理由で未知の Reason も通す)。 *)
-                  If[MemberQ[{"NotRunning", "ModelLoading", "Unauthorized"}, reason],
+                  If[MemberQ[{"NotRunning", "ModelLoading", "Unauthorized",
+                              "ProviderNotDesignated"}, reason],
                     Print["  [RT-Async] ERROR: " <> label2 <>
                       " preflight failed (" <> reason <> ", url=" <> url <> ") \[LongDash] " <>
                       Switch[reason,
@@ -40507,6 +41284,11 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                           "\:30b5\:30fc\:30d0\:304c\:8d77\:52d5\:3057\:3066\:3044\:307e\:305b\:3093\:3002URL \:8a2d\:5b9a\:3092\:78ba\:8a8d\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
                         "ModelLoading",
                           "\:30e2\:30c7\:30eb\:3092\:30ed\:30fc\:30c9\:4e2d\:3067\:3059\:3002\:5b8c\:4e86\:5f8c\:306b\:518d\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+                        "ProviderNotDesignated",
+                          "接続先が自機 (localhost) で、自機のローカル LLM エンジンは '" <>
+                            ToString[Lookup[pre2, "Designated", "?"]] <>
+                            "' に固定されています。別機を使うなら URL を指定、" <>
+                            "切り替えるなら ClaudeSetLocalLLMProvider。",
                         _,
                           "API \:30ad\:30fc\:304c\:672a\:767b\:9332\:307e\:305f\:306f\:4e0d\:6b63\:3067\:3059\:3002"]];
                     Quiet[CurrentValue[nb, WindowStatusArea] =
@@ -40622,6 +41404,51 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
               Return[codexRun]
             ]
           ];
+
+          (* 2026-09-08: OpenAI-compatible cloud modelSpec + cloud tool loop
+             enabled -> URLSubmit loop with the directive-only tool subset
+             (same runState shape as the local tool loop: toolLoopId, no proc).
+             Preflight is applied here because the async loop (iToolLoopStart)
+             does not run it itself. Any failure falls through to the PS1
+             branches below. *)
+          If[ListQ[modelSpec] && Length[modelSpec] >= 2 &&
+             StringQ[modelSpec[[1]]] && StringQ[modelSpec[[2]]] &&
+             iCloudOAIProviderQ[modelSpec[[1]]] && Length[mediaFiles] === 0 &&
+             TrueQ[iCloudToolLoopEnabledQ[modelSpec[[1]]]],
+            Module[{provC, modelC, customURLC, urlC, apiKeyC, preC, tlIdC},
+              provC = ToLowerCase[modelSpec[[1]]];
+              modelC = modelSpec[[2]];
+              customURLC = If[Length[modelSpec] >= 3 && StringQ[modelSpec[[3]]] &&
+                              modelSpec[[3]] =!= "", modelSpec[[3]], ""];
+              urlC = Which[
+                customURLC =!= "", iEnsureChatCompletionsPath[customURLC],
+                provC === "zai", $iZAIChatCompletionsURL,
+                provC === "kimi", $iKimiChatCompletionsURL,
+                True, "https://api.openai.com/v1/chat/completions"];
+              preC = iCloudSendPreflightDecision[provC, prompt, urlC];
+              If[Lookup[preC, "Decision", "Deny"] =!= "Permit",
+                Return[iCloudSendPreflightFailure[preC]]];
+              apiKeyC = Quiet[NBAccess`NBGetAPIKey[provC,
+                PrivacySpec -> <|"AccessLevel" -> 1.0|>]];
+              If[StringQ[apiKeyC] && apiKeyC =!= "",
+                Quiet[CurrentValue[nb, WindowStatusArea] =
+                  provC <> "/" <> modelC <> " (tool loop) " <>
+                    iL["\:306b\:554f\:3044\:5408\:308f\:305b\:4e2d... 0s", " querying... 0s"]];
+                tlIdC = iToolLoopStart[provC, modelC, prompt, urlC, apiKeyC,
+                  Automatic, None, None, iToolLoopToolsFor[provC]];
+                If[StringQ[tlIdC],
+                  Return[<|
+                    "toolLoopId"   -> tlIdC,
+                    "proc"         -> None,
+                    "outFile"      -> "",
+                    "startTime"    -> AbsoluteTime[],
+                    "timeout"      -> Replace[timeoutOpt,
+                                        Automatic -> $iFallbackTimeout],
+                    "providerKind" -> provC,
+                    "lmstudioURL"  -> urlC,
+                    "lmstudioModel"-> modelC|>]];
+                Print["  [RT-Async] WARN: cloud tool loop start failed (" <>
+                  provC <> "); falling back to the PS1 path"]]]];
 
           (* \[HorizontalLine]\[HorizontalLine] z.ai (GLM) / Kimi (Moonshot) = OpenAI \:4e92\:63db\:30af\:30e9\:30a6\:30c9 \:5206\:5c90 \[HorizontalLine]\[HorizontalLine]
              iPrepareAnthropicPS1 \:306e openai \:5f62\:5f0f PS1 \:3092 StartProcess \:3067\:975e\:540c\:671f\:8d77\:52d5\:3059\:308b\:3002
@@ -44114,11 +44941,27 @@ iClaudeDirectivesAvailableQ[] :=
   ValueQ[ClaudeDirectives`$ClaudeDirectiveRepository] &&
   ClaudeDirectives`$ClaudeDirectiveRepository =!= None;
 
-iClaudeSysPromptViaDirectives[modelName_String, taskHint_String] :=
-  Module[{result},
+(* 2026-09-08: modelSpec may be a {provider, model[, url]} tuple, "prov/model"
+   or a bare name (ClaudeDirectives normalizes). ToolAccess tells the
+   projection whether the model can pull directives on demand. The resolved
+   level is remembered in $iClaudeLastDirectiveLevel for diagnostics. *)
+iClaudeSysPromptViaDirectives[modelSpec_, taskHint_String] :=
+  Module[{result, toolAccess},
+    toolAccess = TrueQ[Quiet @ Check[iDirectiveToolAccessQ[modelSpec], False]];
+    $iClaudeLastDirectiveLevel = Quiet @ Check[
+      Append[ClaudeDirectives`ClaudeResolveDirectiveLevel[modelSpec],
+        <|"ToolAccess" -> toolAccess, "At" -> AbsoluteTime[]|>],
+      None];
     result = Quiet @ Check[
-      ClaudeDirectives`ClaudeBuildDirectivePromptForSingle[modelName, taskHint],
+      ClaudeDirectives`ClaudeBuildDirectivePromptForSingle[modelSpec, taskHint,
+        "ToolAccess" -> toolAccess],
       ""];
+    (* older ClaudeDirectives without the option: plain call *)
+    If[!StringQ[result],
+      result = Quiet @ Check[
+        ClaudeDirectives`ClaudeBuildDirectivePromptForSingle[
+          If[iValidModelTupleQ[modelSpec], modelSpec[[2]], ToString[modelSpec]],
+          taskHint], ""]];
     If[StringQ[result] && result =!= "",
       result <> "\n\n---\n\n",
       ""]

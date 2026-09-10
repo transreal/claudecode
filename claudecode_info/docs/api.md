@@ -1,6 +1,6 @@
 ### $ClaudeModel
 型: {String, String} | String, 初期値: ""
-LLM 呼び出しに使うモデル指定。{provider, modelName} タプル形式が正準 (provider: "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio"、lmstudio は {provider, model, url} の3要素も可)。文字列単体はモデル名のみの指定で Claude CLI の --model に渡される。初期値 "" は Claude Code CLI 自身の既定モデルを使う。ShowClaudePalette の Provider/Model ボタン操作でタプルが代入される。
+LLM 呼び出しに使うモデル指定。{provider, modelName} タプル形式が正準 (provider: "claudecode" | "chatgptcodex" | "anthropic" | "openai" | "zai" | "kimi" | "lmstudio" | "freetoken" | "llamacpp"、lmstudio/llamacpp は {provider, model, url} の3要素も可)。文字列単体はモデル名のみの指定で Claude CLI の --model に渡される。初期値 "" は Claude Code CLI 自身の既定モデルを使う。ShowClaudePalette の Provider/Model ボタン操作でタプルが代入される。
 例: $ClaudeModel = {"claudecode", "claude-opus-5"};
 
 ### $ClaudeAdvisaryModel
@@ -83,7 +83,19 @@ ClaudeUpdateDocumentation の非同期ドキュメント更新チェーンのス
 
 ### $ClaudeDocUpdateExternal
 型: Boolean, 初期値: True
-True のとき ClaudeUpdateDocumentation の生成パイプライン全体を外部 wolframscript ワーカープロセスで実行し、FrontEnd の中心カーネルを塞がない (claim ファイル + heartbeat で FE 再起動後の二重ワーカー起動を防止、stale 120秒で自動失効)。False で従来のカーネル内非同期経路に戻る。ライセンス席の枯渇・画像添付タスク・非 claude CLI モデル使用時は自動的に従来経路にフォールバックする。
+True のとき ClaudeUpdateDocumentation の生成パイプライン全体を外部 wolframscript ワーカープロセスで実行し、FrontEnd の中心カーネルを塞がない (claim ファイル + heartbeat で FE 再起動後の二重ワーカー起動を防止、stale 120秒で自動失効)。ライセンス席が空いていない場合は即座にカーネル内経路へフォールバックせず $ClaudeDocExtSeatWaitSeconds の間、共有 polling tick で 15 秒おきに再試行しながら席が空くのを待つ (待機中も FE は塞がない)。False で従来のカーネル内非同期経路に戻る。待機上限超過・ライセンス席の枯渇・spawn 失敗・画像添付タスク・非 claude CLI モデル使用時は自動的に従来経路にフォールバックする。
+
+### $ClaudeDocExtSeatWaitSeconds
+型: Number, 初期値: 1800
+$ClaudeDocUpdateExternal の外部プロセス起動時にライセンス席が空いていない場合、席が空くのを待つ最大秒数。共有 polling tick で 15 秒ごとに再試行し FE は塞がない。上限超過でカーネル内更新へフォールバックする。0 で待たずに即フォールバック。
+
+### $ClaudeGitHubLinksCacheSeconds
+型: Number, 初期値: 1800
+ドキュメント生成プロンプトに添える GitHub リポジトリ URL 一覧 (GitHubPackageURLs) のセッション内キャッシュ保持秒数。0 で毎回再取得 (全パッケージの owner 解決で数十秒かかる)。
+
+### $ClaudeDocAuxPublicMaxChars
+型: Integer, 初期値: 30000
+ClaudeUpdateDocumentation / ClaudeCreateDocumentation が user_manual.md / setup.md 等のプロンプトに添える補助モジュール (<pkg>_<aux>.wl) 公開インタフェース (usage 部) の合計上限文字数。0 で添付しない。
 
 ### $ClaudeEvalMaxDepth
 型: Integer, 初期値: 5
@@ -149,11 +161,13 @@ ShowClaudePalette の Privacy セクション下に表示するサービスト�
 
 ### $ClaudePaletteProviders
 型: List | All, 初期値: {"claudecode", "chatgptcodex", "anthropic", "openai"}
-ShowClaudePalette の標準 (非秘密) Provider サイクルに出す provider の登録簿 (2026-08-30 追加)。背景: P: ボタンを回すと、API キー未設定の課金 provider や、選んだ瞬間にローカル推論サーバー (FreeToken 等) を叩いてしまう provider まで候補に出てしまう問題があった。既定は「どの環境でも概ね成立する」4provider のみ。zai / kimi / lmstudio / freetoken / llamacpp 等はここに未登録なら標準サイクルの候補に出ず、localInit 等での明示登録が必要。All を指定すると既知の全 provider (iPaletteEnabledProviders の縮退動作)。既存値があればロード時に上書きしない (ユーザー設定を保持)。
+ShowClaudePalette の標準 (非秘密) Provider サイクルに出す provider の登録簿 (2026-08-30 追加)。背景: P: ボタンを回すと、API キー未設定の課金 provider や、選んだ瞬間にローカル推論サーバー (FreeToken 等) を叩いてしまう provider まで候補に出てしまう問題があった。既定は「どの環境でも概ね成立する」4provider のみ。zai / kimi / lmstudio / freetoken / llamacpp はここに未登録なら標準サイクルの候補に出ず、localInit 等での明示登録が必要。All を指定すると既知の全 provider (iPaletteEnabledProviders の縮退動作)。登録が空/不正なら claudecode のみに落ちる。既存値があればロード時に上書きしない (ユーザー設定を保持)。
+例: $ClaudePaletteProviders = {"claudecode", "anthropic", "zai", "lmstudio"};
 
 ### $ClaudePalettePrivateProviders
 型: List | All, 初期値: {"lmstudio"}
-ShowClaudePalette の秘密モデル ($ClaudePrivateModel) 側 Provider サイクルに出す provider の登録簿 (2026-08-30 追加、$ClaudePaletteProviders と対になる)。既存値があればロード時に上書きしない。
+ShowClaudePalette の秘密モデル ($ClaudePrivateModel) 側 Provider サイクルに出す provider の登録簿 (2026-08-30 追加、$ClaudePaletteProviders と対になる)。秘密データ処理用なのでプライバシーレベル 1.0 のローカル provider のみが対象。freetoken / llamacpp は opt-in (常駐サーバーを起こしたくない環境があるため)。既存値があればロード時に上書きしない。
+例: $ClaudePalettePrivateProviders = {"lmstudio", "llamacpp"};
 
 ### $ClaudeCLIMCPServers
 型: Association, 初期値: <||>
@@ -331,13 +345,40 @@ LM Studio MCP (integrations) 有効時にプロンプト先頭に前置するツ
 型: Boolean, 初期値: True
 パレットの LM Studio モデル選択の情報源。True: メモリにロード済み (state=="loaded") のモデルのみ提示。False: ダウンロード済みの chat 対応モデル全体を提示。LM Studio に到達不可の場合は SourceVault カタログ/静的リストにフォールバック。
 
+## ローカル LLM プロバイダー排他指定
+
+マシン自身 (localhost / 自機 IP) で動かすローカル LLM エンジンを 1 つに絞り、意図しないローカル推論サーバーへの誤送信を防ぐ仕組み (2026-09-08)。対象は「自機の localhost を指す接続」のみ。指定外のローカル provider でも、接続先が LAN 上の別機 (例: 192.168.x.x の llama-server) なら従来どおり使える (可否は URL と NBAccess の信頼判定に従う)。クラウド provider (claudecode/anthropic/openai/zai/kimi) は対象外。接続先の判定は URL のホスト部 (localhost / 127.* / ::1 / $MachineAddresses / $MachineName)。
+
+### $ClaudeFreeTokenBaseURL
+型: String, 初期値: "http://127.0.0.1:1919"
+FreeToken (VRAM 超え MoE 用ローカル推論サーバー) の既定 base URL。OpenAI 互換 /v1/chat/completions を提供する。provider "freetoken" は lmstudio と同じローカル OpenAI 互換経路で扱われる。
+
+### $ClaudeLlamaCppBaseURL
+型: String, 初期値: "http://127.0.0.1:8080"
+llama.cpp llama-server の既定 base URL。OpenAI 互換 /v1/chat/completions と /v1/models のみを提供する (LM Studio の /api/v0, /api/v1 系は無い)。provider "llamacpp" は lmstudio と同じローカル OpenAI 互換経路で扱われる。LAN 上の別機で動かす場合、この既定値をここで書き換えず (パッケージは GitHub に公開されるため localhost 固定が正)、マシン固有 IP は起動ファイル (localInit.wl) 側や model tuple 第3要素の URL で上書きする。llama-server は --api-key-file で認証必須。キーは NBAccess`NBStoreLocalLLMAPIKey["llamacpp", $ClaudeLlamaCppBaseURL, "LLAMACPP_API_KEY", "<key>"] で登録する (未登録なら credential 名は ToUpperCase[provider]<>"_API_KEY" にフォールバック)。
+
+### $ClaudeLocalLLMProvider
+型: "lmstudio" | "llamacpp" | "freetoken" | All | Automatic, 初期値: Automatic
+このマシン自身で動かすローカル LLM エンジンの明示指定。Automatic (既定) はマシン別表 $ClaudeMachineLocalLLMProvider → 既定 "lmstudio" の順で解決する。All は排他を解除する (従来挙動)。自機を指す指定外 provider は: パレットの P: / 秘密 P: の循環候補から消える (保存済み設定からも復元しない)、preflight (ClaudeBackendAvailableQ) が Reason "ProviderNotDesignated" で Available -> False、同期 (ClaudeQuery 等) / 非同期 (ClaudeQueryAsync, RT-Async) の送信経路が送信前に止まる、$ClaudeLLMTierTable の候補にあれば指定 provider へ写される ({prov, Automatic})。実効値は ClaudeLocalLLMProvider[]、切替は ClaudeSetLocalLLMProvider[prov]。
+
+### $ClaudeMachineLocalLLMProvider
+型: Association, 初期値: <||>
+マシン名 ($MachineName、大文字小文字は無視) → そのマシン自身で動かすローカル LLM エンジンの対応表。表に無いマシンは "lmstudio"。$ClaudeLocalLLMProvider が String / All のときはそちらが優先。LAN 上の別機のサーバはこの表の管轄外 (URL で指定すれば使える)。$ClaudePaletteProviders / $ClaudePalettePrivateProviders に lmstudio と llamacpp を両方登録したままでも、自機を指す方だけが表で指定した 1 つに絞られる (登録簿 = 環境に存在するもの、表 = 自機で動かすもの)。
+例 (localInit.wl、Needs["ClaudeCode`"] の前に置く): ClaudeCode`$ClaudeMachineLocalLLMProvider = <|"strixhalo128" -> "lmstudio", "raptorlake" -> "llamacpp"|>;
+
+### ClaudeLocalLLMProvider[] → String | All
+このマシン自身で動かすローカル LLM エンジンの provider 名 ("lmstudio" 等) を返す。排他解除 ($ClaudeLocalLLMProvider = All) のときは All。解決順は $ClaudeLocalLLMProvider を参照。
+
+### ClaudeSetLocalLLMProvider[prov] → String | All | $Failed
+自機のローカル LLM エンジン指定をこのカーネルで切り替える ("lmstudio" | "llamacpp" | "freetoken" | All | Automatic)。preflight キャッシュを捨て、パレットの P: / 秘密 P: が自機を指す指定外 provider になっていれば指定 provider へ寄せる。戻り値は実効 provider (ClaudeLocalLLMProvider[])。不正な値は $Failed (設定は変えない)。恒久設定は $ClaudeMachineLocalLLMProvider (localInit.wl) に書く。
+
 ## LLM ルーティング・使用量管理
 
 TaskClass ベースのバックエンド自動選択、日次課金上限、使用量集計を扱うサブシステム (hardening 04)。
 
 ### $ClaudeLLMTierTable
 型: Association
-TaskClass (例: "extract", "classify", "summarize", "securityjudge", "mailtriage", "code", "design", "general") -> backend 候補列 (優先順のモデル tuple リスト) の宣言表。候補は model tuple ({"lmstudio", Automatic} はロード済みモデルから解決)。"general" は Automatic (従来の provider fallback 連鎖) を指す。
+TaskClass (例: "extract", "classify", "summarize", "securityjudge", "mailtriage", "code", "design", "general") -> backend 候補列 (優先順のモデル tuple リスト) の宣言表。候補は model tuple ({"lmstudio", Automatic} はロード済みモデルから解決)。"general" は Automatic (従来の provider fallback 連鎖) を指す。ローカル排他 ($ClaudeLocalLLMProvider) が有効な場合、候補中の自機向けローカル provider は指定 provider へ自動的に写し替えられる。
 
 ### $ClaudeTaskClassTable
 型: Association
@@ -363,8 +404,8 @@ Options: "Days" -> 1
 ティア表と preflight からタスクの実行 backend を決める。戻り値: <|"TaskClass"->実効class, "Selected"->tuple|Automatic|None, "Candidates"->..., "Rejected"->{<|"Backend","Reason"|>..}|>。Selected===Automatic は従来経路へ委譲、None は全候補 preflight 不通。
 
 ### ClaudeBackendAvailableQ[{provider, model, url...}, opts___Rule] → Association
-LLM backend の事前可用性チェック (preflight)。lmstudio は /api/v0/models のロード状態、claudecode はレート制限状態を確認する。60秒キャッシュ、"Refresh"->True で再取得。
-→ <|"Available"->True|False, "Reason"->"OK"|"NotRunning"|"ModelNotLoaded"|..., ...|>
+LLM backend の事前可用性チェック (preflight)。lmstudio は /api/v0/models のロード状態、freetoken は /v1/models の疎通、llamacpp は /health (ロード中 503) + /v1/models (401=未登録キー) を確認、claudecode はレート制限状態を確認する。60秒キャッシュ、"Refresh"->True で再取得。自機を指す指定外のローカル provider ($ClaudeLocalLLMProvider 排他) は Reason "ProviderNotDesignated" で Available->False になる。
+→ <|"Available"->True|False, "Reason"->"OK"|"NotRunning"|"ModelNotLoaded"|"ModelLoading"|"Unauthorized"|"ModelNameMismatch"|"StateUnknown"|"ProviderNotDesignated"|..., ...|>
 
 ### $ClaudeRoutingModelPolicy
 型: Automatic | "Local" | "Cloud" | "Off"
@@ -726,6 +767,30 @@ Options: Fallback -> False, References -> {} (URL/書籍リスト。README.md �
 → True | $Failed
 Options: Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, Acknowledgments -> {}, License -> "", TargetFiles -> Automatic, Mode -> "Update", Baseline -> "LastDocUpdate"
 
+## クライアント側ツールループ (SourceVault MCP をローカル/クラウド API モデルへ)
+
+LM Studio は `/api/v1/chat` の integrations でサーバ側がツールループを回すが、llama.cpp / FreeToken と OpenAI 互換のクラウド API にはその機能が無い。claudecode が `tools` を送り、`tool_calls` を受け、`SourceVaultMCPCallTool` をプロセス内で実行して `role:"tool"` で返すループを回す (同期 `iQueryOpenAIToolLoop`、非同期 URLSubmit `iToolLoopStart`)。
+
+### $ClaudeLocalToolLoop
+型: Automatic | True | False (既定 Automatic)。ローカル OpenAI 互換 provider で SourceVault MCP のツールをモデルに使わせるか (クライアント側ツールループ)。Automatic: /api/v1/chat を持たない provider (llamacpp / freetoken) で有効。True: lmstudio も含め常に有効。False: 無効 (従来どおり素の1往復)。有効な provider は **全 SourceVault ツール**を受ける。ツール可否と可視範囲は SourceVault の delivery profile に従う。`$ClaudeLocalToolLoopMaxIterations` (8), `$ClaudeLocalToolLoopMaxResultChars` (8000), `$ClaudeLocalToolLoopToolTimeoutSeconds` (60), `$ClaudeLocalToolLoopMaxUselessResults` (3), `$ClaudeLocalToolLoopVerbose` (既定 True)。
+
+### $ClaudeLocalToolLoopMaxCompletionTokens / $ClaudeLocalToolLoopReasoningEffort (2026-09-09)
+思考暴走ガード。実機 (qwen3.8-27b, LM Studio) で「光子の二重スリット実験のシミュレーションコード」が reasoning 22,430 tok (10.8 tok/s で約 35 分) を吐き続けて本文もツール呼び出しも無いまま 40K 文脈に達し、DAG は 30 分 (`$LLMGraphDAGMaxJobSeconds`) で kill された。
+- `$ClaudeLocalToolLoopMaxCompletionTokens` (既定 8192): ループの全往復に `max_tokens` として送る (思考トークンも数える)。None で無効。
+- `$ClaudeLocalToolLoopReasoningEffort`: Automatic (provider ごとに解決: lmstudio はパレット秘密モデル effort が「off」なら `"none"`、それ以外は `iResolveLMStudioReasoning`; freetoken は `iResolveFreeTokenReasoning`) / None (送らない) / `"none"` 等の文字列 (全往復に強制)。値は `/v1/chat/completions` の語彙 (none / minimal / low / medium / high / xhigh) に正規化する — `/api/v1/chat` 用の `"on"` を送ると LM Studio が 400 (`Invalid 'reasoning_effort' value: 'on'`) を返すため、off→none、on→送らない。
+- 往復が `finish_reason: "length"` かつ本文空かつツール呼び出し無し (= 出力予算を思考で使い切った) なら、`reasoning_effort: "none"` と「長考せず今すぐ回答せよ」の `[System]` メッセージで **1 回だけ再試行**し、それでも同じなら Error (同期は `Error: ...` 文字列、非同期ジョブは Failed) で即座に返す。freeze log `toolloop-thinking-exhausted-retry`。
+- DAG の max-lifetime / stall kill は `toolLoopId` を持つノードの URLSubmit タスクも `TaskAbort`+`TaskRemove` する (`dag-kill-toolloop`)。これが無いと LM Studio は切断を検知せず、ジョブ死亡後も往復の最後まで生成を続けてスロットを塞ぐ。
+
+### $ClaudeEvalToolIntegrations
+型: List, 初期値: {"mcp/sourcevault"}
+ContextPlan の ToolDefinitions ゲート (Mode -> "None") が効いている間でも LM Studio へ渡してよい integrations の許可リスト。ゲートは「mcp/exa のツールスキーマ (約31Kトークン) を ClaudeEval の通常送信で毎回送らない」ためのもので、これが無いと sourcevault まで一律に締め出されパレットの対話セルから MCP がまったく使えなくなる。{} にすると従来どおり全抑止。個別呼び出しの Integrations -> {...} はこのゲートより優先される。
+
+### $ClaudeCloudToolLoop (2026-09-08)
+型: Automatic | True | False (既定 Automatic = SourceVault ロード時に有効)。OpenAI 互換クラウド provider (openai / zai / kimi) にも同じループを回すが、モデルに見せる・実行できるツールは **`$ClaudeCloudToolLoopTools` のみ** (既定 `{"sourcevault_directives", "sourcevault_directive_body"}` = CLAUDE.md/rules/skills、PrivacyLevel 0.0)。SourceVault のデータツール (メール・セッションログ・ノート) はスキーマにも載らず、実行時の許可リスト (`iExecSourceVaultToolCall`) でも拒否される。ディレクティブ一覧の絶対パスはクラウド向け結果から除去する。同期 (`iQueryViaAPI` の openai/zai/kimi 分岐)、非同期 fallback (`iStartFallbackAsync`)、RT-Async (`QueryProviderAsync`) の 3 経路で有効。ツールループの往復には `SystemPrompt` オプションを `role:"system"` として載せられる。
+
+### ClaudeEffectiveDirectiveLevel[] → Association
+現在のターンが受ける DirectiveLevel (Minimal/Standard/Full, ClaudeDirectives) とその根拠、実効モデル (`$iClaudeEvalCurrentModelSpec` → privacy 要求レベル ≥0.5 なら `$ClaudePrivateModel` → `$ClaudeModel`)、ツールによるディレクティブ取得可否 (`ToolAccess`)。`iClaudeSysPrompt[]` は 2026-09-08 からこの実効モデル (タプル) で投影する (旧版は `ToString[$ClaudeModel]` の `"{lmstudio, qwen3.8-27b}"` を能力表に渡していて常に不一致だった)。
+
 ## ディレクティブ管理 (CLAUDE.md)
 
 ### ClaudeAddDirective[target, description, opts]
@@ -1002,7 +1067,7 @@ LLMGraphDAG ノードが「停滞」と判定されるまでの無進捗秒数�
 
 ### $LLMGraphDAGMaxJobSeconds
 型: Number
-LLMGraphDAG ジョブ全体の最大実行秒数上限。超過したジョブは失敗扱いになる。
+LLMGraphDAG ジョブ全体の最大実行秒数上限。超過したジョブは失敗扱いになる。ツールループノード (URLSubmit ベース) も lifetime/stall kill 時に対応する URLSubmit タスクごと TaskAbort+TaskRemove される。
 
 ### LLMGraphDAGCreate[spec] → String (jobId)
 DAG ベースの非同期ジョブを作成し起動する。spec (Association) のキー: "nodes" (Association, nodeId -> ノード仕様 <|"status","dependsOn",...|>)、"taskDescriptor" (ノード種別ごとの実行ハンドラ定義)、"nb" (省略時は EvaluationNotebook[])、"onComplete" (完了時コールバック、省略可)、"context" (ノード共有コンテキスト、省略可)。より簡便な入口としては LLMGraphExecute を推奨。
@@ -1118,6 +1183,10 @@ $ClaudeRuntimeAsyncExecution の判定に関わらず非同期実行を強制す
 型: Boolean
 非同期コード実行時に入力セルの自動 InputEval を抑制するフラグ。
 
+### $ClaudeSyntaxRepair
+型: Boolean, 初期値: True
+ランタイムブリッジが、パースできない ```mathematica``` 提案コードをそのままテキストのみに縮退させてノートブックに壊れたコードを貼り付ける代わりに、行ごとの括弧欠陥一覧を添えて修復ターンとしてモデルに送り返すかどうか。また、ロード済みコンテキストに存在せず System シンボルから編集距離1のヘッド (StringEndQ のようなタイポ) も承認ダイアログではなく修復ターンに回す。修復回数はランタイムの MaxValidationRepairs 予算に制限される。False で 2026-08-29 以前の挙動 (即テキスト縮退/承認ダイアログ) に戻す。
+
 ### ClaudeBuildRuntimeAdapter[nb, opts]
 ノートブック nb 用のランタイムアダプター Association を構築する。ClaudeStartRuntime / ClaudeEvalViaRuntime で内部使用する。
 → Association
@@ -1208,7 +1277,7 @@ $ClaudeEvalContextPlanning が有効かつプランの History Mode が "Recent"
 
 ### $ClaudeEvalDefaultContextPlan
 型: Association
-プランナー未登録時に iAssembleContextForPlan が使うパッケージ既定のコンテキストプラン。"Notebook" と "History" のサブプランを持つ Association。
+プランナー未登録時に iAssembleContextForPlan が使うパッケージ既定のコンテキストプラン。"Notebook" と "History" のサブプランを持つ Association。既定では "ToolDefinitions" サブプランに "Mode" -> "None" が設定されており ($ClaudeEvalToolIntegrations の許可リストを除き) ツールスキーマを毎回の送信に含めない。
 
 ### $ClaudeEvalPromptRouterDispatch
 型: Automatic | True | False, 初期値: Automatic
@@ -1241,7 +1310,7 @@ Options: NBAccess`NBEnqueueFinalAction のオプションを継承
 ## パレット・UI
 
 ### ShowClaudePalette[]
-Claude Code コントロールパレットを表示する。Provider 選択 (循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudeLLMBreakpoint トグル ("BreakPtr")、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル (2026-08-30 改訂): 標準サイクルは $ClaudePaletteProviders 登録簿の順 (既定 {"claudecode","chatgptcodex","anthropic","openai"})、秘密モデル (Privacy) 側は $ClaudePalettePrivateProviders (既定 {"lmstudio"}) に従う。zai/kimi/freetoken/llamacpp などそれ以外の provider は登録簿に未登録だと候補に出ない — API キー未設定の課金 provider や、選択した瞬間にローカル推論サーバーを起動してしまう provider を誤って回さないための変更で、必要な環境では localInit 等で明示登録する ($ClaudePaletteProviders / $ClaudePalettePrivateProviders に All を指定すると既知の全 provider に戻せる)。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。kimi は Moonshot AI Kimi シリーズ (kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)。freetoken は無料トークンベースのプロバイダー枠 (候補モデル一覧は未確認)。llamacpp はローカル llama.cpp サーバー経由と見られるプロバイダー枠 (候補モデル一覧は未確認)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.8-27b/qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する (静的フォールバックは Automatic/gpt-5.6-sol)。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
+Claude Code コントロールパレットを表示する。Provider 選択 (循環)、Model 選択 (現プロバイダーの候補列を循環)、Effort、Fallback、有料 API 許可、$ClaudeLLMBreakpoint トグル ("BreakPtr")、$ClaudePaletteServiceControls 登録サービスコントロール等を含む。Provider サイクル (2026-08-30 改訂): 標準サイクルは $ClaudePaletteProviders 登録簿の順 (既定 {"claudecode","chatgptcodex","anthropic","openai"})、秘密モデル (Privacy) 側は $ClaudePalettePrivateProviders (既定 {"lmstudio"}) に従う。zai/kimi/freetoken/llamacpp などそれ以外の provider は登録簿に未登録だと候補に出ない — API キー未設定の課金 provider や、選択した瞬間にローカル推論サーバーを起動してしまう provider を誤って回さないための変更で、必要な環境では localInit 等で明示登録する ($ClaudePaletteProviders / $ClaudePalettePrivateProviders に All を指定すると既知の全 provider に戻せる)。マシン別排他 ($ClaudeLocalLLMProvider / $ClaudeMachineLocalLLMProvider、2026-09-08) が有効な場合、自機の localhost を指す指定外のローカル provider (lmstudio/llamacpp/freetoken) はさらに P: / 秘密 P: の循環候補から消える (LAN 上の別機を指す接続は対象外)。zai は z.ai GLM シリーズ (glm-5.2/glm-5.1/glm-5/glm-5-turbo/glm-4.7/glm-4.6/glm-4.5-air/glm-4.5)。kimi は Moonshot AI Kimi シリーズ (kimi-k3/kimi-k2.7-code/kimi-k2.7-code-highspeed/kimi-k2.6)。freetoken は VRAM 超え MoE 用のローカル推論サーバー枠 (既定 base URL は $ClaudeFreeTokenBaseURL、候補モデル一覧は未確認)。llamacpp はローカル llama.cpp (llama-server) 経由のプロバイダー枠 (既定 base URL は $ClaudeLlamaCppBaseURL、候補モデル一覧は未確認、--api-key-file 認証が必要)。claudecode/anthropic の既定モデルは SourceVault の ClaudeResolveModel 経由で動的解決され (SourceVault 未ロード時は静的候補 claude-opus-5/claude-fable-5/claude-sonnet-5/claude-haiku-4-5 にフォールバック)、マイナーバージョンの手動変更不要。openai 候補: gpt-5.5/gpt-5.5-pro/gpt-5-mini/gpt-5-nano。lmstudio 候補: qwen3.8-27b/qwen3.6-27b/qwen3.5-27b/qwen3-coder-30b/gpt-oss-120b (LM Studio 到達可能ならロード済みモデル一覧が優先、SourceVault カタログ、静的リストの順にフォールバック)。chatgptcodex は Automatic を既定とし SourceVault の候補列を優先使用する (静的フォールバックは Automatic/gpt-5.6-sol)。パレットの選択操作は $ClaudeModel に {provider, modelName} タプルを反映する (パッケージロード直後、未操作時の $ClaudeModel は "" で Claude Code CLI 自身の既定モデルを使う)。有料 API 許可はノートブック単位で TaggingRules ("claudecode" -> "paidAPIAllowed") に永続化され、既定は禁止 (新規ノートブックでは Inherited 扱いから自動的に False に解決される)。
 → NotebookObject
 
 ### ClaudeRegisterPaletteServiceControl[spec]

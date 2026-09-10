@@ -1,4 +1,5 @@
 ---
+tier: guardrail
 paths:
   - "**/{NBAccess,claudecode,NotebookExtensions,PresentationListener}*.{wl,wls,m,nb}"
   - "**/*Notebook*.{wl,wls,m,nb}"

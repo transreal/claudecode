@@ -1,4 +1,5 @@
 ---
+tier: safety
 paths:
   - "**/{claudecode,NBAccess,SourceVault,localInit}*.{wl,wls,m,nb}"
   - "**/*LLM*.{wl,wls,m,nb}"

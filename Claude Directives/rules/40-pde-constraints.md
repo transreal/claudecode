@@ -1,4 +1,5 @@
 ---
+tier: procedure
 paths:
   - "**/*PDE*.{wl,wls,m,nb}"
   - "**/*Model*.{wl,wls,m,nb}"

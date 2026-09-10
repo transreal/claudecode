@@ -1,4 +1,5 @@
 ---
+tier: style
 paths:
   - "**/*.{wl,wls,m,nb}"
 ---

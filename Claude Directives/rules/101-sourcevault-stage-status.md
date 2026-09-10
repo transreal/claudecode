@@ -1,4 +1,5 @@
 ---
+tier: procedure
 paths:
   - "**/SourceVault*.wl"
   - "**/sourcevault*.md"

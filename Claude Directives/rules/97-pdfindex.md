@@ -1,3 +1,6 @@
+---
+tier: procedure
+---
 # 97-pdfindex.md — PDFIndex パッケージ連携ルール
 
 ## 概要

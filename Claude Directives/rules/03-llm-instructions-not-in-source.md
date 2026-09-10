@@ -1,3 +1,6 @@
+---
+tier: guardrail
+---
 # Rule 02: LLM 指示文・スキル・慣習を `.wl` にハードコードしない
 
 優先度: **最優先 (00 AutoEvaluate 禁止に次ぐ)**

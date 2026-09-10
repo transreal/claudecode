@@ -1,4 +1,5 @@
 ---
+tier: safety
 paths:
   - "**/*.{wl,wls,m,nb}"
 ---

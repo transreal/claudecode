@@ -1,4 +1,5 @@
 ---
+tier: safety
 paths:
   - "**/SourceVault*.wl"
   - "**/NBAccess*.wl"

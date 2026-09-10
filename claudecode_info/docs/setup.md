@@ -1,5 +1,3 @@
-# claudecode パッケージ セットアップガイド
-
 ### 必須環境
 - **Wolfram Language 12.0** 以上（Mathematica または Wolfram Engine）
 - **Windows 10/11** （現在 Windows 専用実装）
@@ -193,7 +191,7 @@ Dataset[KeyValueMap[
 ]]
 ```
 
-`$UseClaudeRuntime = False`（デフォルト）の場合、ClaudeRuntime パッケージが存在しない環境でも claudecode の全機能を利用できます。
+`$UseClaudeRuntime = False`(デフォルト)の場合、ClaudeRuntime パッケージが存在しない環境でも claudecode の全機能を利用できます。
 
 ### 5. フォールバックモデルの設定（オプション）
 
@@ -269,6 +267,32 @@ ClaudeCode`$ClaudePaletteProviders = All;
 - 登録簿が空・不正値・既知 provider と 1 つも一致しない場合は、パレットが操作不能にならないよう標準枠は `{"claudecode"}`、秘密枠は `{"lmstudio"}` にフォールバックします。
 - この制御は**パレット UI の選択候補のみ**に効きます。`Model -> {"zai", "glm-5.2"}` のような明示指定や、`$ClaudeFallbackModels` / `$ClaudePrivateModel` への直接代入、ワークフローからの呼び出しは登録簿の影響を受けず従来どおり動作します。
 - 現在有効な候補は `GetPaletteProviderOrder[]`（秘密枠は `GetPalettePrivateProviderOrder[]`）で確認できます。既知 provider の全一覧は `GetPaletteKnownProviders[]` です（いずれも `ClaudeCode` コンテキスト）。
+
+#### ローカル LLM エンジンのマシン別排他（`$ClaudeLocalLLMProvider`）
+
+登録簿（`$ClaudePaletteProviders` 等）は「環境に存在する provider」を列挙するだけで、「このマシン自身でどのローカル LLM エンジンを動かすか」までは決めません。そのため、例えば LM Studio を動かしているマシンでパレットの `P:` を回すと `llamacpp` も選べてしまい、自機の localhost を指す想定外のサーバへ接続してしまう事故が起こり得ます。
+
+`$ClaudeLocalLLMProvider` / `$ClaudeMachineLocalLLMProvider`（2026-09-08 追加）は、この事故を「自機の localhost を指す接続」に限定して塞ぐ仕組みです。排他の判定は接続先が自機かどうかで行われ、provider 名では行われません。LAN 上の別機（例えば `raptorlake` で動く `llama-server`）を指す指定外 provider は、URL で明示すれば従来どおり使用できます。クラウド provider（`claudecode` / `anthropic` / `openai` / `zai` / `kimi`）は対象外です。
+
+```mathematica
+(* localInit.wl（Needs["ClaudeCode`"] の前）にマシン別対応表を書く例 *)
+ClaudeCode`$ClaudeMachineLocalLLMProvider = <|
+  "strixhalo128" -> "lmstudio", "raptorlake" -> "llamacpp"|>;
+
+(* 特定のマシンに限らず、このカーネルで明示的に 1 つへ絞る場合 *)
+$ClaudeLocalLLMProvider = "lmstudio"   (* "lmstudio" | "llamacpp" | "freetoken" *)
+
+(* 排他を解除して従来どおり全ローカル provider を使う場合 *)
+$ClaudeLocalLLMProvider = All
+
+(* 実効値の確認 *)
+ClaudeLocalLLMProvider[]
+
+(* カーネル内で指定を切り替える（パレットの P: / 秘密 P: も指定 provider に寄せられる） *)
+ClaudeSetLocalLLMProvider["llamacpp"]
+```
+
+解決の優先順位は `$ClaudeLocalLLMProvider`（String または `All`）> `$ClaudeMachineLocalLLMProvider[$MachineName]` > 既定 `"lmstudio"` です。マシン名は `$MachineName`（大文字小文字は無視）で対応表を引くため、表に無いマシンは既定 `"lmstudio"` として扱われます。自機を指す指定外のローカル provider は、パレットの循環候補・保存済み設定の復元・`ClaudeBackendAvailableQ` の preflight（`"Reason" -> "ProviderNotDesignated"`）・同期/非同期の送信経路のすべてで止められます。`$ClaudePaletteProviders` / `$ClaudePalettePrivateProviders` に `lmstudio` と `llamacpp` を両方登録したままでも、自機を指す方だけがこの対応表で指定した 1 つに絞られます（登録簿 = 環境に存在するもの、対応表 = 自機で動かすもの、という役割分担です）。
 
 ### 6. ドキュメント生成設定
 
@@ -817,7 +841,7 @@ ClaudeBackendAvailableQ[{"lmstudio", "my-model", "http://localhost:1234"}]
 ClaudeBackendAvailableQ[{"lmstudio", Automatic}, "Refresh" -> True]
 ```
 
-返り値は `<|"Available" -> True|False, "Reason" -> "OK"|"NotRunning"|"ModelNotLoaded"|"RateLimited"|...|>` 形式の Association です。`"Reason"` が `"NotRunning"` の場合はサーバ未起動、`"ModelNotLoaded"` の場合はモデル未ロード、`"RateLimited"` の場合はレート制限中を示します。
+返り値は `<|"Available" -> True|False, "Reason" -> "OK"|"NotRunning"|"ModelNotLoaded"|"RateLimited"|"ProviderNotDesignated"|...|>` 形式の Association です。`"Reason"` が `"NotRunning"` の場合はサーバ未起動、`"ModelNotLoaded"` の場合はモデル未ロード、`"RateLimited"` の場合はレート制限中、`"ProviderNotDesignated"` の場合は前述の「フォールバックモデルの設定 > ローカル LLM エンジンのマシン別排他」により自機を指す指定外のローカル provider として止められたことを示します。
 
 `/api/v1` 系にしか対応していないサーバは state 情報が取得できないため、可用性チェックでブロックされません（既知の挙動）。
 
@@ -1203,7 +1227,7 @@ ClaudeResolveLLMTier["general"]
 (* "general" は Automatic（従来の provider fallback 連鎖）をそのまま使う *)
 ```
 
-`"general"` クラスは従来の provider fallback 連鎖を使用します。未知のクラスは `"general"` に降格され、warn が emit されます。
+`"general"` クラスは従来の provider fallback 連鎖を使用します。未知のクラスは `"general"` に降格され、warn が emit されます。タスククラスの候補列（`$ClaudeLLMTierTable`）にローカル provider が含まれる場合も、前述の「フォールバックモデルの設定 > ローカル LLM エンジンのマシン別排他」が適用され、自機を指す指定外のローカル provider は指定 provider（`ClaudeLocalLLMProvider[]`）へ自動的に写し替えられます。
 
 #### ClaudeTaskClassAttributes
 
@@ -1244,10 +1268,32 @@ ClaudeBackendAvailableQ[{"lmstudio", Automatic}, "Refresh" -> True]
 | キー | 値の例 | 説明 |
 |------|--------|------|
 | `"Available"` | `True` / `False` | バックエンドが利用可能かどうか |
-| `"Reason"` | `"OK"` / `"NotRunning"` / `"ModelNotLoaded"` / `"RateLimited"` / `"StateUnknown"` | 利用可否の理由 |
+| `"Reason"` | `"OK"` / `"NotRunning"` / `"ModelNotLoaded"` / `"RateLimited"` / `"StateUnknown"` / `"ProviderNotDesignated"` | 利用可否の理由 |
 | `"BaseURL"` | `"http://localhost:1234"` | 接続先 URL（lmstudio 等） |
 
-`"Reason"` が `"RateLimited"` の場合はレート制限中を示します。`"StateUnknown"` は `/api/v1` 系のみ対応するサーバ（state 情報が取得できないため）で返され、この場合はブロックされません。
+`"Reason"` が `"RateLimited"` の場合はレート制限中を示します。`"StateUnknown"` は `/api/v1` 系のみ対応するサーバ（state 情報が取得できないため）で返され、この場合はブロックされません。`"ProviderNotDesignated"` は、指定した provider が自機の localhost を指すローカル provider であり、かつ前述の「フォールバックモデルの設定 > ローカル LLM エンジンのマシン別排他」により自機で動かす provider として指定されていない場合に返されます。
+
+#### クラウド provider のディレクティブオンデマンドツールループ（$ClaudeCloudToolLoop）
+
+SourceVault がロードされている場合、`openai` / `zai` / `kimi` の API モデルも、LM Studio（mcp/sourcevault 経由）や Codex（AGENTS.md index 経由）と同様に、ルール・スキルをオンデマンドで取得できるクライアント側ツールループ経由で動作します（2026-09-08 追加）。
+
+```mathematica
+(* 既定 Automatic: SourceVault がロードされていれば有効 *)
+$ClaudeCloudToolLoop = Automatic   (* Automatic | True | False *)
+
+(* ツールループで公開する SourceVault MCP ツール（既定） *)
+$ClaudeCloudToolLoopTools
+(* {"sourcevault_directives", "sourcevault_directive_body"} *)
+```
+
+ツールループで実行可能なのは `$ClaudeCloudToolLoopTools` に列挙されたツールだけで、いずれも PrivacyLevel 0.0 です。SourceVault のデータツールがクラウドモデルに渡ることはありません。画像などのメディア添付があるクエリはこのツールループの対象外です。
+
+```mathematica
+(* 今のターンの DirectiveLevel・決定元・実効モデル・オンデマンドツールアクセスの有無を確認 *)
+ClaudeEffectiveDirectiveLevel[]
+```
+
+`ClaudeEffectiveDirectiveLevel[]` は `Minimal` | `Standard` | `Full` の DirectiveLevel（モデルの生成世代に応じたディレクティブの詳細度）を、その決定元・実効モデルスペックとあわせて返します。
 
 ### 仕様実装ワークフロー（CreateImplementationWorkflow）
 
@@ -1360,6 +1406,13 @@ ShowClaudePalette[]
 ?$ClaudeUltraEnabled
 ?ClaudeUltraModelSpec
 ?$ClaudeStandardFont
+?$ClaudeLocalLLMProvider
+?$ClaudeMachineLocalLLMProvider
+?ClaudeLocalLLMProvider
+?ClaudeSetLocalLLMProvider
+?$ClaudeCloudToolLoop
+?$ClaudeCloudToolLoopTools
+?ClaudeEffectiveDirectiveLevel
 ?CreateImplementationWorkflow
 ?LaunchImplementationWorkflow
 ?ClaudeImplStatus

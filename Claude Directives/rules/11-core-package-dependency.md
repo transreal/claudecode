@@ -1,4 +1,5 @@
 ---
+tier: guardrail
 paths:
   - "**/{NBAccess,claudecode,ClaudeCode}*.{wl,wls,m,nb}"
   - "**/*.{wl,wls,m}"

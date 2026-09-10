@@ -1,4 +1,5 @@
 ---
+tier: guardrail
 description: データ・ファイルの読み込みに Get/Import 等を使わず、まず既存の定義済み関数(パッケージ API)を探して使う
 ---
 

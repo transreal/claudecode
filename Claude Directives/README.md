@@ -72,6 +72,33 @@ Claude Directives/
     sourcevault-packageapi-narrowing/ 本システムのパッケージで関数・実装箇所を探す初動で、広い rg でなく SourceVault MCP packageapi マイニング (sourcevault_search kinds=[packageapi]) を先に使う手順。1 呼び出し 1 概念トークン・sourcevault_get view=body・StaleDocs 確認・filters.packages scope・条件付き glob 境界 rg fallback
 ```
 
+## rule の frontmatter: `tier:` と `models:` (2026-09-08)
+
+モデル世代によって必要な指示の水準が違う (Anthropic 2026-07-24: Claude 5 世代では system prompt の 8 割超を削っても評価が落ちない)。
+`claudecode_directives.wl` はモデルごとの **DirectiveLevel** (`Minimal` / `Standard` / `Full`) と rule の **tier** で注入量を決める。
+
+```yaml
+---
+tier: safety        # safety | guardrail | procedure | style | evolved
+paths:
+  - "**/*.wl"
+models:             # 任意: このモデルにだけ配る ("provider:model", "provider:*", "*:model")
+  - lmstudio:qwen3.8-27b
+exclude_models:     # 任意
+  - openai:*
+---
+```
+
+| tier | 内容 | Minimal (Claude 5 世代) | Standard (Heavy) | Full (Mid/Light/旧世代) |
+|---|---|---|---|---|
+| `safety` | 不可逆操作・秘密・privacy・課金の禁止 | 全文 | 全文 | 全文 |
+| `guardrail` | 文脈から推測できないプロジェクト固有の落とし穴 | 名前+説明 1 行 (ツールで本文取得) | 全文 | 全文 |
+| `procedure` | 明示手順 (タスク一致時のみ選ばれる) | 除外 | 全文 | 全文 |
+| `style` | 書式・言い回しの好み | 除外 | 除外 | 全文 |
+| `evolved` | TurnWiki が検証して昇格した手順書 | 全文 | 全文 | 全文 |
+
+`tier` 無指定は `guardrail`。API モデル (openai/zai/kimi) とローカルモデルはツールループの `sourcevault_directives` / `sourcevault_directive_body` で名前だけ列挙された rule/skill の本文を取りに来る。DirectiveLevel は TurnWiki (`ClaudeTurnWikiDirectiveLevelAdvice`) が失敗率から自動調整する。
+
 ## 主要な設計原則
 
 ### NBAccess 分離原則 (`rules/10-nbaccess.md`)

@@ -1,4 +1,5 @@
 ---
+tier: procedure
 paths:
   - "**/{claudecode,ClaudeRuntime,ClaudeOrchestrator}*.{wl,wls,m}"
 ---

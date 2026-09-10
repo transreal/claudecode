@@ -1,4 +1,5 @@
 ---
+tier: guardrail
 paths:
   - "**/*.{wl,wls,m,nb}"
 ---

@@ -1,4 +1,5 @@
 ---
+tier: guardrail
 description: SourceVault の一覧・検索 API は「連想リストを返す core」と「表を返す View (…View)」の対。ユーザーに見せる一覧は必ず View、後段処理へ渡すのは core。素の Dataset/Grid を手組みしない
 paths:
   - "**/SourceVault*.{wl,wls,m,nb}"

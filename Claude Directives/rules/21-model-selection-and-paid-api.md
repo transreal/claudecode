@@ -1,4 +1,5 @@
 ---
+tier: safety
 paths:
   - "**/{claudecode,NBAccess,SourceVault,Cerezo}*.{wl,wls,m,nb}"
   - "**/*Claude*.{wl,wls,m,nb}"

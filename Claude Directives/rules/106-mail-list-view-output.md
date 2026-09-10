@@ -1,4 +1,5 @@
 ---
+tier: guardrail
 description: メール検索・一覧の最終出力は必ずメール専用 View (SourceVaultMailSearchIndexView / SourceVaultMailView) を使う。素の Dataset/Grid/Column で件名一覧を手組みしない
 ---
 

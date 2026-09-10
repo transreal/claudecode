@@ -1,4 +1,5 @@
 ---
+tier: procedure
 paths:
   - "**/ClaudeOrchestrator*.{wl,wls,m,nb}"
   - "**/ClaudeTestKit*.{wl,wls,m,nb}"

@@ -1,4 +1,5 @@
 ---
+tier: guardrail
 paths:
   - "**/NBAccess*.wl"
   - "**/SourceVault*.wl"

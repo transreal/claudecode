@@ -1,4 +1,5 @@
 ---
+tier: procedure
 paths:
   - "**/*test*.{wl,wls,m,nb}"
   - "**/*_test.{wl,wls,m,nb}"

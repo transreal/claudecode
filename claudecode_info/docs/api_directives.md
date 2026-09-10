@@ -14,7 +14,7 @@ Block[{$CharacterEncoding = "UTF-8"}, Get["ClaudeDirectives.wl"]]
 
 ### $ClaudeModelCapabilities
 型: Association, キー: {provider, model} tuple
-モデル能力テーブル。値は `<|"ContextWindow"->Integer, "Class"->"Heavy-Cloud"|"Heavy-Local"|"Mid-Local"|"Light-Cloud"|"Light-Local", "DefaultMode"->"Full"|"Summary"|"Index"|"Lazy", "Strengths"->{"Code","Reasoning","Search","ToolUse",...}, "PreserveThinking"->True|False, "Paid"->True|False|>`。provider 名: `"claudecode"` (CLI、課金なし), `"anthropic"` (API、課金), `"openai"` (API、課金), `"lmstudio"` (ローカル、課金なし)。Anthropic CLI Opus と Anthropic API Opus は別モデルとして両方登録される。
+モデル能力テーブル。値は `<|"ContextWindow"->Integer, "Class"->"Heavy-Cloud"|"Heavy-Local"|"Mid-Local"|"Light-Cloud"|"Light-Local", "DefaultMode"->"Full"|"Summary"|"Index"|"Lazy", "Strengths"->{"Code","Reasoning","Search","ToolUse",...}, "PreserveThinking"->True|False, "Paid"->True|False, "DirectiveLevel"->"Minimal"|"Standard"|"Full", "Generation"->String|>`。provider 名: `"claudecode"` (CLI、課金なし), `"anthropic"` (API、課金), `"openai"` (API、課金), `"lmstudio"` (ローカル、課金なし)。Anthropic CLI Opus と Anthropic API Opus は別モデルとして両方登録される。
 
 ### $ClaudeRoleDefaultModels
 型: Association, Role -> {provider, model} tuple
@@ -48,14 +48,44 @@ ClaudeDirectiveClassifyRule が rule を "large" と分類するバイト境界�
 ### ClaudeRegisterModelCapability[name, spec] → Association
 $ClaudeModelCapabilities にモデル能力を追加・更新。name は {provider, model} tuple・String キーの両方を accept。
 
-### ClaudeResolveModelCapability[modelName] → Association
-モデル名から能力 Association を返す。未登録時は保守的既定値 (ContextWindow 32000, DefaultMode "Summary") を返す。
+### ClaudeResolveModelCapability[modelSpec] → Association
+モデル指定から能力 Association を返す。modelSpec は `{provider, model}` / `{provider, model, url}` タプル、`"provider/model"`、文字列化タプル `"{provider, model}"`、素のモデル名のいずれも可 (2026-09-08: 旧版は String で tuple キーを引いていたため常に不一致で、ローカルモデルが全て 32K/Unknown に落ちていた)。順序: 完全一致タプル → 同名モデルの別 provider → provider 推定の最強モデル (未登録ローカルモデルは DirectiveLevel "Full" に保守化、`ResolvedFrom -> "provider-fallback"`)。未登録時は保守的既定値 (ContextWindow 32000, DefaultMode "Summary")。
 
-### ClaudeResolveModelMode[modelName] → String
-モデル名から既定 ProjectionMode を返す。
+### ClaudeNormalizeModelSpec[spec] → {provider | None, model}
+上記すべての spec 形を正規化する純関数。provider 綴りの別名 (`lm-studio`→`lmstudio`, `claude`→`claudecode`, `codex`→`chatgptcodex` 等) も吸収。
 
-### ClaudeResolveModelContextWindow[modelName] → Integer
-モデル名から ContextWindow (token 数) を返す。
+### ClaudeResolveModelMode[modelSpec] → String
+既定 ProjectionMode を返す。
+
+### ClaudeResolveModelContextWindow[modelSpec] → Integer
+ContextWindow (token 数) を返す。
+
+## DirectiveLevel (モデル世代別の指示水準, 2026-09-08)
+ProjectionMode (Full/Summary/Index/Lazy = **どれだけ入るか**、文脈長) と直交する第 2 軸 **DirectiveLevel = どれだけ必要か** (モデル世代)。Anthropic 2026-07-24 の知見 (Claude 5 世代では system prompt の 8 割超を削っても評価が落ちない: 禁止事項列挙・冗長なツール例・矛盾指示が不要になり、残るのは不可逆操作のガード・文脈から推測できない落とし穴・チーム固有の意見) を、rule の `tier:` frontmatter とモデル別レベルで実装する。
+
+- `$ClaudeDirectiveLevels` = `{"Minimal", "Standard", "Full"}`。
+- rule frontmatter `tier:` = `safety` (不可逆・秘密・privacy・課金: 常に全文) / `guardrail` (文脈から推測できない落とし穴: Minimal では名前+説明の 1 行索引) / `procedure` (明示手順: Minimal で除外) / `style` (書式・言い回し: Standard で除外) / `evolved` (TurnWiki 昇格スキル: 常に全文)。無指定は `$ClaudeDefaultRuleTier` (`guardrail`)。
+- `$ClaudeRuleTierPolicy` = level → `<|tier -> "Full" | "Index" | None|>`。
+- rule frontmatter `models:` / `exclude_models:` (`provider:model`, `provider:*`, `*:model`, `model`) で適用モデルを限定できる (TurnWiki の昇格スキルは検証したプロファイルにのみ配られる)。
+- 能力表に `"DirectiveLevel"` と `"Generation"` を追加 (Claude 5 世代 = Minimal、他の Heavy = Standard、Mid/Light/旧世代 = Full)。
+
+### $ClaudeDirectiveLevelOverrides / $ClaudeDirectiveLevelResolver / $ClaudeDirectiveDefaultLevel
+$ClaudeDirectiveLevelOverrides: Association, `{provider,model} | provider | model -> level`。ClaudeResolveDirectiveLevel で最優先に解決され、ClaudeSetDirectiveLevelOverride で書き込む。$ClaudeDirectiveLevelResolver: None | `f[{provider,model}] -> level | None`。適応層のフック (ClaudeOrchestrator`TurnWiki` が directive-levels.json を読む関数をここに登録)。$ClaudeDirectiveDefaultLevel: "Standard"。override/resolver/能力表/Class いずれも決められない場合の既定値。
+
+### ClaudeResolveDirectiveLevel[modelSpec] → `<|"Level", "Source", "Provider", "Model"|>`
+解決順: `$ClaudeDirectiveLevelOverrides` (tuple > "prov/model" > model > provider) → `$ClaudeDirectiveLevelResolver` (適応層のフック。TurnWiki が `directive-levels.json` を読む関数を登録) → 能力表 `DirectiveLevel` → Class 由来 (Ultra→Minimal, Heavy→Standard, 他→Full) → `$ClaudeDirectiveDefaultLevel`。
+
+### ClaudeSetDirectiveLevelOverride[modelSpec, level | None] → key
+override の登録/解除。
+
+### ClaudeDirectiveRuleTier[ruleAssoc] / ClaudeDirectiveRuleAppliesToModelQ[ruleAssoc, modelSpec] / ClaudeApplyDirectiveLevel[rules, level]
+純関数。ApplyDirectiveLevel は policy に従って rule を落とすか `"Projection" -> "Full" | "Index"` を付ける。
+
+### ClaudeDirectiveBundleDiagnostics[modelSpec, taskHint, opts] → Association
+bundle の DirectiveMeta (DirectiveLevel, LevelSource, ProjectionMode, RuleProjections, RuleTiers, DroppedByLevel, DroppedByModel, EstimatedTokens, ProjectedChars) を投影せずに返す診断。
+
+### ClaudeResolveDirectiveBundle の追加オプション
+`"DirectiveLevel" -> Automatic | level` (明示指定は Source "option")、`"ToolAccess" -> False | True` (呼び出し側がディレクティブ取得ツール `sourcevault_directives` / `sourcevault_directive_body` を持つツールループを回すとき True: 投影末尾に「名前だけ列挙した rule/skill はツールで取れ」の案内を付ける)。bundle は `"DirectiveLevel"`, `"ToolAccess"` を持ち、DirectiveMeta に `ModelSpec`, `ModelGeneration`, `LevelSource`, `RuleProjections`, `RuleTiers`, `DroppedByLevel`, `DroppedByModel` が加わる。`ClaudeBuildDirectivePromptForSingle[modelSpec, taskHint, opts]` はタプルと同オプションを受ける。
 
 ## Directive Repository
 ### ClaudeFindDirectiveRoots[] → {String...}
@@ -146,7 +176,7 @@ ClaudeDirectiveHarnessPlan を実行し Codex ハーネスを具現化。`.agent
 Options: ClaudeDirectiveHarnessPlan の全 Options に加え "GenerateDirectiveIndex", "GenerateProvenance", "CommandPolicyMaterialization", "DryRun" -> False, "FailOnAgentsMdOverflow"
 
 ### ClaudeDirectiveMaterializeClaudeHarness[bundle, targetDir, opts] → Association
-正準リポジトリから Claude CLI ハーネス (Phase 4, Generated mode) を具現化。`.claude/CLAUDE.md`, `.claude/rules/<name>.md`, `.claude/skills/<name>/SKILL.md` を verbatim コピー (rule→skill 変換・AGENTS.md・directive index なし)、加えて `.claude/sourcevault-provenance.json` を書く。正準リポジトリは変更せず、`.claude/settings.json` は呼び出し側に委ねる (claudecode.wl が read permission を注入)。
+正準リポジトリから Claude CLI ハーネス (Phase 4, Generated mode) を具現化。`.claude/CLAUDE.md`, `.claude/rules/<name>.md`, `.claude/skills/<name>/SKILL.md` を verbatim コピー (rule→skill 変換・AGENTS.md・directive index なし)、加えて `.claude/sourcevault-provenance.json` を書く。正準リポジトリは変更せず、`.claude/settings.json` は呼び出し側に委ねる (claudecode.wl が read permission を注入)。内部プラン計算 (iClaudeCLIHarnessPlan) は RootInstruction (CLAUDE.md→.claude/CLAUDE.md) と GeneratedSkills (Kind->"rule"|"skill" を含む rule/skill 一覧) を返し、AgentsMd/Index は Missing["NotApplicable"]。
 → 具現化レポート (WrittenFiles, RootInstruction, GeneratedFiles, ProvenanceFiles, Warnings, Plan)。DryRun->True ではプランを返す。
 Options: "HarnessMaterializationMode" -> Automatic, "SourceVaultSnapshotId" -> Missing["NotRegistered"], "DirectiveRepositoryManifestHash" -> Automatic, "GenerateProvenance" -> True, "DryRun" -> False
 

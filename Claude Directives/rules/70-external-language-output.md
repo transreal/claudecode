@@ -1,4 +1,5 @@
 ---
+tier: procedure
 paths:
   - "**/*.{wl,wls,m,nb}"
 ---

@@ -91,6 +91,61 @@ ClaudeResolveModelMode::usage =
 ClaudeResolveModelContextWindow::usage =
   "ClaudeResolveModelContextWindow[modelName] \:306f\:30e2\:30c7\:30eb\:540d\:304b\:3089 ContextWindow (token \:6570) \:3092\:8fd4\:3059\:3002";
 
+(* \[HorizontalLine] DirectiveLevel (model-generation aware directive strictness, 2026-09-08) \[HorizontalLine] *)
+
+$ClaudeDirectiveLevels::usage =
+  "$ClaudeDirectiveLevels is the ordered list of directive levels, least to most explicit: " <>
+  "{\"Minimal\", \"Standard\", \"Full\"}. Minimal = judgment-based (safety rules in full, guardrails as one-line index, " <>
+  "no procedure/style rules) for Claude 5 generation models; Standard = safety+guardrail+task-matched procedures; " <>
+  "Full = everything incl. style rules, for small / older / local models.";
+
+$ClaudeDirectiveLevelOverrides::usage =
+  "$ClaudeDirectiveLevelOverrides is an Association mapping {provider, model} | provider | model -> level. " <>
+  "It has the highest priority in ClaudeResolveDirectiveLevel. The adaptive layer (ClaudeOrchestrator`TurnWiki`) " <>
+  "writes here via ClaudeSetDirectiveLevelOverride.";
+
+$ClaudeDirectiveLevelResolver::usage =
+  "$ClaudeDirectiveLevelResolver is None or a function f[{provider, model}] -> level | None consulted after " <>
+  "$ClaudeDirectiveLevelOverrides and before the capability table (hook for adaptive tuning).";
+
+$ClaudeDirectiveDefaultLevel::usage =
+  "$ClaudeDirectiveDefaultLevel (\"Standard\") is used when neither override, resolver, capability nor class decides.";
+
+$ClaudeRuleTierPolicy::usage =
+  "$ClaudeRuleTierPolicy is an Association level -> <|tier -> \"Full\" | \"Index\" | None|>. " <>
+  "Rule tiers come from the rule frontmatter key `tier:` (safety | guardrail | procedure | style | evolved); " <>
+  "rules without a tier get $ClaudeDefaultRuleTier.";
+
+$ClaudeDefaultRuleTier::usage =
+  "$ClaudeDefaultRuleTier (\"guardrail\") is the tier assumed for rules whose frontmatter has no `tier:` key.";
+
+ClaudeResolveDirectiveLevel::usage =
+  "ClaudeResolveDirectiveLevel[modelSpec] returns <|\"Level\" -> level, \"Source\" -> \"override\"|\"resolver\"|\"capability\"|\"class\"|\"default\", " <>
+  "\"Provider\", \"Model\"|>. modelSpec is {provider, model}, {provider, model, url}, \"provider/model\" or a bare model name.";
+
+ClaudeSetDirectiveLevelOverride::usage =
+  "ClaudeSetDirectiveLevelOverride[modelSpec, level] records level in $ClaudeDirectiveLevelOverrides " <>
+  "(level None removes the entry). Returns the normalized key.";
+
+ClaudeDirectiveRuleTier::usage =
+  "ClaudeDirectiveRuleTier[ruleAssoc] returns the rule's tier string (frontmatter `tier:`, evolved-turn-* -> \"evolved\", else $ClaudeDefaultRuleTier).";
+
+ClaudeDirectiveRuleAppliesToModelQ::usage =
+  "ClaudeDirectiveRuleAppliesToModelQ[ruleAssoc, modelSpec] is True unless the rule frontmatter `models:` / `exclude_models:` " <>
+  "lists (entries \"provider:model\", \"provider:*\", \"*:model\", \"model\") exclude modelSpec.";
+
+ClaudeApplyDirectiveLevel::usage =
+  "ClaudeApplyDirectiveLevel[rules, level] returns the rules kept under the level policy, each with a \"Projection\" key " <>
+  "(\"Full\" | \"Index\"). Pure function.";
+
+ClaudeNormalizeModelSpec::usage =
+  "ClaudeNormalizeModelSpec[spec] -> {provider | None, model} for a tuple, \"provider/model\", a stringified tuple " <>
+  "\"{provider, model}\" or a bare model name.";
+
+ClaudeDirectiveBundleDiagnostics::usage =
+  "ClaudeDirectiveBundleDiagnostics[modelSpec, taskHint, opts] resolves a bundle and returns its DirectiveMeta " <>
+  "(level, projection mode, selected / dropped rule names with tiers, estimated tokens) without projecting the prompt.";
+
 (* \[HorizontalLine] Directive Repository \[HorizontalLine] *)
 
 $ClaudeDirectiveRepository::usage =
@@ -382,6 +437,8 @@ $ClaudeModelCapabilities = <|
 
   (* \[HorizontalLine] Anthropic CLI (claudecode \:30b3\:30de\:30f3\:30c9\:7d4c\:7531\:3001\:8ab2\:91d1\:306a\:3057 = Pro/Max \:30b5\:30d6\:30b9\:30af\:30ea\:30d7\:30b7\:30e7\:30f3\:5185) \[HorizontalLine] *)
   {"claudecode", "claude-opus-5"} -> <|
+    "Generation"       -> 5,
+    "DirectiveLevel"   -> "Minimal",
     "ContextWindow"    -> 200000,
     "Class"            -> "Heavy-Cloud",
     "DefaultMode"      -> "Summary",
@@ -392,6 +449,8 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"claudecode", "claude-opus-4-7"} -> <|
+    "Generation"       -> 4,
+    "DirectiveLevel"   -> "Standard",
     "ContextWindow"    -> 200000,
     "Class"            -> "Heavy-Cloud",
     "DefaultMode"      -> "Summary",
@@ -402,6 +461,8 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"claudecode", "claude-opus-4-6"} -> <|
+    "Generation"       -> 4,
+    "DirectiveLevel"   -> "Standard",
     "ContextWindow"    -> 200000,
     "Class"            -> "Heavy-Cloud",
     "DefaultMode"      -> "Summary",
@@ -412,6 +473,8 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"claudecode", "claude-sonnet-4-6"} -> <|
+    "Generation"       -> 4,
+    "DirectiveLevel"   -> "Standard",
     "ContextWindow"    -> 200000,
     "Class"            -> "Mid-Cloud",
     "DefaultMode"      -> "Summary",
@@ -422,6 +485,8 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"claudecode", "claude-haiku-4-5"} -> <|
+    "Generation"       -> 4,
+    "DirectiveLevel"   -> "Full",
     "ContextWindow"    -> 200000,
     "Class"            -> "Light-Cloud",
     "DefaultMode"      -> "Summary",
@@ -433,6 +498,8 @@ $ClaudeModelCapabilities = <|
 
   (* \[HorizontalLine] Anthropic API \:76f4\:63a5 (anthropic \:30d7\:30ed\:30d0\:30a4\:30c0\:3001\:8ab2\:91d1\:3042\:308a) \[HorizontalLine] *)
   {"anthropic", "claude-opus-5"} -> <|
+    "Generation"       -> 5,
+    "DirectiveLevel"   -> "Minimal",
     "ContextWindow"    -> 200000,
     "Class"            -> "Heavy-Cloud",
     "DefaultMode"      -> "Summary",
@@ -443,6 +510,8 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"anthropic", "claude-opus-4-7"} -> <|
+    "Generation"       -> 4,
+    "DirectiveLevel"   -> "Standard",
     "ContextWindow"    -> 200000,
     "Class"            -> "Heavy-Cloud",
     "DefaultMode"      -> "Summary",
@@ -453,6 +522,8 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"anthropic", "claude-opus-4-6"} -> <|
+    "Generation"       -> 4,
+    "DirectiveLevel"   -> "Standard",
     "ContextWindow"    -> 200000,
     "Class"            -> "Heavy-Cloud",
     "DefaultMode"      -> "Summary",
@@ -463,6 +534,8 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"anthropic", "claude-sonnet-4-6"} -> <|
+    "Generation"       -> 4,
+    "DirectiveLevel"   -> "Standard",
     "ContextWindow"    -> 200000,
     "Class"            -> "Mid-Cloud",
     "DefaultMode"      -> "Summary",
@@ -473,6 +546,8 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"anthropic", "claude-haiku-4-5"} -> <|
+    "Generation"       -> 4,
+    "DirectiveLevel"   -> "Full",
     "ContextWindow"    -> 200000,
     "Class"            -> "Light-Cloud",
     "DefaultMode"      -> "Summary",
@@ -484,6 +559,7 @@ $ClaudeModelCapabilities = <|
 
   (* \[HorizontalLine] LM Studio / \:30ed\:30fc\:30ab\:30eb LLM (\:8ab2\:91d1\:306a\:3057) \[HorizontalLine] *)
   {"lmstudio", "qwen3.6-27b"} -> <|
+    "DirectiveLevel"   -> "Standard",
     "ContextWindow"    -> 131072,                (* RTX 4090 \:5b9f\:7528\:5024 *)
     "Class"            -> "Heavy-Local",
     "DefaultMode"      -> "Summary",
@@ -497,6 +573,7 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"lmstudio", "qwen3.5-27b"} -> <|
+    "DirectiveLevel"   -> "Full",
     "ContextWindow"    -> 131072,
     "Class"            -> "Mid-Local",
     "DefaultMode"      -> "Summary",
@@ -507,6 +584,7 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"lmstudio", "qwen3-coder-30b"} -> <|
+    "DirectiveLevel"   -> "Full",
     "ContextWindow"    -> 128000,
     "Class"            -> "Mid-Local",
     "DefaultMode"      -> "Summary",
@@ -517,6 +595,7 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"lmstudio", "gpt-oss-120b"} -> <|
+    "DirectiveLevel"   -> "Full",
     "ContextWindow"    -> 32768,
     "Class"            -> "Light-Local",
     "DefaultMode"      -> "Index",
@@ -528,6 +607,7 @@ $ClaudeModelCapabilities = <|
 
   (* \[HorizontalLine] OpenAI API \:76f4\:63a5 (\:8ab2\:91d1\:3042\:308a\:3001\:5c06\:6765\:7121\:6599\:30d7\:30e9\:30f3\:5bfe\:5fdc\:6642\:306b Paid -> False \:306e entry \:8ffd\:52a0\:3082\:53ef\:80fd) \[HorizontalLine] *)
   {"openai", "gpt-5.5"} -> <|
+    "DirectiveLevel"   -> "Standard",
     "ContextWindow"    -> 128000,
     "Class"            -> "Heavy-Cloud",
     "DefaultMode"      -> "Summary",
@@ -538,6 +618,7 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"openai", "gpt-5.5-pro"} -> <|
+    "DirectiveLevel"   -> "Standard",
     "ContextWindow"    -> 128000,
     "Class"            -> "Heavy-Cloud",
     "DefaultMode"      -> "Summary",
@@ -548,6 +629,7 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"openai", "gpt-5-mini"} -> <|
+    "DirectiveLevel"   -> "Standard",
     "ContextWindow"    -> 128000,
     "Class"            -> "Mid-Cloud",
     "DefaultMode"      -> "Summary",
@@ -558,6 +640,7 @@ $ClaudeModelCapabilities = <|
   |>,
 
   {"openai", "gpt-5-nano"} -> <|
+    "DirectiveLevel"   -> "Full",
     "ContextWindow"    -> 128000,
     "Class"            -> "Light-Cloud",
     "DefaultMode"      -> "Summary",
@@ -565,6 +648,117 @@ $ClaudeModelCapabilities = <|
     "PreserveThinking" -> False,
     "Provider"         -> "openai",
     "Paid"             -> True
+  |>,
+
+  (* \[HorizontalLine] 2026-09-08: current palette catalog additions with DirectiveLevel.
+     Claude 5 generation (Opus 5 / Fable 5 / Sonnet 5) -> "Minimal" (judgment-based
+     directives; Anthropic 2026-07-24 removed >80% of Claude Code's system prompt for
+     these models with no measurable loss). Other heavy models -> "Standard".
+     Mid / Light / older -> "Full" (explicit procedures still needed). \[HorizontalLine] *)
+  {"claudecode", "claude-fable-5"} -> <|
+    "Generation"       -> 5,
+    "DirectiveLevel"   -> "Minimal",
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Ultra-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "LongContext", "ToolUse"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "claudecode",
+    "Paid"             -> False
+  |>,
+  {"claudecode", "claude-sonnet-5"} -> <|
+    "Generation"       -> 5,
+    "DirectiveLevel"   -> "Minimal",
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "ToolUse"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "claudecode",
+    "Paid"             -> False
+  |>,
+  {"anthropic", "claude-fable-5"} -> <|
+    "Generation"       -> 5,
+    "DirectiveLevel"   -> "Minimal",
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Ultra-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "LongContext", "ToolUse"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "anthropic",
+    "Paid"             -> True
+  |>,
+  {"anthropic", "claude-sonnet-5"} -> <|
+    "Generation"       -> 5,
+    "DirectiveLevel"   -> "Minimal",
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "ToolUse"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "anthropic",
+    "Paid"             -> True
+  |>,
+  {"chatgptcodex", "gpt-5.6-sol"} -> <|
+    "DirectiveLevel"   -> "Standard",
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "ToolUse"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "chatgptcodex",
+    "Paid"             -> False
+  |>,
+  {"zai", "glm-5.2"} -> <|
+    "DirectiveLevel"   -> "Standard",
+    "ContextWindow"    -> 128000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "ToolUse", "Multilingual"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "zai",
+    "Paid"             -> True
+  |>,
+  {"kimi", "kimi-k3"} -> <|
+    "DirectiveLevel"   -> "Standard",
+    "ContextWindow"    -> 128000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "ToolUse", "LongContext"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "kimi",
+    "Paid"             -> True
+  |>,
+  {"lmstudio", "qwen3.8-27b"} -> <|
+    "DirectiveLevel"   -> "Standard",
+    "ContextWindow"    -> 131072,
+    "Class"            -> "Heavy-Local",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "ToolUse", "Reasoning", "Multimodal", "Multilingual"},
+    "PreserveThinking" -> True,
+    "ThinkingMode"     -> "Hybrid",
+    "Provider"         -> "lmstudio",
+    "Paid"             -> False
+  |>,
+  {"llamacpp", "qwen3.8-flash-next"} -> <|
+    "DirectiveLevel"   -> "Standard",
+    "ContextWindow"    -> 131072,
+    "Class"            -> "Heavy-Local",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "ToolUse", "Reasoning", "Multilingual"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "llamacpp",
+    "Paid"             -> False
+  |>,
+  {"freetoken", "gpt-oss-120b"} -> <|
+    "DirectiveLevel"   -> "Full",
+    "ContextWindow"    -> 32768,
+    "Class"            -> "Light-Local",
+    "DefaultMode"      -> "Index",
+    "Strengths"        -> {"Search", "Summarize"},
+    "PreserveThinking" -> False,
+    "Provider"         -> "freetoken",
+    "Paid"             -> False
   |>
 |>;
 
@@ -671,8 +865,13 @@ iGuessProvider[name_String] :=
     StringTrim[name] === "",          "anthropic",
     StringStartsQ[name, "claude-"] ||
       StringStartsQ[name, "claude/"], "anthropic",
-    StringStartsQ[name, "qwen"],      "lm-studio",
-    StringStartsQ[name, "gpt-oss"],   "lm-studio",     (* OSS \:7cfb: OpenAI \:3088\:308a\:512a\:5148 *)
+    (* 2026-09-08: the table registers local models under "lmstudio" (not
+       "lm-studio"); the old spelling never matched, so every local model fell
+       through to the conservative default (32K / Unknown). *)
+    StringStartsQ[name, "qwen"],      "lmstudio",
+    StringStartsQ[name, "gpt-oss"],   "lmstudio",      (* OSS \:7cfb: OpenAI \:3088\:308a\:512a\:5148 *)
+    StringStartsQ[name, "glm"],       "zai",
+    StringStartsQ[name, "kimi"],      "kimi",
     StringStartsQ[name, "gpt-"] ||
       StringStartsQ[name, "gpt"],     "openai",
     StringStartsQ[name, "o1-"] ||
@@ -681,10 +880,68 @@ iGuessProvider[name_String] :=
   ];
 iGuessProvider[_] := "unknown";
 
+(* iNormalizeProviderName: provider spellings used across the palette / NBAccess
+   ("lm-studio", "LM Studio", "claude", "codex", ...) -> table spelling. *)
+iNormalizeProviderName[p_String] :=
+  Module[{s = ToLowerCase[StringTrim[p]]},
+    Which[
+      s === "",                                   "unknown",
+      MemberQ[{"lm-studio", "lm studio", "lms"}, s], "lmstudio",
+      MemberQ[{"claude", "claude-code", "claude-cli"}, s], "claudecode",
+      MemberQ[{"codex", "chatgpt-codex", "gptcodex", "chatgpt"}, s], "chatgptcodex",
+      MemberQ[{"llama.cpp", "llama-cpp", "llama_cpp", "llamaserver", "llama-server"}, s], "llamacpp",
+      MemberQ[{"glm", "z.ai", "zhipu"}, s],      "zai",
+      MemberQ[{"moonshot"}, s],                   "kimi",
+      True,                                       s]];
+iNormalizeProviderName[_] := "unknown";
+
+(* ClaudeNormalizeModelSpec: every model spec shape used in this system ->
+   {provider | None, model}.
+     {prov, model} / {prov, model, url}   tuple (palette, $ClaudeModel, $ClaudePrivateModel)
+     "prov/model"                         slash form
+     "{prov, model}" / "{prov, model, url}" stringified tuple (ToString[$ClaudeModel])
+     "model"                              bare name (provider guessed later) *)
+ClaudeNormalizeModelSpec[{prov_String, model_String, ___}] :=
+  {iNormalizeProviderName[prov], StringTrim[iNormalizeModelName[model]]};
+ClaudeNormalizeModelSpec[{model_String}] := ClaudeNormalizeModelSpec[model];
+ClaudeNormalizeModelSpec[s_String] :=
+  Module[{t = StringTrim[s], m},
+    Which[
+      t === "", {None, ""},
+      StringStartsQ[t, "{"],
+        m = StringCases[t,
+          StartOfString ~~ "{" ~~ Whitespace ... ~~ p : Except[","] .. ~~ "," ~~
+            Whitespace ... ~~ n : Except["," | "}"] .. ~~ ("," | "}") :> {p, n}, 1];
+        If[m === {}, {None, t},
+          {iNormalizeProviderName[StringTrim[m[[1, 1]], "\"" | " "]],
+           StringTrim[m[[1, 2]], "\"" | " "]}],
+      StringContainsQ[t, "/"],
+        With[{parts = StringSplit[t, "/", 2]},
+          If[Length[parts] === 2,
+            {iNormalizeProviderName[parts[[1]]], StringTrim[parts[[2]]]},
+            {None, t}]],
+      True, {None, t}]];
+ClaudeNormalizeModelSpec[Automatic | None | Null] := {None, ""};
+ClaudeNormalizeModelSpec[_] := {None, ""};
+
+(* iCapabilityByModelName: exact model name registered under another provider
+   (e.g. asked {"anthropic", "claude-fable-5"} but only claudecode registered).
+   Prefers the requested provider, then the strongest class. *)
+iCapabilityByModelName[name_String, prov_] :=
+  Module[{hits},
+    hits = Select[Normal[$ClaudeModelCapabilities],
+      ListQ[First[#]] && Length[First[#]] >= 2 && First[#][[2]] === name &];
+    If[hits === {}, Return[None]];
+    With[{same = Select[hits, First[#][[1]] === prov &]},
+      If[same =!= {}, Return[Last[First[same]]]]];
+    Last[First[SortBy[hits, -iClassRank[Lookup[Last[#], "Class", ""]] &]]]];
+iCapabilityByModelName[___] := None;
+
 (* iClassRank: Class \:6587\:5b57\:5217\:304b\:3089\:512a\:5148\:5ea6\:3092\:8fd4\:3059\:3002Heavy > Mid > Light\:3002
    \:540c\:4e00 Provider \:5185\:3067\:300c\:6700\:5f37\:306e\:767b\:9332\:30e2\:30c7\:30eb\:300d\:3092\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:5148\:3068\:3057\:3066\:9078\:3076\:306e\:306b\:4f7f\:3046\:3002 *)
 iClassRank[class_String] :=
   Which[
+    StringContainsQ[class, "Ultra"], 4,
     StringContainsQ[class, "Heavy"], 3,
     StringContainsQ[class, "Mid"],   2,
     StringContainsQ[class, "Light"], 1,
@@ -719,18 +976,28 @@ iSelectFallbackForProvider[_] := None;
    \:7d50\:679c: \:65b0\:3057\:3044\:30e2\:30c7\:30eb\:679d\:756a\:304c\:51fa\:3066\:304d\:3066\:3082\:3001Capability \:30c6\:30fc\:30d6\:30eb\:306b\:767b\:9332\:3059\:308b\:3060\:3051\:3067
    \:3053\:306e\:30b3\:30fc\:30c9\:306b\:624b\:3092\:5165\:308c\:308b\:5fc5\:8981\:304c\:306a\:3044\:3002 *)
 iPrefixMatchCapability[modelName_String] :=
+  iPrefixMatchCapability[modelName, None];
+
+iPrefixMatchCapability[modelName_String, knownProvider_] :=
   Module[{normalized, provider, fallback},
     normalized = iNormalizeModelName[modelName];
 
     (* \:7a7a\:6587\:5b57\:5217 / \:7a7a\:767d\:306e\:307f: claudecode.wl \:306e\:6163\:7fd2\:3068\:3057\:3066
        Anthropic Claude \:30c7\:30d5\:30a9\:30eb\:30c8\:30e2\:30c7\:30eb\:60f3\:5b9a *)
-    If[!StringQ[normalized] || StringTrim[normalized] === "",
-      provider = "anthropic",
-      provider = iGuessProvider[normalized]
-    ];
+    provider = Which[
+      StringQ[knownProvider] && knownProvider =!= "unknown", knownProvider,
+      !StringQ[normalized] || StringTrim[normalized] === "", "anthropic",
+      True, iGuessProvider[normalized]];
 
     fallback = iSelectFallbackForProvider[provider];
-    If[AssociationQ[fallback], Return[fallback]];
+    If[AssociationQ[fallback],
+      (* 2026-09-08: the provider's strongest registered model stands in, but
+         the directive level must stay conservative for an unknown model of
+         that provider (an unregistered local model is not a Claude 5). *)
+      Return[Append[fallback, <|"DirectiveLevel" ->
+        If[MemberQ[{"claudecode", "anthropic", "chatgptcodex"}, provider],
+          Lookup[fallback, "DirectiveLevel", "Standard"], "Full"],
+        "ResolvedFrom" -> "provider-fallback"|>]]];
 
     (* \:5305\:62ec Provider \:5224\:5b9a\:306f\:3067\:304d\:305f\:304c\:305d\:306e Provider \:306e\:30e2\:30c7\:30eb\:304c
        \:4e00\:3064\:3082\:767b\:9332\:3055\:308c\:3066\:3044\:306a\:3044 / \:307e\:305f\:306f provider="unknown"\:306e\:5834\:5408\:3001
@@ -743,26 +1010,213 @@ iPrefixMatchCapability[modelName_String] :=
       "Provider"         -> provider|>
   ];
 
-ClaudeResolveModelCapability[modelName_String] :=
-  Module[{normalized, exact},
-    normalized = iNormalizeModelName[modelName];
-    (* 1. \:5b8c\:5168\:4e00\:81f4\:3092\:512a\:5148 *)
-    exact = Lookup[$ClaudeModelCapabilities, normalized, None];
+(* 2026-09-08 rewrite. The table keys are {provider, model} tuples, but the old
+   code looked them up with a String (Lookup[assoc, "name"]) -- which can never
+   match a List key -- so EVERY call fell through to iPrefixMatchCapability.
+   Combined with the "lm-studio" spelling bug, all local models resolved to the
+   conservative default. Now: tuple -> exact tuple lookup (Key[...]) -> same
+   model under another provider -> provider prefix fallback. *)
+ClaudeResolveModelCapability[spec : ({_String, _String, ___} | _String)] :=
+  Module[{prov, name, exact},
+    {prov, name} = ClaudeNormalizeModelSpec[spec];
+    If[!StringQ[name] || name === "",
+      Return[iPrefixMatchCapability["", prov]]];
+    (* 1. exact tuple *)
+    If[StringQ[prov],
+      exact = Lookup[$ClaudeModelCapabilities, Key[{prov, name}], None];
+      If[AssociationQ[exact], Return[exact]]];
+    (* 2. same model name under another provider (or provider unknown) *)
+    exact = iCapabilityByModelName[name, prov];
     If[AssociationQ[exact], Return[exact]];
-    (* 2. \:5143\:306e\:6587\:5b57\:5217\:3067\:3082\:5b8c\:5168\:4e00\:81f4\:3092\:8a66\:3059 (provider/ \:4ed8\:304d\:3067\:767b\:9332\:3055\:308c\:305f\:5834\:5408) *)
-    exact = Lookup[$ClaudeModelCapabilities, modelName, None];
+    (* 3. legacy String keys (ClaudeRegisterModelCapability with String key
+          before Phase 28 stored plain names) *)
+    exact = Lookup[$ClaudeModelCapabilities, Key[name], None];
     If[AssociationQ[exact], Return[exact]];
-    (* 3. \:30d7\:30ec\:30d5\:30a3\:30c3\:30af\:30b9\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af *)
-    iPrefixMatchCapability[modelName]
+    (* 4. provider prefix fallback *)
+    iPrefixMatchCapability[name, prov]
   ];
 
+(* {provider, Automatic} etc.: provider-level fallback (strongest registered model
+   of that provider, conservative level for unknown local models). *)
+ClaudeResolveModelCapability[{prov_String, ___}] :=
+  iPrefixMatchCapability["", iNormalizeProviderName[prov]];
 ClaudeResolveModelCapability[___] := ClaudeResolveModelCapability[""];
 
-ClaudeResolveModelMode[modelName_String] :=
+ClaudeResolveModelMode[modelName_] :=
   Lookup[ClaudeResolveModelCapability[modelName], "DefaultMode", "Summary"];
 
-ClaudeResolveModelContextWindow[modelName_String] :=
+ClaudeResolveModelContextWindow[modelName_] :=
   Lookup[ClaudeResolveModelCapability[modelName], "ContextWindow", 32000];
+
+
+(* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
+   2b. DirectiveLevel (2026-09-08)
+
+   Two orthogonal axes decide what a model receives:
+     ProjectionMode (Full/Summary/Index/Lazy)  = how much FITS   (context window)
+     DirectiveLevel (Minimal/Standard/Full)    = how much is NEEDED (model generation)
+
+   Rationale: Anthropic (2026-07-24) removed >80% of Claude Code's system prompt
+   for the Claude 5 generation with no measurable loss -- absolute prohibitions,
+   redundant tool-usage examples and contradictory rules were dropped; what stays
+   is (a) guards on irreversible / external / paid operations, (b) project
+   pitfalls the model cannot infer from context, (c) team-specific opinions.
+   Older / smaller / local models still need explicit procedures.
+
+   Rule tiers (frontmatter `tier:`):
+     safety     irreversible ops, secrets, privacy, paid API  -> always in full
+     guardrail  project pitfalls not inferable from context   -> Minimal: index line
+     procedure  explicit how-to that capable models infer     -> Minimal: dropped
+     style      formatting / phrasing preferences             -> Standard: dropped
+     evolved    TurnWiki-promoted skills (validated on probes) -> always in full
+   \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550 *)
+
+$ClaudeDirectiveLevels = {"Minimal", "Standard", "Full"};
+If[!AssociationQ[$ClaudeDirectiveLevelOverrides], $ClaudeDirectiveLevelOverrides = <||>];
+If[!ValueQ[$ClaudeDirectiveLevelResolver], $ClaudeDirectiveLevelResolver = None];
+If[!StringQ[$ClaudeDirectiveDefaultLevel], $ClaudeDirectiveDefaultLevel = "Standard"];
+If[!StringQ[$ClaudeDefaultRuleTier], $ClaudeDefaultRuleTier = "guardrail"];
+If[!AssociationQ[$ClaudeRuleTierPolicy],
+  $ClaudeRuleTierPolicy = <|
+    "Minimal"  -> <|"safety" -> "Full", "guardrail" -> "Index",
+                    "procedure" -> None, "style" -> None, "evolved" -> "Full"|>,
+    "Standard" -> <|"safety" -> "Full", "guardrail" -> "Full",
+                    "procedure" -> "Full", "style" -> None, "evolved" -> "Full"|>,
+    "Full"     -> <|"safety" -> "Full", "guardrail" -> "Full",
+                    "procedure" -> "Full", "style" -> "Full", "evolved" -> "Full"|>|>];
+
+iValidLevelQ[l_] := StringQ[l] && MemberQ[$ClaudeDirectiveLevels, l];
+
+iLevelKeyCandidates[{prov_, name_}] :=
+  DeleteDuplicates @ DeleteCases[
+    {If[StringQ[prov] && StringQ[name] && name =!= "", {prov, name}, Nothing],
+     If[StringQ[prov] && StringQ[name] && name =!= "", prov <> "/" <> name, Nothing],
+     If[StringQ[name] && name =!= "", name, Nothing],
+     If[StringQ[prov], prov, Nothing]},
+    Nothing];
+
+(* class -> level when the capability entry carries no DirectiveLevel *)
+iLevelFromClass[class_] :=
+  Which[
+    !StringQ[class], "Full",
+    StringContainsQ[class, "Ultra"], "Minimal",
+    StringContainsQ[class, "Heavy"], "Standard",
+    True, "Full"];
+
+ClaudeResolveDirectiveLevel[spec_] :=
+  Module[{prov, name, keys, hit, cap, lvl, src},
+    {prov, name} = ClaudeNormalizeModelSpec[spec];
+    cap = ClaudeResolveModelCapability[spec];
+    If[!StringQ[prov] || prov === "unknown",
+      prov = Lookup[cap, "Provider", prov]];
+    keys = iLevelKeyCandidates[{prov, name}];
+    (* 1. explicit overrides (tuple > "prov/model" > model > provider) *)
+    hit = SelectFirst[keys,
+      iValidLevelQ[Lookup[$ClaudeDirectiveLevelOverrides, Key[#], None]] &, None];
+    If[hit =!= None,
+      Return[<|"Level" -> Lookup[$ClaudeDirectiveLevelOverrides, Key[hit]],
+        "Source" -> "override", "Provider" -> prov, "Model" -> name|>]];
+    (* 2. resolver hook (adaptive layer) *)
+    If[$ClaudeDirectiveLevelResolver =!= None,
+      (* contained: a broken hook must never take the prompt build down
+         (Check for messages, Catch for tagged and untagged Throw) *)
+      lvl = Quiet @ Catch[Catch[
+        Check[$ClaudeDirectiveLevelResolver[{prov, name}], None],
+        _, None &]];
+      If[iValidLevelQ[lvl],
+        Return[<|"Level" -> lvl, "Source" -> "resolver",
+          "Provider" -> prov, "Model" -> name|>]]];
+    (* 3. capability table *)
+    lvl = Lookup[cap, "DirectiveLevel", None];
+    If[iValidLevelQ[lvl],
+      Return[<|"Level" -> lvl, "Source" -> "capability",
+        "Provider" -> prov, "Model" -> name|>]];
+    (* 4. class-derived *)
+    If[StringQ[Lookup[cap, "Class", None]] && Lookup[cap, "Class", ""] =!= "Unknown",
+      Return[<|"Level" -> iLevelFromClass[cap["Class"]], "Source" -> "class",
+        "Provider" -> prov, "Model" -> name|>]];
+    (* 5. default *)
+    <|"Level" -> If[iValidLevelQ[$ClaudeDirectiveDefaultLevel],
+        $ClaudeDirectiveDefaultLevel, "Standard"],
+      "Source" -> "default", "Provider" -> prov, "Model" -> name|>];
+
+ClaudeSetDirectiveLevelOverride[spec_, level_] :=
+  Module[{prov, name, key},
+    {prov, name} = ClaudeNormalizeModelSpec[spec];
+    key = Which[
+      StringQ[prov] && prov =!= "unknown" && StringQ[name] && name =!= "", {prov, name},
+      StringQ[name] && name =!= "", name,
+      StringQ[prov], prov,
+      True, Return[$Failed]];
+    (* NB: assoc[Key[k]] = v stores a literal Key[...] wrapper; part assignment
+       takes the bare key (List keys included). Lookup, by contrast, needs Key[]. *)
+    If[level === None || level === Null,
+      $ClaudeDirectiveLevelOverrides = KeyDrop[$ClaudeDirectiveLevelOverrides, Key[key]],
+      If[!iValidLevelQ[level], Return[$Failed]];
+      $ClaudeDirectiveLevelOverrides[key] = level];
+    key];
+
+(* ---- rule tier / model applicability (pure) ---- *)
+
+iFrontmatterList[fm_Association, key_String] :=
+  Module[{raw = Lookup[fm, key, Lookup[fm, Capitalize[key], None]]},
+    Which[
+      ListQ[raw], Select[ToString /@ raw, # =!= "" &],
+      StringQ[raw] && raw =!= "",
+        Select[StringTrim /@ StringSplit[
+          StringTrim[raw, ("[" | "]" | " ") ...], ","], # =!= "" &],
+      True, {}]];
+iFrontmatterList[___] := {};
+
+ClaudeDirectiveRuleTier[rule_Association] :=
+  Module[{fm = Lookup[rule, "Frontmatter", <||>], t, name},
+    If[!AssociationQ[fm], fm = <||>];
+    name = ToLowerCase[ToString[Lookup[rule, "Name", ""]]];
+    t = Lookup[fm, "tier", Lookup[fm, "Tier", None]];
+    t = If[StringQ[t], ToLowerCase[StringTrim[t]], None];
+    Which[
+      StringQ[t] && MemberQ[{"safety", "guardrail", "procedure", "style", "evolved"}, t], t,
+      StringStartsQ[name, "evolved-turn-"], "evolved",
+      True, $ClaudeDefaultRuleTier]];
+ClaudeDirectiveRuleTier[___] := $ClaudeDefaultRuleTier;
+
+(* "provider:model" | "provider:*" | "*:model" | "model" | "provider" *)
+iModelPatternMatchQ[pat_String, {prov_, name_}] :=
+  Module[{p = ToLowerCase[StringTrim[pat]], pp, pm},
+    If[p === "" || p === "*" || p === "*:*", Return[True]];
+    If[StringContainsQ[p, ":"],
+      {pp, pm} = StringSplit[p, ":", 2];
+      (pp === "*" || (StringQ[prov] && pp === ToLowerCase[prov])) &&
+        (pm === "*" || (StringQ[name] && pm === ToLowerCase[name])),
+      (StringQ[name] && p === ToLowerCase[name]) ||
+        (StringQ[prov] && p === ToLowerCase[prov])]];
+iModelPatternMatchQ[___] := False;
+
+ClaudeDirectiveRuleAppliesToModelQ[rule_Association, spec_] :=
+  Module[{fm = Lookup[rule, "Frontmatter", <||>], inc, exc, key},
+    If[!AssociationQ[fm], fm = <||>];
+    inc = iFrontmatterList[fm, "models"];
+    exc = iFrontmatterList[fm, "exclude_models"];
+    key = ClaudeNormalizeModelSpec[spec];
+    If[exc =!= {} && AnyTrue[exc, iModelPatternMatchQ[#, key] &], Return[False]];
+    If[inc === {}, Return[True]];
+    AnyTrue[inc, iModelPatternMatchQ[#, key] &]];
+ClaudeDirectiveRuleAppliesToModelQ[___] := True;
+
+ClaudeApplyDirectiveLevel[rules_List, level_] :=
+  Module[{lvl = If[iValidLevelQ[level], level, "Standard"], pol},
+    pol = Lookup[$ClaudeRuleTierPolicy, lvl, $ClaudeRuleTierPolicy["Standard"]];
+    DeleteMissing @ Map[
+      Function[r,
+        If[!AssociationQ[r], Missing[],
+          Module[{tier = ClaudeDirectiveRuleTier[r], proj},
+            proj = Lookup[pol, tier, "Full"];
+            Which[
+              proj === None, Missing[],
+              proj === "Index", Append[r, <|"Projection" -> "Index", "Tier" -> tier|>],
+              True, Append[r, <|"Projection" -> "Full", "Tier" -> tier|>]]]]],
+      rules]];
+ClaudeApplyDirectiveLevel[___] := {};
 
 
 (* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
@@ -818,7 +1272,9 @@ iParseFrontmatter[text_String] :=
         StringLength[ln] - StringLength[
           StringReplace[ln, RegularExpression["^\\s+"] -> ""]],
         0]];
-    lines = Select[StringSplit[text, "\n"], StringQ];
+    (* 2026-09-08: CRLF files (several rules are saved that way on Windows)
+       left "\r" on every value ("tier: safety\r", "description: ...\r") *)
+    lines = Select[StringSplit[StringReplace[text, "\r\n" -> "\n"], "\n"], StringQ];
     If[Length[lines] < 2 || StringTrim[First[lines]] =!= "---",
       Return[<|"Frontmatter" -> <||>, "Body" -> text|>]];
     restLines = Select[Rest[lines], StringQ];
@@ -1463,34 +1919,55 @@ Options[ClaudeResolveDirectiveBundle] = {
      Target -> "Prompt" keeps the legacy behaviour unchanged. *)
   "Provider"                   -> Automatic,
   "Target"                     -> "Prompt",
-  "HarnessMaterializationMode" -> Automatic
+  "HarnessMaterializationMode" -> Automatic,
+  (* 2026-09-08: DirectiveLevel (Automatic = ClaudeResolveDirectiveLevel[model]);
+     ToolAccess -> True when the caller runs a tool loop that exposes the
+     directive tools (sourcevault_directives / sourcevault_directive_body), so
+     the projection may point at on-demand retrieval instead of inlining. *)
+  "DirectiveLevel"             -> Automatic,
+  "ToolAccess"                 -> False
 };
 
 ClaudeResolveDirectiveBundle[opts:OptionsPattern[]] :=
-  Module[{role, modelName, mode, taskHint, budget, maxSkills,
+  Module[{role, modelName, modelSpec, mode, taskHint, budget, maxSkills,
           repo, capability, strengths, claudeMD, rules, skills,
-          tokens, finalMode, downgradeCount = 0},
-    
+          tokens, finalMode, downgradeCount = 0,
+          levelInfo, level, allRules, droppedByModel = {}, droppedByLevel = {},
+          toolAccess},
+
     role       = OptionValue["Role"];
     modelName  = OptionValue["Model"];
     mode       = OptionValue["Mode"];
     taskHint   = OptionValue["TaskHint"];
     budget     = OptionValue["TokenBudget"];
     maxSkills  = OptionValue["MaxSkills"];
-    
+    toolAccess = TrueQ[OptionValue["ToolAccess"]];
+
     (* 1. Repository \:53d6\:5f97 (\:30ad\:30e3\:30c3\:30b7\:30e5\:306a\:3051\:308c\:3070\:81ea\:52d5\:30ed\:30fc\:30c9) *)
     If[!AssociationQ[$ClaudeDirectiveRepository],
       ClaudeLoadDirectiveRepository[]];
     repo = $ClaudeDirectiveRepository;
-    
+
     (* 2. Model -> Capability *)
     If[modelName === Automatic,
       modelName = If[StringQ[role] && KeyExistsQ[$ClaudeRoleDefaultModels, role],
         $ClaudeRoleDefaultModels[role],
         "claude-opus-5"]];
-    
-    capability = ClaudeResolveModelCapability[modelName];
+    (* model may be a tuple {provider, model[, url]}, "provider/model", a
+       stringified tuple or a bare name (2026-09-08) *)
+    modelSpec  = modelName;
+    capability = ClaudeResolveModelCapability[modelSpec];
     strengths  = Lookup[capability, "Strengths", {}];
+    levelInfo  = If[iValidLevelQ[OptionValue["DirectiveLevel"]],
+      <|"Level" -> OptionValue["DirectiveLevel"], "Source" -> "option"|>,
+      ClaudeResolveDirectiveLevel[modelSpec]];
+    level      = Lookup[levelInfo, "Level", "Standard"];
+    modelName  = With[{nm = ClaudeNormalizeModelSpec[modelSpec]},
+      Which[
+        StringQ[nm[[1]]] && nm[[1]] =!= "unknown" && nm[[2]] =!= "", nm[[1]] <> "/" <> nm[[2]],
+        nm[[2]] =!= "", nm[[2]],
+        StringQ[modelSpec], modelSpec,
+        True, ToString[modelSpec]]];
     
     (* 3. Mode \:89e3\:6c7a
        v0.1.9: role \:304c $ClaudeRoleDefaultMode \:306b\:767b\:9332\:3055\:308c\:3066\:3044\:308c\:3070 role \:5225 default \:3092
@@ -1534,7 +2011,25 @@ ClaudeResolveDirectiveBundle[opts:OptionsPattern[]] :=
         "MaxSkills" -> maxSkills,
         "ModelStrengths" -> strengths],
       Take[Lookup[repo, "Skills", {}], UpTo[maxSkills]]];
-    
+
+    (* 5b. model applicability (`models:` / `exclude_models:` frontmatter, e.g.
+       TurnWiki evolved rules validated for one model profile only) *)
+    allRules = rules;
+    rules = Select[rules, ClaudeDirectiveRuleAppliesToModelQ[#, modelSpec] &];
+    droppedByModel = Complement[Lookup[#, "Name", ""] & /@ allRules,
+      Lookup[#, "Name", ""] & /@ rules];
+    skills = Select[skills, ClaudeDirectiveRuleAppliesToModelQ[#, modelSpec] &];
+
+    (* 5c. DirectiveLevel: tier policy decides Full / Index / drop per rule *)
+    allRules = rules;
+    rules = ClaudeApplyDirectiveLevel[rules, level];
+    droppedByLevel = Complement[Lookup[#, "Name", ""] & /@ allRules,
+      Lookup[#, "Name", ""] & /@ rules];
+    (* Minimal: skills are named, not inlined (the model pulls them on demand
+       when ToolAccess, or asks in a follow-up turn) *)
+    If[level === "Minimal",
+      skills = Append[#, "Projection" -> "Index"] & /@ skills];
+
     (* 6. Mode \:964d\:683c\:5224\:5b9a: \:63a8\:5b9a token \:304c budget \:3092\:8d85\:3048\:308b\:306a\:3089
           \:4e0b\:4f4d\:30e2\:30fc\:30c9\:306b\:81ea\:52d5\:964d\:683c *)
     finalMode = mode;
@@ -1551,31 +2046,61 @@ ClaudeResolveDirectiveBundle[opts:OptionsPattern[]] :=
       "ActiveRules"    -> rules,
       "ActiveSkills"   -> skills,
       "ProjectionMode" -> finalMode,
+      "DirectiveLevel" -> level,
+      "ToolAccess"     -> toolAccess,
       "TokenBudget"    -> budget,
       "DirectiveMeta"  -> <|
         "Role"             -> role,
         "Model"            -> modelName,
+        "ModelSpec"        -> modelSpec,
         "ModelClass"       -> Lookup[capability, "Class", "Unknown"],
+        "ModelGeneration"  -> Lookup[capability, "Generation", Missing["Unknown"]],
         "ModelStrengths"   -> strengths,
+        "DirectiveLevel"   -> level,
+        "LevelSource"      -> Lookup[levelInfo, "Source", "?"],
+        "ToolAccess"       -> toolAccess,
         "RequestedMode"    -> mode,
         "DowngradeCount"   -> downgradeCount,
         "EstimatedTokens"  ->
           iEstimateBundleTokens[claudeMD, rules, skills, finalMode],
         "SelectedSkillNames" -> (Lookup[#, "Name", ""] &) /@ skills,
-        "SelectedRuleNames"  -> (Lookup[#, "Name", ""] &) /@ rules
+        "SelectedRuleNames"  -> (Lookup[#, "Name", ""] &) /@ rules,
+        "RuleProjections"  -> Association[
+          (Lookup[#, "Name", ""] -> Lookup[#, "Projection", "Full"]) & /@ rules],
+        "RuleTiers"        -> Association[
+          (Lookup[#, "Name", ""] -> Lookup[#, "Tier", ClaudeDirectiveRuleTier[#]]) & /@ rules],
+        "DroppedByLevel"   -> droppedByLevel,
+        "DroppedByModel"   -> droppedByModel
       |>
     |> ~Join~ iHarnessBundleMeta[OptionValue["Target"], OptionValue["Provider"], OptionValue["HarnessMaterializationMode"], repo]
   ];
 
+(* Diagnostics: the DirectiveMeta of a bundle without projecting it (for
+   views / tests / palette). Accepts the same options as ClaudeResolveDirectiveBundle. *)
+ClaudeDirectiveBundleDiagnostics[modelSpec_, taskHint_String : "", opts : OptionsPattern[ClaudeResolveDirectiveBundle]] :=
+  Module[{b = ClaudeResolveDirectiveBundle["Model" -> modelSpec, "TaskHint" -> taskHint, opts]},
+    Append[Lookup[b, "DirectiveMeta", <||>], <|
+      "ProjectionMode" -> Lookup[b, "ProjectionMode", "?"],
+      "TokenBudget" -> Lookup[b, "TokenBudget", Missing[]],
+      "ProjectedChars" -> StringLength[ClaudeProjectDirectives[b]]|>]];
+
 (* mode \:306b\:5fdc\:3058\:305f token \:63a8\:5b9a *)
+
+(* 2026-09-08: rules / skills carrying "Projection" -> "Index" (DirectiveLevel
+   policy) cost one line (~50 tokens) in every mode. *)
+iItemTokens[item_Association, cap_] :=
+  If[Lookup[item, "Projection", "Full"] === "Index",
+    Min[Lookup[item, "Tokens", 0], 50],
+    If[IntegerQ[cap], Min[Lookup[item, "Tokens", 0], cap], Lookup[item, "Tokens", 0]]];
+iItemTokens[_, _] := 0;
 
 iEstimateBundleTokens[claudeMD_String, rules_List, skills_List,
                        mode_String] :=
   Module[{cmTok, rulesTok, skillsTok},
     cmTok = ClaudeDirectiveTokenEstimate[claudeMD];
-    rulesTok = Total[Lookup[#, "Tokens", 0] & /@ rules];
-    skillsTok = Total[Lookup[#, "Tokens", 0] & /@ skills];
-    
+    rulesTok = Total[iItemTokens[#, None] & /@ rules];
+    skillsTok = Total[iItemTokens[#, None] & /@ skills];
+
     Switch[mode,
       "Full",
         cmTok + rulesTok + skillsTok,
@@ -1586,8 +2111,8 @@ iEstimateBundleTokens[claudeMD_String, rules_List, skills_List,
            skills \:306f iSummarizeBody[..., 600] = 200 tokens \:4e0a\:9650 (\:5f93\:6765\:901a\:308a)\:3002
            claudeMD \:306f iSummarizeBody[..., 3000] \[TildeTilde] 1000 tokens \:4e0a\:9650\:3002 *)
         Min[Floor[cmTok / 3], 1000] +
-          Total[Min[Lookup[#, "Tokens", 0], 133] & /@ rules] +
-          Total[Min[Lookup[#, "Tokens", 0], 200] & /@ skills],
+          Total[iItemTokens[#, 133] & /@ rules] +
+          Total[iItemTokens[#, 200] & /@ skills],
       "Index",
         Floor[cmTok / 4] +
           Total[Min[Lookup[#, "Tokens", 0], 50] & /@ rules] +
@@ -1621,62 +2146,120 @@ iSummarizeBody[body_String, maxChars_Integer] :=
 
 iSummarizeBody[_, _] := "";
 
+(* ---- per-item projection helpers (2026-09-08, DirectiveLevel) ----
+   An item whose "Projection" is "Index" is rendered as ONE line (name +
+   description) whatever the mode: the model is told the rule exists and can
+   pull the body on demand (tool loop) or ask for it. *)
+iIndexProjectedQ[item_Association] := Lookup[item, "Projection", "Full"] === "Index";
+iIndexProjectedQ[_] := False;
+
+iRuleIndexLine[r_Association] :=
+  "- " <> Lookup[r, "Name", ""] <> ": " <>
+    iSummarizeBody[
+      With[{d = Lookup[r, "Description", ""]},
+        If[StringQ[d] && StringTrim[d] =!= "", d,
+          First[Select[StringSplit[Lookup[r, "Body", ""], "\n"],
+            StringTrim[#] =!= "" && !StringStartsQ[StringTrim[#], "#"] &], ""]]],
+      160];
+
+iSkillIndexLine[s_Association] :=
+  "- **" <> Lookup[s, "Name", ""] <> "**: " <>
+    iSummarizeBody[Lookup[s, "Description", ""], 200];
+
+(* On-demand retrieval note: only when the caller confirmed a tool loop with the
+   directive tools (bundle "ToolAccess"). Tool names are code-level facts. *)
+iToolAccessNote[bundle_Association] :=
+  If[TrueQ[Lookup[bundle, "ToolAccess", False]],
+    "## Directives on demand\n" <>
+    "Rules and skills listed above by name only (and any not listed) can be retrieved with the tools " <>
+    "`sourcevault_directives` (list: name, description, tier) and `sourcevault_directive_body` " <>
+    "(full text of one rule / skill by name). Retrieve a directive before doing work it governs.",
+    ""];
+
+(* PREPEND: claudecode caps the projected text head-first
+   ($ClaudeEvalContextSysPromptCharBudget, 6000 chars), so a note at the tail of
+   a 12K Standard projection would never reach the model (2026-09-09). *)
+iAppendToolNote[parts_List, bundle_Association] :=
+  With[{n = iToolAccessNote[bundle]}, If[n === "", parts, Prepend[parts, n]]];
+
 iProjectFull[bundle_Association] :=
-  Module[{parts = {}, claudeMD, rules, skills},
+  Module[{parts = {}, claudeMD, rules, skills, fullRules, idxRules, fullSkills, idxSkills},
     claudeMD = Lookup[bundle, "ClaudeMD", ""];
     rules    = Lookup[bundle, "ActiveRules", {}];
     skills   = Lookup[bundle, "ActiveSkills", {}];
-    
+    fullRules  = Select[rules, !iIndexProjectedQ[#] &];
+    idxRules   = Select[rules, iIndexProjectedQ];
+    fullSkills = Select[skills, !iIndexProjectedQ[#] &];
+    idxSkills  = Select[skills, iIndexProjectedQ];
+
     If[claudeMD =!= "",
-      AppendTo[parts, "## Project guidelines (CLAUDE.md)\n\n" <> claudeMD]];
-    
-    If[Length[rules] > 0,
+      AppendTo[parts, "## Project guidelines (CLAUDE.md)\n\n" <>
+        If[Lookup[bundle, "DirectiveLevel", "Standard"] === "Minimal",
+          iSummarizeBody[claudeMD, 3000], claudeMD]]];
+
+    If[Length[fullRules] > 0,
       AppendTo[parts, "## Rules (always-on)\n"];
       Do[
         AppendTo[parts,
           "### Rule: " <> Lookup[r, "Name", ""] <> "\n\n" <>
           Lookup[r, "Body", ""]],
-        {r, rules}]];
-    
-    If[Length[skills] > 0,
+        {r, fullRules}]];
+    If[Length[idxRules] > 0,
+      AppendTo[parts, "## Rules (by name; retrieve on demand)\n" <>
+        StringRiffle[iRuleIndexLine /@ idxRules, "\n"]]];
+
+    If[Length[fullSkills] > 0,
       AppendTo[parts, "## Skills (selected)\n"];
       Do[
         AppendTo[parts,
           "### Skill: " <> Lookup[s, "Name", ""] <> "\n\n" <>
           Lookup[s, "Body", ""]],
-        {s, skills}]];
-    
-    StringRiffle[parts, "\n\n---\n\n"]
+        {s, fullSkills}]];
+    If[Length[idxSkills] > 0,
+      AppendTo[parts, "## Available skills (by name)\n" <>
+        StringRiffle[iSkillIndexLine /@ idxSkills, "\n"]]];
+
+    StringRiffle[iAppendToolNote[parts, bundle], "\n\n---\n\n"]
   ];
 
 iProjectSummary[bundle_Association] :=
-  Module[{parts = {}, claudeMD, rules, skills},
+  Module[{parts = {}, claudeMD, rules, skills, fullRules, idxRules, fullSkills, idxSkills},
     claudeMD = Lookup[bundle, "ClaudeMD", ""];
     rules    = Lookup[bundle, "ActiveRules", {}];
     skills   = Lookup[bundle, "ActiveSkills", {}];
-    
+    fullRules  = Select[rules, !iIndexProjectedQ[#] &];
+    idxRules   = Select[rules, iIndexProjectedQ];
+    fullSkills = Select[skills, !iIndexProjectedQ[#] &];
+    idxSkills  = Select[skills, iIndexProjectedQ];
+
     If[claudeMD =!= "",
       AppendTo[parts, "## Project guidelines (CLAUDE.md)\n\n" <>
         iSummarizeBody[claudeMD, 3000]]];
-    
-    If[Length[rules] > 0,
+
+    If[Length[fullRules] > 0,
       AppendTo[parts, "## Rules (always-on)\n"];
       Do[
         AppendTo[parts,
           "- **" <> Lookup[r, "Name", ""] <> "**: " <>
           iSummarizeBody[Lookup[r, "Body", ""], 400]],
-        {r, rules}]];
-    
-    If[Length[skills] > 0,
+        {r, fullRules}]];
+    If[Length[idxRules] > 0,
+      AppendTo[parts, "## Rules (by name; retrieve on demand)\n" <>
+        StringRiffle[iRuleIndexLine /@ idxRules, "\n"]]];
+
+    If[Length[fullSkills] > 0,
       AppendTo[parts, "## Skills (selected, summarized)\n"];
       Do[
         AppendTo[parts,
           "### " <> Lookup[s, "Name", ""] <> "\n" <>
           "_" <> Lookup[s, "Description", ""] <> "_\n\n" <>
           iSummarizeBody[Lookup[s, "Body", ""], 600]],
-        {s, skills}]];
-    
-    StringRiffle[parts, "\n\n---\n\n"]
+        {s, fullSkills}]];
+    If[Length[idxSkills] > 0,
+      AppendTo[parts, "## Available skills (by name)\n" <>
+        StringRiffle[iSkillIndexLine /@ idxSkills, "\n"]]];
+
+    StringRiffle[iAppendToolNote[parts, bundle], "\n\n---\n\n"]
   ];
 
 iProjectIndex[bundle_Association] :=
@@ -1702,8 +2285,8 @@ iProjectIndex[bundle_Association] :=
           ("- **" <> Lookup[#, "Name", ""] <> "**: " <>
             iSummarizeBody[Lookup[#, "Description", ""], 200]) & /@ skills,
           "\n"]]];
-    
-    StringRiffle[parts, "\n\n"]
+
+    StringRiffle[iAppendToolNote[parts, bundle], "\n\n"]
   ];
 
 iProjectLazy[bundle_Association] :=
@@ -1712,7 +2295,8 @@ iProjectLazy[bundle_Association] :=
     "## Available skills (lazy mode)\n" <>
     "Request the body of any skill via follow-up turn:\n" <>
     StringRiffle["- " <> # & /@ names, "\n"] <>
-    "\n\nUse: \"Please show skill: <name>\" to expand a skill on demand."
+    "\n\nUse: \"Please show skill: <name>\" to expand a skill on demand." <>
+    With[{n = iToolAccessNote[bundle]}, If[n === "", "", "\n\n" <> n]]
   ];
 
 ClaudeProjectDirectives[bundle_Association] :=
@@ -1748,12 +2332,16 @@ ClaudeBuildDirectivePromptForRole[role_, model_, ___] :=
     If[StringQ[role], role, ""],
     If[StringQ[model], model, "claude-opus-5"], ""];
 
-ClaudeBuildDirectivePromptForSingle[modelName_String, taskHint_String] :=
+(* 2026-09-08: modelName may be a tuple / "prov/model" / stringified tuple;
+   extra options (DirectiveLevel, ToolAccess, Mode, ...) pass through. *)
+ClaudeBuildDirectivePromptForSingle[modelName_, taskHint_String,
+    opts : OptionsPattern[ClaudeResolveDirectiveBundle]] :=
   Module[{bundle},
     bundle = ClaudeResolveDirectiveBundle[
       "Role" -> None,
       "Model" -> modelName,
-      "TaskHint" -> taskHint];
+      "TaskHint" -> taskHint,
+      opts];
     ClaudeProjectDirectives[bundle]];
 
 ClaudeBuildDirectivePromptForSingle[___] := "";
@@ -2235,8 +2823,15 @@ ClaudeDirectiveClassifyRule[___] := $Failed;
 
 (* ---- bundle harness metadata (spec 5.4 / 5.5) ---- *)
 
-iHarnessBundleMeta[target_, provider_, hmm_, repo_] :=
-  Module[{root, isHarness, mode, hash},
+iHarnessBundleMeta[targetIn_, provider_, hmm_, repo_] :=
+  Module[{target, root, isHarness, mode, hash},
+    (* 2026-09-08: accept the short target names the callers actually pass
+       ("Codex" from iPrepareCodexRun, "ClaudeCLI") -- the strict spelling made
+       the Codex bundle carry HarnessTarget None and a Missing manifest hash. *)
+    target = Switch[targetIn,
+      "Codex", "CodexHarness",
+      "ClaudeCLI", "ClaudeHarness",
+      _, targetIn];
     isHarness = MemberQ[{"CodexHarness", "ClaudeHarness"}, target];
     root = Lookup[
       If[AssociationQ[repo], repo, <||>], "Root", None];

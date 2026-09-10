@@ -1,4 +1,5 @@
 ---
+tier: safety
 paths:
   - "**/{NBAccess,claudecode,NotebookExtensions,PresentationListener}*.{wl,wls,m,nb}"
   - "**/*API*.{wl,wls,m,nb}"
