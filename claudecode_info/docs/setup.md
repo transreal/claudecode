@@ -234,6 +234,14 @@ $ClaudeFallbackModels = {
 
 `llamacpp` は LAN 内の別マシンで動作する `llama-server`（llama.cpp のサーバモード）を指す provider です。上記の `lmstudio` 一般化対象（ローカル OpenAI 互換バックエンド）としても扱われますが、`$iPaletteProviderOrder` 上では `freetoken` の次（末尾）に独立した provider として並びます。LAN 内の別機である都合上、ローカルで動く `lmstudio` と異なり接続に API キーによる認証が必須です。キーが未設定のまま送信するとダミーキーで 401 エラーになるため、`$ClaudeFallbackModels` や `$ClaudePrivateModel` で `llamacpp` を指定する場合は API キーを別途登録してください。モデル tuple に URL を含めた場合はその URL が優先される点は `lmstudio` と同じ規則です。
 
+`llamacpp` / `freetoken` サーバへ画像を送信する場合、claudecode は送信前に自動的に `GET /props` の `modalities.vision` を確認します（2026-09-11 追加）。`--mmproj`（multimodal projector, `mmproj-*.gguf`）無しで起動された等の理由で `false` と判明している場合は、画像を送らずに `Error: NoVision: ...` を返します。実際に送信して「画像入力は非対応」系のエラーが返ってきた場合も同様に NoVision へ正規化され、以後は同じサーバ（server root 単位）への画像送信がキャッシュ期間内（既定 300 秒）止まります。古い build で `modalities` フィールドが無い場合や `/props` に到達できない場合は不明（送信は止めない）として扱われ、サーバを `--mmproj` 付きで再起動すればキャッシュは自然に更新されます。すぐに見直したい場合は次でキャッシュを即座に破棄できます：
+
+```mathematica
+ClaudeLlamaCppForgetModalities[]
+```
+
+なお、接続失敗のエラーメッセージには接続先ホストが常に併記されるようになりました。接続先が `localhost` の場合、LAN 上の別機のサーバを使うつもりであれば、`localInit.wl` 側の URL 上書き設定やパレットの URL 設定を見直してください（上書きが効いていないカーネルは既定の `127.0.0.1` を指してしまいます）。
+
 パレットの `P:` ボタンをクリックすると provider が順に切り替わります。ただし切り替え候補になるのは、後述の**登録簿に登録した provider だけ**です。並び順は `$iPaletteProviderOrder`（既知 provider とその並び順）で定義されており、`claudecode → chatgptcodex → anthropic → openai → zai → kimi → lmstudio → freetoken → llamacpp` の順から、登録済みのものだけを抜き出した順序で循環します。登録簿の記述順は循環順に影響しません。
 
 #### パレットの provider 登録簿（`$ClaudePaletteProviders`）
@@ -910,6 +918,30 @@ ClaudeAuthStatus[]
 ClaudeAuthClear[]
 ```
 
+#### 18. llamacpp / freetoken サーバへの画像送信が「NoVision」エラーになる
+
+`llamacpp` / `freetoken` provider（llama.cpp のサーバモード）へ画像付きのクエリを送信すると、以下のようなエラーが返ることがあります：
+
+```
+Error: NoVision: llamacpp サーバ (http://<host>:<port>) は画像入力を受け付けません。
+llama-server が multimodal projector 無しで起動されています
+(起動時に --mmproj <mmproj-*.gguf> を指定するか、/etc/llm-server.env の MMPROJ= を設定して
+systemctl restart llama-server)。それまで画像は送らず、テキストのみで問い合わせてください。
+```
+
+これは、送信前に `GET /props` の `modalities.vision` を確認する preflight チェック（2026-09-11 追加）、または実送信時に返った「画像入力は非対応」エラーの正規化のいずれかによるものです。原因は多くの場合、`llama-server` が `--mmproj`（multimodal projector, `mmproj-*.gguf`）無しで起動されていることです。本来 vision 対応のモデルでも、`--mmproj` 無しで起動していれば同じエラーになります。
+
+一度 NoVision と判定されると、同じサーバ（server root 単位）への以後の画像送信は、キャッシュ期間内（既定 300 秒）は自動的に抑制されます。サーバを `--mmproj` 付きで再起動した後は、キャッシュの自然失効を待つか、次を実行して即座にキャッシュを破棄してください：
+
+```mathematica
+(* llamacpp/freetoken サーバの画像入力可否キャッシュを破棄 *)
+ClaudeLlamaCppForgetModalities[]
+```
+
+古い build で `modalities` フィールドが返らない場合や `/props` に到達できない場合は、可否不明として扱われ、送信は止められません（この場合は実送信結果からエラーが返ることがあります）。
+
+なお、接続失敗（サーバ未起動など）のエラーメッセージには接続先ホストが常に併記されます。接続先が `localhost` と表示されているのに LAN 上の別機のサーバを使うつもりだった場合は、`localInit.wl` 側の URL 上書き設定やパレットの URL 設定を確認してください（上書きが効いていないカーネルは既定の `127.0.0.1` を指してしまいます）。
+
 ### デバッグ情報の取得
 
 ```mathematica
@@ -1410,6 +1442,7 @@ ShowClaudePalette[]
 ?$ClaudeMachineLocalLLMProvider
 ?ClaudeLocalLLMProvider
 ?ClaudeSetLocalLLMProvider
+?ClaudeLlamaCppForgetModalities
 ?$ClaudeCloudToolLoop
 ?$ClaudeCloudToolLoopTools
 ?ClaudeEffectiveDirectiveLevel

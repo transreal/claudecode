@@ -31,7 +31,7 @@ ClaudeEval が生成する出力コード (Grid/Column/Style/Button 等) で統�
 ### $ClaudePrivateModel
 型: String, 初期値: なし
 秘密データ処理用ローカルモデル指定。AutoPrivate -> True 時に機密変数を含むタスクに使用される。
-例: $ClaudePrivateModel = {"lmstudio", "openai/gpt-oss-120b", "http://127.0.0.1:1234"}
+例: $ClaudePrivateModel = {"lmstudio", "openai/gpt-oss-20b", "http://127.0.0.1:1234"}
 
 ### $ClaudeWorkingDirectory
 型: String, 初期値: FileNameJoin[{$HomeDirectory, "Claude Working"}]

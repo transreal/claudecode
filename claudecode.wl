@@ -2240,6 +2240,13 @@ ClaudeBackendAvailableQ::usage =
   "返り値: <|\"Available\"->True|False, \"Reason\"->\"OK\"|\"NotRunning\"|\"ModelNotLoaded\"|\n" <>
   "  \"ModelLoading\"|\"Unauthorized\"|\"ModelNameMismatch\"|\"StateUnknown\", ...|>。";
 
+ClaudeLlamaCppForgetModalities::usage =
+  "ClaudeLlamaCppForgetModalities[] は llama.cpp 系サーバ (llamacpp / freetoken) の画像入力可否 (GET /props の modalities) の
+" <>
+  "キャッシュ (server root 単位、$iLlamaCppModalitiesCacheTTL 秒 = 既定 300) を捨てる。
+" <>
+  "サーバを --mmproj 付きで再起動した直後に画像付き問い合わせを試すときに呼ぶ。";
+
 $ClaudeLLMTierTable::usage =
   "$ClaudeLLMTierTable \[LongDash] TaskClass -> backend 候補列 (優先順) の宣言表 (hardening 04 Inc2)。\n" <>
   "候補は model tuple ({\"lmstudio\", Automatic} = ロード済みモデルから解決)。\n" <>
@@ -12850,7 +12857,15 @@ iQueryOpenAIAPI[apiKey_String, model_String, prompt_ /; (StringQ[prompt] || List
           "Content-Type"  -> "application/json"},
         "Body" -> bodyBytes|>]]];
     If[!MatchQ[resp, _HTTPResponse],
-      Return[iL["Error: OpenAI API \:63a5\:7d9a\:5931\:6557", "Error: OpenAI API connection failed"]]];
+      (* 2026-09-12: 接続先を必ず出す。localInit.wl の上書きが効いていないカーネルは
+         $ClaudeLlamaCppBaseURL 等が既定の 127.0.0.1 のままで、LAN 上の別機 (raptorlake) を
+         指しているつもりでここに落ちる。URL 無しの「接続失敗」では見分けが付かなかった。 *)
+      Return[iL["Error: OpenAI API \:63a5\:7d9a\:5931\:6557 (url=" <> url <> ")" <>
+          If[StringContainsQ[url, "127.0.0.1" | "localhost"],
+            " \:2014 \:63a5\:7d9a\:5148\:304c localhost \:3067\:3059\:3002LAN \:4e0a\:306e\:30b5\:30fc\:30d0\:3092\:4f7f\:3046\:306a\:3089 $ClaudeLlamaCppBaseURL / $ClaudeLMStudioBaseURL \:3084\:30d1\:30ec\:30c3\:30c8\:306e URL \:3092\:78ba\:8a8d (localInit.wl \:306e\:4e0a\:66f8\:304d\:304c\:52b9\:3044\:3066\:3044\:306a\:3044\:30ab\:30fc\:30cd\:30eb\:306f\:65e2\:5b9a\:306e 127.0.0.1 \:3092\:6307\:3059)", ""],
+        "Error: OpenAI API connection failed (url=" <> url <> ")" <>
+          If[StringContainsQ[url, "127.0.0.1" | "localhost"],
+            " \:2014 target is localhost; check $ClaudeLlamaCppBaseURL / $ClaudeLMStudioBaseURL or the palette URL", ""]]]];
     bodyStr = iHTTPResponseBodyUTF8[resp];
     If[!StringQ[bodyStr],
       bodyStr = resp["Body"];
@@ -17209,6 +17224,77 @@ iLMStudioModelVisionQ[model_String, baseURL_String] :=
       True, $Failed]];
 iLMStudioModelVisionQ[___] := $Failed;
 
+(* ---- llama.cpp 系サーバ (llamacpp / freetoken) の画像入力可否 (2026-09-11) ----
+   llama-server は --mmproj (multimodal projector, mmproj-*.gguf) 無しで起動すると
+   画像を受け付けず、/v1/chat/completions が 500
+     {"error":{"code":500,"message":"image input is not supported - hint: if this is
+      unexpected, you may need to provide the mmproj"}}
+   を返す (Qwen3.8-Flash-Next のように本来 vision 対応のモデルでも同じ)。
+   GET /props が "modalities": {"vision": bool} を返すので、画像を base64 で送る前に
+   それを見て "Error: NoVision: ..." を即返す (LM Studio の capabilities.vision と同じ扱い。
+   documentation_paper2nb.wl はこの文字列で「以後テキストのみ」へ切り替える)。
+   古い build で modalities が無い / 401 / 不通なら $Failed (不明) として送信は止めない。
+   送った結果が上の 500 なら NoVision へ正規化し、同じサーバへの以後の画像送信も止める。
+   キャッシュは server root 単位で $iLlamaCppModalitiesCacheTTL 秒 (mmproj 付きで
+   再起動すれば自然に更新される。即時に見直すなら ClaudeLlamaCppForgetModalities[])。 *)
+If[!AssociationQ[$iLlamaCppServerModalitiesCache], $iLlamaCppServerModalitiesCache = <||>];
+If[!NumericQ[$iLlamaCppModalitiesCacheTTL], $iLlamaCppModalitiesCacheTTL = 300];
+
+ClaudeLlamaCppForgetModalities[] := ($iLlamaCppServerModalitiesCache = <||>;);
+
+(* Association (modalities) / $Failed (不明) *)
+iLlamaCppServerModalities[baseURL_String, apiKey_String] :=
+  Module[{root, cached, resp, body, json, mods},
+    root = iLMStudioServerRoot[baseURL];
+    cached = Lookup[$iLlamaCppServerModalitiesCache, root, None];
+    If[ListQ[cached] && Length[cached] === 2 && NumericQ[cached[[1]]] &&
+       AbsoluteTime[] - cached[[1]] < $iLlamaCppModalitiesCacheTTL,
+      Return[cached[[2]]]];
+    resp = Quiet @ Check[
+      URLRead[HTTPRequest[root <> "/props",
+        <|Method -> "GET", "Headers" -> {"Authorization" -> "Bearer " <> apiKey}|>],
+        TimeConstraint -> 10], $Failed];
+    mods = $Failed;
+    If[Head[resp] === HTTPResponse && resp["StatusCode"] === 200,
+      body = iHTTPResponseBodyUTF8[resp];
+      If[!StringQ[body], body = resp["Body"]];
+      json = If[StringQ[body], Quiet @ Check[Developer`ReadRawJSONString[body], $Failed], $Failed];
+      If[!AssociationQ[json] && StringQ[body],
+        json = Quiet @ Check[ImportString[body, "RawJSON"], $Failed]];
+      If[AssociationQ[json],
+        mods = Lookup[json, "modalities", $Failed];
+        If[ListQ[mods] && !AssociationQ[mods], mods = Quiet @ Check[Association[mods], $Failed]];
+        If[!AssociationQ[mods], mods = $Failed]]];
+    $iLlamaCppServerModalitiesCache[root] = {AbsoluteTime[], mods};
+    mods];
+iLlamaCppServerModalities[___] := $Failed;
+
+(* True / False / $Failed (不明) *)
+iLlamaCppServerVisionQ[baseURL_String, apiKey_String] :=
+  Module[{mods = iLlamaCppServerModalities[baseURL, apiKey], v},
+    If[!AssociationQ[mods], Return[$Failed]];
+    v = Lookup[mods, "vision", Missing["KeyAbsent"]];
+    Which[MissingQ[v], $Failed, TrueQ[v], True, v === False || v === Null, False, True, $Failed]];
+iLlamaCppServerVisionQ[___] := $Failed;
+
+(* 実送信の結果から「画像非対応」を学習 (以後 TTL 内は送らない) *)
+iLlamaCppRememberNoVision[baseURL_String] :=
+  ($iLlamaCppServerModalitiesCache[iLMStudioServerRoot[baseURL]] =
+     {AbsoluteTime[], <|"vision" -> False|>};);
+
+(* llama-server の「画像非対応」エラー本文か *)
+iLlamaCppNoVisionErrorQ[res_String] :=
+  StringContainsQ[res, "image input is not supported", IgnoreCase -> True];
+iLlamaCppNoVisionErrorQ[_] := False;
+
+iLlamaCppNoVisionMessage[provider_String, url_String, detail_String] :=
+  "Error: NoVision: " <> provider <> " サーバ (" <> iLMStudioServerRoot[url] <>
+  ") は画像入力を受け付けません。llama-server が multimodal projector 無しで起動されています" <>
+  " (起動時に --mmproj <mmproj-*.gguf> を指定するか、/etc/llm-server.env の MMPROJ= を設定して" <>
+  " systemctl restart llama-server)。それまで画像は送らず、テキストのみで問い合わせてください。" <>
+  If[StringTrim[detail] =!= "", " 詳細: " <> StringTrim[detail], ""];
+
+
 (* 画像 → OpenAI 互換 image_url ブロック (data URI)。幅 1568px を上限に縮小 (Anthropic 経路と同じ) *)
 iOpenAIImageBlockFromImage[img_?ImageQ] :=
   Module[{im = img, w = ImageDimensions[img][[1]], b64},
@@ -17221,7 +17307,7 @@ iOpenAIImageBlockFromFile[path_String] :=
 
 iClaudeQueryBgAPIMultimodalOpenAI[items_List, providerLower_String, modelSpec_, timeout_] :=
   Module[{model, customURL, baseURL, url, apiKey, accessLevel, targetNb, nbAllowed,
-          visionQ, contentBlocks = {}, temperature, reasoning},
+          visionQ, contentBlocks = {}, temperature, reasoning, res},
     model = Which[
       ListQ[modelSpec] && Length[modelSpec] >= 2 && StringQ[modelSpec[[2]]], modelSpec[[2]],
       ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 2 && StringQ[$ClaudeModel[[2]]], $ClaudeModel[[2]],
@@ -17265,6 +17351,13 @@ iClaudeQueryBgAPIMultimodalOpenAI[items_List, providerLower_String, modelSpec_, 
         Return["Error: NoVision: LM Studio モデル '" <> model <>
           "' は capabilities に vision を申告していないため、画像は送りません。" <>
           "テキストのみで問い合わせてください。"]]];
+    (* llama.cpp 系 (llamacpp / freetoken): /props の modalities.vision を確認。
+       false 確定 (= --mmproj 無しで起動) なら送らずに NoVision を返す。不明なら送る。 *)
+    If[MemberQ[{"llamacpp", "freetoken"}, providerLower],
+      visionQ = iLlamaCppServerVisionQ[url, apiKey];
+      If[visionQ === False,
+        Return[iLlamaCppNoVisionMessage[providerLower, url,
+          "GET /props の modalities.vision が false"]]]];
     (* content ブロック配列 *)
     Scan[Function[item, Which[
       StringQ[item] && (!FileExistsQ[item] || !iIsMediaFile[item]),
@@ -17287,11 +17380,18 @@ iClaudeQueryBgAPIMultimodalOpenAI[items_List, providerLower_String, modelSpec_, 
     temperature = If[iLocalOAIProviderQ[providerLower],
       iResolveLMStudioTemperature[model, Automatic], Automatic];
     reasoning = If[providerLower === "freetoken", iResolveFreeTokenReasoning[model], None];
-    Block[{$iClaudeCurrentAPIProvider = providerLower},
+    res = Block[{$iClaudeCurrentAPIProvider = providerLower},
       TimeConstrained[
         iQueryOpenAIAPI[apiKey, model, contentBlocks, url, temperature, reasoning],
         timeout,
-        "Error: タイムアウト (" <> ToString[Round[timeout]] <> "秒)"]]
+        "Error: タイムアウト (" <> ToString[Round[timeout]] <> "秒)"]];
+    (* llama.cpp 系サーバが「画像非対応」を 500 で返したら NoVision へ正規化し、
+       同じサーバへの以後の画像送信を (キャッシュ TTL 内は) 止める *)
+    If[iLocalOAIProviderQ[providerLower] && iLlamaCppNoVisionErrorQ[res],
+      iLlamaCppRememberNoVision[url];
+      Return[iLlamaCppNoVisionMessage[providerLower, url,
+        StringTake[StringTrim[res], UpTo[200]]]]];
+    res
   ];
 (* Anthropic \:30ec\:30b9\:30dd\:30f3\:30b9 JSON \[RightArrow] \:30c6\:30ad\:30b9\:30c8\:6587\:5b57\:5217 *)
 

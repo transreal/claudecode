@@ -20,7 +20,7 @@ ClaudeCode は以下の設計原則に基づいています。
 - **自動実行安全ガード**: `ClaudeEval` の `AutoEvaluate -> True` で生成コードを自動実行する際、`NBAutoEvalProhibitedPatterns` に定義された禁止パターンに該当するコードの自動実行をブロックします。これにより、ファイル削除や危険なシステム操作などを含むコードが意図せず実行されることを防止します。
 - **共有ポーリングタスク**: 複数の非同期ジョブが実行中の場合、すべてのジョブが単一の共有ポーリングタスクを利用します。旧実装のようにジョブごとに個別の `ScheduledTask` を作成しないため、多数のジョブを並列実行した際のオーバーヘッドが大幅に削減されます。`iEnsureSharedPollingTask` により共有タスクのライフサイクルが管理され、パッケージリロード時には旧タスクが自動的に停止されます。フリーズ(数十秒単位でメインカーネルをブロックする不具合)を根絶するため、FE 応答性プローブと handler 個別タイムアウトの二段構えの防御も導入されています(詳細は「高度な非同期処理システム」を参照)。
 - **非同期スケジューリング規約の自動注入**: `ClaudeUpdatePackage` のプロンプトに、非同期タスクのスケジューリング規約(claudecode/NBAccess 公開 API の使用義務・例外条件・根拠)を自動注入します。LLM が生成するパッケージコードが正しい非同期パターンに従うよう誘導します。
-- **Windows エンコーディング安全な API 通信(マルチモーダル対応)**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス(`Fallback -> True`)では Anthropic API のマルチモーダル `content` 配列を構築して送信します。LM Studio プロバイダに対してもマルチモーダル入力が可能になり(2026-07-29)、OpenAI 互換の chat/completions エンドポイント経由で画像を含むクエリを送信します。さらに 2026-09-05 の改訂では、この OpenAI 互換マルチモーダル送信経路が LM Studio 専用の実装から一般化され、OpenAI 互換 chat/completions API を使うプロバイダ(LM Studio・llama.cpp・freetoken・openai)すべてで `image_url` 形式の content ブロック配列による画像送信に対応しました。内部的にはプロンプトを従来どおりの文字列として渡すことも、OpenAI 互換の content ブロック配列(vision 入力用)として渡すことも可能になっています。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換(ShiftJIS 等)による日本語文字化けが発生しません。2026-08-04 の改訂では、OpenAI 互換 chat/completions API(openai / zai / kimi プロバイダ)のリクエスト本文生成にも同様の対策が適用され、文字列連結による手組み JSON ではなく Association から `ExportByteArray["RawJSON"]` で直接 UTF-8 ByteArray を生成する方式に統一されました(詳細は「OpenAI 互換 API 通信の Windows エンコーディング対応」を参照)。
+- **Windows エンコーディング安全な API 通信(マルチモーダル対応)**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス(`Fallback -> True`)では Anthropic API のマルチモーダル `content` 配列を構築して送信します。LM Studio プロバイダに対してもマルチモーダル入力が可能になり(2026-07-29)、OpenAI 互換の chat/completions エンドポイント経由で画像を含むクエリを送信します。さらに 2026-09-05 の改訂では、この OpenAI 互換マルチモーダル送信経路が LM Studio 専用の実装から一般化され、OpenAI 互換 chat/completions API を使うプロバイダ(LM Studio・llama.cpp・freetoken・openai)すべてで `image_url` 形式の content ブロック配列による画像送信に対応しました。内部的にはプロンプトを従来どおりの文字列として渡すことも、OpenAI 互換の content ブロック配列(vision 入力用)として渡すことも可能になっています。2026-09-11〜12 の改訂では、llama.cpp 系サーバ(llamacpp・freetoken)に対して画像を送る前に画像入力可否(vision)を確認し、非対応と分かっている場合は送信自体を止める仕組みが追加されました(詳細は「操作パレット」の「llamacpp/freetoken の画像入力可否検出(NoVision 検出)」を参照)。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換(ShiftJIS 等)による日本語文字化けが発生しません。2026-08-04 の改訂では、OpenAI 互換 chat/completions API(openai / zai / kimi プロバイダ)のリクエスト本文生成にも同様の対策が適用され、文字列連結による手組み JSON ではなく Association から `ExportByteArray["RawJSON"]` で直接 UTF-8 ByteArray を生成する方式に統一されました(詳細は「OpenAI 互換 API 通信の Windows エンコーディング対応」を参照)。
 - **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすると、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、危険な操作に対して承認フロー(`NeedsApproval`)を提供します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、`ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode 単独ロード時はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。
 - **ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすると、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。rate-limit 検出・自動待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断します。
 - **SourceVault 連携(PromptRouter ブリッジ)**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`(`HoldComplete`)の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず(rule 11)、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター(spec 5.3 / 24.3)にフォールバックします。SourceVault をロードすると、仕様書の審査・実装ワークフロー化 API(`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`・`ClaudeImplStatus`・`ClaudeImplMonitor`)も利用可能になります。`CreateImplementationWorkflow` が完了すると、生成されたワークフローの起動関数がスラッグ・表示名をキーワードとして PromptRouter に自動登録されるため、以降は `ClaudeEval` でスラッグ名を呼び出すだけでワークフローを起動できます。`CreateImplementationWorkflow` の実装者ロールは、`$ClaudeUltraEnabled`(デフォルト `False`)を `True` に設定した場合に限り ultra モデルクラス(`ClaudeUltraModelSpec` で解決; CLI 優先・paid-API ゲート付き)を優先し、利用できない場合は `$ClaudeModel` にフォールバックします。既定(`$ClaudeUltraEnabled = False`)では `$ClaudeModel` / `$ClaudeAdvisaryModel` の指定がそのまま尊重され、ultra への暗黙アップグレードは行われません(2026-08-03: 暗黙アップグレードが共有 fable セッション使用枠を消費してしまう事故が発生したための方針変更)。検証者ロールには `$ClaudeAdvisaryModel` が使われます。承認にはパッケージのテストが新規カーネルで合格すること(proven-code ゲート)も条件となります(サマリーキー: `TestGate` / `Proven`)。`MaxRounds` オプションは既定で 3 に設定されています。実装(implement)と検証(verify)を 1 ラウンドとすると実測で概ね 13〜15 分を要するため、既定値 3 で妥当な運用時間に収まるよう調整されています。また実行全体には約 90 分の全体デッドラインが設けられており、超過した場合は残りのラウンドを打ち切って失敗として扱います。また、claudecode/anthropic プロバイダのパレット既定モデル(いわゆる「ヒープモデル」)や lmstudio プロバイダのモデル候補一覧も、SourceVault のモデルレジストリからの動的解決を優先します(詳細は「操作パレット」を参照)。
@@ -321,6 +321,7 @@ ClaudePrepareCommit["MyPackage"]
 | | `ClaudeSetLocalLLMProvider` | ローカル LLM provider をこのカーネルで切替 |
 | | `$ClaudeCloudToolLoop` | クラウド API プロバイダのディレクティブオンデマンド取得の有効/無効 |
 | | `$ClaudeCloudToolLoopTools` | クラウド API プロバイダに許可する SourceVault MCP ツール名 |
+| | `ClaudeLlamaCppForgetModalities` | llamacpp/freetoken サーバの画像入力可否(vision)判定キャッシュを破棄 |
 | **セッション** | `CreateClaudeSession` | 名前付きセッション作成 |
 | | `ClaudeShowHistory` | 履歴表示 |
 | | `ClaudeCompactHistory` | 履歴コンパクション |
@@ -582,6 +583,23 @@ ClaudeCode`$ClaudeMachineLocalLLMProvider["strixhalo128"] = "lmstudio";
 - **モデル名の指定は事実上装飾的**です。llama-server は起動時にロードした単一モデルのみを常駐させるため、リクエストの `model` フィールドに何を指定しても、その常駐モデルが応答します。既定候補は `"qwen3.8-flash-next"` です。
 - **稼働状態の判定**: llama-server が公開する health 用エンドポイントは `/health` のみのため、まずそこに問い合わせて未起動(`NotRunning`)・503(モデルロード中、`ModelLoading`。100GB 級の大きなモデルは再起動後 3〜5 分ロードにかかることがあります)を判定し、続いて認証キー付きで `/v1/models` に問い合わせて認証切れ(`Unauthorized`、401)を判定します。パレットのプロバイダ状態表示や `ClaudeQueryBg` 等の内部プリフライトはこの判定結果を利用します。
 - **thinking の Off 切り替えはできません**。llama-server のサンプリング・思考設定はサーバー起動時に固定されるため、パレットの `エフォート` は llamacpp 選択時のみ Off を除いた Low/Medium/High/Max の 4 段になります(前掲の「設定セクション」表を参照)。
+
+**llamacpp/freetoken の画像入力可否検出(NoVision 検出、2026-09-11〜12 追加)**
+
+llama-server は `--mmproj`(multimodal projector、`mmproj-*.gguf`)を指定せずに起動すると、画像を含むリクエストに対して `{"error":{"code":500,"message":"image input is not supported - hint: ..."}}` という形の 500 エラーを返します。これは Qwen3.8-Flash-Next のように本来 vision 対応のモデルであっても、mmproj 無しで起動されていれば同じく発生します。この 500 エラーがそのまま得体の知れないエラーとしてユーザーに見えてしまう問題への対策として、画像を送る前に入力可否(vision)を確認し、実送信の結果からも学習する仕組みが `llamacpp` / `freetoken` プロバイダに追加されました。
+
+- **事前チェック(`GET /props`)**: 画像を base64 で送信する前に、`llamacpp` / `freetoken` プロバイダは接続先サーバーの `GET /props` に問い合わせ、`"modalities": {"vision": bool}` を確認します。`false` が確定していれば(= `--mmproj` 無しで起動されていることが分かっていれば)画像を送信せず、即座に `"Error: NoVision: ..."` を返します(LM Studio の `capabilities.vision` チェックと同じ扱いです)。古い build で `modalities` フィールドが存在しない場合や、401・サーバー不通などで確認できない場合は「不明」(`$Failed`)として扱われ、送信そのものは止めずに従来どおり試行されます。
+- **キャッシュ**: この判定結果は server root(接続先ホスト)単位でキャッシュされ、既定 300 秒間は再確認しません。TTL を過ぎると次回送信時に `GET /props` から確認し直します。
+- **実送信結果からの学習**: 事前チェックが「不明」だった場合でも、実際に画像付きリクエストを送って `"image input is not supported"` を含む 500 エラーが返ってきた場合は、その事実を server root 単位で記憶し、以後キャッシュ TTL 内は同じサーバへの画像送信を自動的に止めます。
+- **エラーメッセージと接続先の明示**: 画像入力が拒否された場合に返る `"Error: NoVision: ..."` メッセージには、`llama-server が multimodal projector 無しで起動されています。--mmproj <mmproj-*.gguf> を指定するか、対応する起動設定(例: `/etc/llm-server.env` の `MMPROJ=`)を設定してサーバを再起動してください` という案内に加え、実際に問い合わせた接続先(base URL)も必ず含まれます。接続先が意図せず `localhost` になっている場合(LAN 上のサーバーを使うつもりが `localInit.wl` での上書きが効いておらず既定の `127.0.0.1` を指してしまっている等)に気づけるようにするためです。外部パッケージ(documentation_paper2nb.wl 等)はこの `"Error: NoVision: "` という接頭辞を見て、以後の同じ問い合わせをテキストのみに切り替える設計を想定できます。
+
+```mathematica
+(* サーバーを --mmproj 付きで再起動した直後、キャッシュされた「vision 不可」判定を
+   即座に破棄して再問い合わせしたい場合に呼ぶ *)
+ClaudeLlamaCppForgetModalities[]
+```
+
+キャッシュは既定 300 秒の TTL 経過後に自然に更新されますが、`ClaudeLlamaCppForgetModalities[]` を呼べば即座に見直せます。この機能は `llamacpp` / `freetoken` の両プロバイダに共通で適用されます。
 
 **ローカルプロバイダの非同期ツールループ(lmstudio/freetoken/llamacpp、2026-08-29)**
 
@@ -1231,7 +1249,7 @@ result = ClaudeQueryBg[{"この PDF の要点を教えて", File["C:\\...\\doc.p
 | メディアあり + provider = `lmstudio` / `freetoken` / `llamacpp`(OpenAI 互換 chat/completions 系) | OpenAI 互換 chat/completions パス | OpenAI 互換のマルチモーダル形式(`content` 配列、`image_url` ブロック)で直接送信。2026-07-29 に LM Studio で先行対応し、2026-09-05 の改訂で freetoken・llamacpp にも同じ経路が一般化された。2026-07-29 以前は `/api/v1/chat` がテキスト専用のため画像が破棄されていた。 |
 | メディアあり + `Fallback -> True`、provider = `anthropic` 等 | Anthropic API マルチモーダルパス | `content` 配列にテキストブロックと画像ブロックを組み立てて API に直接送信 |
 
-CLI パスでは画像ファイルが一時ディレクトリに保存され(最大 1024 px にリサイズ)、Claude Code CLI が `--image` フラグでそれを参照します。API パスでは PNG バイト列を Base64 エンコードした `image` コンテンツブロックを `content` 配列に追加して送信します。LM Studio・freetoken・llamacpp パスでは OpenAI 互換の chat/completions エンドポイントにマルチモーダルリクエストを送信します。
+CLI パスでは画像ファイルが一時ディレクトリに保存され(最大 1024 px にリサイズ)、Claude Code CLI が `--image` フラグでそれを参照します。API パスでは PNG バイト列を Base64 エンコードした `image` コンテンツブロックを `content` 配列に追加して送信します。LM Studio・freetoken・llamacpp パスでは OpenAI 互換の chat/completions エンドポイントにマルチモーダルリクエストを送信します。llamacpp・freetoken 経由で画像を送信する際は、送信前に画像入力可否(vision)が確認され、非対応と判明している場合は送信せず `"Error: NoVision: ..."` を返します(詳細は「操作パレット」の「llamacpp/freetoken の画像入力可否検出(NoVision 検出)」を参照)。
 
 #### Anthropic API 通信の Windows エンコーディング対応
 
