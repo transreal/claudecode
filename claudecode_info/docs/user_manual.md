@@ -889,6 +889,21 @@ ClaudeCode`$ClaudeCloudToolLoopTools = {"sourcevault_directives"}
 
 この機構により、ファイル削除やシステム操作など、意図しない副作用を持つ可能性のあるコードが自動実行されるリスクを軽減します。内部的には `iAutoEvalProhibitedPatterns` によって禁止パターンの照合が行われます。
 
+### ClaudeRuntime の二重実行防止ガード(2026-09-18)
+
+`$UseClaudeRuntime = True` の ClaudeRuntime 経路では、`iRuntimeDisplayResult` が LLM 応答テキストからコードブロックを再抽出して Input セルに書き込みます。この再抽出処理と、runtime 自身がすでに実行済みのコードとの間に取り違えが起きると、同じ式が二重に自動実行されてしまう不具合がありました。実際に 2026-09-17、`result.nb` で `GitHubCreateRepository` が 2 回実行され、2 回目が `422 name already exists` エラーになる事故が発生しています。副作用のあるコードでは実害が出ますが、冪等な式ではこの二重実行自体に気付けない点が問題でした。
+
+原因は ClaudeRuntime.wl の非同期実行経路統一(2026-05-15)の際、この二重実行を抑止する Phase 32c 由来のガード変数がロード時に `False` へ固定されてしまい、以後ずっとガードが機能せず素通りしていたことでした。2026-09-18 の改訂で根治され、判定材料が「非同期モードかどうか」ではなく「runtime state が保持する実行済みコード集合」に変更されました。
+
+- **`iRuntimeExecutedCodes[st]`**: runtime state から、これまでに実行済みのコードを収集する内部関数です。`ConversationState["Messages"]` 中の `ExecutionResult` が付与されたターンの `ProposedCode`、および `LastProposal["RawCode"]` + `LastExecutionResult`(実行が完了したものの何らかの理由で Messages へ追記されていないターンを拾うための保険)の両方から集約します。
+- **`iRuntimeCodeAlreadyExecutedQ[executed, blk]`**: 提案されたコードブロック `blk` が、実行済みコード集合 `executed` に含まれる(完全一致、または `iMergeDependentBlocks` で結合された式の一部として含まれる)かどうかを判定します。比較の前に `iRuntimeNormalizeCodeForCompare`(空白文字の除去)で正規化するため、整形・改行の違いによる誤判定を避けます。
+- コードブロックが実行済みと判定された場合、その Input セルはノートブックに書き込まれますが、自動評価はスキップされます。代わりに以下の案内メッセージが表示され、必要であればユーザーが手動で Shift+Enter して実行できます。
+  - 日本語: 「ℹ️ runtime が実行済みの式です。Input セルは書かれましたが自動評価はされません(二重実行防止)。必要なら手動で Shift+Enter してください。」
+  - 英語: "ℹ️ Already executed by the runtime. Input cells written but not auto-evaluated (double-execution guard). Press Shift+Enter manually if needed."
+- 誤判定は常に「自動評価しない」側に倒れるよう設計されています。実行済みと誤って判定されなかった場合はユーザーが手動実行すれば済みますが、逆に未実行のコードを誤って「実行済み」と判定してしまうと本来実行すべきコードがスキップされてしまうため、判定はやや保守的(実行済みコード集合との一致を厳密に確認する)に行われます。
+
+この改善は内部的な信頼性強化であり、新しい公開 API の追加はありません。通常の `ClaudeEvalViaRuntime` 等の利用フローの中で自動的に適用されます。
+
 ### アクセス可能ディレクトリ制御
 
 `$ClaudeAccessibleDirs` により、Claude Code がアクセスできるディレクトリを制御できます。NotebookDirectory が安全なデフォルトディレクトリ(`$packageDirectory` や `$ClaudeWorkingDirectory` 配下)でない場合、初回使用時にダイアログで許可を求めます。許可設定はノートブックの TaggingRules に永続化されます。
@@ -1357,7 +1372,7 @@ CreateImplementationWorkflow["my-feature", specText,
 
 #### 従来の問題
 
-従来は、直近ターンの評価結果であっても他の古いターンと同様に Summary(200 文字)へ切り詰められ、ツール呼び出し結果も一律 3000 文字で切り詰められていました。このため、`SlideGraphSectionText` / `SlideNotebookText` のような長文セクションを読み取るツール呼び出しの結果が毎ターン途中で切れてしまい、エージェントが本文を最後まで読めないまま次のターンへ進んでしまう不具合がありました。実際に、WikiSkill による KG(ナレッジグラフ)推敲タスクで、モデルが 1 ページ目の内容を読み直すたびに切り詰められた断片しか見えず、2 ページ目を読んだ時点で 1 ページ目の理解が迷走する、という事例が確認されています。
+従来は、直近ターンの評価結果であっても他の古いターンと同様に Summary(200 文字)へ切り詰められ、ツール呼び出し結果も一律 3000 文字で切り詰められていました。このため、`SlideGraphSectionText` / `SlideNotebookText` のような長文セクションを読み取るツール呼び出しの結果が毎ターン途中で切れてしまい、エージェントが本文を最後まで読めないまま次のターンへ進んでしまう不具合がありました。実際に、WikiSkill による KG(ナレッジグラフ)推敲タスクで、モデルが 1 ページ目の内容を読み直すたびに切り詰められた断片しか見えず、2 ページ目を読んだ時点で 1 ページ目の理解が迷走する、という事例が確認されています。エージェントはターン履歴以外に記憶を持たないため、差分を書く直前のターンについては全文の内容が必要になる場面が多いことが背景にあります。
 
 #### 改善内容
 

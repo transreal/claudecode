@@ -19976,7 +19976,7 @@ iClaudeEvalExtractAccessLevel[task_String] := Module[
       ("\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:30ec\:30d9\:30eb" |
        "\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb" | "\:6a5f\:5bc6\:30ec\:30d9\:30eb" |
        "privacylevel" | "privacy level" | "accesslevel" | "access level" |
-       "PL") ~~ Whitespace ... ~~
+       "PL") ~~ WhitespaceCharacter ... ~~
         v : (DigitCharacter .. ~~ (("." ~~ DigitCharacter ..) | "")) ~~
         q : ("\:672a\:6e80" | "\:4ee5\:4e0b" | "") :> {v, q},
       1, IgnoreCase -> True],
@@ -24221,9 +24221,9 @@ iDocCodePrivacyLevel[path_String] := Module[{st, bytes, head},
     ByteArray[Take[Normal[bytes], UpTo[4096]]], "ISO8859-1"], $Failed]];
   If[!StringQ[head], Return[0]];
   Replace[StringCases[head,
-      StartOfLine ~~ (" " | "\t") ... ~~ ("(*" | "<!--") ~~ Whitespace ... ~~
-        ":CodePrivacyLevel:" ~~ Whitespace ... ~~ lvl : NumberString ~~
-        Whitespace ... ~~ ("*)" | "-->") :> ToExpression[lvl], 1],
+      StartOfLine ~~ (" " | "\t") ... ~~ ("(*" | "<!--") ~~ WhitespaceCharacter ... ~~
+        ":CodePrivacyLevel:" ~~ WhitespaceCharacter ... ~~ lvl : NumberString ~~
+        WhitespaceCharacter ... ~~ ("*)" | "-->") :> ToExpression[lvl], 1],
     {{l_?NumericQ, ___} :> l, _ -> 0}]];
 
 (* パッケージのソース privacy level: <pkg>.wl (単一ファイル) と
@@ -43511,6 +43511,44 @@ iContinueEvalViaRuntimeBridge[nb_NotebookObject, tag_String,
    7. \:30bb\:30c3\:30b7\:30e7\:30f3\:5c65\:6b74\:66f4\:65b0
 *)
 
+(* ── 二重実行ガード用ヘルパー (2026-09-18) ──
+   iRuntimeDisplayResult は LLM 応答テキストからコードブロックを再抽出して
+   Input セルに書き戻す。その式を runtime (adapter ExecuteProposal ->
+   NBExecuteHeldExpr) が既に評価済みなら、自動評価させてはならない。
+   判定材料は runtime state:
+     - ConversationState["Messages"] … 実行が完了したターンの ProposedCode
+       (iExecuteAndContinueSyncFinalize が ExecutionResult 付きで追記する)
+     - LastProposal["RawCode"] + LastExecutionResult … 実行に失敗したターンは
+       Messages へ追記されないので、こちらで拾う *)
+iRuntimeNormalizeCodeForCompare[code_String] :=
+  StringDelete[code, WhitespaceCharacter];
+iRuntimeNormalizeCodeForCompare[_] := "";
+
+iRuntimeExecutedCodes[st_Association] :=
+  Module[{msgs, codes, lastCode},
+    msgs = Lookup[Lookup[st, "ConversationState", <||>], "Messages", {}];
+    codes = If[ListQ[msgs],
+      Cases[msgs,
+        m_Association /;
+          StringQ[Lookup[m, "ProposedCode", None]] &&
+          Lookup[m, "ExecutionResult", None] =!= None :>
+            Lookup[m, "ProposedCode"]],
+      {}];
+    lastCode = Lookup[Lookup[st, "LastProposal", <||>], "RawCode", None];
+    If[StringQ[lastCode] && Lookup[st, "LastExecutionResult", None] =!= None,
+      AppendTo[codes, lastCode]];
+    DeleteCases[
+      DeleteDuplicates[iRuntimeNormalizeCodeForCompare /@ codes], ""]];
+iRuntimeExecutedCodes[_] := {};
+
+(* 実行済みコードと一致、または実行済みコード (iMergeDependentBlocks で結合された
+   もの) の一部ならば「実行済み」とみなす。誤判定は「自動評価しない」側に倒れる
+   ので安全: ユーザーが Shift+Enter すれば動く。逆の誤りが二重実行になる。 *)
+iRuntimeCodeAlreadyExecutedQ[executed_List, blk_] :=
+  Module[{n = iRuntimeNormalizeCodeForCompare[blk]},
+    n =!= "" && AnyTrue[executed, # === n || StringContainsQ[#, n] &]];
+iRuntimeCodeAlreadyExecutedQ[___] := False;
+
 iRuntimeDisplayResult[nb_NotebookObject, tag_String,
     runtimeId_String] :=
   Module[{st, status, meta, jobId, ae, autoMark, ccBefore, copts, step,
@@ -44209,6 +44247,26 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
           iL["\:2139\:fe0f \:975e\:540c\:671f\:5b9f\:884c\:6e08\:307f\:3002Input \:30bb\:30eb\:306f\:66f8\:304b\:308c\:307e\:3057\:305f\:304c\:81ea\:52d5\:8a55\:4fa1\:306f\:3055\:308c\:307e\:305b\:3093\:3002\:5fc5\:8981\:306a\:3089\:624b\:52d5\:3067 Shift+Enter \:3057\:3066\:304f\:3060\:3055\:3044\:3002",
              "\:2139\:fe0f Already executed in parallel. Input cells written but not auto-evaluated. Press Shift+Enter manually if needed."],
           GrayLevel[0.4]]]]];
+    (* 2026-09-18 (二重実行の根治): 上の Phase 32c ガードは
+       $ClaudeRuntimeAsyncExecution が True であることを前提にしているが、
+       ClaudeRuntime.wl の経路統一 (2026-05-15) が同変数をロード時に False 固定に
+       したため、このガードは以後ずっと素通りしていた。結果、runtime が
+       NBExecuteHeldExpr で既に評価した式を、この関数が LLM 応答から再抽出して
+       Input セルに書き戻し NBEvaluatePreviousCell で再評価していた
+       (result.nb 2026-09-17: GitHubCreateRepository が 2 回走り、
+        2 回目が 422 name already exists)。冪等な式では気付けない。
+       抑制すべき条件は「非同期モードか」ではなく
+       「この提案を runtime がもう実行したか」なので、実行済みコード集合で判定する。 *)
+    Module[{executedCodes},
+      executedCodes = iRuntimeExecutedCodes[st];
+      If[TrueQ[effectiveAE] && Length[executedCodes] > 0 && Length[blocks] > 0 &&
+         AnyTrue[blocks, iRuntimeCodeAlreadyExecutedQ[executedCodes, #] &],
+        effectiveAE = False;
+        AppendTo[queue, Function[
+          NBAccess`NBWritePrintNotice[nb,
+            iL["\:2139\:fe0f runtime \:304c\:5b9f\:884c\:6e08\:307f\:306e\:5f0f\:3067\:3059\:3002Input \:30bb\:30eb\:306f\:66f8\:304b\:308c\:307e\:3057\:305f\:304c\:81ea\:52d5\:8a55\:4fa1\:306f\:3055\:308c\:307e\:305b\:3093 (\:4e8c\:91cd\:5b9f\:884c\:9632\:6b62)\:3002\:5fc5\:8981\:306a\:3089\:624b\:52d5\:3067 Shift+Enter \:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+               "\:2139\:fe0f Already executed by the runtime. Input cells written but not auto-evaluated (double-execution guard). Press Shift+Enter manually if needed."],
+            GrayLevel[0.4]]]]]];
 
     (* ---- \:69cb\:6587\:30b2\:30fc\:30c8 (2026-08-29) ----
        \:6700\:5f8c\:306e\:95a2\:6240\:3002\:4fee\:5fa9\:30bf\:30fc\:30f3\:3067\:76f4\:305b\:306a\:304b\:3063\:305f / \:4fee\:5fa9\:3092\:7121\:52b9\:5316\:3057\:305f /
