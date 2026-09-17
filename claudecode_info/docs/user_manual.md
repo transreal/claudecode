@@ -1,34 +1,3 @@
-# 設計思想と実装の概要
-
-ClaudeCode は以下の設計原則に基づいています。
-
-- **ノートブック中心**: すべての操作はノートブック上で完結します。CLI を直接操作する必要はありません。
-- **非同期実行**: LLM への問い合わせは非同期で実行され、ノートブックの操作を妨げません。リアルタイムのストリーミング進捗表示により、思考中・テキスト生成中・ツール実行中の状態を確認できます。
-- **安全なパッケージ管理**: パッケージの更新はバックアップ・差分マージ・安全性検証・再ロードを自動で行います。排他ロック機構により、同一パッケージへの並列更新を防止します。更新後は自動生成された検証テストが実行され、意図した変更が正しくコードに反映されているか確認します。2026-06-10 の改善により、LLM レスポンスを「連続した行のかたまり(セグメント)」単位でマージするようになり、マージ精度が大幅に向上しました。`Pkg\`X` / `Pkg\`Private\`iX` のような完全修飾定義も正しく認識されます。
-- **差分ベースバックアップ**: バックアップは SequenceAlignment ベースの差分形式(.cz / .cdiff / .unchanged)で保存され、ストレージ消費を大幅に削減します。既存の生バックアップは `ClaudeMigrateBackupHistory` で差分形式に変換できます。
-- **機密データ保護**: `Confidential[]` による秘匿変数システムと、プライバシー考慮型モデルルーティングにより、機密データの安全な取り扱いを実現します。アクセスレベルに基づいて、クラウドモデルとローカルモデルを自動的に使い分けます。
-- **多段フォールバック**: Claude Code CLI が利用不可の場合、アクセスレベルに応じたフォールバックモデルに自動切替します。Anthropic API、OpenAI API、z.ai(GLM シリーズ)、Kimi(Moonshot AI)、LM Studio・freetoken・llamacpp 等のローカルモデルを順次試行します。フォールバック候補を順に試す際は、429(レート制限)やサーバー過負荷エラーが連続して発生する事態を避けるため、次候補の起動を指数バックオフ(1秒→2秒→4秒を上限とする遅延)で行います。2026-08-28 の改訂では、Claude Code CLI の OAuth 認証切れ(401 authentication_failed)もレート制限と同格の検出対象に追加され、`ClaudeAuthStatus` / `ClaudeAuthClear` で状態の確認・手動リセットができるようになりました(詳細は「認証切れ検出(ClaudeAuthStatus / ClaudeAuthClear)」を参照)。
-- **セッション管理**: 会話履歴をノートブックの TaggingRules に永続化し、差分圧縮と自動コンパクションによりストレージを効率的に利用します。
-- **多言語対応**: `$Language` 設定に基づいてプロンプトの言語指示を動的に生成します。`$Language` が `"Japanese"` の場合は日本語で応答するよう指示し、それ以外の場合は英語に切り替わります。
-- **AI 生成機能**: OpenAI Images API による画像生成(`ClaudeImageGenerate`)と OpenAI TTS API による音声生成(`ClaudeSpeech`)を統合しています。
-- **プロジェクト固有ディレクティブ**: ノートブックディレクトリごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。
-- **claudecode_directives 連携**: オプションの独立パッケージ [claudecode_directives](https://github.com/transreal/claudecode_directives) をロードすることで、`rules/` および `skills/` ディレクトリのデフォルトセットが自動的にインストールされます。ロード後は Claude Code CLI のコンテキストに rules/ の制約と skills/ の手順が自動的に注入され、Claude がスキルを呼び出せるようになります。claudecode.wl 本体はディレクティブの内容に非依存であり、claudecode_directives がその管理を担います。
-- **ディレクティブ投影レイヤー (ClaudeDirectives)**: rules/skills を含む正規ディレクティブ・リポジトリを読み込み、モデルの能力(コンテキスト長・課金有無)・ロール・タスクに応じて、投影モード(Full / Summary / Index / Lazy)と適用するスキル・ルールを in-memory で動的に選択します。2026-09-08 の改訂では、これに加えてモデルの「世代・能力」に応じた投影の強度(DirectiveLevel: Minimal / Standard / Full)という直交軸が導入され、Claude 5 系のような高性能な生成モデルにはガードレール系ルールを索引だけ渡してツール経由でオンデマンド取得させる一方、小型・旧世代・ローカルモデルには従来どおり全文を渡す、という使い分けが可能になりました(詳細は「ディレクティブ強度制御(DirectiveLevel)」を参照)。さらに、単一の正規リポジトリから Claude CLI 用(`.claude/`)と Codex CLI 用(`AGENTS.md` / `.agents/`)のハーネスを生成・実体化する機能を備えます。ファイル形式は Claude Code 互換を維持し、claudecode.wl / NBAccess.wl への依存を持たない純 Wolfram Language 実装(Rule 11)として、claudecode.wl 側から optional に統合されます。
-- **スマートドキュメント管理**: ドキュメント生成・更新時のモード制御(新規作成・既存更新)、部分更新対象の指定、差分検出による効率的な更新処理を提供します。`ClaudeUpdateDocumentation` の `Baseline` オプションにより、差分の基準を「直近の更新バックアップ(`"LastDocUpdate"`)」と「GitHub コミット版(`"Github"`)」から選択でき、後者では `_info/design` の新規設計内容も加味した更新が行えます。20 ファイル以上の一括更新時は、README を除くドキュメントを LLM へ並列投入し、ウィンドウステータスバーにリアルタイム進捗(「完了 N/M • K 並列実行中 • 経過 Ts」)を表示します。サイクル再開(resumption)機能により、API エラーで中断後に再実行しても同一サイクル内の更新済みファイルをスキップして効率的に継続できます。2026-07-09 の改訂により、更新失敗は「システム的失敗(fail-fast でチェーン即中断)」と「品質ゲート失敗(切り詰め・サイズ退行・タイトル不整合。当該ファイルをスキップして次に進む)」に明確に分類され、1 ファイルの持続的な品質失敗が残り全部の更新を巻き添えにしなくなりました。品質ゲート失敗が発生した場合はまず 1 回だけ自動リトライが行われ、その際は「単一応答で出力すること・ツールを使用しないこと・コードフェンスを正しく閉じること」を明示する RETRY NOTICE がプロンプトに追加注入されます。リトライ後も同じ理由で失敗した場合は当該ファイルをスキップして次のファイルに進み、進捗表示には切り詰め文字数・サイズ退行前後の文字数と割合・タイトル不一致内容などの具体的な失敗理由が付記されます。既存ファイルへの上書き時には、新しい内容の文字数が既存内容の 40% 未満に縮小した場合は書き込み自体を拒否するサイズ退行ガードも機能します(閾値 40%)。リトライ実行時はこの比率ガードが緩和され、stub(空同然の応答)防止のための絶対値床(600 文字未満のみ拒否)に切り替わります。これは RETRY NOTICE により意図的に簡潔な応答が返ってくることを想定した調整です。また、サイクル再開(resumption)機能についても、前回実行の残存カウンタにより初回試行が誤ってスキップされてしまう不具合が修正され、より正確に継続できるようになりました。品質ゲート失敗時のリトライ・スキップ経路で、共有ポーリングタスクの再発火や派生クエリの二重起動によりドキュメント更新チェーンが分岐(fork)してしまう不具合を防ぐため、各ステップに一意のシリアルトークンを発行し最初のコールバックのみを有効化する二重発火ガードも導入されています。また `docs/` 配下に同期事故等で生じた `docs/docs/` ネスト重複ドキュメントを自動検出し、更新対象から除外した上で削除を推奨する警告を表示します。2026-07-09 の改訂では、`docs/examples/` 配下の `*.md`(使用例ドキュメント)も `Automatic`(既定)モードでの自動更新対象から除外されるようになりました。これは、examples は手作業内容が主であり毎回再生成すると多数作成した場合に更新が終わらなくなるためで、更新するには `TargetFiles` オプションで明示的に指定する必要があります(詳細は「ドキュメント更新対象ファイルの指定(TargetFiles)」を参照)。ドキュメント更新チェーンの多重起動防止ガードにより、同一パッケージに対して複数の更新チェーンが同時起動することを防ぎます。チェーンが異常終了した場合も `$ClaudeDocUpdateStaleSeconds` 秒後に自動解放されます。補助 API ドキュメント(`api_<aux>.md`)の再生成要否判定は、更新日時(mtime)比較からコンテンツハッシュ比較へ段階的に移行しており、Dropbox 同期や複数 PC 環境による mtime の揺れだけでは不要な再生成が発生しないようになっています。2026-07-10 の改訂では、条件を満たす場合にドキュメント更新パイプライン全体を外部 wolframscript ワーカープロセスへ退避して実行する仕組み(`$ClaudeDocUpdateExternal`)が導入され、複数のドキュメント更新を並走させた際のメインカーネル飽和によるフリーズが根絶されました(詳細は「ドキュメント更新の外部プロセス実行」を参照)。2026-07-13 の改訂では、README.md の「## 謝辞」「## 免責事項」「## ライセンス」節を LLM には書かせず、`Acknowledgments` / `Disclaimer` / `License` オプションと `doc_options.json` の既定値から書き込み直前にコード側で決定的に(verbatim で)追記する方式へ変更されました。これにより法的節の文言が LLM の出力切り詰めの影響を受けなくなります。追記前には本文が必須の「## 使用例」節まで到達しているか、および本文自体が途中で切れていないかを検証する専用ガードが働き、いずれかに該当する場合は書き込みが拒否されます。同じく 2026-07-13 の改訂で、複数パッケージが同時に言及されるタスクにおける API ドキュメントの注入順序とコンテキスト予算の割り当ても再設計されています(詳細は「複数パッケージ言及時の注入順序とコンテキスト予算」を参照)。2026-08-28 の改訂では、Claude Code CLI の OAuth 認証切れ(401 authentication_failed)を検出した場合、レート制限と同格の投入前ゲートとして扱われ、新規ドキュメントを 1 件も投入せずに中断して再ログインを促すようになりました(詳細は「認証切れ検出とドキュメント更新の投入前ゲート」を参照)。
-- **分離原則検証**: NBAccess パッケージとの適切な分離を維持するため、コード内の分離原則違反を自動検出・修正する機能を備えています。
-- **パッケージキーワード自動注入**: 各パッケージが独自のキーワードを登録し、プロンプト中にキーワードが含まれる場合に自動的にそのパッケージの API ドキュメントをコンテキストに注入します。パッケージ単位(`$ClaudePackageKeywordMap`)に加え、補助ドキュメント単位(`$ClaudePackageAuxKeywordMap`)でも注入条件を制御できます。
-- **自動実行安全ガード**: `ClaudeEval` の `AutoEvaluate -> True` で生成コードを自動実行する際、`NBAutoEvalProhibitedPatterns` に定義された禁止パターンに該当するコードの自動実行をブロックします。これにより、ファイル削除や危険なシステム操作などを含むコードが意図せず実行されることを防止します。
-- **共有ポーリングタスク**: 複数の非同期ジョブが実行中の場合、すべてのジョブが単一の共有ポーリングタスクを利用します。旧実装のようにジョブごとに個別の `ScheduledTask` を作成しないため、多数のジョブを並列実行した際のオーバーヘッドが大幅に削減されます。`iEnsureSharedPollingTask` により共有タスクのライフサイクルが管理され、パッケージリロード時には旧タスクが自動的に停止されます。フリーズ(数十秒単位でメインカーネルをブロックする不具合)を根絶するため、FE 応答性プローブと handler 個別タイムアウトの二段構えの防御も導入されています(詳細は「高度な非同期処理システム」を参照)。
-- **非同期スケジューリング規約の自動注入**: `ClaudeUpdatePackage` のプロンプトに、非同期タスクのスケジューリング規約(claudecode/NBAccess 公開 API の使用義務・例外条件・根拠)を自動注入します。LLM が生成するパッケージコードが正しい非同期パターンに従うよう誘導します。
-- **Windows エンコーディング安全な API 通信(マルチモーダル対応)**: `ClaudeQueryBg` はテキスト・`Image`・`File` オブジェクトを混在したリスト形式の入力に対応しています。CLI パスでは `iNormalizePrompt` 経由で画像を PNG に変換して送信し、API フォールバックパス(`Fallback -> True`)では Anthropic API のマルチモーダル `content` 配列を構築して送信します。LM Studio プロバイダに対してもマルチモーダル入力が可能になり(2026-07-29)、OpenAI 互換の chat/completions エンドポイント経由で画像を含むクエリを送信します。さらに 2026-09-05 の改訂では、この OpenAI 互換マルチモーダル送信経路が LM Studio 専用の実装から一般化され、OpenAI 互換 chat/completions API を使うプロバイダ(LM Studio・llama.cpp・freetoken・openai)すべてで `image_url` 形式の content ブロック配列による画像送信に対応しました。内部的にはプロンプトを従来どおりの文字列として渡すことも、OpenAI 互換の content ブロック配列(vision 入力用)として渡すことも可能になっています。2026-09-11〜12 の改訂では、llama.cpp 系サーバ(llamacpp・freetoken)に対して画像を送る前に画像入力可否(vision)を確認し、非対応と分かっている場合は送信自体を止める仕組みが追加されました(詳細は「操作パレット」の「llamacpp/freetoken の画像入力可否検出(NoVision 検出)」を参照)。リクエストボディは `ExportByteArray["JSON"]` で UTF-8 ByteArray として送信し、非 ASCII 文字は `\uXXXX` JSON エスケープに変換します。レスポンスは `ImportByteArray["RawJSON"]` で ByteArray のまま直接 JSON パースするため、Windows 固有の暗黙的エンコーディング変換(ShiftJIS 等)による日本語文字化けが発生しません。2026-08-04 の改訂では、OpenAI 互換 chat/completions API(openai / zai / kimi プロバイダ)のリクエスト本文生成にも同様の対策が適用され、文字列連結による手組み JSON ではなく Association から `ExportByteArray["RawJSON"]` で直接 UTF-8 ByteArray を生成する方式に統一されました(詳細は「OpenAI 互換 API 通信の Windows エンコーディング対応」を参照)。
-- **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすると、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、危険な操作に対して承認フロー(`NeedsApproval`)を提供します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、`ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode 単独ロード時はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。
-- **ClaudeOrchestrator 連携**: オプションの独立パッケージ [ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator) をロードすると、`ClaudeEval` がオーケストレーター管理下の非同期実行モードに切り替わります。呼び出しはジョブキューに追加されて即座に返り、カーネルをブロックしません。rate-limit 検出・自動待機・リトライスケジューリングが透過的に処理され、長時間・大規模なタスクを安定して継続実行できます。`ClaudeRateLimitStatus[]` が返す復旧予定時刻を参照して待機タイミングを自動判断します。
-- **SourceVault 連携(PromptRouter ブリッジ)**: オプションの独立パッケージ [SourceVault](https://github.com/transreal/SourceVault) をロードすると、`ClaudeEval` の Order 2 ディスパッチとして PromptRouter による提案ベースの実行経路が有効になります。SourceVault がタスク文字列から `PromptRouteProposal` を構築し、claudecode 側は提案の `ProposedExpression`(`HoldComplete`)の頭部を ReadOnly 許可リストと照合した上でのみ評価します。claudecode.wl は SourceVault に対して hard dependency を持たず(rule 11)、SourceVault がアクティブでない・許可リスト外の頭部を提案した・エラー・拒否を返した場合は `NotDispatched` となり、従来の自然言語ルーター(spec 5.3 / 24.3)にフォールバックします。SourceVault をロードすると、仕様書の審査・実装ワークフロー化 API(`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`・`ClaudeImplStatus`・`ClaudeImplMonitor`)も利用可能になります。`CreateImplementationWorkflow` が完了すると、生成されたワークフローの起動関数がスラッグ・表示名をキーワードとして PromptRouter に自動登録されるため、以降は `ClaudeEval` でスラッグ名を呼び出すだけでワークフローを起動できます。`CreateImplementationWorkflow` の実装者ロールは、`$ClaudeUltraEnabled`(デフォルト `False`)を `True` に設定した場合に限り ultra モデルクラス(`ClaudeUltraModelSpec` で解決; CLI 優先・paid-API ゲート付き)を優先し、利用できない場合は `$ClaudeModel` にフォールバックします。既定(`$ClaudeUltraEnabled = False`)では `$ClaudeModel` / `$ClaudeAdvisaryModel` の指定がそのまま尊重され、ultra への暗黙アップグレードは行われません(2026-08-03: 暗黙アップグレードが共有 fable セッション使用枠を消費してしまう事故が発生したための方針変更)。検証者ロールには `$ClaudeAdvisaryModel` が使われます。承認にはパッケージのテストが新規カーネルで合格すること(proven-code ゲート)も条件となります(サマリーキー: `TestGate` / `Proven`)。`MaxRounds` オプションは既定で 3 に設定されています。実装(implement)と検証(verify)を 1 ラウンドとすると実測で概ね 13〜15 分を要するため、既定値 3 で妥当な運用時間に収まるよう調整されています。また実行全体には約 90 分の全体デッドラインが設けられており、超過した場合は残りのラウンドを打ち切って失敗として扱います。また、claudecode/anthropic プロバイダのパレット既定モデル(いわゆる「ヒープモデル」)や lmstudio プロバイダのモデル候補一覧も、SourceVault のモデルレジストリからの動的解決を優先します(詳細は「操作パレット」を参照)。
-- **[実験的] LLM 適用グラフ (LLMGraph)**: LLM の適用を DAG(有向非巡回グラフ)として自動記録・可視化します。Mathematica 14.2 の `LLMGraph` と類似の構造を採用した独自実装で、`ClaudeEval` / `ClaudeQuery` 実行時にノートブック固有のグラフが自動生成されます。この実装は `claudecode_info/design/` にある WOOC'92 / WOOC'93 論文で議論されている、データの構造を保ったまま定義域ごとに適応的に処理を適用するモデルを下敷きにしています。`$LLMGraphMaxConcurrency` によりカテゴリ別の並列度を制御でき、DAG ジョブの作成・実行・キャンセル・再構築を行う `LLMGraphDAGCreate` / `LLMGraphDAGRebuild` 系の API も提供されます。なお `$LLMGraphMaxConcurrency["cli"]` は並列ドキュメント更新(20+ ファイル時)の並列度制御にも使用されます。
-- **[実験的] プライバシー分割ファイル処理 (ClaudeProcessFile)**: LLMGraph の応用として、ノートブックファイルのセルをプライバシーレベルで分割し、クラウド LLM とプライベート LLM で並列処理してマージする機能を提供します。
-
-内部的には、[NBAccess](https://github.com/transreal/NBAccess) パッケージにノートブックのセル操作・プライバシー管理・履歴 DB を委譲し、[GitHubREST](https://github.com/transreal/github) パッケージと連携して GitHub 上のパッケージ管理を行います。
-
 ## 詳細説明
 
 ### 動作環境
@@ -93,6 +62,12 @@ $ClaudeTimeout = 1200
 
 (* ClaudeEval 再帰深度上限 *)
 $ClaudeEvalMaxDepth = 5
+
+(* 反復エージェント (ClaudeEval / ClaudeRuntime) の継続プロンプトに載せる、直近ターンの
+   評価結果 (RedactedResult) とツール結果 1 件の最大文字数(デフォルト 6000)。
+   古いターンは従来どおり Summary(200 文字)のまま。詳細は「反復エージェントの継続
+   プロンプトの文字数制御($ClaudeAgentResultMaxChars)」を参照 *)
+$ClaudeAgentResultMaxChars = 6000
 
 (* ドキュメント生成用モデル *)
 $ClaudeDocModel = "claude-sonnet-5"
@@ -327,6 +302,7 @@ ClaudePrepareCommit["MyPackage"]
 | | `ClaudeCompactHistory` | 履歴コンパクション |
 | | `ClaudeHistorySize` | 履歴サイズ診断 |
 | | `ClaudeAttach` / `ClaudeDetach` | 参考資料のアタッチ |
+| | `$ClaudeAgentResultMaxChars` | 反復エージェントの継続プロンプトに載せる直近ターン結果の最大文字数 |
 | **認証・利用制限** | `ClaudeRateLimitStatus` | レート制限状態の確認 |
 | | `ClaudeRateLimitClear` | レート制限記録のクリア |
 | | `ClaudeAuthStatus` | claude CLI の OAuth 認証状態確認 |
@@ -970,7 +946,7 @@ ClaudeUpdateDocumentation["MyPackage", TargetFiles -> {"examples/*"}]
 
 `TargetFiles -> Automatic`(差分検出による自動判定)を使用する通常のドキュメント更新では、`docs/examples/` 配下の `*.md`(使用例ドキュメント)は**自動更新の対象から除外**されるようになりました。examples ドキュメントは手作業で作成した内容が中心であり、ソース差分のたびに毎回再生成してしまうと、使用例を多数作成しているパッケージほど更新が終わらなくなる問題があったためです。
 
-除外された場合、ノートブックには件数を示す情報メッセージ(`ℹ examples/*.md (N 件) は自動更新から除外。更新するには TargetFiles で明示指定 (個別 "examples/<name>.md" または一括 "examples/*")。`)が表示されます。examples ドキュメントを更新したい場合は、上記のとおり `TargetFiles` で個別または一括のマーカーを明示的に指定してください。
+除外された場合、ノートブックには件数を示す情報メッセージ(`ℹ examples/*.md (N 件) は自動更新から除外。更新するには TargetFiles で明示指定(個別 "examples/<name>.md" または一括 "examples/*")。`)が表示されます。examples ドキュメントを更新したい場合は、上記のとおり `TargetFiles` で個別または一括のマーカーを明示的に指定してください。
 
 なお、`docsDir/docs/` のようにネストして作成されてしまった重複ドキュメント(Dropbox 同期事故等で発生)についても、従来どおり自動検出されて更新対象から除外され、削除を推奨する警告が表示されます。
 
@@ -1374,6 +1350,30 @@ CreateImplementationWorkflow["my-feature", specText,
 ### セッション管理の改善
 
 セッション履歴の管理において、`iSessionAppend` と `iSessionUpdateLast` による効率的な差分更新機能が実装されています。プロンプトに含まれるキーワードが 600 文字を超える場合は各 300 文字に切り詰める制御により、過度に長い履歴エントリによるパフォーマンス低下を防ぎます。
+
+### 反復エージェントの継続プロンプトの文字数制御($ClaudeAgentResultMaxChars、2026-09-15)
+
+`ClaudeEval` / `ClaudeRuntime` によるマルチターンの反復実行(ツール呼び出しを繰り返しながらタスクを進めるエージェント的実行)では、各ターンの評価結果を次のターンへの継続プロンプトに引き継ぎます。この引き継ぎ方法が 2026-09-15 に改善されました。
+
+#### 従来の問題
+
+従来は、直近ターンの評価結果であっても他の古いターンと同様に Summary(200 文字)へ切り詰められ、ツール呼び出し結果も一律 3000 文字で切り詰められていました。このため、`SlideGraphSectionText` / `SlideNotebookText` のような長文セクションを読み取るツール呼び出しの結果が毎ターン途中で切れてしまい、エージェントが本文を最後まで読めないまま次のターンへ進んでしまう不具合がありました。実際に、WikiSkill による KG(ナレッジグラフ)推敲タスクで、モデルが 1 ページ目の内容を読み直すたびに切り詰められた断片しか見えず、2 ページ目を読んだ時点で 1 ページ目の理解が迷走する、という事例が確認されています。
+
+#### 改善内容
+
+- **直近 1 ターンは全文表示**: 直近ターンの評価結果については、Summary ではなく `RedactedResult`(最大 `$ClaudeAgentResultMaxChars` 文字、既定 6000)をそのまま次の継続プロンプトに載せるようになりました。`RedactedResult` が空の場合は従来どおり `Summary` にフォールバックします。差分を書く直前のターンの内容は全文が必要になる場面が多いため、この直近ターンだけは詳しく見せる、という方針です。
+- **古いターンは従来どおり**: 直近ターン以外の古いターンは、従来どおり `Summary`(200 文字)による圧縮表示が維持されます。全ターンを全文表示すると、逆に反復回数が多いタスクでコンテキストが膨張してしまうためです。
+- **ツール結果の切り詰め上限も連動**: 直近ターンにおけるツール結果 1 件の最大文字数も、従来の固定 3000 文字から `Max[3000, $ClaudeAgentResultMaxChars]` に変更されました。`$ClaudeAgentResultMaxChars` を大きくすると、直近のツール呼び出し結果もそれに応じて長く保持されます。
+
+```mathematica
+(* 既定値(6000)より詳細に直近ターンの結果を保持したい場合 *)
+$ClaudeAgentResultMaxChars = 12000
+
+(* 既定に戻す、または未設定・0 以下の値を指定した場合は 6000 が使用される *)
+$ClaudeAgentResultMaxChars = 6000
+```
+
+`$ClaudeAgentResultMaxChars` は NBAccess の `$NBRedactedResultMaxLength`(RedactedResult 自体を生成する際の上限)と揃えて設定することを推奨します。継続プロンプト側の上限が RedactedResult 生成側の上限より大きくても意味がないためです。
 
 ### スケジューリング
 

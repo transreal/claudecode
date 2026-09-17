@@ -359,6 +359,27 @@ $ClaudeStandardFont = "Meiryo UI"   (* 変更例 *)
 
 日本語環境で生成コードのフォントが崩れる場合にこの変数を設定してください。パッケージロード後いつでも変更でき、次回以降の `ClaudeEval` 生成コードに反映されます。
 
+### 9. エージェント継続プロンプトの結果文字数（オプション）
+
+`$ClaudeAgentResultMaxChars`（既定 6000）は、反復エージェント（`ClaudeEval` / `ClaudeRuntime`）の継続プロンプトに載せる**直近ターンの評価結果（RedactedResult）とツール結果 1 件の最大文字数**です（2026-09-15 追加）。
+
+```mathematica
+(* 現在の設定を確認 *)
+$ClaudeAgentResultMaxChars
+
+(* 長文の読み取りを多用するワークフローでは大きめに設定 *)
+$ClaudeAgentResultMaxChars = 12000
+```
+
+動作の要点は次のとおりです：
+
+- **詳細表示する直近ターン**には評価結果の全文（最大 `$ClaudeAgentResultMaxChars` 字の `RedactedResult`）がそのまま載ります。`RedactedResult` が空の場合は `Summary` が使われます。
+- **古いターン**は従来どおり `Summary`（200 字）に要約されます。エージェントはターン履歴以外に記憶を持たないため、差分を書く直前の数ターン分だけ全文を必要とする、という設計です。
+- **ツール結果 1 件**は `Max[3000, $ClaudeAgentResultMaxChars]` 字まで載ります（従来の 3000 字を下回ることはありません）。
+- 値は `NBAccess`$NBRedactedResultMaxLength` と揃えることが推奨されます。
+
+以前は Summary 200 字 / RedactedResult 500 字 / ツール結果 3000 字が上限で、`SlideGraphSectionText` / `SlideNotebookText` のような長文の読み取りが毎回途中で切れ、エージェントが本文を読めないまま推敲を続けて迷走する（1 ページ目を読み直す → 今度は 2 ページ目が落ちる、の往復になる）事故がありました。既定値の引き上げにより、この往復は解消されています。
+
 ## 動作確認
 
 ### 1. 基本動作の確認
@@ -520,6 +541,7 @@ claudecode は ClaudeRuntime および ClaudeTestKit の導入にあたり、**�
 - `$UseClaudeRuntime` のデフォルト値は `False` であり、ClaudeRuntime パッケージが存在しない環境でも claudecode は正常に動作します。
 - ClaudeTestKit は開発・テスト用の独立したパッケージであり、claudecode 本体の動作には一切影響しません。
 - ClaudeOrchestrator は claudecode の上位レイヤーとして動作する独立したパッケージです。claudecode 本体の動作には影響しません。
+- `$ClaudeAgentResultMaxChars` は既定値（6000）のままでも従来の呼び出し方法を一切変更しません。継続プロンプトに載る直近ターンの情報量が増えるだけで、古いターンの Summary（200 字）要約は従来どおりです。
 
 また、`ClaudeUpdateDocumentation` の `Baseline` オプションの既定値は `"LastDocUpdate"` であり、従来どおり直近の `_documentupdate` バックアップを差分基準とします。`Baseline -> "Github"` を明示しない限り、既存のドキュメント更新ワークフローの挙動は変わりません。
 
@@ -546,7 +568,12 @@ ClaudeCompactHistory[]
 
 (* 再帰実行の深度制限 *)
 $ClaudeEvalMaxDepth = 5
+
+(* 継続プロンプトに載せる直近ターン結果の最大文字数（既定 6000） *)
+$ClaudeAgentResultMaxChars = 6000
 ```
+
+`$ClaudeAgentResultMaxChars` を大きくすると長文の読み取り結果がエージェントに届きやすくなりますが、そのぶん継続プロンプトのトークン消費が増えます。逆に小さくするとトークンは節約できますが、長文の途中切れによる読み直しが増えます（詳細は「初期設定 > 9. エージェント継続プロンプトの結果文字数」を参照）。
 
 ### Web 検索設定
 
@@ -941,6 +968,18 @@ ClaudeLlamaCppForgetModalities[]
 古い build で `modalities` フィールドが返らない場合や `/props` に到達できない場合は、可否不明として扱われ、送信は止められません（この場合は実送信結果からエラーが返ることがあります）。
 
 なお、接続失敗（サーバ未起動など）のエラーメッセージには接続先ホストが常に併記されます。接続先が `localhost` と表示されているのに LAN 上の別機のサーバを使うつもりだった場合は、`localInit.wl` 側の URL 上書き設定やパレットの URL 設定を確認してください（上書きが効いていないカーネルは既定の `127.0.0.1` を指してしまいます）。
+
+#### 19. エージェントが長文の読み取り結果を読めず、同じ箇所を読み直す
+
+`ClaudeEval` / `ClaudeRuntime` の反復エージェントが、`SlideGraphSectionText` / `SlideNotebookText` のような長文を読み取る評価を繰り返しているのに本文を把握できていない場合、継続プロンプトに載る結果が上限で切り詰められている可能性があります。
+
+```mathematica
+(* 継続プロンプトに載せる直近ターン結果の上限を確認・拡大 *)
+$ClaudeAgentResultMaxChars          (* 既定 6000 *)
+$ClaudeAgentResultMaxChars = 12000  (* 長文読み取りが多い場合 *)
+```
+
+エージェントはターン履歴以外に記憶を持たないため、直近ターンの評価結果（`RedactedResult`）が途中で切れると、1 ページ目を読み直す → 今度は 2 ページ目が落ちる、という往復に陥ります。既定値（6000 字）でも大半のケースは解消しますが、より長い本文を一度に扱う場合はこの値を引き上げてください（詳細は「初期設定 > 9. エージェント継続プロンプトの結果文字数」を参照）。なお、古いターンは設計上つねに Summary（200 字）へ要約されるため、本文の全文が必要な作業は直近ターン内で完結させる構成が有効です。
 
 ### デバッグ情報の取得
 
@@ -1433,6 +1472,7 @@ ShowClaudePalette[]
 ?$LLMGraphMaxConcurrency
 ?$UseClaudeRuntime
 ?$ClaudeLastRuntimeId
+?$ClaudeAgentResultMaxChars
 ?$ClaudeDocUpdateStaleSeconds
 ?$ClaudeAdvisaryModel
 ?$ClaudeUltraEnabled

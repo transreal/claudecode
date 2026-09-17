@@ -2208,6 +2208,9 @@ $ClaudeEvalToolIntegrations::usage =
   "{} にすると従来どおり全抑止。個別呼び出しの Integrations -> {...} は\n" <>
   "このゲートより優先されるので従来どおり。";
 
+$ClaudeAgentResultMaxChars::usage =
+  "$ClaudeAgentResultMaxChars \:306f\:53cd\:5fa9\:30a8\:30fc\:30b8\:30a7\:30f3\:30c8 (ClaudeEval / ClaudeRuntime) \:306e\:7d99\:7d9a\:30d7\:30ed\:30f3\:30d7\:30c8\:306b\:8f09\:305b\:308b\:76f4\:8fd1\:30bf\:30fc\:30f3\:306e\:8a55\:4fa1\:7d50\:679c (RedactedResult) \:3068\:30c4\:30fc\:30eb\:7d50\:679c 1 \:4ef6\:306e\:6700\:5927\:6587\:5b57\:6570 (\:65e2\:5b9a 6000)\:3002\:53e4\:3044\:30bf\:30fc\:30f3\:306f\:5f93\:6765\:3069\:304a\:308a Summary (200 \:5b57)\:3002NBAccess`$NBRedactedResultMaxLength \:3068\:63c3\:3048\:308b\:3002";
+
 $ClaudeLocalToolLoop::usage =
   "$ClaudeLocalToolLoop \[LongDash] ローカル OpenAI 互換 provider で SourceVault MCP の\n" <>
   "ツールをモデルに使わせるか (クライアント側ツールループ)。\n" <>
@@ -12050,6 +12053,11 @@ If[! IntegerQ[$ClaudeLocalToolLoopMaxIterations],
    (2026-08-29 実測)。切り詰めた旨はモデルにも伝える。 *)
 If[! IntegerQ[$ClaudeLocalToolLoopMaxResultChars],
   $ClaudeLocalToolLoopMaxResultChars = 8000];
+(* 2026-09-15: 直近ターンの評価結果とツール結果 1 件の上限。従来は Summary 200 字 / RedactedResult 500 字 /
+   ツール結果 3000 字で、SlideGraphSectionText のような長文読み取りが毎回途中で切れていた。 *)
+If[! IntegerQ[$ClaudeAgentResultMaxChars] || $ClaudeAgentResultMaxChars <= 0,
+  $ClaudeAgentResultMaxChars = 6000];
+iAgentResultMaxChars[] := If[IntegerQ[$ClaudeAgentResultMaxChars] && $ClaudeAgentResultMaxChars > 0, $ClaudeAgentResultMaxChars, 6000];
 (* ツール 1 件の実行時間上限 (秒)。2026-09-02 実測 (documentation「展開」, qwen3.8-27b):
    sourcevault_get_document が webingest の TimeConstrained[URLRead / ImportByteArray]
    内で割り込み不能区間 (native HTML import / SSL read) に入ると、期限の Abort は
@@ -40211,11 +40219,17 @@ iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
               AppendTo[parts, "Response: " <>
                 StringTake[textResp, UpTo[300]] <> "\n"]];
             If[AssociationQ[execRes],
-              summary = Lookup[execRes, "Summary",
-                Lookup[execRes, "RedactedResult", ""]];
+              (* 2026-09-15: \:76f4\:8fd1\:30bf\:30fc\:30f3\:306f RedactedResult (\:6700\:5927 $ClaudeAgentResultMaxChars \:5b57) \:3092\:305d\:306e\:307e\:307e\:898b\:305b\:308b\:3002Summary (200 \:5b57) \:3060\:3051\:3060\:3068
+                 SlideGraphSectionText / SlideNotebookText \:306e\:3088\:3046\:306a\:9577\:6587\:306e\:8aad\:307f\:53d6\:308a\:304c\:6bce\:56de\:9014\:4e2d\:3067\:5207\:308c\:3001\:30a8\:30fc\:30b8\:30a7\:30f3\:30c8\:304c\:672c\:6587\:3092\:8aad\:3081\:305a\:306b
+                 \:8ff7\:8d70\:3057\:305f (WikiSkill \:306e KG \:63a8\:6572)\:3002\:53e4\:3044\:30bf\:30fc\:30f3\:306f\:5f93\:6765\:3069\:304a\:308a Summary\:3002 *)
+              (* \:8a73\:7d30\:8868\:793a\:3059\:308b\:76f4\:8fd1\:30bf\:30fc\:30f3\:5168\:90e8\:306b\:5168\:6587\:3092\:8f09\:305b\:308b (\:6700\:5f8c\:306e 1 \:30bf\:30fc\:30f3\:3060\:3051\:3060\:3068\:30012 \:30da\:30fc\:30b8\:76ee\:3092\:8aad\:3093\:3060\:6642\:70b9\:3067 1 \:30da\:30fc\:30b8\:76ee\:304c
+                 200 \:5b57\:306e Summary \:306b\:843d\:3061\:3001\:30e2\:30c7\:30eb\:304c 1 \:30da\:30fc\:30b8\:76ee\:3092\:8aad\:307f\:76f4\:3059 \:2192 \:4eca\:5ea6\:306f 2 \:30da\:30fc\:30b8\:76ee\:304c\:843d\:3061\:308b\:3001\:306e\:5f80\:5fa9\:306b\:306a\:3063\:305f\:3002
+                 \:30a8\:30fc\:30b8\:30a7\:30f3\:30c8\:306f\:30bf\:30fc\:30f3\:5c65\:6b74\:4ee5\:5916\:306b\:8a18\:61b6\:3092\:6301\:305f\:306a\:3044\:306e\:3067\:3001\:5dee\:5206\:3092\:66f8\:304f\:76f4\:524d\:306e\:6570\:30bf\:30fc\:30f3\:5206\:306f\:5168\:6587\:304c\:8981\:308b)\:3002 *)
+              summary = With[{rr = Lookup[execRes, "RedactedResult", ""]},
+                If[StringQ[rr] && StringLength[rr] > 0, rr, Lookup[execRes, "Summary", ""]]];
               If[StringQ[summary] && StringLength[summary] > 0,
                 AppendTo[parts, "Result: " <>
-                  StringTake[summary, UpTo[500]] <> "\n"]]];
+                  StringTake[summary, UpTo[iAgentResultMaxChars[]]] <> "\n"]]];
             AppendTo[parts, "\n"]],
           {i, Max[1, recentStart], Length[detailed]}]];
       AppendTo[parts, "\n"]];
@@ -40623,7 +40637,7 @@ iToolResultsToPromptText[toolCalls_List, toolResults_List] :=
         AppendTo[parts,
           "<tool_result name=\"" <> name <> "\" id=\"" <>
           Lookup[call, "Id", ""] <> "\">\n" <>
-          StringTake[resultText, UpTo[3000]] <>
+          StringTake[resultText, UpTo[Max[3000, iAgentResultMaxChars[]]]] <>
           "\n</tool_result>\n\n"]],
       {i, Length[toolCalls]}];
     StringJoin[parts]
