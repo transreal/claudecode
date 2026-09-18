@@ -40807,7 +40807,9 @@ iToolExecMathematica[input_Association, accessSpec_Association,
     
     execResult = NBAccess`NBExecuteHeldExpr[heldExpr, accessSpec,
       "TimeConstraint" -> timeout];
-    redacted   = NBAccess`NBRedactExecutionResult[execResult, accessSpec];
+    (* 2026-09-18: 提案コード実行と同じく privacy を合成してから redact する *)
+    redacted   = NBAccess`NBRedactExecutionResult[
+      iRuntimeMergeResultPrivacy[execResult], accessSpec];
     
     <|"Success"        -> TrueQ[Lookup[execResult, "Success", False]],
       "RawResult"      -> Lookup[execResult, "RawResult", None],
@@ -42125,15 +42127,43 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                  ToString[effectiveTimeout] <> "s)..."]];
           iClaudeFreezeLog["exec-start",
             "timeout=" <> ToString[effectiveTimeout]];
-          Module[{iExecR},
-            iExecR = NBAccess`NBExecuteHeldExpr[heldExpr, accessSpec,
-              "TimeConstraint" -> effectiveTimeout,
-              "ApprovalMode" -> userApprovalMode];
+          Module[{iExecR, svScoped, svPriv = 0.},
+            (* 2026-09-18: SourceVault の評価スコープ透かしをこの実行の範囲で
+               計測する (SourceVaultWithPrivacyScope は外側へ Max で伝搬するので
+               既存の透かしは下がらない)。値はノートブック表示の機密スタンプに
+               だけ使い、LLM 向け redact の判定 (EvaluationPrivacy) は変えない。
+               SourceVault 未ロード時は従来どおり素の呼び出し。 *)
+            If[iRuntimeSVPrivacyScopeAvailableQ[],
+              svScoped = With[{
+                  scope = Symbol["SourceVault`SourceVaultWithPrivacyScope"]},
+                scope[NBAccess`NBExecuteHeldExpr[heldExpr, accessSpec,
+                  "TimeConstraint" -> effectiveTimeout,
+                  "ApprovalMode" -> userApprovalMode]]];
+              If[AssociationQ[svScoped] && KeyExistsQ[svScoped, "Value"],
+                iExecR = svScoped["Value"];
+                svPriv = iRuntimeClipPrivacy[Lookup[svScoped, "Privacy", 1.]],
+                iExecR = svScoped],
+              iExecR = NBAccess`NBExecuteHeldExpr[heldExpr, accessSpec,
+                "TimeConstraint" -> effectiveTimeout,
+                "ApprovalMode" -> userApprovalMode]];
             iClaudeFreezeLog["exec-end", ""];
+            (* 表示専用メタ: メインカーネルで同期評価した結果だけを
+               ノートブックへの生表示の対象にする (非同期結果には付かない)。
+               RedactResult (NBRedactExecutionResult) はこの 2 キーを読まない。 *)
+            If[AssociationQ[iExecR],
+              iExecR = Join[iExecR, <|"DisplayEligible" -> True,
+                "SourceVaultPrivacy" -> svPriv|>]];
             iExecR]
         ]
       ],
       
+      (* 2026-09-18: 表示専用フック。ClaudeRuntime の iExecuteAndContinueSyncFinalize
+         がコード実行成功ごとに呼ぶ。生の実行結果をカーネル内の表示ストアに置き、
+         iRuntimeDisplayResult が実際の出力として Output セルに書く。
+         LLM に渡る redacted (RedactResult の出力) とは別経路。 *)
+      "OnExecutionResult" -> Function[{rid, turn, proposal, execResult, redacted},
+        iRuntimeRecordDisplayResult[rid, turn, proposal, execResult, redacted]],
+
       (* \[HorizontalLine]\[HorizontalLine] RedactResult \[HorizontalLine]\[HorizontalLine] *)
       "RedactResult" -> Function[{executionResult, contextPacket},
         Module[{ctxAccessSpec},
@@ -42146,7 +42176,10 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
              \:6a5f\:5bc6\:884c\:756a\:53f7\:3092 notebook \:304b\:3089\:7b97\:51fa\:3057\:3066 accessSpec \:306b\:6e21\:3059\:3002 *)
           ctxAccessSpec["ConfidentialLineNumbers"] = Quiet @ Check[
             NBAccess`NBConfidentialLineNumbers[nb, ctxAccessSpec], {}];
-          NBAccess`NBRedactExecutionResult[executionResult, ctxAccessSpec]
+          (* 2026-09-18: 透かし/埋め込みラベルを合成してから redact する
+             (iRuntimeMergeResultPrivacy。値は下げない) *)
+          NBAccess`NBRedactExecutionResult[
+            iRuntimeMergeResultPrivacy[executionResult], ctxAccessSpec]
         ]
       ],
       
@@ -43549,6 +43582,191 @@ iRuntimeCodeAlreadyExecutedQ[executed_List, blk_] :=
     n =!= "" && AnyTrue[executed, # === n || StringContainsQ[#, n] &]];
 iRuntimeCodeAlreadyExecutedQ[___] := False;
 
+(* ── 実行結果の表示ストア (2026-09-18) ──
+   「検証実行」(runtime が NBExecuteHeldExpr で評価し、redact して LLM に返す) と
+   「実際の出力」(ユーザーがノートブックで見る) を分けたまま、後者を復活させる。
+   二重実行ガードで Input セルを自動評価しなくなったため、runtime が実行した
+   View 等は redacted 文字列 (LLM 向け、約 200 字で切れる) でしか見えなくなっていた。
+   - 生の結果はこのカーネル内ストアにだけ置く。ConversationState / Messages /
+     ContinuationInput / snapshot には入れない (LLM 経路と交わらない)。
+     記録は adapter の "OnExecutionResult" フック (ClaudeRuntime の
+     iExecuteAndContinueSyncFinalize から呼ばれる) で行う。
+   - 対象はメインカーネルで同期評価された成功結果だけ ("DisplayEligible")。
+     非同期/サブカーネル結果は従来どおり redacted 表示。
+   - ノートブックへは BoxData の Output セルとして書き、機密レベルをセル式に
+     焼き込む (NBAccess の生成時スタンプと同じ形)。
+   - 1 ターンの結果は 1 回だけ生表示する。取り出した時点でストアから消す。 *)
+If[! AssociationQ[$iRuntimeDisplayStore], $iRuntimeDisplayStore = <||>];
+$iRuntimeDisplayStoreMaxRuntimes = 8;
+$iRuntimeDisplayStoreMaxTurns = 8;
+(* これを超える結果/boxes は FE を固めうるので Shallow 表示に落とす。
+   Short は FE 側で切り詰める表示ラッパで、ToBoxes の段階では全量の boxes を
+   作ってしまう (Range[3*10^6] で 240MB)。Shallow はカーネル側で切り詰める。
+   参考: 100 行の Grid (SourceVault View 相当) で raw/boxes とも約 40KB。 *)
+$iRuntimeDisplayMaxRawBytes = 16*2^20;
+$iRuntimeDisplayMaxBoxBytes = 4*2^20;
+
+(* SourceVault の評価スコープ透かしを計測できるか。SourceVault は任意依存
+   (NBAccess + claudecode だけの環境でも動くよう名前で引く)。 *)
+iRuntimeSVPrivacyScopeAvailableQ[] :=
+  Names["SourceVault`SourceVaultWithPrivacyScope"] =!= {} &&
+  With[{s = Symbol["SourceVault`SourceVaultWithPrivacyScope"]},
+    Length[DownValues[s]] > 0 &&
+    MemberQ[Attributes[s], HoldFirst | HoldAll]];
+
+(* 生の結果に埋め込まれた PL: SourceVault の表示ラッパ SourceVaultPrivate[_, pl]
+   と record / snapshot の "PrivacyLevel" キー。透かしの取りこぼしに対する二重防御。 *)
+iRuntimeEmbeddedPrivacy[raw_] :=
+  Module[{labels = {}, keys},
+    If[Names["SourceVault`SourceVaultPrivate"] =!= {},
+      With[{w = Symbol["SourceVault`SourceVaultPrivate"]},
+        labels = Cases[raw, w[_, pl_?NumericQ] :> N[pl],
+          {0, Infinity}, Heads -> True]]];
+    keys = Join[
+      Cases[raw, a_Association /; NumericQ[Lookup[a, "PrivacyLevel", None]] :>
+        N[a["PrivacyLevel"]], {0, Infinity}],
+      Cases[raw, (Rule | RuleDelayed)["PrivacyLevel", pl_?NumericQ] :> N[pl],
+        {0, Infinity}]];
+    Max[0., labels, keys]];
+
+iRuntimeClipPrivacy[x_] := If[NumericQ[x], N[Clip[x, {0., 1.}]], 1.];
+
+(* 埋め込みラベルの走査に上限を付ける: packed array にはラベルが入り得ないので
+   走査しない (Cases が unpack して膨らむのを避ける)。時間切れは fail-closed。 *)
+iRuntimeEmbeddedPrivacySafe[raw_] :=
+  Which[
+    raw === Null || raw === None, 0.,
+    Developer`PackedArrayQ[raw], 0.,
+    True, iRuntimeClipPrivacy[
+      Quiet @ Check[TimeConstrained[iRuntimeEmbeddedPrivacy[raw], 5, 1.], 1.]]];
+
+(* 式が SourceVault の関数/変数を参照しているか (未評価のまま調べる)。 *)
+iRuntimeHeldRefsSourceVaultQ[held_] :=
+  ! FreeQ[held, s_Symbol /; StringStartsQ[Context[s], "SourceVault`"],
+    {0, Infinity}, Heads -> True];
+
+(* LLM に返す前の privacy 合成 (2026-09-18)。
+   NBRedactExecutionResult は "EvaluationPrivacy" > AccessLevel ならスキーマのみに
+   落とす。本命の修正は SourceVaultNotePrivacy -> NBNoteEvaluationPrivacy の合流
+   (NBExecuteHeldExpr の透かしに SourceVault の読み取りが載る) で、ここは多重防御:
+     - 生の結果に埋め込まれた機密ラベル (SourceVaultPrivate[_, pl] / "PrivacyLevel")。
+       過去に作られて変数に残っていた View を返すだけの式は透かしに載らないため。
+     - "SourceVaultPrivacy" (adapter の同期実行で SourceVaultWithPrivacyScope が計測)。
+     - 透かしが未計測 ("EvaluationPrivacy" キーが無い = 非同期/サブカーネル実行) で、
+       式が SourceVault を参照しているなら SourceVault の既定 PL (fail-closed)。
+   値は Max で重ねるだけで、下げることはない。 *)
+iRuntimeMergeResultPrivacy[res_Association] :=
+  Module[{measured = KeyExistsQ[res, "EvaluationPrivacy"], ev, extra},
+    ev = If[measured, iRuntimeClipPrivacy[res["EvaluationPrivacy"]], 0.];
+    extra = Max[
+      If[KeyExistsQ[res, "SourceVaultPrivacy"],
+        iRuntimeClipPrivacy[res["SourceVaultPrivacy"]], 0.],
+      iRuntimeEmbeddedPrivacySafe[Lookup[res, "RawResult", Null]],
+      If[! measured && iRuntimeHeldRefsSourceVaultQ[Lookup[res, "HeldExpr", None]],
+        iRuntimeClipPrivacy[
+          If[Names["SourceVault`$SourceVaultPrivacyDefaultLevel"] =!= {},
+            Symbol["SourceVault`$SourceVaultPrivacyDefaultLevel"], 1.]],
+        0.]];
+    Append[res, "EvaluationPrivacy" -> Max[ev, extra]]];
+iRuntimeMergeResultPrivacy[res_] := res;
+
+(* adapter "OnExecutionResult" の本体。戻り値は使われない。 *)
+iRuntimeRecordDisplayResult[rid_String, turn_, proposal_,
+    execResult_Association, redacted_] :=
+  Module[{raw, code, priv, perRun},
+    If[! TrueQ[Lookup[execResult, "DisplayEligible", False]], Return[Null]];
+    If[! TrueQ[Lookup[execResult, "Success", False]], Return[Null]];
+    raw = Lookup[execResult, "RawResult", Null];
+    (* 表示するものが無い (代入の ; 等) なら記録しない: FE の Out と同じ *)
+    If[raw === Null, Return[Null]];
+    code = If[AssociationQ[proposal], Lookup[proposal, "RawCode", None], None];
+    (* fail-closed: 取れない値は 1.0 扱い *)
+    priv = Max[
+      iRuntimeClipPrivacy[Lookup[execResult, "EvaluationPrivacy", 0.]],
+      iRuntimeClipPrivacy[Lookup[execResult, "SourceVaultPrivacy", 0.]],
+      iRuntimeEmbeddedPrivacySafe[raw],
+      (* redactor が機密依存 (機密変数 / 機密セル参照 / 透かし超過) と判定した
+         結果は NBAccess の dependent マーク (0.75) と同じ扱いにする *)
+      If[AssociationQ[redacted] &&
+         TrueQ[Lookup[redacted, "ConfidentialDependent", False]], 0.75, 0.]];
+    perRun = Lookup[$iRuntimeDisplayStore, rid, <||>];
+    perRun[turn] = <|
+      "Code" -> iRuntimeNormalizeCodeForCompare[code],
+      "Raw" -> raw,
+      "Privacy" -> priv|>;
+    If[Length[perRun] > $iRuntimeDisplayStoreMaxTurns,
+      perRun = Take[perRun, -$iRuntimeDisplayStoreMaxTurns]];
+    $iRuntimeDisplayStore = Append[KeyDrop[$iRuntimeDisplayStore, rid],
+      rid -> perRun];
+    If[Length[$iRuntimeDisplayStore] > $iRuntimeDisplayStoreMaxRuntimes,
+      $iRuntimeDisplayStore =
+        Take[$iRuntimeDisplayStore, -$iRuntimeDisplayStoreMaxRuntimes]];
+    Null];
+iRuntimeRecordDisplayResult[___] := Null;
+
+(* ターン番号でエントリを取り出す (取り出したら消す = 1 回だけ表示)。 *)
+iRuntimeTakeDisplayEntry[rid_String, turn_] :=
+  Module[{perRun = Lookup[$iRuntimeDisplayStore, rid, <||>], e},
+    e = Lookup[perRun, Key[turn], None];
+    If[! AssociationQ[e], Return[None]];
+    $iRuntimeDisplayStore[rid] = KeyDrop[perRun, Key[turn]];
+    e];
+iRuntimeTakeDisplayEntry[___] := None;
+
+(* コードブロックで取り出す: 実行済みコードと一致、または結合済みコードの一部。 *)
+iRuntimeTakeDisplayEntryForCode[rid_String, blk_] :=
+  Module[{perRun = Lookup[$iRuntimeDisplayStore, rid, <||>],
+          n = iRuntimeNormalizeCodeForCompare[blk], hit},
+    If[n === "", Return[None]];
+    hit = SelectFirst[Reverse[Keys[perRun]],
+      With[{c = Lookup[perRun[#], "Code", ""]},
+        StringQ[c] && c =!= "" && (c === n || StringContainsQ[c, n])] &,
+      None];
+    If[hit === None, None, iRuntimeTakeDisplayEntry[rid, hit]]];
+iRuntimeTakeDisplayEntryForCode[___] := None;
+
+(* エントリから機密スタンプ済みの Output セル式を作る。
+   スタンプはセル式に焼き込む (iNBArtifactCellExpr と同じ TaggingRules
+   "claudecode" -> {"privacyLevel", "confidential"} + $NBConfidentialCellOpts)。
+   書き込み関所 (NBSetWriteConfidential) の自動スタンプに任せないのは、
+   View の boxes 内部に TaggingRules が 1 つでもあると関所がスタンプを
+   見送る (FreeQ 判定) ため。関所の現在値は下回らないように合成する。 *)
+iRuntimeBuildDisplayCell[nb_, entry_Association] :=
+  Module[{raw = Lookup[entry, "Raw", Null], boxes, pl},
+    boxes = If[ByteCount[raw] > $iRuntimeDisplayMaxRawBytes,
+      $Failed,
+      Quiet @ Check[
+        TimeConstrained[ToBoxes[raw, StandardForm], 15, $Failed], $Failed]];
+    If[boxes === $Failed || ByteCount[boxes] > $iRuntimeDisplayMaxBoxBytes,
+      boxes = Quiet @ Check[
+        TimeConstrained[ToBoxes[Shallow[raw, {4, 30}], StandardForm], 10,
+          $Failed],
+        $Failed]];
+    If[boxes === $Failed, Return[None]];
+    pl = Max[
+      iRuntimeClipPrivacy[Lookup[entry, "Privacy", 1.]],
+      iRuntimeClipPrivacy[
+        Quiet @ Check[NBAccess`NBWriteConfidentialLevel[nb], 0.]]];
+    If[pl > 0.5,
+      Cell[BoxData[boxes], "Output",
+        CellAutoOverwrite -> True, Editable -> False,
+        TaggingRules -> {
+          "claudecode" -> {"privacyLevel" -> pl, "confidential" -> True}},
+        Sequence @@ NBAccess`$NBConfidentialCellOpts],
+      Cell[BoxData[boxes], "Output",
+        CellAutoOverwrite -> True, Editable -> False]]];
+iRuntimeBuildDisplayCell[___] := None;
+
+iRuntimeDisplayCellForTurn[nb_, rid_String, turn_] :=
+  With[{e = iRuntimeTakeDisplayEntry[rid, turn]},
+    If[AssociationQ[e], iRuntimeBuildDisplayCell[nb, e], None]];
+iRuntimeDisplayCellForTurn[___] := None;
+
+iRuntimeDisplayCellForCode[nb_, rid_String, blk_] :=
+  With[{e = iRuntimeTakeDisplayEntryForCode[rid, blk]},
+    If[AssociationQ[e], iRuntimeBuildDisplayCell[nb, e], None]];
+iRuntimeDisplayCellForCode[___] := None;
+
 iRuntimeDisplayResult[nb_NotebookObject, tag_String,
     runtimeId_String] :=
   Module[{st, status, meta, jobId, ae, autoMark, ccBefore, copts, step,
@@ -44074,16 +44292,25 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
                 Cell[tc, "Input", CellAutoOverwrite -> True]];
               NBAccess`NBWriteCell[nb, cl]]]]]];
         
-        (* \:4e2d\:9593\:30bf\:30fc\:30f3\:306e\:5b9f\:884c\:7d50\:679c\:3092\:8868\:793a *)
-        If[AssociationQ[turnResult],
-          resultText = Lookup[turnResult, "Summary",
-            Lookup[turnResult, "RedactedResult", None]];
-          If[resultText =!= None,
-            AppendTo[queue, With[{rt = ToString[resultText]}, Function[
-              NBAccess`NBWriteCell[nb,
-                Cell[rt, "Output",
-                  CellAutoOverwrite -> True,
-                  Editable -> False]]]]]]];
+        (* \:4e2d\:9593\:30bf\:30fc\:30f3\:306e\:5b9f\:884c\:7d50\:679c\:3092\:8868\:793a
+           2026-09-18: runtime が同期実行した生の結果が表示ストアにあれば、
+           redacted 文字列 (LLM 向け、約 200 字で切れる) ではなく実際の出力を
+           機密スタンプ付き Output セルとして 1 回だけ書く。無い (非同期実行 /
+           表示済み / 失敗) ときは従来どおり redacted を表示する。 *)
+        With[{dispCell = iRuntimeDisplayCellForTurn[nb, runtimeId,
+            Lookup[msg, "Turn", None]]},
+          If[MatchQ[dispCell, _Cell],
+            AppendTo[queue, With[{cl = dispCell}, Function[
+              NBAccess`NBWriteCell[nb, cl]]]],
+            If[AssociationQ[turnResult],
+              resultText = Lookup[turnResult, "Summary",
+                Lookup[turnResult, "RedactedResult", None]];
+              If[resultText =!= None,
+                AppendTo[queue, With[{rt = ToString[resultText]}, Function[
+                  NBAccess`NBWriteCell[nb,
+                    Cell[rt, "Output",
+                      CellAutoOverwrite -> True,
+                      Editable -> False]]]]]]]]];
         
         (* \[HorizontalLine]\[HorizontalLine] \:30c4\:30fc\:30eb\:30bf\:30fc\:30f3\:306e\:8868\:793a \[HorizontalLine]\[HorizontalLine] *)
         Module[{tc = Lookup[msg, "ToolCalls", None],
@@ -44264,8 +44491,8 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
         effectiveAE = False;
         AppendTo[queue, Function[
           NBAccess`NBWritePrintNotice[nb,
-            iL["\:2139\:fe0f runtime \:304c\:5b9f\:884c\:6e08\:307f\:306e\:5f0f\:3067\:3059\:3002Input \:30bb\:30eb\:306f\:66f8\:304b\:308c\:307e\:3057\:305f\:304c\:81ea\:52d5\:8a55\:4fa1\:306f\:3055\:308c\:307e\:305b\:3093 (\:4e8c\:91cd\:5b9f\:884c\:9632\:6b62)\:3002\:5fc5\:8981\:306a\:3089\:624b\:52d5\:3067 Shift+Enter \:3057\:3066\:304f\:3060\:3055\:3044\:3002",
-               "\:2139\:fe0f Already executed by the runtime. Input cells written but not auto-evaluated (double-execution guard). Press Shift+Enter manually if needed."],
+            iL["\:2139\:fe0f \:3053\:306e\:5f0f\:306f runtime \:304c\:5b9f\:884c\:3057\:307e\:3059 (\:5b9f\:884c\:6e08\:307f\:3001\:307e\:305f\:306f\:627f\:8a8d\:5f8c\:306b\:5b9f\:884c)\:3002\:4e8c\:91cd\:5b9f\:884c\:3092\:9632\:3050\:305f\:3081 Input \:30bb\:30eb\:306f\:81ea\:52d5\:8a55\:4fa1\:3057\:307e\:305b\:3093\:3002\:7d50\:679c\:306f runtime \:306e\:51fa\:529b\:3068\:3057\:3066\:8868\:793a\:3055\:308c\:307e\:3059\:3002",
+               "\:2139\:fe0f This expression is run by the runtime (already executed, or after approval). To avoid double execution the Input cell is not auto-evaluated; the result is shown as the runtime's output."],
             GrayLevel[0.4]]]]]];
 
     (* ---- \:69cb\:6587\:30b2\:30fc\:30c8 (2026-08-29) ----
@@ -44308,7 +44535,15 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
       (* AutoEvaluate: effectiveAE \:306f\:7981\:6b62\:64cd\:4f5c\:691c\:51fa\:6642\:306b False \:306b\:306a\:3063\:3066\:3044\:308b *)
       If[TrueQ[effectiveAE],
         AppendTo[queue, Function[
-          NBAccess`NBEvaluatePreviousCell[nb]]]],
+          NBAccess`NBEvaluatePreviousCell[nb]]]];
+      (* 2026-09-18: runtime が実行済みのブロックは自動評価しない代わりに、
+         その実行結果 (実際の出力) を表示ストアから 1 回だけ Output セルで書く。
+         effectiveAE が True のブロックは runtime 未実行なので該当エントリは無い。 *)
+      If[! TrueQ[effectiveAE],
+        With[{dispCell = iRuntimeDisplayCellForCode[nb, runtimeId, blk]},
+          If[MatchQ[dispCell, _Cell],
+            AppendTo[queue, With[{cl = dispCell}, Function[
+              NBAccess`NBWriteCell[nb, cl]]]]]]],
     {blk, blocks}];
     
     (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:304c\:306a\:3044\:5834\:5408\:306e\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af

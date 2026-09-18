@@ -1181,7 +1181,7 @@ $ClaudeRuntimeAsyncExecution の判定に関わらず非同期実行を強制す
 
 ### $ClaudeRuntimeAsyncSuppressInputEval
 型: Boolean
-非同期コード実行時に入力セルの自動 InputEval を抑制するフラグ。2026-09-18 以降、二重実行の防止自体はこのフラグに依存しない: ランタイムが既に実行した提案コード (ConversationState の Messages / LastProposal) と一致するコードブロックは、非同期かどうかに関わらず Input セルとして書かれるだけで自動評価されない。(ClaudeRuntime.wl のロード時設定で $ClaudeRuntimeAsyncExecution が False 固定になって以降、旧ガードは常に素通りし、GitHubCreateRepository のような非冪等な式が 2 回実行されていた。)
+非同期コード実行時に入力セルの自動 InputEval を抑制するフラグ。2026-09-18 以降、二重実行の防止自体はこのフラグに依存しない: ランタイムが既に実行した提案コード (ConversationState の Messages / LastProposal) と一致するコードブロックは、非同期かどうかに関わらず Input セルとして書かれるだけで自動評価されない。代わりに、runtime がメインカーネルで同期実行した結果そのもの (LLM に返す redacted 文字列ではない) が、機密レベル (EvaluationPrivacy / SourceVault の評価スコープ透かし / SourceVaultPrivate ラベル / "PrivacyLevel" キー / 機密依存判定の最大値、取れなければ 1.0) をセルに焼き込んだ Output セルとして 1 回だけ表示される。生の結果はカーネル内の表示専用ストアにだけ置かれ、LLM への継続入力には入らない。(ClaudeRuntime.wl のロード時設定で $ClaudeRuntimeAsyncExecution が False 固定になって以降、旧ガードは常に素通りし、GitHubCreateRepository のような非冪等な式が 2 回実行されていた。)
 
 ### $ClaudeSyntaxRepair
 型: Boolean, 初期値: True
