@@ -1,11 +1,13 @@
+# setup.md
+
 ### 必須環境
 - **Wolfram Language 12.0** 以上（Mathematica または Wolfram Engine）
 - **Windows 10/11** （現在 Windows 専用実装）
 - **Node.js 16.0** 以上
-- **Claude Code CLI** （Anthropic 提供）
+- **Claude Code CLI** （Anthropic 提供）。Claude 5 世代のモデル（Opus 5.5 など）を使う場合は新しいバージョンの CLI が必要です（古い CLI だと API が `400 claude_code_version_too_old` を返します。トラブルシューティング「22」を参照）。
 
 ### オプション環境
-- **ChatGPT Codex CLI** （OpenAI 提供）― provider に `chatgptcodex` を指定して Codex 経由でコード生成・クエリを実行する場合に必要です。Claude Code CLI のみを使う場合は不要です。
+- **ChatGPT Codex CLI** （OpenAI 提供）― provider に `chatgptcodex` を指定して Codex 経由でコード生成・クエリを実行する場合に必要です。Claude Code CLI のみを使う場合は不要です。Windows では、Codex の実行前に PC ごとのサンドボックス検証（後述の「1b」）が必要です。
 
 ### ハードウェア要件
 - **メモリ**: 最低 8GB RAM（推奨 16GB 以上）
@@ -43,7 +45,7 @@ codex --version
 codex login
 ```
 
-`codex login` で作成される認証情報（`auth.json`）は既定の `CODEX_HOME`（`~/.codex`）に保存されます。claudecode は Codex 実行ごとに一時的な `CODEX_HOME` を作成しますが、この認証情報を自動的に引き継ぐため、`codex login` を一度実行しておけば claudecode 経由の Codex 実行でも認証が通ります。
+`codex login` で作成される認証情報（`auth.json`）は既定の `CODEX_HOME`（`~/.codex`）に保存されます。claudecode は Codex 実行ごとに一時的な `CODEX_HOME` を作成しますが、この認証情報を自動的に引き継ぐため、`codex login` を一度実行しておけば claudecode 経由の Codex 実行でも認証が通ります。なお、一時的な `CODEX_HOME` にはログイン情報の写しを残さないよう後始末が行われます。
 
 利用可能なモデル一覧は次のコマンドで確認できます：
 
@@ -53,6 +55,27 @@ codex debug models
 ```
 
 このモデルカタログは SourceVault が一元管理します（後述の「ChatGPT Codex のモデル管理」を参照）。
+
+#### Codex の Windows サンドボックス検証（PC ごと、2026-10-02 追加）
+
+Codex CLI 0.153 以降、Windows のサンドボックス方式は非昇格方式と AppContainer ベースの **mxc** に分かれており、許可リスト型の読取制限を守れるのは mxc だけです。claudecode は Codex を起動する前に、この PC で mxc サンドボックスが設定どおりに動くことを確認し、確認できない場合は Codex を起動しません。
+
+- 検証結果は PC ごと（`$MachineName` 単位）に保存されます。結果には Codex CLI のバージョンとサンドボックスの方式が含まれます。CLI やバックエンドが変わると「未検証」に戻り、再検証が済むまで Codex は実行されません。
+- 検証では、サンドボックスの外からは届くファイルやネットワークに、サンドボックスの内側からは届かないことを確認します。外側から読めるはずのユーザープロファイル内の実ファイルが、内側から読めないことも調べます。
+- 状態は ASCII のみの JSON で保存されます（理由は英語で保存し、表示時に日本語へ変換します）。
+- 検証に成功すると「Codex sandbox を検証しました」と表示され、以後は Codex を使えます。失敗した場合は「Codex sandbox を検証できなかったため Codex は実行されません」と理由つきで表示されます。
+- Codex CLI 自体を起動できない場合は、インストールと `codex login` の確認を促す警告が表示されます。
+
+現在の状態は次で確認できます：
+
+```mathematica
+(* この PC の Codex サンドボックス検証状態を確認 *)
+ClaudeCodexSandboxStatus[]
+```
+
+状態の分類は `NotVerified`（未検証・CLI のバージョン変更後を含む）、`AuthFailed`（認証失敗）などです。この PC で Codex のサンドボックスが使えない場合は、`ClaudeCodexSandboxStatus[]` で確認してください。
+
+Codex の実行結果は、SIEM spool（`LLMCall`、Provider `chatgptcodex`）と、作業ベースの小さな台帳（直近 200 件）の両方に記録されます。台帳は健全性 probe が 7 日窓で読みます。失敗は分類コードのみが記録されます。
 
 ### 2. Node.js のインストール
 
@@ -195,6 +218,8 @@ Dataset[KeyValueMap[
 
 ClaudeRuntime は、LLM 応答から再抽出したコードブロックが runtime 側で既に実行済みの式と一致する場合、Input セルへの書き込みは行いますが自動評価は抑制します（二重実行防止ガード、2026-09-18 修正）。この挙動については後述の「トラブルシューティング > 20. ClaudeRuntime で『二重実行防止』により Input セルが自動評価されない」を参照してください。
 
+ノートブック外の UI（ResoniteRealtime のタブレット等）から ClaudeRuntime の承認フローを制御・観測したい場合は、後述の「高度な設定 > ノートブック外からの承認制御（ClaudeRuntimeDecide / $ClaudeRuntimeDisplayHook）」を参照してください。
+
 ### 5. フォールバックモデルの設定（オプション）
 
 Claude Code が利用できない場合のバックアップとして、他の LLM を設定できます：
@@ -280,7 +305,7 @@ ClaudeCode`$ClaudePaletteProviders = All;
 
 #### ローカル LLM エンジンのマシン別排他（`$ClaudeLocalLLMProvider`）
 
-登録簿（`$ClaudePaletteProviders` 等）は「環境に存在する provider」を列挙するだけで、「このマシン自身でどのローカル LLM エンジンを動かすか」までは決めません。そのため、例えば LM Studio を動かしているマシンでパレットの `P:` を回すと `llamacpp` も選べてしまい、自機の localhost を指す想定外のサーバへ接続してしまう事故が起こり得ます。
+登録簿（`$ClaudePaletteProviders` 等）は「環境に存在する provider」を列挙するだけで、「このマシン自身でどのローカル LLM エンジンを動かすか」までは決めません。そのため、例えば LM Studio を動かているマシンでパレットの `P:` を回すと `llamacpp` も選べてしまい、自機の localhost を指す想定外のサーバへ接続してしまう事故が起こり得ます。
 
 `$ClaudeLocalLLMProvider` / `$ClaudeMachineLocalLLMProvider`（2026-09-08 追加）は、この事故を「自機の localhost を指す接続」に限定して塞ぐ仕組みです。排他の判定は接続先が自機かどうかで行われ、provider 名では行われません。LAN 上の別機（例えば `raptorlake` で動く `llama-server`）を指す指定外 provider は、URL で明示すれば従来どおり使用できます。クラウド provider（`claudecode` / `anthropic` / `openai` / `zai` / `kimi`）は対象外です。
 
@@ -309,8 +334,8 @@ ClaudeSetLocalLLMProvider["llamacpp"]
 claudecode はパッケージのドキュメント一式（README.md / api.md / setup.md / user_manual.md）を LLM で生成・更新する機能を備えています。生成・更新に使うモデルやリトライ動作は以下のグローバル変数で制御できます：
 
 ```mathematica
-(* ドキュメント生成用モデル *)
-$ClaudeDocModel = "claude-sonnet-5"
+(* ドキュメント生成用モデル（Sonnet 系の最新。2026-10-01 以降は claude-sonnet-5-5 に対応） *)
+$ClaudeDocModel = "claude-sonnet-5-5"
 
 (* リトライ設定 *)
 $ClaudeDocMaxRetries = 3
@@ -323,6 +348,8 @@ $ClaudeDocMaxChunkChars = 60000
    この秒数を超えたチェーンは異常終了とみなして自動解放される *)
 $ClaudeDocUpdateStaleSeconds = 1800
 ```
+
+Sonnet 5.5（`claude-sonnet-5-5`、Claude 5 世代）は、モデル能力表に `claudecode` / `anthropic` の両 provider で登録されています（値は Sonnet 5 のものを流用）。
 
 `$ClaudeDocUpdateStaleSeconds`（既定 1800 秒）は、`ClaudeUpdateDocumentation` の非同期更新チェーンが異常終了した場合に多重起動ガードを自動解放するまでの待機時間です。通常は変更不要ですが、長時間かかるドキュメント更新が多い場合は大きな値に設定してください。
 
@@ -347,6 +374,8 @@ $LLMGraphMaxConcurrency["cli-vision"] = 1  (* CLI 画像付き呼び出し *)
 1. `taskDescriptor["maxConcurrency"][abstractCat]`（ジョブ固有のオーバーライド）
 2. `$LLMGraphMaxConcurrency[abstractCat]`（グローバルデフォルト）
 3. `1`（フォールバック）
+
+LLMGraph DAG やチャンクジョブなどの非同期 LLM 呼び出しの最終結果は、ジョブのアンカー直後（結果セルと同じ場所）に通知として書き込まれます（2026-10-02 変更。以前はノートブックの現在の選択位置に書いていたため、別の場所に出ることがありました）。結果は SIEM と台帳にも記録され、失敗は分類コードのみが残ります。
 
 ### 8. UI フォントの設定（オプション）
 
@@ -476,6 +505,9 @@ $UseClaudeRuntime = False
 ChatGPT Codex CLI をインストールした場合は、provider を `chatgptcodex` に切り替えて動作を確認できます：
 
 ```mathematica
+(* Windows では先にこの PC の Codex サンドボックス検証状態を確認 *)
+ClaudeCodexSandboxStatus[]
+
 (* provider を Codex に切り替え（モデルは CLI 既定を使用） *)
 $ClaudeModel = {"chatgptcodex", Automatic}
 
@@ -488,7 +520,7 @@ $ClaudeModel = {"claudecode", "claude-opus-5"}
 
 `$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定すると、`ClaudeEval` / `ClaudeQuery` が Codex CLI 経由で実行されます。`Automatic` は Codex CLI の既定モデルを使用します。具体的なモデルを指定する場合は `$ChatgptCodexModel` を設定するか、パレットの `M:` ボタンで選択します（「ChatGPT Codex のモデル管理」を参照）。
 
-Codex provider は専用の非同期 bridge（バックグラウンドでの CLI 起動と結果ポーリング）で動作するため、実行中にカーネルがブロックされることはありません。
+Codex provider は専用の非同期 bridge（バックグラウンドでの CLI 起動と結果ポーリング）で動作するため、実行中にカーネルがブロックされることはありません。ただし Windows では、この PC のサンドボックスが未検証・検証失敗の間、Codex は起動されず警告が表示されます（「1b. ChatGPT Codex CLI のインストール」の「Codex の Windows サンドボックス検証」を参照）。
 
 ### 8. 仕様実装ワークフローの動作確認（オプション）
 
@@ -686,6 +718,8 @@ ClearAll["ClaudeCode`*"]
 Get["claudecode.wl"]
 ```
 
+定義の無い関数が呼ばれたとき、同名で定義を持つ記号が別のコンテキストにあれば、その旨のメッセージ（`A defined symbol with the same name exists: ...`）が添えられます。読み込み順や修飾漏れの手掛かりになります。
+
 #### 4. メモリ不足エラー
 
 ```mathematica
@@ -771,6 +805,8 @@ FileExistsQ[FileNameJoin[{$packageDirectory, "ClaudeRuntime", "Kernel", "init.wl
 $UseClaudeRuntime = False
 ```
 
+ClaudeRuntime の複数の sub-file は、いずれも `BeginPackage["ClaudeRuntime`"]` で始まります（2026-10-02 の整理）。
+
 #### 9. ChatGPT Codex provider のエラー
 
 provider を `chatgptcodex` に設定して `ClaudeEval` がカスケード失敗する場合、いくつかの原因が考えられます。
@@ -799,6 +835,17 @@ codex login
 (* 確実に動作する既定モデルに戻す *)
 $ChatgptCodexModel = Automatic
 ```
+
+**サンドボックス未検証で Codex が起動しない（Windows、2026-10-02 追加）**：次のような警告が表示された場合は、この PC の Codex サンドボックス（Windows mxc）が検証されていないか、検証に失敗しています。
+
+```
+⚠ Codex was not started: its sandbox (Windows mxc) has not been verified on this PC yet.
+⚠ Codex was not started: the last check found that the Codex sandbox (mxc) does not work on this PC (<reason>).
+⚠ The Codex CLI or the sandbox backend changed since the last check, so Codex will not run until the sandbox is verified again.
+⚠ Codex was not started because the Codex CLI could not be run. Check the installation and codex login, then ...
+```
+
+`ClaudeCodexSandboxStatus[]` で状態（`NotVerified` / `AuthFailed` など）と理由を確認してください。Codex CLI のバージョンを上げた後は再検証が必要です。CLI のインストールや `codex login` に問題がある場合は、先にそれらを直してから再検証してください。検証結果はマシン名ごとに保存されるため、別の PC で検証済みでも、この PC では改めて検証が必要です。
 
 **問題切り分け**：Codex 実行ごとの一時ディレクトリ（既定では `$TemporaryDirectory` 配下の `claudecode-chatgpt-codex`）に、`codex_stderr_*.log` というセッションログが残ります。Codex CLI が出力したエラー内容はこのログで確認できます。
 
@@ -995,6 +1042,38 @@ ClaudeRuntime を使ったコード実行で、LLM 応答からエージェン�
 
 必要な場合は、Input セルを選択して手動で Shift+Enter を押せば実行できます。
 
+提案の呼び出しが「定義の無い関数」のまま返ってきた場合（`ClaudeUpdatePackage` / `ClaudeCreatePackage` / `ClaudeRestorePackage` 等が未ロードの場合など）は、成功扱いにはならず失敗として扱われます（2026-10-01 修正）。
+
+#### 21. ClaudeRuntime で大きな図を含む結果が壊れて表示される（2026-09-22 修正）
+
+ClaudeRuntime の実行結果が内部の表示サイズ上限を超えた場合、以前は縮退表現として `Shallow` を適用していましたが、`Graphics` を含む式では `Shallow` が `GraphicsBox` の中身を `Skeleton` に置き換えてしまい、フロントエンドが「GraphicsBox の書式が不正」「GraphicsComplexBox は 1 個の引数で呼ばれました」というエラーを出してピンクの空セルになる事故がありました（Resonite タブレット経由で送った 60×60 の `ContourPlot` で実測）。
+
+現在は、図（`Graphics` / `Graphics3D` / `Image` / `Legended` / `Graph` / `GeoGraphics` / `Image3D` / `Dataset` を含む式）が表示サイズ上限を超えた場合、まずラスタライズして画像に変換することで見た目を保ったまま軽量化します（96 dpi 固定・幅 1000 px 上限・Byte 型画像）。ラスタライズも失敗する場合のみ従来どおり `Shallow` に縮退しますが、その結果 `GraphicsBox` の中に `Skeleton` が残ってしまうケースでは縮退表現を表示せず、サイズ超過を示す注記のみを表示します。
+
+この修正は設定不要で自動的に動作します。
+
+#### 22. CLI が API エラーを返す（古い CLI で新しいモデルを指定した場合など、2026-09-24 追加）
+
+claude CLI が API エラー（4xx 等）を result 行で返した場合（例：Opus 5.5 を古い CLI 2.1.278 で呼ぶと `400 claude_code_version_too_old`）、以前は `ReasonClass` 由来の「TransportTransient」などの分類名しか表示されず、原因が分かりませんでした。現在は、result 行の API エラー文言（本文は result 行の `"result"` 文字列）がそのまま失敗理由として返されます。
+
+新しいモデルを指定して `claude_code_version_too_old` が出た場合は、Claude Code CLI を更新してください。
+
+```bash
+claude --version
+```
+
+失敗した場合の失敗理由には、原因に応じた対処が 1 行で添えられます。
+
+#### 23. ノートブックの承認ボタンが「既に処理済み」と表示される（2026-09-23 追加）
+
+ClaudeRuntime の承認 UI（❓ 通知 / NeedsApproval セル / 承認・中止ボタン）は、ResoniteRealtime のワールド内タブレットなどノートブック外から承認済みの場合、ボタンを押すと次のような案内を表示します：
+
+```
+ℹ️ This approval was already handled (runtime status: <status>). ワールド内タブレット等で承認済みか、実行が進行中です。結果はこのノートブックに表示されます。
+```
+
+これは異常ではありません。処理済み（承認済み・実行中・完了）の承認には再度の承認を行わず、案内のみを表示します。結果は従来どおりノートブックの結果セルに出ます。通知セルは、ジョブのアンカー直後（結果セルと同じ場所）に書き込まれます。
+
 ### デバッグ情報の取得
 
 ```mathematica
@@ -1016,9 +1095,14 @@ ClaudeDiagEvents[]
 
 (* 件数を指定して確認 *)
 ClaudeDiagEvents[20]
+
+(* この PC の Codex サンドボックス検証状態 *)
+ClaudeCodexSandboxStatus[]
 ```
 
-`ClaudeDiagEvents[n]` は SIEM spool（diag-spool、マシンローカル）の直近 n 件を新しい順の Dataset で返します。SourceVault service による ingest 前でも、自マシンの運用イベント（SpawnFailed / ScheduleSubmitFailed 等）をリアルタイムで確認できます。
+`ClaudeDiagEvents[n]` は SIEM spool（diag-spool、マシンローカル）の直近 n 件を新しい順の Dataset で返します。SourceVault service による ingest 前でも、自マシンの運用イベント（SpawnFailed / ScheduleSubmitFailed 等）をリアルタイムで確認できます。Codex の実行結果（`LLMCall`、Provider `chatgptcodex`）や、LLMGraph DAG・チャンクジョブの非同期 LLM 呼び出しの最終結果も同じ spool に記録されます（失敗は分類コードのみ）。
+
+また、サンドボックス起因の失敗は、その後に自己テストが通っていれば解決済みとして数えられません。
 
 ## 高度な設定
 
@@ -1252,7 +1336,7 @@ $ClaudeCLIMCPServers
 | キー | 型 | 説明 |
 |------|---|------|
 | `"ConfigFn"` | `Function[]` | サーバ稼働時に `<|"Url"->url, ("Headers"-><|...|>)|>` を返し、停止時に `None` を返す関数。`/health` プローブ等を含み得る。 |
-| `"AllowedTools"` | `{文字列...}` | `--allowedTools` フラグに `mcp__<id>__<tool>` 形式で追加するツール名リスト。`--print` モードでは対話的承認ができないため、事前に許可が必要。 |
+| `"AllowedTools"` | `{文字列...}` または `Function[]` | `--allowedTools` フラグに `mcp__<id>__<tool>` 形式で追加するツール名リスト。`Function[]` を渡した場合は呼び出し時に評価され、その戻り値（リスト）が使用されます（2026-09-22 追加。登録側が外部ツール一覧を動的に返す場合向け。評価に失敗した場合、または戻り値がリストでない場合は空リスト扱いになります）。`--print` モードでは対話的承認ができないため、事前に許可が必要。 |
 | `"PromptDirective"` | `String` または `Function[]` | サーバ稼働中にクエリプロンプトへ注入する MCP 優先ポリシーテキスト。`Function[]` の場合は注入時に評価される。 |
 
 同じ `id` で再登録すると既存のエントリが置き換えられます。登録済みの稼働中サーバの read-only ツールは claude CLI 実行時に自動的に許可されます。
@@ -1263,6 +1347,51 @@ $ClaudeCLIMCPServers = KeyDrop[$ClaudeCLIMCPServers, "my-server"]
 ```
 
 `$ClaudeCLIMCPServers` は `<|id -> spec|>` 形式の Association で、登録済み MCP サーバのスナップショットを保持します。`ConfigFn` はサーバ稼働時のみ接続情報を返すため、停止中のサーバは自動的に CLI 実行から除外されます。
+
+### ノートブック外からの承認制御（ClaudeRuntimeDecide / $ClaudeRuntimeDisplayHook）
+
+ClaudeRuntime は既定ではノートブックの承認セルのボタン経由で `AwaitingApproval` 状態に応答しますが、ResoniteRealtime のタブレットのような、ノートブック外の UI からプログラムで応答したい場合は `ClaudeRuntimeDecide`（2026-09-22 追加）を使用します。
+
+```mathematica
+(* AwaitingApproval の runtime を承認 *)
+ClaudeRuntimeDecide[runtimeId, "Approve"]
+
+(* 拒否 *)
+ClaudeRuntimeDecide[runtimeId, "Deny"]
+
+(* タイムアウトを延長したうえで承認（秒数指定。Infinity も可） *)
+ClaudeRuntimeDecide[runtimeId, {"ApproveTimeout", 300}]
+
+(* 実行中の runtime を中止 *)
+ClaudeRuntimeDecide[runtimeId, "Cancel"]
+```
+
+`ClaudeRuntimeDecide[runtimeId, decision]` は、ノートブックの承認セルのボタンと同じ処理（承認/拒否/タイムアウト延長 + 結果セル表示 + Job 終了）をダイアログ無しで行います。対象となる Notebook / Tag / JobId は runtime の Metadata から自動的に取得されます。`decision` には `"Approve"` | `"Deny"` | `{"ApproveTimeout", seconds | Infinity}` | `"Cancel"` を指定できます。
+
+戻り値は次のいずれかです：
+
+| 戻り値 | 意味 |
+|--------|------|
+| `"Approved"` | 承認を実行した |
+| `"Denied"` | 拒否を実行した |
+| `"Cancelled"` | 実行中の runtime を中止した |
+| `"NotAwaiting"` | 対象 runtime が `AwaitingApproval` 状態ではなかった |
+| `"NotFound"` | 指定した `runtimeId` の runtime が見つからなかった |
+
+タブレットで承認した場合、ノートブックには「Approved from the in-world tablet. The runtime executes it.」（タイムアウトを延長した場合は「(timeout Ns)」付き）の通知が書かれます。この通知は、現在の選択位置ではなく、ジョブのアンカー直後（結果セルと同じ場所）に書き込まれます（2026-10-02 変更）。すでに処理済みの承認に対してノートブックの承認ボタンを押した場合の案内は、「トラブルシューティング > 23」を参照してください。
+
+`$ClaudeRuntimeDisplayHook`（既定 `None`）は、結果セルへの書き込み前に外部 UI が生の実行結果を横取りするための seam です。`None` を設定した場合は従来どおりノートブック内でのみ表示されます。`Function[<|"RuntimeId" -> ..., "Turn" -> ..., "Raw" -> 生の結果, "Privacy" -> 0-1, "Code" -> 実行コード|>]` を設定すると、結果表示のたびに呼び出されます。
+
+```mathematica
+(* 外部 UI (Resonite タブレット等) に生の結果を渡す例 *)
+$ClaudeRuntimeDisplayHook = Function[payload,
+  MyExternalUI`SendResult[payload["RuntimeId"], payload["Raw"]]];
+
+(* 無効化（既定） *)
+$ClaudeRuntimeDisplayHook = None;
+```
+
+これらは ResoniteRealtime のタブレットのような、ノートブック外のワールド内 UI から Claude Code の承認フローを制御・観測する用途を想定しています。通常のノートブック単体でのワークフローでは設定不要です。
 
 ### パレットサービストグルの登録（ClaudeRegisterPaletteServiceControl）
 
@@ -1497,6 +1626,7 @@ ShowClaudePalette[]
 ?ClaudeLocalLLMProvider
 ?ClaudeSetLocalLLMProvider
 ?ClaudeLlamaCppForgetModalities
+?ClaudeCodexSandboxStatus
 ?$ClaudeCloudToolLoop
 ?$ClaudeCloudToolLoopTools
 ?ClaudeEffectiveDirectiveLevel
@@ -1510,6 +1640,8 @@ ShowClaudePalette[]
 ?ClaudeOpenSourceVaultURI
 ?$ClaudeCLIMCPServers
 ?ClaudeRegisterCLIMCPServer
+?ClaudeRuntimeDecide
+?$ClaudeRuntimeDisplayHook
 ?$ClaudePaletteServiceControls
 ?ClaudeRegisterPaletteServiceControl
 ?ClaudeUnregisterPaletteServiceControl

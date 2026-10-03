@@ -201,12 +201,12 @@ Quiet[Scan[
    "ClaudeBuildRuntimeAdapter","ClaudeStartRuntime","ClaudeEvalViaRuntime",
    (* Phase Q-2b \:79fb\:7ba1: ClaudeBuildTransactionAdapter, ClaudeUpdatePackageViaRuntime
       \:306f ClaudePackageManager.wl \:3078\:5b8c\:5168\:79fb\:7ba1 (alias \:7d4c\:7531\:3067\:3082\:5f15\:304d\:7d9a\:304d\:547c\:3073\:51fa\:3057\:53ef) *)
-   "ClaudeApproveProposal",
+   "ClaudeApproveProposal","ClaudeRuntimeDecide",
    "ClaudeRuntimeSnapshot","ClaudeRuntimeRestore","ClaudeRuntimeListSnapshots",
    "ClaudeRegisterDAGRuntime",
    "$ClaudeRoutingProviders",
    "$UseClaudeRuntime",
-   "$ClaudeLastRuntimeId",
+   "$ClaudeLastRuntimeId","$ClaudeRuntimeDisplayHook",
    (* === Phase 32 (2026-05-13): \:30b3\:30fc\:30c9\:5b9f\:884c\:306e\:975e\:540c\:671f\:5316 (ParallelSubmit) === *)
    "$ClaudeRuntimeAsyncExecution",
    "$ClaudeRuntimeAsyncForce",
@@ -1850,6 +1850,11 @@ ClaudeApproveProposal::usage =
   "ClaudeApproveProposal[runtimeId] \:306f AwaitingApproval \:72b6\:614b\:306e runtime \:306b\n" <>
   "\:5bfe\:3057\:3066\:627f\:8a8d/\:62d2\:5426\:30c0\:30a4\:30a2\:30ed\:30b0\:3092\:8868\:793a\:3057\:3001\:7d50\:679c\:306b\:5fdc\:3058\:3066 runtime \:3092\:518d\:958b\:3059\:308b\:3002\n" <>
   "\:623b\:308a\:5024: \"Approved\" | \"Denied\" | \"NotAwaiting\"";
+ClaudeRuntimeDecide::usage =
+  "ClaudeRuntimeDecide[runtimeId, decision] は AwaitingApproval の runtime にプログラムから応答する。\n" <>
+  "ノートブックの承認セルのボタンと同じ処理 (承認/拒否/タイムアウト延長 + 結果セル表示 + Job 終了) をダイアログ無しで行う。\n" <>
+  "decision: \"Approve\" | \"Deny\" | {\"ApproveTimeout\", seconds | Infinity} | \"Cancel\" (実行中の runtime を止める)。\n" <>
+  "戻り値: \"Approved\" | \"Denied\" | \"Cancelled\" | \"NotAwaiting\" | \"NotFound\"。ResoniteRealtime のタブレット等、ノートブック外の UI が使う。";
 $ClaudeRoutingProviders::usage =
   "$ClaudeRoutingProviders \:306f RouteAdvice \:306b\:57fa\:3065\:304f provider \:9078\:629e\:30de\:30c3\:30d7\:3002\n" <>
   "\:5f62\:5f0f: <|\"CloudLLM\" -> Automatic, \"PrivateLLM\" -> model, \"LocalOnly\" -> model|>\n" <>
@@ -1871,6 +1876,13 @@ $ClaudeLastRuntimeId::usage =
   "ClaudeGetConversationMessages[$ClaudeLastRuntimeId] \:3067\:30bf\:30fc\:30f3\:5c65\:6b74\:3092\:53d6\:5f97\:3067\:304d\:308b\:3002";
 
 (* === Phase 32 (2026-05-13): \:30b3\:30fc\:30c9\:5b9f\:884c\:306e\:975e\:540c\:671f\:5316 === *)
+
+$ClaudeRuntimeDisplayHook::usage =
+  "$ClaudeRuntimeDisplayHook は runtime 経路の実行結果が表示ストアに記録されるたびに呼ばれる seam。
+" <>
+  "None (既定) | Function[<|\"RuntimeId\", \"Turn\", \"Raw\" (生の結果), \"Privacy\" (0-1), \"Code\"|>]。
+" <>
+  "ResoniteRealtime のタブレットが Graphics3D を拾って「3D生成」に使う。重い処理はしない (実行経路の中で呼ばれる)。";
 
 $ClaudeRuntimeAsyncExecution::usage =
   "$ClaudeRuntimeAsyncExecution \:306f ClaudeRuntime \:306e ExecuteProposal \:6bb5\:968e\:3092\n" <>
@@ -2542,6 +2554,20 @@ $ChatgptCodexRetainTempProjects::usage =
 $ChatgptCodexSourceExposureMode::usage =
   "$ChatgptCodexSourceExposureMode controls how package source is exposed to Codex. Default \"PackageReadOnly\".";
 
+(* === 2026-10-02: Codex Windows sandbox (mxc) per-PC verification === *)
+$ChatgptCodexWindowsSandbox::usage =
+  "$ChatgptCodexWindowsSandbox is the Codex CLI Windows sandbox backend written into the per-run config.toml ([windows] sandbox). Default \"mxc\" (AppContainer based): it is the only backend that enforces the nbaccess-codex allow-list read restrictions. \"elevated\" requires :root read access and \"unelevated\" cannot restrict reads, so the Codex CLI refuses the profile with either. Ignored on non-Windows systems.";
+ClaudeCodexSandboxStatus::usage =
+  "ClaudeCodexSandboxStatus[] reports whether the Codex sandbox has been verified on this PC for the installed Codex CLI version, without running the self-test. Status is \"Ready\", \"NotVerified\" (never checked, or the CLI / backend changed since), \"Failed\" (the last self-test failed; see \"Reason\"), \"CodexNotFound\" or \"NotApplicable\" (not Windows).";
+ClaudeCodexSandboxSetup::usage =
+  "ClaudeCodexSandboxSetup[] runs the Codex sandbox self-test on this PC and records the result. It launches only `codex sandbox` with local commands (nothing is sent to a model) and checks that the working folder is readable and writable, .agents is read-only, *.env / *token* files are unreadable, folders outside the allow list and ~/.codex/auth.json are unreadable, and the network is blocked. Codex runs from ClaudeCode are allowed only after this succeeds for the installed CLI version.";
+ClaudeCodexSandboxGate::usage =
+  "ClaudeCodexSandboxGate[] returns True when Codex may run on this PC (ClaudeCodexSandboxStatus[] is \"Ready\" or \"NotApplicable\"). Otherwise it shows an alert with a button that runs ClaudeCodexSandboxSetup[] (in the notebook when a front end is available, printed otherwise) and returns False. Option \"Notebook\" (default Automatic).";
+ClaudeCodexHealthProbe::usage =
+  "ClaudeCodexHealthProbe[] is the SystemDoctor probe for Codex on this PC (registered as \"Codex\" by SourceVault_diagnostics). It reads only local files (the Codex outcome ledger in the Codex working directory, recent codex_stderr_*.log files and the sandbox state) and never starts a process. Health \"Failing\" / ReasonCode \"CodexAllFailing\" when Codex failed at least twice in the last 7 days with no success; \"Failing\" / \"CodexSandboxUnavailable\" when Codex is in use but the sandbox self-test failed; \"Degraded\" / \"CodexSandboxNotVerified\" when Codex is in use but the sandbox is not verified. Cached for 10 minutes. Options: \"WindowDays\" (7), \"UseCache\" (True).";
+ClaudeCodexSandboxedExec::usage =
+  "ClaudeCodexSandboxedExec[prompt] runs `codex exec` once in a fresh per-run CODEX_HOME that holds only the nbaccess-codex permission profile (Windows: the $ChatgptCodexWindowsSandbox backend) and the login credential, so the user's own ~/.codex config (MCP servers, plugins) is not loaded. It returns <|\"Output\" -> answer, \"ExitCode\" -> ..., ...|> or a Failure; the per-run CODEX_HOME is deleted afterwards. It refuses to run (Failure \"SandboxNotVerified\") until ClaudeCodexSandboxGate[] passes. Options: \"Model\" (Automatic = Codex CLI default), \"Workspace\" (Automatic = a new folder under the Codex working directory, deleted afterwards), \"ReadOnlyRoots\" ({}), \"TimeConstraint\" (900 seconds).";
+
 (* === Phase 4 (2026-05-25): Claude CLI harness materialization === *)
 $ClaudeCLIHarnessMode::usage =
   "$ClaudeCLIHarnessMode selects how the Claude CLI harness (.claude/) is produced. \"Direct\" (default) keeps the existing iPrepareClaudeProjectDirectory behaviour: the working .claude/ directory is copied as-is. \"Generated\" is an opt-in mode that materializes .claude/ from the canonical Claude Directives repository.";
@@ -2588,6 +2614,7 @@ If[!ValueQ[$ChatgptCodexModel], $ChatgptCodexModel = Automatic];
 If[!ValueQ[$ChatgptCodexHarnessMode], $ChatgptCodexHarnessMode = "Generated"];
 If[!ValueQ[$ChatgptCodexRetainTempProjects], $ChatgptCodexRetainTempProjects = False];
 If[!ValueQ[$ChatgptCodexSourceExposureMode], $ChatgptCodexSourceExposureMode = "PackageReadOnly"];
+If[!ValueQ[$ChatgptCodexWindowsSandbox], $ChatgptCodexWindowsSandbox = "mxc"];
 
 (* Phase 4 (2026-05-25): Claude CLI harness mode. Default "Direct"
    keeps the existing behaviour unchanged. *)
@@ -7623,8 +7650,10 @@ iCLIMCPServerConfigs[] := Module[{now = AbsoluteTime[], out = {}},
             "Url" -> cfg["Url"],
             "Headers" -> With[{h = Lookup[cfg, "Headers", <||>]},
               If[AssociationQ[h], h, <||>]],
-            "AllowedTools" -> Replace[Lookup[spec, "AllowedTools", {}],
-              Except[_List] -> {}],
+            (* 2026-09-22: Function も可。登録側が外部 tool (SourceVaultMCPRegisterTools) を
+               呼び出し時に合流させるため *)
+            "AllowedTools" -> With[{a = Lookup[spec, "AllowedTools", {}]},
+              Replace[If[Head[a] === Function, Quiet @ Check[a[], {}], a], Except[_List] -> {}]],
             "PromptDirective" -> Lookup[spec, "PromptDirective", None]|>]]],
       {id, Keys[$ClaudeCLIMCPServers]}]];
   $iCLIMCPConfigCache = <|"At" -> now, "Value" -> out|>;
@@ -8314,9 +8343,32 @@ iStderrErrorText[stderrLines_List] := Module[{joined},
     StringTake[joined, 4000] <> "\n...(\:4ee5\:964d\:306f\:7701\:7565)", joined]];
 iStderrErrorText[___] := "Error: (no detail)";
 
+(* 2026-09-24: CLI が API エラーを返したとき (例: Opus 5.5 を古い CLI 2.1.278
+   で呼ぶと 400 claude_code_version_too_old)、本文は result 行の "result"
+   (文字列) と synthetic assistant メッセージにしか無く text_delta が出ない。
+   下の抽出器は result を Association としてしか読まなかったので本文を捨て、
+   ClaudeEval が何も出さずに終わっていた。is_error / api_error_status>=400 の
+   result 行は "Error: ..." として必ず呼び出し元へ返す。 *)
+iStreamJsonResultErrorText[j_Association] :=
+  Module[{status = Lookup[j, "api_error_status", None],
+          code = Lookup[j, "api_error_code", None],
+          res = Lookup[j, "result", None], msg},
+    If[! (TrueQ[Lookup[j, "is_error", False]] ||
+          (IntegerQ[status] && status >= 400)), Return[None]];
+    msg = Which[
+      StringQ[res] && StringTrim[res] =!= "", StringTrim[res],
+      StringQ[code], "API Error: " <> code,
+      True, "API Error (" <> ToString[Lookup[j, "subtype", "?"]] <> ")"];
+    "Error: " <> msg <>
+      If[code === "claude_code_version_too_old",
+        iL["\n\[RightArrow] Claude Code CLI \:304c\:3053\:306e\:30e2\:30c7\:30eb\:306b\:5bfe\:5fdc\:3057\:3066\:3044\:307e\:305b\:3093\:3002\:30bf\:30fc\:30df\:30ca\:30eb\:3067 claude update \:3092\:5b9f\:884c\:3057\:3066\:304b\:3089\:518d\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+           "\n\[RightArrow] This Claude Code CLI does not support the model. Run 'claude update' in a terminal and retry."],
+        ""]];
+iStreamJsonResultErrorText[_] := None;
+
 iExtractResultFromStreamJson[outFile_String] :=
   Module[{raw, lines, textDeltas = {}, resultText = None, j, evt, delta,
-          stderrLines = {}},
+          stderrLines = {}, apiErrText = None, resultStr = None},
     If[!FileExistsQ[outFile] || FileByteCount[outFile] === 0, Return[""]];
     raw = iSafeReadStreamFile[outFile];
     If[!StringQ[raw] || raw === "", Return[""]];
@@ -8329,6 +8381,12 @@ iExtractResultFromStreamJson[outFile_String] :=
           AppendTo[stderrLines, line]];
         Continue[]];
       Which[
+        (* 2026-09-24: API \:30a8\:30e9\:30fc\:306e result \:884c (\:672c\:6587\:306f\:6587\:5b57\:5217) *)
+        j["type"] === "result" && StringQ[iStreamJsonResultErrorText[j]],
+          apiErrText = iStreamJsonResultErrorText[j],
+        (* \:6210\:529f\:6642\:306e\:6587\:5b57\:5217 result (text_delta \:304c\:7121\:3044\:5834\:5408\:306e\:4e88\:5099) *)
+        j["type"] === "result" && StringQ[Lookup[j, "result", None]],
+          resultStr = j["result"],
         (* result \:30a4\:30d9\:30f3\:30c8\:304b\:3089\:30c6\:30ad\:30b9\:30c8\:3092\:62bd\:51fa\:ff08\:6700\:512a\:5148\:ff09 *)
         j["type"] === "result" && AssociationQ[Lookup[j, "result", None]],
           Module[{res = j["result"], content},
@@ -8347,8 +8405,10 @@ iExtractResultFromStreamJson[outFile_String] :=
       {line, lines}];
     (* result \:304c\:3042\:308c\:3070\:305d\:308c\:3092\:512a\:5148\:3001\:306a\:3051\:308c\:3070 text_delta \:3092\:7d50\:5408 *)
     Which[
+      StringQ[apiErrText] && textDeltas === {}, apiErrText,
       StringQ[resultText] && resultText =!= "", resultText,
       Length[textDeltas] > 0, StringJoin[textDeltas],
+      StringQ[resultStr] && StringTrim[resultStr] =!= "", resultStr,
       (* 2026-08-30: stream-json \:3067\:306f\:306a\:304f\:5358\:4e00\:306e JSON \:672c\:6587\:3060\:3063\:305f\:5834\:5408\:3092
          \:5148\:306b\:6551\:6e08\:3059\:308b\:3002\:6b32\:3057\:3044\:672c\:6587\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:8fd4\:3057\:3001\:7121\:3051\:308c\:3070
          \:751f JSON \:3092\:6d41\:3059\:4ee3\:308f\:308a\:306b\:539f\:56e0\:3092\:8a00\:3046\:3002 *)
@@ -8366,7 +8426,7 @@ iExtractResultFromStreamJson[outFile_String] :=
    ClaudeRuntime \:306e iStepCollectProviderResult \:304b\:3089\:547c\:3070\:308c\:308b\:3002 *)
 iExtractResultFromStreamJsonText[raw_String] :=
   Module[{lines, textDeltas = {}, resultText = None, j, evt, delta,
-          stderrLines = {}},
+          stderrLines = {}, apiErrText = None, resultStr = None},
     If[raw === "", Return[""]];
     lines = Select[StringSplit[raw, "\n"], StringLength[#] > 0 &];
     Do[
@@ -8376,6 +8436,10 @@ iExtractResultFromStreamJsonText[raw_String] :=
           AppendTo[stderrLines, line]];
         Continue[]];
       Which[
+        j["type"] === "result" && StringQ[iStreamJsonResultErrorText[j]],
+          apiErrText = iStreamJsonResultErrorText[j],
+        j["type"] === "result" && StringQ[Lookup[j, "result", None]],
+          resultStr = j["result"],
         j["type"] === "result" && AssociationQ[Lookup[j, "result", None]],
           Module[{res = j["result"], content},
             content = Lookup[res, "content", {}];
@@ -8391,8 +8455,10 @@ iExtractResultFromStreamJsonText[raw_String] :=
       ],
       {line, lines}];
     Which[
+      StringQ[apiErrText] && textDeltas === {}, apiErrText,
       StringQ[resultText] && resultText =!= "", resultText,
       Length[textDeltas] > 0, StringJoin[textDeltas],
+      StringQ[resultStr] && StringTrim[resultStr] =!= "", resultStr,
       (* 2026-08-30: \:30d5\:30a1\:30a4\:30eb\:7248\:3068\:540c\:3058\:6551\:6e08\:3002LM Studio \:975e\:540c\:671f\:7d4c\:8def\:306f
          \:3053\:3061\:3089\:3092\:901a\:308b (collectProvider \[RightArrow] iExtractResultFromStreamJsonText)\:3002 *)
       True,
@@ -9496,7 +9562,10 @@ iTeXToBoxes[tex_String] :=
   Module[{cleaned, expr, boxes},
     cleaned = iTeXPreprocess[tex];
     expr = Quiet @ Check[ToExpression[cleaned, TeXForm, HoldComplete], $Failed];
-    If[expr === $Failed, Return[$Failed]];
+    (* TeX として読めないと HoldComplete[$Failed] が返ることがある。これを通すと
+       "$Failed" という boxes が本文に出る (2026-10-01 result.nb)。 *)
+    If[!MatchQ[expr, HoldComplete[_]] || expr === HoldComplete[$Failed],
+      Return[$Failed]];
     boxes = Quiet @ Check[
       expr /. HoldComplete[e_] :> MakeBoxes[e, StandardForm],
       $Failed];
@@ -9528,13 +9597,23 @@ iTeXEquationToBoxes[tex_String] :=
 
 iTeXMathToCell[text_String, style_String] :=
   Module[{preprocessed, parts, result = {}, tex, boxes},
-    (* $$...$$ \[RightArrow] $...$ \:306b\:6b63\:898f\:5316\:ff08\:6539\:884c\:3092\:542b\:3080\:30b1\:30fc\:30b9\:306b\:3082\:5bfe\:5fdc\:ff09 *)
+    (* $$...$$ \[RightArrow] $...$ \:306b\:6b63\:898f\:5316\:ff08\:6539\:884c\:3092\:542b\:3080\:30b1\:30fc\:30b9\:306b\:3082\:5bfe\:5fdc\:ff09\:3002
+       \:5185\:5074\:306e\:524d\:5f8c\:7a7a\:767d\:306f\:843d\:3068\:3059 (\:4e0b\:306e\:533a\:5207\:308a\:898f\:5247\:304c\:7a7a\:767d\:306b\:63a5\:3057\:305f $ \:3092\:8a8d\:3081\:306a\:3044\:305f\:3081)\:3002 *)
     preprocessed = StringReplace[text,
-      RegularExpression["(?s)\\$\\$(.+?)\\$\\$"] :> "$" <> "$1" <> "$"];
-    (* $...$ \:3092\:533a\:5207\:308a\:3068\:3057\:3066\:5206\:5272\:ff08\:6539\:884c\:3092\:542b\:3080\:30b1\:30fc\:30b9\:306b\:3082\:5bfe\:5fdc\:ff09 *)
+      RegularExpression["(?s)\\$\\$(.+?)\\$\\$"] :>
+        "$" <> StringTrim["$1"] <> "$"];
+    (* $...$ を区切りとして分割する。2026-10-01: 応答本文はバッククォートを
+       外してから (cleanMarkdown) ここへ来るので、`$ClaudeModelCapabilities` …
+       `$iPaletteModelsByProvider` の 2 つの $ が数式の対と誤認され、間の文章と
+       コードの説明が "$Failed" 1 個に置き換わっていた (result.nb)。pandoc の
+       tex_math_dollars と同じく、開きの $ の直後と閉じの $ の直前は空白不可・
+       閉じの直後に数字不可とし、さらに閉じの直後の英字/_/$ (記号名 $Foo の
+       続き) と空行をまたぐ対も認めない。\$ (エスケープ) と $$ の片割れも除く。 *)
     parts = StringSplit[preprocessed,
-      RegularExpression["(?s)\\$([^$]+?)\\$"] :> "$TEXMATH$" <> "$1"];
-    If[Length[parts] === 1 && !StringContainsQ[preprocessed, "$"],
+      RegularExpression[
+        "(?<![\\\\$])\\$(?=[^\\s$])((?:[^$\\n]|\\n(?![ \\t]*\\n))*?[^\\s$])\\$(?![0-9A-Za-z_$])"] :>
+        "$TEXMATH$" <> "$1"];
+    If[!AnyTrue[parts, StringStartsQ[#, "$TEXMATH$"] &],
       (* LaTeX \:6570\:5f0f\:306a\:3057 \[RightArrow] \:901a\:5e38\:306e\:30c6\:30ad\:30b9\:30c8\:30bb\:30eb *)
       Return[Cell[text, style]]];
     Do[
@@ -11093,6 +11172,19 @@ iClassifyEmptyResponseMessage[oFile_String] :=
   Module[{raw = Quiet @ Check[
       Block[{$CharacterEncoding = "UTF-8"}, Import[oFile, "Text"]], ""]},
     If[!StringQ[raw], raw = ""];
+    (* 2026-09-24: result 行が API エラー (4xx 等) ならその文言を返す *)
+    With[{apiErr = Module[{rl = SelectFirst[Reverse[StringSplit[raw, "\n"]],
+                StringContainsQ[#, "\"type\":\"result\""] &, None], j},
+              j = If[StringQ[rl],
+                Quiet @ Check[Developer`ReadRawJSONString[rl], None], None];
+              If[AssociationQ[j] &&
+                 ! StringContainsQ[raw, "\"api_error_status\":529" |
+                     "\"error\":\"overloaded\"" | "\"status\":\"rejected\"" |
+                     "\"status\":\"blocked\""] &&
+                 ! StringContainsQ[raw, "hit your limit" | "usage limit",
+                     IgnoreCase -> True],
+                iStreamJsonResultErrorText[j], None]]},
+      If[StringQ[apiErr], Return[apiErr, Module]]];
     Which[
       (* 一時的なサーバ過負荷: 利用制限ではない *)
       StringContainsQ[raw,
@@ -18326,7 +18418,11 @@ iWriteExternalLanguageCell[nb_NotebookObject, code_String,
 $iLongRunningPatterns = {
   "GitHubRefreshAndCommit", "GitHubPushAll", "GitHubCommit",
   "GitHubCreatePullRequest", "GitHubMergePullRequest",
-  "GitHubSubmitPullRequest"
+  "GitHubSubmitPullRequest",
+  (* 2026-09-30: github.wl \:306e\:5916\:90e8\:30d5\:30a9\:30eb\:30c0\:7528 (GitHubFolderCommit \:306f
+     GitHubFolderCommitPreview \:306b\:3082\:5f53\:305f\:308b) \:3068\:30ea\:30dd\:30b8\:30c8\:30ea\:4f5c\:6210\:3002
+     "GitHubCommit" \:306e\:90e8\:5206\:4e00\:81f4\:3067\:306f GitHubFolderCommit \:3092\:62fe\:3048\:306a\:3044\:3002 *)
+  "GitHubFolderCommit", "GitHubFolderCreateRepository", "GitHubCreateRepository"
 };
 
 iIsLongRunningCode[code_String] :=
@@ -36706,7 +36802,47 @@ iILaunchChunkAsync[chunk_Association, prompt_String,
    \:623b\:308a\:5024: <|"status"->"Running"|"Done"|"Failed",
              "result"->..., "error"->...|>
    \[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine]\[HorizontalLine] *)
+(* 2026-10-02: 非同期 LLM 呼び出し (LLMGraph DAG / チャンクジョブ) の最終結果を
+   SIEM に記録する共通点。失敗は全 provider、成功は Codex だけ emit する
+   (CLI / API の成功は stream-json の result 行・API 応答の側で既に emit される
+   ので二重計上しない)。以前は失敗がどこにも記録されず、Codex は成功も記録され
+   なかったため、SystemDoctor が「記録の空白」も「Codex の全滅」も検知できなかった。
+   呼び手は Running 以外が返った時点で runState を手放すので、最終結果につき
+   1 回だけ通る。 *)
 iICollectChunkResult[runState_Association, timeout_: Automatic] :=
+  Module[{r = iICollectChunkResultCore[runState, timeout]},
+    If[AssociationQ[r] && MemberQ[{"Done", "Failed"}, Lookup[r, "status"]],
+      Quiet @ Check[iLLMCallRecordAsyncOutcome[runState, r], Null]];
+    r];
+
+iLLMCallRecordAsyncOutcome[runState_Association, r_Association] :=
+  Module[{pk, ok = (r["status"] === "Done"), err, dur},
+    pk = ToLowerCase @ ToString @ Lookup[runState, "providerKind",
+      Lookup[runState, "provider", "claudecode"]];
+    err = ToString[Lookup[r, "error", ""]];
+    dur = Round[1000 (AbsoluteTime[] - Lookup[runState, "startTime", AbsoluteTime[]])];
+    Which[
+      iCodexProviderQ[pk],
+        iCodexRecordOutcome[If[ok, "success", "error"],
+          If[ok, None, iCodexClassifyFailure[err]],
+          <|"Via" -> "async", "DurationMs" -> dur|>],
+      ! ok,
+        iClaudeDiagEmit["LLMCall", <|
+          "Provider" -> pk,
+          "Model" -> ToString[Lookup[runState, "lmstudioModel",
+            Lookup[runState, "model", "unknown"]]],
+          "TaskClass" -> If[StringQ[$iClaudeCurrentTaskClass],
+            $iClaudeCurrentTaskClass, "general"],
+          "Outcome" -> "error",
+          "FailureClass" -> Which[
+            StringStartsQ[err, "Timeout"], "Timeout",
+            StringStartsQ[err, "Output file not found"], "NoOutput",
+            StringContainsQ[err, "429" | "rate limit" | "usage limit", IgnoreCase -> True],
+              "RateLimited",
+            True, "Error"],
+          "DurationMs" -> dur, "Via" -> "async"|>, "warn"]]];
+
+iICollectChunkResultCore[runState_Association, timeout_: Automatic] :=
   Module[{proc, outFile, elapsed, resolvedTimeout, raw, result},
     proc    = Lookup[runState, "proc", None];
     outFile = Lookup[runState, "outFile", ""];
@@ -39877,6 +40013,7 @@ ClaudeCode`RefreshLMStudioPaletteModels[] := (
 (* True \:306b\:3059\:308b\:3068 ClaudeEval \:304c expression-proposal loop (runtime) \:7d4c\:7531\:3067\:52d5\:4f5c\:3059\:308b *)
 If[!ValueQ[$UseClaudeRuntime], $UseClaudeRuntime = False];
 If[!ValueQ[$ClaudeLastRuntimeId], $ClaudeLastRuntimeId = None];
+If[!ValueQ[$ClaudeRuntimeDisplayHook], $ClaudeRuntimeDisplayHook = None];
 
 (* \[HorizontalLine]\[HorizontalLine] ClaudeEval dispatch \:30b9\:30a4\:30c3\:30c1 (Phase 33 Task 5) \[HorizontalLine]\[HorizontalLine]
    "Single" \:65e2\:5b9a\:3001\:5f93\:6765\:306e ClaudeEval \:52d5\:4f5c
@@ -42147,6 +42284,20 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                 "TimeConstraint" -> effectiveTimeout,
                 "ApprovalMode" -> userApprovalMode]];
             iClaudeFreezeLog["exec-end", ""];
+            (* 2026-10-01: 定義の無い関数の呼び出しがそのまま返ったら成功扱いに
+               しない (iRuntimeUndefinedCallInfo)。Error 文字列は ClaudeRuntime の
+               ClaudeClassifyFailure が "UndefinedFunction" として再試行可能に分類し、
+               修復ターンで LLM に理由が伝わる。 *)
+            If[AssociationQ[iExecR] && TrueQ[Lookup[iExecR, "Success", False]],
+              With[{undef = iRuntimeUndefinedCallInfo[heldExpr,
+                  Lookup[iExecR, "RawResult", None]]},
+                If[AssociationQ[undef],
+                  iClaudeFreezeLog["exec-undefined-function", undef["Symbol"]];
+                  iExecR = Join[iExecR, <|
+                    "Success"           -> False,
+                    "ReasonClass"       -> "UndefinedFunction",
+                    "UndefinedFunction" -> undef["Symbol"],
+                    "Error"             -> undef["Message"]|>]]]];
             (* 表示専用メタ: メインカーネルで同期評価した結果だけを
                ノートブックへの生表示の対象にする (非同期結果には付かない)。
                RedactResult (NBRedactExecutionResult) はこの 2 キーを読まない。 *)
@@ -43117,6 +43268,101 @@ ClaudeApproveProposal[runtimeId_String] :=
     decision
   ];
 
+(* ═════════════════════════════════════════════════
+   ClaudeRuntimeDecide — ノートブック外の UI から承認 / 拒否 / 中止 (2026-09-22)
+
+   ResoniteRealtime のタブレット (ワールド内の承認ボタン) が使う。ノートブックの承認セルの
+   ボタンと同じ手順 (runtime の再開 → iRuntimeDisplayResult で結果セル、拒否なら通知 + Job 終了)
+   をダイアログ無しで行う。Notebook / Tag / JobId は runtime の Metadata から取る。
+   ═════════════════════════════════════════════════ *)
+
+ClaudeRuntimeDecide[runtimeId_String, decision_] :=
+  Module[{rt, meta, nb, tag, jd, display, endJob, notice, clearApprovalUI},
+    rt = Quiet @ Check[ClaudeRuntime`Private`$iClaudeRuntimes[runtimeId], None];
+    If[!AssociationQ[rt], Return["NotFound"]];
+    meta = Lookup[rt, "Metadata", <||>];
+    If[!AssociationQ[meta], meta = <||>];
+    nb  = Lookup[meta, "Notebook", None];
+    tag = Lookup[meta, "Tag", iSessionTag[]];
+    jd  = Lookup[meta, "JobId", ""];
+    display = Function[
+      If[Head[nb] === NotebookObject &&
+         AssociationQ[Quiet @ Check[ClaudeRuntime`Private`$iClaudeRuntimes[runtimeId], None]],
+        Quiet @ Check[iRuntimeDisplayResult[nb, tag, runtimeId], Null];
+        Quiet[CurrentValue[nb, WindowStatusArea] = ""]]];
+    endJob = Function[
+      If[StringQ[jd] && jd =!= "",
+        $iJobActiveNb = None;
+        Quiet @ Check[NBAccess`NBEndJob[jd], Null]];
+      If[Head[nb] === NotebookObject, Quiet[CurrentValue[nb, WindowStatusArea] = ""]]];
+    (* 2026-09-23: 通知はジョブのアンカー直後 (結果セルと同じ場所) に書く。従来は現在の選択位置に
+       書かれ、末尾の承認 UI の下に取り残された。 *)
+    notice = Function[{msg},
+      If[Head[nb] === NotebookObject,
+        If[StringQ[jd] && jd =!= "", Quiet @ Check[NBAccess`NBJobMoveToAnchor[jd], Null]];
+        Quiet @ Check[NBAccess`NBWritePrintNotice[nb, msg, RGBColor[0.8, 0.5, 0]], Null]]];
+    (* 2026-09-23 (Resonite Tablet.nb): ノートブック側の承認 UI (❓ 通知 / NeedsApproval セル / 承認・中止ボタン、
+       CellTags claudecode-approval-<rid>) はタブレットから承認しても消えず、しかも承認後の結果セルは
+       アンカー直後 (= 承認 UI より上) に挿入されるため、ノートブックの末尾に「2 度目の承認要求」に見える
+       押せるボタンが残った。ユーザーがそれを押すと ClaudeApproveProposal は NotAwaitingApproval で何も起きない。
+       タブレットで決めたら、ノートブックの承認 UI はここで消す (ボタン本体の decided フラグは
+       DynamicModule の中なので外からは倒せない)。 *)
+    clearApprovalUI = Function[
+      If[Head[nb] === NotebookObject,
+        Quiet @ Check[NBAccess`NBDeleteCellsByTag[nb, "claudecode-approval-" <> runtimeId], Null]]];
+    If[decision === "Cancel",
+      clearApprovalUI[];
+      Quiet @ Check[ClaudeRuntime`ClaudeRuntimeCancel[runtimeId], Null];
+      notice[iL["\:26d4 ユーザーが実行を中止しました (ワールド内タブレット)。",
+                "\:26d4 User cancelled the run (in-world tablet)."]];
+      endJob[];
+      Return["Cancelled"]];
+    If[rt["Status"] =!= "AwaitingApproval", Return["NotAwaiting"]];
+    Which[
+      decision === "Approve",
+        clearApprovalUI[];
+        notice[iL["\:2705 ワールド内タブレットで承認しました。runtime が実行します。",
+                  "\:2705 Approved from the in-world tablet. The runtime executes it."]];
+        Quiet @ ClaudeRuntime`ClaudeApproveProposal[runtimeId];
+        display[];
+        "Approved",
+      MatchQ[decision, {"ApproveTimeout", _}],
+        clearApprovalUI[];
+        notice[iL["\:2705 ワールド内タブレットで承認しました (タイムアウト " <> ToString[decision[[2]]] <> " 秒)。",
+                  "\:2705 Approved from the in-world tablet (timeout " <> ToString[decision[[2]]] <> "s)."]];
+        Quiet @ ClaudeRuntime`ClaudeApproveProposalWithTimeout[runtimeId, decision[[2]]];
+        display[];
+        "Approved",
+      True,
+        clearApprovalUI[];
+        Quiet @ ClaudeRuntime`ClaudeDenyProposal[runtimeId];
+        notice[iL["\:26d4 ユーザーが式の実行を拒否しました (ワールド内タブレット)。",
+                  "\:26d4 User denied the proposed expression (in-world tablet)."]];
+        endJob[];
+        "Denied"]
+  ];
+
+(* 2026-09-23: ノートブックの承認ボタンが、既に処理済みの承認 (タブレットで承認済み / 実行中 / 完了) に
+   押されたときの案内。従来は ClaudeApproveProposal が NotAwaitingApproval を返しても無言で、
+   その上 iRuntimeDisplayResult が走って結果セルが二重に書かれ得た。処理済みなら通知だけ書いて True を返す。 *)
+iRuntimeNotAwaitingNotice[nb_, rid_String, result_] :=
+  Module[{st, status},
+    If[!MatchQ[result, Missing["NotAwaitingApproval"]], Return[False]];
+    st = Quiet @ Check[ClaudeRuntime`Private`$iClaudeRuntimes[rid], None];
+    status = If[AssociationQ[st], ToString[Lookup[st, "Status", "?"]], "?"];
+    If[Head[nb] === NotebookObject,
+      Quiet @ Check[
+        NBAccess`NBWritePrintNotice[nb,
+          iL["\:2139\:fe0f この承認は既に処理済みです (runtime の状態: " <> status <>
+               ")。ワールド内タブレット等で承認済みか、実行が進行中です。結果はこのノートブックに表示されます。",
+             "\:2139\:fe0f This approval was already handled (runtime status: " <> status <>
+               "). It was approved elsewhere (e.g. the in-world tablet) or is still running; results appear in this notebook."],
+          GrayLevel[0.4]],
+        Null]];
+    True];
+iRuntimeNotAwaitingNotice[___] := False;
+
+
 (* \:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550\:2550
    Phase 13: $UseClaudeRuntime \:6a4b\:6e21\:3057
    
@@ -43631,6 +43877,52 @@ iRuntimeEmbeddedPrivacy[raw_] :=
 
 iRuntimeClipPrivacy[x_] := If[NumericQ[x], N[Clip[x, {0., 1.}]], 1.];
 
+(* 2026-10-01: 提案の呼び出しが「定義の無い関数」のまま返ったかを見る。
+   ClaudePackageManager.wl が未ロードだった環境で ClaudeUpdatePackage[...] が
+   Global`ClaudeUpdatePackage[...] のまま返り、runtime は「完了」と表示し、
+   継続ターンの LLM も「承認待ちで止まった」と誤診して同じ提案を繰り返した。
+   判定は狭く取る: 結果の頭部が System` 以外の記号で、値・属性・メッセージ
+   (usage) のどれも持たず、かつ提案コード自身がその記号を関数として呼んでいる。
+   記号計算の結果 (DSolve の y[x] 等) は頭部が System` の関数なので当たらない。
+   Module の局所記号は Temporary 属性を持つので当たらない。
+   該当すれば <|"Symbol" -> 完全名, "Message" -> LLM へ返す説明|>、他は None。 *)
+iRuntimeUndefinedCallInfo[held_HoldComplete, result_] :=
+  Module[{h, name, full, cands},
+    h = Quiet @ Check[Head[result], None];
+    If[!MatchQ[h, _Symbol], Return[None]];
+    (* Context / Attributes / DownValues 等は HoldAll(First) なので、局所変数 h
+       ではなく記号そのものを With で埋め込んで渡す *)
+    full = With[{s = h}, Context[s]] <> SymbolName[h];
+    If[StringStartsQ[full, "System`"], Return[None]];
+    With[{s = h},
+      If[Attributes[s] =!= {} || Messages[s] =!= {} ||
+         OwnValues[s] =!= {} || DownValues[s] =!= {} || SubValues[s] =!= {} ||
+         UpValues[s] =!= {} || FormatValues[s] =!= {} || NValues[s] =!= {} ||
+         DefaultValues[s] =!= {},
+        Return[None, Module]];
+      If[FreeQ[held, HoldPattern[s[___]]], Return[None, Module]]];
+    name = SymbolName[h];
+    (* 同名で定義を持つ記号が別文脈にあれば添える (読込順や修飾漏れの手掛かり) *)
+    cands = Take[Select[
+      (# <> name) & /@ Select[Contexts[],
+        !StringContainsQ[#, "Private`" | "Dump`"] &],
+      # =!= full && Names[#] =!= {} &&
+        TrueQ[Quiet @ Check[ToExpression[#, InputForm,
+          Function[s, DownValues[s] =!= {} || SubValues[s] =!= {}, HoldAll]],
+          False]] &], UpTo[3]];
+    <|"Symbol" -> full,
+      "Message" -> "UndefinedFunction: " <> name <> " (" <> full <>
+        ") has no definition in this kernel, so the call returned " <>
+        "unevaluated and nothing was executed. The package that defines it " <>
+        "is probably not loaded, or the name is wrong. Do not report this " <>
+        "step as done." <>
+        If[cands =!= {},
+          " A defined symbol with the same name exists: " <>
+            StringRiffle[cands, ", "] <>
+            " (call it fully qualified, or load its package first).",
+          ""]|>];
+iRuntimeUndefinedCallInfo[___] := None;
+
 (* 埋め込みラベルの走査に上限を付ける: packed array にはラベルが入り得ないので
    走査しない (Cases が unpack して膨らむのを避ける)。時間切れは fail-closed。 *)
 iRuntimeEmbeddedPrivacySafe[raw_] :=
@@ -43701,6 +43993,10 @@ iRuntimeRecordDisplayResult[rid_String, turn_, proposal_,
     If[Length[$iRuntimeDisplayStore] > $iRuntimeDisplayStoreMaxRuntimes,
       $iRuntimeDisplayStore =
         Take[$iRuntimeDisplayStore, -$iRuntimeDisplayStoreMaxRuntimes]];
+    (* 2026-09-22: 外部 UI (Resonite タブレット等) が生の結果を拾う seam *)
+    If[$ClaudeRuntimeDisplayHook =!= None,
+      Quiet @ Check[$ClaudeRuntimeDisplayHook[<|"RuntimeId" -> rid, "Turn" -> turn,
+        "Raw" -> raw, "Privacy" -> priv, "Code" -> code|>], Null]];
     Null];
 iRuntimeRecordDisplayResult[___] := Null;
 
@@ -43731,17 +44027,48 @@ iRuntimeTakeDisplayEntryForCode[___] := None;
    書き込み関所 (NBSetWriteConfidential) の自動スタンプに任せないのは、
    View の boxes 内部に TaggingRules が 1 つでもあると関所がスタンプを
    見送る (FreeQ 判定) ため。関所の現在値は下回らないように合成する。 *)
-iRuntimeBuildDisplayCell[nb_, entry_Association] :=
-  Module[{raw = Lookup[entry, "Raw", Null], boxes, pl},
+(* 大きい結果の縮退 (2026-09-22): 以前は boxes が $iRuntimeDisplayMaxBoxBytes を超えると
+   Shallow[raw, {4, 30}] に落としていたが、Graphics の中身が Skeleton に置き換わって
+   GraphicsBox が壊れ、FE が「GraphicsBox の書式が不正」「GraphicsComplexBox は 1 個の引数で
+   呼ばれました」を出してピンクの空セルになった (Resonite タブレットの ContourPlot 60x60 で実測)。
+   図を含む式はラスタライズして画像にする (見た目を保ったまま小さくなる)。それも駄目なときだけ
+   Shallow に落とし、Shallow が GraphicsBox の中に Skeleton を残す場合は出さずに注記にする。 *)
+iRuntimeGraphicsLikeQ[raw_] :=
+  !FreeQ[raw, _Graphics | _Graphics3D | _Image | _Legended | _Graph | _GeoGraphics |
+    _Image3D | _Dataset];
+
+iRuntimeDisplayBoxes[raw_] :=
+  Module[{boxes, img},
     boxes = If[ByteCount[raw] > $iRuntimeDisplayMaxRawBytes,
       $Failed,
       Quiet @ Check[
         TimeConstrained[ToBoxes[raw, StandardForm], 15, $Failed], $Failed]];
-    If[boxes === $Failed || ByteCount[boxes] > $iRuntimeDisplayMaxBoxBytes,
-      boxes = Quiet @ Check[
-        TimeConstrained[ToBoxes[Shallow[raw, {4, 30}], StandardForm], 10,
-          $Failed],
-        $Failed]];
+    If[boxes =!= $Failed && ByteCount[boxes] <= $iRuntimeDisplayMaxBoxBytes,
+      Return[boxes]];
+    If[iRuntimeGraphicsLikeQ[raw] && TrueQ[$Notebooks],
+      (* 96 dpi 固定 + 幅 1000 px 上限 + Byte 型: 画面の DPI 倍率で 600 pt の図が 1410 px /
+         約 10 MB の RasterBox になり、元の boxes より重くなっていた (2026-09-22 実測) *)
+      img = Quiet @ Check[
+        TimeConstrained[Rasterize[raw, "Image", ImageResolution -> 96], 30, $Failed], $Failed];
+      If[ImageQ[img],
+        If[ImageDimensions[img][[1]] > 1000, img = ImageResize[img, 1000]];
+        img = Image[img, "Byte"];
+        boxes = Quiet @ Check[ToBoxes[img, StandardForm], $Failed];
+        If[boxes =!= $Failed, Return[boxes]]]];
+    boxes = Quiet @ Check[
+      TimeConstrained[ToBoxes[Shallow[raw, {4, 30}], StandardForm], 10,
+        $Failed],
+      $Failed];
+    If[boxes =!= $Failed && !FreeQ[boxes, Skeleton] &&
+       !FreeQ[boxes, _GraphicsBox | _Graphics3DBox],
+      boxes = Quiet @ Check[ToBoxes[
+        Style["(" <> ToString[Head[raw]] <> ": " <> ToString[ByteCount[raw]] <>
+          " bytes, too large to display)", Italic, GrayLevel[0.4]], StandardForm], $Failed]];
+    boxes];
+
+iRuntimeBuildDisplayCell[nb_, entry_Association] :=
+  Module[{raw = Lookup[entry, "Raw", Null], boxes, pl},
+    boxes = iRuntimeDisplayBoxes[raw];
     If[boxes === $Failed, Return[None]];
     pl = Max[
       iRuntimeClipPrivacy[Lookup[entry, "Privacy", 1.]],
@@ -43932,7 +44259,8 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
                         result = Quiet @ ClaudeRuntime`ClaudeApproveProposalWithTimeout[
                           rid, expSecVal];
                         st2 = ClaudeRuntime`Private`$iClaudeRuntimes[rid];
-                        If[AssociationQ[st2],
+                        If[AssociationQ[st2] &&
+                           !iRuntimeNotAwaitingNotice[nbObj, rid, result],
                           iRuntimeDisplayResult[nbObj, tg, rid]];
                         Quiet[CurrentValue[nbObj, WindowStatusArea] = ""]
                       ],
@@ -43958,7 +44286,8 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
                         result = Quiet @ ClaudeRuntime`ClaudeApproveProposalWithTimeout[
                           rid, Infinity];
                         st2 = ClaudeRuntime`Private`$iClaudeRuntimes[rid];
-                        If[AssociationQ[st2],
+                        If[AssociationQ[st2] &&
+                           !iRuntimeNotAwaitingNotice[nbObj, rid, result],
                           iRuntimeDisplayResult[nbObj, tg, rid]];
                         Quiet[CurrentValue[nbObj, WindowStatusArea] = ""]
                       ],
@@ -44038,7 +44367,9 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
                           Module[{result, st2},
                             result = Quiet @ ClaudeRuntime`ClaudeApproveProposal[rid];
                             st2 = ClaudeRuntime`Private`$iClaudeRuntimes[rid];
-                            If[AssociationQ[st2],
+                            (* 2026-09-23: 処理済みの承認 (タブレットで承認済み等) なら案内だけ *)
+                            If[AssociationQ[st2] &&
+                               !iRuntimeNotAwaitingNotice[nbObj, rid, result],
                               iRuntimeDisplayResult[nbObj, tg, rid]];
                             Quiet[CurrentValue[nbObj, WindowStatusArea] = ""]
                           ],
@@ -44109,7 +44440,7 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
     
     (* \[HorizontalLine]\[HorizontalLine] \:5931\:6557\:6642\:306e\:8868\:793a \[HorizontalLine]\[HorizontalLine] *)
     If[status === "Failed",
-      Module[{failDetail = Lookup[st, "LastFailure", <||>], errMsg,
+      Module[{failDetail = Lookup[st, "LastFailure", <||>], errMsg, baseErrMsg,
               isTimeout, isSyntaxFail},
         If[StringQ[jobId] && jobId =!= "",
           NBAccess`NBJobMoveToAnchor[jobId];
@@ -44117,6 +44448,14 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
         errMsg = Lookup[failDetail, "ReasonClass",
           Lookup[failDetail, "Error",
             iL["\:4e0d\:660e", "Unknown"]]];
+        (* 2026-09-24: ReasonClass だけでは「TransportTransient」等しか出ず
+           原因が分からない。Error 本文 (API エラー文言など) があれば併記する。 *)
+        baseErrMsg = errMsg;
+        If[AssociationQ[failDetail] && StringQ[errMsg] &&
+           StringQ[Lookup[failDetail, "Error", None]] &&
+           Lookup[failDetail, "Error"] =!= errMsg,
+          errMsg = errMsg <> "\n" <>
+            StringTake[Lookup[failDetail, "Error"], UpTo[2000]]];
         NBAccess`NBWritePrintNotice[nb,
           iL["\:26a0\:fe0f ClaudeRuntime: \:5931\:6557 - ",
              "\:26a0\:fe0f ClaudeRuntime: Failed - "] <> errMsg,
@@ -44137,7 +44476,7 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
         
         (* Phase 29 (2026-05-13): \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:6642\:306f\:5b9f\:884c\:3055\:308c\:305f\:30b3\:30fc\:30c9\:3068\:8abf\:67fb\:30dc\:30bf\:30f3\:3092\:8868\:793a\:3002
            Imai \:5148\:751f\:6307\:91dd: \:300c\:77e5\:308a\:305f\:3044\:306e\:306f\:5b9f\:969b\:306b\:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:3057\:305f\:30b3\:30fc\:30c9\:300d *)
-        isTimeout = StringQ[errMsg] && StringContainsQ[errMsg, "timed out"];
+        isTimeout = StringQ[baseErrMsg] && StringContainsQ[baseErrMsg, "timed out"];
         (* 2026-08-29: \:69cb\:6587\:4fee\:5fa9\:304c\:4e88\:7b97\:5207\:308c\:3057\:305f\:5834\:5408\:3082\:540c\:3058\:6271\:3044\:306b\:3059\:308b\:3002
            \:4fee\:5fa9\:30eb\:30fc\:30d7\:3092\:5165\:308c\:308b\:3068\:3001\:76f4\:3089\:306a\:304b\:3063\:305f\:3068\:304d\:306b Failed \:3067\:65e9\:671f
            return \:3059\:308b\:305f\:3081\:3001\:5f93\:6765\:306f\:8b66\:544a\:4ed8\:304d\:3067\:6b8b\:3063\:3066\:3044\:305f\:30b3\:30fc\:30c9\:3055\:3048
@@ -45997,10 +46336,25 @@ iCodexTomlPath[___] := "";
      "GlobScanMaxDepth"   integer (computed from real root depth)
      "ProjectDocMaxBytes" default 65536
      "NetworkEnabled"     default False
+     "WindowsSandbox"     Automatic (Windows: $ChatgptCodexWindowsSandbox,
+                          else none) | backend string | None
 *)
+(* 2026-10-02: Windows のサンドボックス方式。Codex CLI 0.153 以降、非昇格
+   (unelevated) は読取制限を強制できず、昇格 (elevated) は :root 読取を前提に
+   するため、":minimal" 読取の nbaccess-codex プロファイルは拒否される。
+   AppContainer ベースの mxc だけが許可リスト型の読取制限を守れる
+   (ClaudeCodexSandboxSetup の自己テストで確認する)。Windows 以外は None。 *)
+iCodexWindowsSandboxMode[] :=
+  If[$OperatingSystem =!= "Windows", None,
+    If[StringQ[$ChatgptCodexWindowsSandbox] &&
+        StringLength[$ChatgptCodexWindowsSandbox] > 0,
+      $ChatgptCodexWindowsSandbox, "mxc"]];
+
 iCodexPermissionConfigText[spec_Association] :=
   Module[{profile, policy, model, roots, depth, docMax, netEnabled,
-          rootsClean, denyFor, sens, lines},
+          rootsClean, denyFor, sens, lines, winSandbox},
+    winSandbox  = Replace[Lookup[spec, "WindowsSandbox", Automatic],
+      Automatic :> iCodexWindowsSandboxMode[]];
     profile     = Lookup[spec, "ProfileName", "nbaccess-codex"];
     policy      = Lookup[spec, "ApprovalPolicy", "never"];
     model       = Lookup[spec, "Model", Automatic];
@@ -46020,6 +46374,8 @@ iCodexPermissionConfigText[spec_Association] :=
        "project_doc_max_bytes = " <> ToString[docMax],
        "approval_policy = \"" <> policy <> "\""},
       If[StringQ[model], {"model = \"" <> model <> "\""}, {}],
+      If[StringQ[winSandbox],
+        {"", "[windows]", "sandbox = \"" <> winSandbox <> "\""}, {}],
       {"",
        "[permissions." <> profile <> ".filesystem]",
        "\":minimal\" = \"read\"",
@@ -46162,6 +46518,600 @@ iCodexResolveExe[] :=
   If[StringQ[$ChatgptCodexExe] && StringLength[$ChatgptCodexExe] > 0,
     $ChatgptCodexExe,
     "codex"];
+
+(* ------------------------------------------------------------------
+   2026-10-02: Codex の Windows サンドボックス (mxc) を PC ごとに確認する。
+
+   Codex CLI 0.153 以降、Windows では nbaccess-codex プロファイル
+   (":minimal" 読取+許可ルート+deny glob) を、非昇格サンドボックスは
+   「読取制限を強制できない」、昇格サンドボックスは「:root 読取が必要」として
+   拒否するようになり、claudecode からの Codex 実行が全部起動前に失敗していた。
+   AppContainer ベースの mxc だけが許可リスト型の読取制限を守れる。ただし
+   Windows のビルドや CLI の版で使えない場合があるので、PC ごと・CLI の版ごとに
+   自己テスト (ClaudeCodexSandboxSetup: `codex sandbox` でローカルコマンドだけを
+   動かす。モデルには何も送らない) が通るまで Codex を起動しない (fail-closed)。
+   未確認の PC では ClaudeCodexSandboxGate がアラートと「確認して有効化」ボタンを
+   出す。結果は作業ベース ($OpenaiWorkingDirectory、PC ローカル) の JSON に
+   $MachineName をキーにして保存する (作業ベースを共有フォルダにしても PC ごと)。
+   ------------------------------------------------------------------ *)
+$iCodexSandboxStateFileName = "nbaccess_codex_sandbox_state.json";
+If[!AssociationQ[$iCodexCLIVersionCache], $iCodexCLIVersionCache = <||>];
+If[!NumericQ[$iCodexSandboxAlertLast], $iCodexSandboxAlertLast = 0];
+
+iCodexSandboxStateFile[] :=
+  FileNameJoin[{iCodexResolveWorkingBase[], $iCodexSandboxStateFileName}];
+
+iCodexCmdPrefix[] := If[$OperatingSystem === "Windows", {"cmd", "/c"}, {}];
+
+(* "codex-cli 0.159.3" (10 分キャッシュ。CLI を更新すると版が変わり再確認になる) *)
+iCodexCLIVersion[] :=
+  Module[{exe = iCodexResolveExe[], c, r, out, v},
+    c = Lookup[$iCodexCLIVersionCache, exe, None];
+    If[AssociationQ[c] && AbsoluteTime[] - c["At"] < 600,
+      Return[c["Version"]]];
+    r = Quiet @ Check[
+      TimeConstrained[
+        RunProcess[Join[iCodexCmdPrefix[], {exe, "--version"}], All],
+        60, $TimedOut],
+      $Failed];
+    If[! AssociationQ[r] || r["ExitCode"] =!= 0,
+      Return[Missing["CodexNotFound"]]];
+    out = StringTrim @ ToString[Lookup[r, "StandardOutput", ""]];
+    v = First[StringCases[out,
+      RegularExpression["codex-cli\\s+\\S+"]], out];
+    If[! StringQ[v] || v === "", Return[Missing["CodexNotFound"]]];
+    $iCodexCLIVersionCache[exe] = <|"Version" -> v, "At" -> AbsoluteTime[]|>;
+    v];
+
+iCodexSandboxReadState[] :=
+  Module[{f = iCodexSandboxStateFile[], a},
+    If[! FileExistsQ[f], Return[<||>]];
+    a = Quiet @ Check[
+      ImportString[ByteArrayToString[ReadByteArray[f], "UTF-8"], "RawJSON"],
+      <||>];
+    If[AssociationQ[a], a, <||>]];
+
+(* 状態は ASCII のみ (理由は英語で保存し、表示時に日本語へ) なので RawJSON で
+   書いてよい。tmp に書いてから差し替える。 *)
+iCodexSandboxWriteState[all_Association] :=
+  Module[{f = iCodexSandboxStateFile[], tmp, s},
+    Quiet @ CreateDirectory[DirectoryName[f],
+      CreateIntermediateDirectories -> True];
+    tmp = f <> ".tmp";
+    s = Quiet @ OpenWrite[tmp, BinaryFormat -> True];
+    If[Head[s] =!= OutputStream, Return[$Failed]];
+    BinaryWrite[s, StringToByteArray[
+      ExportString[all, "RawJSON", "Compact" -> False], "UTF-8"]];
+    Close[s];
+    Quiet[If[FileExistsQ[f], DeleteFile[f]]];
+    Quiet @ RenameFile[tmp, f];
+    If[FileExistsQ[f], f, $Failed]];
+
+ClaudeCodexSandboxStatus[] :=
+  Module[{mode, ver, rec, base},
+    If[$OperatingSystem =!= "Windows",
+      Return[<|"Status" -> "NotApplicable", "Mode" -> None,
+        "Machine" -> $MachineName|>]];
+    mode = iCodexWindowsSandboxMode[];
+    ver = iCodexCLIVersion[];
+    base = <|"Mode" -> mode, "Machine" -> $MachineName,
+      "CLIVersion" -> ver, "StateFile" -> iCodexSandboxStateFile[]|>;
+    If[! StringQ[ver],
+      Return @ Join[<|"Status" -> "CodexNotFound",
+        "Reason" -> "The Codex CLI could not be started (codex --version failed)."|>,
+        base]];
+    rec = Lookup[iCodexSandboxReadState[], $MachineName, None];
+    Which[
+      ! AssociationQ[rec],
+        Join[<|"Status" -> "NotVerified",
+          "Reason" -> "The Codex sandbox has never been checked on this PC."|>,
+          base],
+      Lookup[rec, "CLIVersion"] =!= ver || Lookup[rec, "Mode"] =!= mode,
+        Join[<|"Status" -> "NotVerified",
+          "Reason" -> "The Codex CLI or the sandbox backend changed since the last check (" <>
+            ToString[Lookup[rec, "CLIVersion"]] <> " / " <>
+            ToString[Lookup[rec, "Mode"]] <> " -> " <> ver <> " / " <>
+            ToString[mode] <> ").",
+          "VerifiedCLIVersion" -> Lookup[rec, "CLIVersion"],
+          "VerifiedAt" -> Lookup[rec, "CheckedAt"]|>, base],
+      Lookup[rec, "Status"] === "Ready",
+        Join[<|"Status" -> "Ready",
+          "VerifiedCLIVersion" -> Lookup[rec, "CLIVersion"],
+          "VerifiedAt" -> Lookup[rec, "CheckedAt"]|>, base],
+      True,
+        Join[<|"Status" -> "Failed",
+          "Reason" -> Lookup[rec, "Reason", "The last self-test failed."],
+          "VerifiedAt" -> Lookup[rec, "CheckedAt"]|>, base]]];
+
+(* 自己テストの期待値。"OK" = 許可されるべき、"DENIED" = 拒否されるべき *)
+$iCodexSandboxSelfTestExpect = <|
+  "WorkspaceRead" -> "OK", "WorkspaceWrite" -> "OK",
+  "AgentsWrite" -> "DENIED", "WorkspaceEnvRead" -> "DENIED",
+  "GrantedRead" -> "OK", "GrantedTokenRead" -> "DENIED",
+  "GrantedWrite" -> "DENIED", "OutsideRead" -> "DENIED",
+  "ProfileSecretRead" -> "DENIED", "SystemRead" -> "OK",
+  "Network" -> "DENIED"|>;
+
+(* Windows 自身が接続確認に使う URL。https では証明書検証に失敗する (curl exit 60)
+   ので http を使う。中身は使わず、届いたかどうかだけを見る。 *)
+$iCodexSandboxNetProbeURL = "http://www.msftconnecttest.com/connecttest.txt";
+
+(* サンドボックスの外から読めるはずのユーザープロファイル内の実ファイル。
+   Codex のログイン情報を第一候補にする (これが読めたら致命的)。 *)
+iCodexSandboxProfileProbe[] :=
+  SelectFirst[{
+      FileNameJoin[{iCodexDefaultHome[], "auth.json"}],
+      FileNameJoin[{iCodexDefaultHome[], "config.toml"}],
+      FileNameJoin[{$UserBaseDirectory, "Kernel", "init.m"}]},
+    FileExistsQ, Missing["NoProfileFile"]];
+
+iCodexSandboxCmdLine[name_String, "Read", path_String] :=
+  "type \"" <> path <> "\" >nul 2>nul && (echo T_" <> name <>
+    "=OK) || (echo T_" <> name <> "=DENIED)";
+iCodexSandboxCmdLine[name_String, "Write", path_String] :=
+  "(echo x> \"" <> path <> "\") >nul 2>nul && (echo T_" <> name <>
+    "=OK) || (echo T_" <> name <> "=DENIED)";
+
+ClaudeCodexSandboxSetup[] :=
+  Module[{mode, ver, exe, dir, proj, home, granted, outside, profileFile,
+          curl, control, spec, cfg, script, r, out, err, got, checks,
+          mismatch, status, reason, all, rec, res},
+    If[$OperatingSystem =!= "Windows",
+      Print[iL["Windows \:4ee5\:5916\:3067\:306f\:3053\:306e\:78ba\:8a8d\:306f\:4e0d\:8981\:3067\:3059\:3002",
+        "This check is not needed outside Windows."]];
+      Return[ClaudeCodexSandboxStatus[]]];
+    mode = iCodexWindowsSandboxMode[];
+    $iCodexCLIVersionCache = <||>;   (* 版を取り直す *)
+    ver = iCodexCLIVersion[];
+    exe = iCodexResolveExe[];
+    reason = None; got = <||>;
+    Which[
+      ! StringQ[ver],
+        reason = "The Codex CLI could not be started (codex --version failed). Install the Codex CLI and run `codex login`.",
+      ! FileExistsQ[curl = FileNameJoin[{Environment["SystemRoot"], "System32", "curl.exe"}]],
+        reason = "curl.exe was not found, so the network block cannot be verified.",
+      True,
+        (* ネットワーク遮断を確かめる前に、サンドボックスの外からは届くことを確認 *)
+        control = Quiet @ Check[TimeConstrained[
+          RunProcess[{curl, "-s", "-m", "8", "-o", "NUL",
+            $iCodexSandboxNetProbeURL}, All], 30, $TimedOut], $Failed];
+        If[! AssociationQ[control] || control["ExitCode"] =!= 0,
+          reason = "This PC could not reach the network test URL even outside the sandbox, so the network block cannot be verified. Run the check again while online."]];
+    If[reason === None,
+      dir = FileNameJoin[{iCodexResolveWorkingBase[],
+        "codex_selftest_" <> iCodexRunId[]}];
+      {proj, home, granted, outside} =
+        FileNameJoin[{dir, #}] & /@ {"project", "home", "granted", "outside"};
+      Scan[Quiet @ CreateDirectory[#, CreateIntermediateDirectories -> True] &,
+        {FileNameJoin[{proj, ".agents"}], home, granted, outside}];
+      Scan[Quiet @ Export[#[[1]], #[[2]], "Text"] &, {
+        {FileNameJoin[{proj, "AGENTS.md"}], "selftest"},
+        {FileNameJoin[{proj, "secret.env"}], "S=1"},
+        {FileNameJoin[{granted, "notes.txt"}], "granted"},
+        {FileNameJoin[{granted, "api_token.txt"}], "tok"},
+        {FileNameJoin[{outside, "x.txt"}], "outside"}}];
+      profileFile = iCodexSandboxProfileProbe[];
+      (* 本番と同じ生成器で config.toml を書く (auth.json はコピーしない) *)
+      spec = Join[iBuildCodexPermissionSpec[{granted}], <|"Model" -> None|>];
+      cfg = Quiet @ Check[
+        Module[{p = FileNameJoin[{home, "config.toml"}], s},
+          s = OpenWrite[p, BinaryFormat -> True];
+          BinaryWrite[s, StringToByteArray[iCodexPermissionConfigText[spec], "UTF-8"]];
+          Close[s]; p], $Failed];
+      script = StringRiffle[Join[
+        {"@echo off", "chcp 65001 >nul",
+         iCodexSandboxCmdLine["WorkspaceRead", "Read", "AGENTS.md"],
+         iCodexSandboxCmdLine["WorkspaceWrite", "Write", "out.txt"],
+         iCodexSandboxCmdLine["AgentsWrite", "Write", ".agents\\a.txt"],
+         iCodexSandboxCmdLine["WorkspaceEnvRead", "Read", "secret.env"],
+         iCodexSandboxCmdLine["GrantedRead", "Read", FileNameJoin[{granted, "notes.txt"}]],
+         iCodexSandboxCmdLine["GrantedTokenRead", "Read", FileNameJoin[{granted, "api_token.txt"}]],
+         iCodexSandboxCmdLine["GrantedWrite", "Write", FileNameJoin[{granted, "w.txt"}]],
+         iCodexSandboxCmdLine["OutsideRead", "Read", FileNameJoin[{outside, "x.txt"}]],
+         iCodexSandboxCmdLine["SystemRead", "Read",
+           FileNameJoin[{Environment["SystemRoot"], "win.ini"}]],
+         "curl.exe -s -m 8 -o NUL " <> $iCodexSandboxNetProbeURL <>
+           " >nul 2>nul && (echo T_Network=OK) || (echo T_Network=DENIED)"},
+        If[StringQ[profileFile],
+          {iCodexSandboxCmdLine["ProfileSecretRead", "Read", profileFile]}, {}]],
+        "\r\n"] <> "\r\n";
+      Quiet @ Module[{s = OpenWrite[FileNameJoin[{proj, "selftest.cmd"}], BinaryFormat -> True]},
+        BinaryWrite[s, StringToByteArray[script, "UTF-8"]]; Close[s]];
+      (* サンドボックス内の cmd はカレントフォルダから実行ファイルを探さない
+         (NoDefaultCurrentDirectoryInExePath) ので .\selftest.cmd と明示する *)
+      r = If[StringQ[cfg],
+        Quiet @ Check[TimeConstrained[
+          RunProcess[Join[iCodexCmdPrefix[],
+              {exe, "sandbox", "-P", Lookup[spec, "ProfileName", "nbaccess-codex"],
+               "-C", proj, "--", "cmd", "/c", ".\selftest.cmd"}], All,
+            ProcessEnvironment -> Normal @ Join[Association @ GetEnvironment[],
+              <|"CODEX_HOME" -> home|>],
+            ProcessDirectory -> proj], 180, $TimedOut], $Failed],
+        $Failed];
+      out = If[AssociationQ[r], ToString[Lookup[r, "StandardOutput", ""]], ""];
+      err = If[AssociationQ[r], ToString[Lookup[r, "StandardError", ""]], ToString[r]];
+      got = Association @ StringCases[out,
+        "T_" ~~ n : (LetterCharacter ..) ~~ "=" ~~ v : ("OK" | "DENIED") :> (n -> v)];
+      Quiet @ DeleteDirectory[dir, DeleteContents -> True];
+      reason = Which[
+        ! StringQ[cfg], "The self-test config.toml could not be written.",
+        r === $TimedOut, "`codex sandbox` did not finish within 180 seconds.",
+        got === <||>,
+          "The sandbox did not start (" <> ToString[mode] <> "): " <>
+            With[{e = StringTrim[err]}, StringTake[e, -Min[300, StringLength[e]]]],
+        True, None]];
+    checks = If[got === <||>, <||>,
+      Association @ KeyValueMap[
+        Function[{k, e}, k -> <|"Expected" -> e,
+          "Got" -> Lookup[got, k, If[k === "ProfileSecretRead" && ! StringQ[profileFile],
+            "Skipped", "Missing"]]|>],
+        $iCodexSandboxSelfTestExpect]];
+    mismatch = Keys @ Select[checks,
+      #["Got"] =!= #["Expected"] && #["Got"] =!= "Skipped" &];
+    If[reason === None && mismatch =!= {},
+      reason = "The sandbox did not enforce: " <> StringRiffle[mismatch, ", "] <> "."];
+    status = If[reason === None, "Ready", "Failed"];
+    rec = <|"Status" -> status, "Mode" -> mode,
+      "CLIVersion" -> If[StringQ[ver], ver, "unknown"],
+      "CheckedAt" -> DateString["ISODateTime"],
+      "Checks" -> Map[#["Got"] &, checks],
+      "Reason" -> If[StringQ[reason], reason, ""]|>;
+    all = iCodexSandboxReadState[];
+    all[$MachineName] = rec;
+    iCodexSandboxWriteState[all];
+    $iCodexSandboxAlertLast = 0;
+    Print[If[status === "Ready",
+      iL["\:2705 \:3053\:306e PC \:3067 Codex \:306e\:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9 (" <> ToString[mode] <>
+          ") \:304c\:6a29\:9650\:8a2d\:5b9a\:3069\:304a\:308a\:306b\:52d5\:304f\:3053\:3068\:3092\:78ba\:8a8d\:3057\:307e\:3057\:305f (" <> rec["CLIVersion"] <>
+          ")\:3002Codex \:3092\:4f7f\:3048\:307e\:3059\:3002",
+        "\:2705 Verified that the Codex sandbox (" <> ToString[mode] <>
+          ") enforces the permission profile on this PC (" <> rec["CLIVersion"] <>
+          "). Codex can run."],
+      iL["\:274c Codex \:306e\:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9\:3092\:78ba\:8a8d\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002Codex \:306f\:8d77\:52d5\:3057\:307e\:305b\:3093\:3002\:7406\:7531: ",
+        "\:274c The Codex sandbox could not be verified. Codex will not run. Reason: "] <>
+        reason <> iCodexSandboxRemedy[reason]]];
+    res = ClaudeCodexSandboxStatus[];
+    Join[res, <|"Checks" -> checks|>]];
+
+(* 失敗理由から対処を 1 行で示す *)
+iCodexSandboxRemedy[reason_String] :=
+  Which[
+    StringContainsQ[reason, "unknown variant" | "invalid value" | "codex --version failed",
+      IgnoreCase -> True],
+      iL[" \:2192 Codex CLI \:3092\:66f4\:65b0 (npm install -g @openai/codex) \:3057\:3001codex login \:5f8c\:306b ClaudeCodexSandboxSetup[] \:3092\:3082\:3046\:4e00\:5ea6\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+        " -> Update the Codex CLI (npm install -g @openai/codex), run codex login, then run ClaudeCodexSandboxSetup[] again."],
+    StringContainsQ[reason, "MXC is unavailable" | "AppContainer" | "BaseContainer" |
+        "CreateProcessInSandbox" | "does not support", IgnoreCase -> True],
+      iL[" \:2192 \:3053\:306e Windows \:3067\:306f mxc \:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9\:304c\:4f7f\:3048\:307e\:305b\:3093\:3002Windows Update \:5f8c\:306b\:518d\:5b9f\:884c\:3059\:308b\:304b\:3001\:3053\:306e PC \:3067\:306f Codex \:3092\:4f7f\:308f\:306a\:3044\:3067\:304f\:3060\:3055\:3044\:3002",
+        " -> mxc is not available on this Windows build. Retry after Windows Update, or do not use Codex on this PC."],
+    StringContainsQ[reason, "network", IgnoreCase -> True],
+      iL[" \:2192 \:30aa\:30f3\:30e9\:30a4\:30f3\:306e\:72b6\:614b\:3067 ClaudeCodexSandboxSetup[] \:3092\:3082\:3046\:4e00\:5ea6\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+        " -> Run ClaudeCodexSandboxSetup[] again while online."],
+    True, ""];
+iCodexSandboxRemedy[___] := "";
+
+iCodexSandboxAlertText[st_Association] :=
+  Module[{s = Lookup[st, "Status", "NotVerified"], reason = Lookup[st, "Reason", ""]},
+    Which[
+      s === "CodexNotFound",
+        iL["\:26a0 Codex CLI \:3092\:8d77\:52d5\:3067\:304d\:306a\:3044\:305f\:3081 Codex \:3092\:5b9f\:884c\:3057\:307e\:305b\:3093\:3067\:3057\:305f\:3002\:30a4\:30f3\:30b9\:30c8\:30fc\:30eb\:3068 codex login \:3092\:78ba\:8a8d\:3057\:305f\:3046\:3048\:3067\:3001",
+          "\:26a0 Codex was not started because the Codex CLI could not be run. Check the installation and codex login, then "],
+      s === "Failed",
+        iL["\:26a0 \:3053\:306e PC \:3067\:306f\:524d\:56de\:306e\:78ba\:8a8d\:3067 Codex \:306e\:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9 (mxc) \:304c\:4f7f\:3048\:306a\:304b\:3063\:305f\:305f\:3081\:3001Codex \:3092\:8d77\:52d5\:3057\:307e\:305b\:3093\:3067\:3057\:305f (" <> reason <> ")\:3002",
+          "\:26a0 Codex was not started: the last check found that the Codex sandbox (mxc) does not work on this PC (" <> reason <> "). "],
+      StringContainsQ[reason, "changed since"],
+        iL["\:26a0 Codex CLI \:307e\:305f\:306f\:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9\:306e\:65b9\:5f0f\:304c\:524d\:56de\:306e\:78ba\:8a8d\:304b\:3089\:5909\:308f\:3063\:305f\:305f\:3081\:3001\:5b89\:5168\:8a2d\:5b9a\:3092\:78ba\:8a8d\:3057\:76f4\:3059\:307e\:3067 Codex \:3092\:8d77\:52d5\:3057\:307e\:305b\:3093\:3002",
+          "\:26a0 The Codex CLI or the sandbox backend changed since the last check, so Codex will not run until the sandbox is verified again. "],
+      True,
+        iL["\:26a0 \:3053\:306e PC \:3067\:306f Codex \:306e\:5b89\:5168\:8a2d\:5b9a (Windows \:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9 mxc) \:304c\:307e\:3060\:78ba\:8a8d\:3055\:308c\:3066\:3044\:306a\:3044\:305f\:3081\:3001Codex \:3092\:8d77\:52d5\:3057\:307e\:305b\:3093\:3067\:3057\:305f\:3002",
+          "\:26a0 Codex was not started: its sandbox (Windows mxc) has not been verified on this PC yet. "]]];
+
+(* 並列の Codex 呼び出し (DAG 等) で同じアラートを何枚も出さない *)
+iCodexSandboxAlert[st_Association, nbOpt_] :=
+  Module[{nb, msg},
+    If[AbsoluteTime[] - $iCodexSandboxAlertLast < 20, Return[Null]];
+    $iCodexSandboxAlertLast = AbsoluteTime[];
+    msg = iCodexSandboxAlertText[st];
+    nb = If[nbOpt === Automatic,
+      If[TrueQ[$Notebooks], Quiet @ Check[EvaluationNotebook[], $Failed], $Failed],
+      nbOpt];
+    (* 2026-10-02: 以前は NBWriteCell で nb の「現在の選択位置」に書いていたが、
+       LLMGraph の非同期ノード (ScheduledTask) から呼ばれると選択位置が見えない
+       場所にあり、利用者にはノードの失敗行しか見えなかった。進行表示
+       ([LLMGraph] ... の行) と同じ Print の経路で出し、ボタンは押した時点で
+       元のノートブック (nb) に ClaudeCodexSandboxSetup[] を書いて評価する。 *)
+    If[TrueQ[$Notebooks],
+      With[{target = nb},
+        Print[Row[{
+          Style[msg, Bold, FontSize -> 11, RGBColor[0.75, 0.35, 0.]],
+          Button[
+            Style[iL["\:78ba\:8a8d\:3057\:3066\:6709\:52b9\:5316", "Check and enable"], Bold, FontSize -> 11],
+            NBAccess`NBWriteInputCellAndMaybeEvaluate[
+              If[Head[target] === NotebookObject, target, InputNotebook[]],
+              RowBox[{"ClaudeCodexSandboxSetup", "[", "]"}], True],
+            Method -> "Queued", Appearance -> Automatic],
+          Style[iL[" (ClaudeCodexSandboxSetup[] \:3092\:5b9f\:884c\:3057\:307e\:3059\:3002\:30e2\:30c7\:30eb\:306b\:306f\:4f55\:3082\:9001\:308a\:307e\:305b\:3093) \:306e\:3042\:3068\:3001\:3082\:3046\:4e00\:5ea6\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+            " (runs ClaudeCodexSandboxSetup[]; nothing is sent to a model), then run again."],
+            FontSize -> 11, RGBColor[0.75, 0.35, 0.]]}]]],
+      Print[msg <> iL["ClaudeCodexSandboxSetup[] \:3092\:5b9f\:884c\:3057\:3066\:304b\:3089\:3001\:3082\:3046\:4e00\:5ea6\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+        "Run ClaudeCodexSandboxSetup[], then run again."]]]];
+
+Options[ClaudeCodexSandboxGate] = {"Notebook" -> Automatic};
+ClaudeCodexSandboxGate[opts : OptionsPattern[]] :=
+  Module[{st = ClaudeCodexSandboxStatus[]},
+    If[MemberQ[{"Ready", "NotApplicable"}, Lookup[st, "Status"]], Return[True]];
+    iCodexSandboxAlert[st, OptionValue["Notebook"]];
+    False];
+
+(* 単発の `codex exec` を、権限プロファイルとログイン情報だけを置いた
+   実行ごとの CODEX_HOME で動かす。利用者の ~/.codex/config.toml (MCP サーバー・
+   プラグイン。いずれもサンドボックスの外で動く) は読み込まれない。
+   仕様生成/仕様実装ワークフローの Codex 呼び出しはこれを使う。 *)
+Options[ClaudeCodexSandboxedExec] = {
+  "Model" -> Automatic, "Workspace" -> Automatic, "ReadOnlyRoots" -> {},
+  "TimeConstraint" -> 900, "Notebook" -> Automatic};
+ClaudeCodexSandboxedExec[prompt_String, opts : OptionsPattern[]] :=
+  Module[{model, ws, ownWs, base, runId, home, spec, cfgPath, answerFile,
+          cmd, res, ans, tl},
+    If[! TrueQ[ClaudeCodexSandboxGate["Notebook" -> OptionValue["Notebook"]]],
+      iCodexRecordOutcome["refused", "SandboxNotVerified", <|"Via" -> "sandboxedexec"|>];
+      Return @ Failure["SandboxNotVerified", <|
+        "MessageTemplate" -> iL["Codex \:3092\:8d77\:52d5\:3057\:307e\:305b\:3093\:3067\:3057\:305f: \:3053\:306e PC \:3067\:306f\:307e\:3060 Codex \:306e\:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9 (" <> ToString[iCodexWindowsSandboxMode[]] <> ") \:304c\:78ba\:8a8d\:3055\:308c\:3066\:3044\:307e\:305b\:3093\:3002\:300c\:78ba\:8a8d\:3057\:3066\:6709\:52b9\:5316\:300d\:30dc\:30bf\:30f3\:3092\:62bc\:3059\:304b ClaudeCodexSandboxSetup[] \:3092\:5b9f\:884c\:3057\:3066\:304b\:3089\:3001\:3082\:3046\:4e00\:5ea6\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+          "Codex was not started: the Codex sandbox (" <>
+          ToString[iCodexWindowsSandboxMode[]] <>
+          ") is not verified on this PC. Click \"Check and enable\" or run ClaudeCodexSandboxSetup[], then run again."],
+        "Status" -> ClaudeCodexSandboxStatus[]|>]];
+    model = OptionValue["Model"];
+    base = iCodexResolveWorkingBase[];
+    runId = iCodexRunId[];
+    ws = OptionValue["Workspace"];
+    ownWs = ! StringQ[ws];
+    If[ownWs, ws = iCodexProjectDir[base, runId]];
+    Quiet @ CreateDirectory[ws, CreateIntermediateDirectories -> True];
+    home = iCodexHomeDir[base, runId];
+    spec = Join[iBuildCodexPermissionSpec[
+        Select[Flatten[{OptionValue["ReadOnlyRoots"]}], StringQ[#] && DirectoryQ[#] &]],
+      <|"Model" -> None|>];
+    cfgPath = iWriteCodexConfig[home, iCodexPermissionConfigText[spec]];
+    If[! DirectoryQ[ws] || ! StringQ[cfgPath],
+      Quiet @ DeleteDirectory[home, DeleteContents -> True];
+      If[ownWs, Quiet @ DeleteDirectory[ws, DeleteContents -> True]];
+      Return @ Failure["CodexSandboxedExec", <|
+        "MessageTemplate" -> "The Codex workspace or CODEX_HOME could not be prepared."|>]];
+    answerFile = FileNameJoin[{ws, "codex_answer_" <> runId <> ".txt"}];
+    cmd = Join[iCodexCmdPrefix[],
+      {iCodexResolveExe[], "exec", "--cd", ws, "--skip-git-repo-check"},
+      If[StringQ[model] && model =!= "" && model =!= "Automatic", {"-m", model}, {}],
+      {"--output-last-message", answerFile, "-"}];
+    tl = OptionValue["TimeConstraint"];
+    res = TimeConstrained[
+      Quiet @ Check[
+        RunProcess[cmd, All, StringToByteArray[prompt, "UTF-8"],
+          ProcessEnvironment -> Normal @ Join[Association @ GetEnvironment[],
+            <|"CODEX_HOME" -> home|>]],
+        $Failed],
+      If[NumericQ[tl], tl, Infinity], $TimedOut];
+    ans = If[FileExistsQ[answerFile],
+      Quiet @ Check[ByteArrayToString[ReadByteArray[answerFile], "UTF-8"], ""], ""];
+    (* ログイン情報の写しを残さない *)
+    Quiet @ DeleteDirectory[home, DeleteContents -> True];
+    If[ownWs, Quiet @ DeleteDirectory[ws, DeleteContents -> True]];
+    With[{ok = AssociationQ[res] && Lookup[res, "ExitCode"] === 0 &&
+           StringQ[ans] && StringTrim[ans] =!= ""},
+      iCodexRecordOutcome[If[ok, "success", "error"],
+        If[ok, None,
+          If[res === $TimedOut, "Timeout",
+            iCodexClassifyFailure[
+              If[AssociationQ[res], ToString[Lookup[res, "StandardError", ""]], ""],
+              If[AssociationQ[res], Lookup[res, "ExitCode"], None]]]],
+        <|"Via" -> "sandboxedexec",
+          "ExitCode" -> If[AssociationQ[res], Lookup[res, "ExitCode", Null], Null],
+          "Model" -> If[StringQ[model] && model =!= "", model, "Automatic"]|>]];
+    <|"Output" -> If[StringQ[ans], StringTrim[ans], ""],
+      "ExitCode" -> If[AssociationQ[res], Lookup[res, "ExitCode", Missing[]], res],
+      "TimedOut" -> (res === $TimedOut),
+      "StandardError" -> If[AssociationQ[res],
+        With[{e = ToString[Lookup[res, "StandardError", ""]]},
+          StringTake[e, -Min[2000, StringLength[e]]]], ""],
+      "Model" -> If[StringQ[model] && model =!= "", model, Automatic],
+      "WindowsSandbox" -> iCodexWindowsSandboxMode[]|>];
+ClaudeCodexSandboxedExec[___] :=
+  Failure["CodexSandboxedExec", <|
+    "MessageTemplate" -> "ClaudeCodexSandboxedExec expects a prompt string and options."|>];
+
+(* ------------------------------------------------------------------
+   2026-10-02: Codex の実行結果の記録と健全性 probe。
+   それまで Codex は LLMCall を一度も emit しておらず (成功も失敗も)、9/9 から
+   全実行が起動時にサンドボックス拒否で失敗していても SIEM / SystemDoctor から
+   見えなかった。結果は (1) SIEM spool へ LLMCall (Provider "chatgptcodex")、
+   (2) 作業ベースの小さな台帳 (直近 200 件。probe が 7 日窓で読む) の両方に残す。
+   失敗の本文は残さず分類コードだけ (rule 90)。
+   ------------------------------------------------------------------ *)
+$iCodexOutcomeLedgerFileName = "nbaccess_codex_outcomes.json";
+iCodexOutcomeLedgerFile[] :=
+  FileNameJoin[{iCodexResolveWorkingBase[], $iCodexOutcomeLedgerFileName}];
+
+(* stderr / エラー文字列 -> 分類コード *)
+iCodexClassifyFailure[text_, exitCode_: None] :=
+  Which[
+    ! StringQ[text] || StringTrim[text] === "",
+      If[exitCode === 0, "NoOutput", "Error"],
+    StringContainsQ[text, "refusing to run unsandboxed" |
+        "requires the elevated Windows sandbox" | "requires effective `:root` read" |
+        "deny-read overrides require" | "windows sandbox failed" |
+        "failed to prepare windows sandbox", IgnoreCase -> True],
+      "SandboxRefused",
+    StringContainsQ[text, "Codex was not started" | "SandboxNotVerified",
+        IgnoreCase -> True],
+      "SandboxNotVerified",
+    StringContainsQ[text, "requires a newer version of Codex" |
+        "unknown variant", IgnoreCase -> True],
+      "CLIOutdated",
+    StringContainsQ[text, "401" | "Unauthorized" | "not logged in" |
+        "codex login", IgnoreCase -> True],
+      "AuthFailed",
+    StringContainsQ[text, "429" | "rate limit" | "usage limit", IgnoreCase -> True],
+      "RateLimited",
+    StringContainsQ[text, "Timeout" | "timed out", IgnoreCase -> True],
+      "Timeout",
+    True, "Error"];
+
+iCodexReadLedger[] :=
+  Module[{f = iCodexOutcomeLedgerFile[], l},
+    If[! FileExistsQ[f], Return[{}]];
+    l = Quiet @ Check[
+      ImportString[ByteArrayToString[ReadByteArray[f], "UTF-8"], "RawJSON"], {}];
+    If[ListQ[l], Select[l, AssociationQ], {}]];
+
+(* outcome: "success" | "error" | "refused" (サンドボックス未確認で起動しなかった) *)
+iCodexRecordOutcome[outcome_String, failureClass_, extra_Association : <||>] :=
+  Quiet @ Check[
+    Module[{rec, led, f, tmp, s},
+      rec = Join[<|
+        "At" -> DateString[TimeZoneConvert[Now, 0], "ISODateTime"] <> "Z",
+        "AbsTime" -> Round[AbsoluteTime[]],
+        "Outcome" -> outcome,
+        "FailureClass" -> If[StringQ[failureClass], failureClass, None],
+        "Machine" -> $MachineName|>,
+        KeySelect[extra, MemberQ[{"Via", "ExitCode", "DurationMs", "Model"}, #] &]];
+      led = With[{l = Append[iCodexReadLedger[], rec]}, Take[l, -Min[200, Length[l]]]];
+      f = iCodexOutcomeLedgerFile[];
+      Quiet @ CreateDirectory[DirectoryName[f], CreateIntermediateDirectories -> True];
+      tmp = f <> ".tmp";
+      s = Quiet @ OpenWrite[tmp, BinaryFormat -> True];
+      If[Head[s] === OutputStream,
+        BinaryWrite[s, StringToByteArray[
+          ExportString[led, "RawJSON", "Compact" -> True], "UTF-8"]];
+        Close[s];
+        Quiet[If[FileExistsQ[f], DeleteFile[f]]];
+        Quiet @ RenameFile[tmp, f]];
+      iClaudeDiagEmit["LLMCall", <|
+        "Provider" -> "chatgptcodex",
+        "Model" -> ToString[Lookup[extra, "Model", $ChatgptCodexModel]],
+        "TaskClass" -> If[StringQ[$iClaudeCurrentTaskClass],
+          $iClaudeCurrentTaskClass, "general"],
+        "Outcome" -> outcome,
+        "FailureClass" -> rec["FailureClass"],
+        "ExitCode" -> Lookup[extra, "ExitCode", Null],
+        "DurationMs" -> Lookup[extra, "DurationMs", Null],
+        "Via" -> Lookup[extra, "Via", Null],
+        "WindowsSandbox" -> iCodexWindowsSandboxMode[]|>,
+        Which[
+          rec["FailureClass"] === "SandboxRefused", "high",
+          outcome === "success", "info",
+          True, "warn"]];
+      rec],
+    $Failed];
+
+(* サンドボックスの確認状態をプロセスを起動せずに返す (probe は SystemDoctor から
+   同期に呼ばれるので `codex --version` を走らせない)。CLI の版はキャッシュが
+   あるときだけ比べる。 *)
+iCodexSandboxStatusCached[] :=
+  Module[{mode = iCodexWindowsSandboxMode[], rec, c},
+    rec = Lookup[iCodexSandboxReadState[], $MachineName, None];
+    c = Lookup[$iCodexCLIVersionCache, iCodexResolveExe[], None];
+    Which[
+      ! AssociationQ[rec], "NotVerified",
+      Lookup[rec, "Mode"] =!= mode, "NotVerified",
+      AssociationQ[c] && Lookup[rec, "CLIVersion"] =!= c["Version"], "NotVerified",
+      Lookup[rec, "Status"] === "Ready", "Ready",
+      True, "Failed"]];
+
+(* 台帳ができる前の実行の失敗も拾う: 非同期経路の stderr ログ
+   (codex_project_*/codex_stderr_*.log) に致命的な拒否が残っていれば失敗と数える。 *)
+iCodexStderrFailures[since_?NumericQ, until_?NumericQ] :=
+  Module[{base = iCodexResolveWorkingBase[], files},
+    files = Quiet @ Check[
+      FileNames["codex_stderr_*.log", FileNames["codex_project_*", base]], {}];
+    files = Select[files,
+      With[{t = Quiet @ Check[AbsoluteTime[FileDate[#, "Modification"]], 0]},
+        since <= t < until] &];
+    Select[
+      Map[<|"AbsTime" -> Quiet @ Check[AbsoluteTime[FileDate[#, "Modification"]], 0],
+          "Outcome" -> "error",
+          "FailureClass" -> iCodexClassifyFailure[
+            Quiet @ Check[ByteArrayToString[ReadByteArray[#], "UTF-8"], ""]]|> &,
+        files],
+      MemberQ[{"SandboxRefused", "CLIOutdated", "AuthFailed"}, #FailureClass] &]];
+
+If[! AssociationQ[$iCodexHealthProbeCache], $iCodexHealthProbeCache = <||>];
+
+Options[ClaudeCodexHealthProbe] = {"WindowDays" -> 7, "UseCache" -> True};
+ClaudeCodexHealthProbe[opts : OptionsPattern[]] :=
+  Module[{now = AbsoluteTime[], days, since, led, ledStart, recent, hist, succ,
+          fails, refused, projects, used, st, verifiedAt, classes, res},
+    If[TrueQ[OptionValue["UseCache"]] &&
+       NumericQ[Lookup[$iCodexHealthProbeCache, "At", None]] &&
+       now - $iCodexHealthProbeCache["At"] < 600,
+      Return[$iCodexHealthProbeCache["Result"]]];
+    res = Which[
+      $OperatingSystem =!= "Windows",
+        <|"Health" -> "OK", "ReasonCode" -> "NotApplicable"|>,
+      True,
+        days = OptionValue["WindowDays"];
+        since = now - days*86400;
+        led = iCodexReadLedger[];
+        ledStart = If[led === {}, now, Min[Lookup[led, "AbsTime", now]]];
+        recent = Select[led, NumericQ[#AbsTime] && #AbsTime >= since &];
+        hist = iCodexStderrFailures[since, ledStart];
+        succ = Count[recent, r_ /; r["Outcome"] === "success"];
+        fails = Join[Select[recent, #Outcome === "error" &], hist];
+        refused = Count[recent, r_ /; r["Outcome"] === "refused"];
+        projects = Length @ Select[
+          Quiet @ Check[FileNames["codex_project_*", iCodexResolveWorkingBase[]], {}],
+          Quiet @ Check[AbsoluteTime[FileDate[#, "Creation"]], 0] >= since &];
+        used = succ + Length[fails] + refused + projects > 0;
+        st = iCodexSandboxStatusCached[];
+        (* サンドボックス起因の失敗は、その後に自己テストが通っていれば解決済みとして数えない
+           (ClaudeCodexSandboxSetup[] 直後に「Setup を実行して」と警告し続けないため)。
+           CheckedAt は地方時の ISO 文字列。認証切れ等ほかの原因は検証では直らないので残す。 *)
+        verifiedAt = If[st === "Ready",
+          With[{s = Lookup[Lookup[iCodexSandboxReadState[], $MachineName, <||>], "CheckedAt", None]},
+            If[StringQ[s], Quiet @ Check[AbsoluteTime[s], None], None]], None];
+        If[NumericQ[verifiedAt],
+          fails = Select[fails,
+            ! (MemberQ[{"SandboxRefused", "SandboxNotVerified"}, Lookup[#, "FailureClass"]] &&
+               NumericQ[Lookup[#, "AbsTime"]] && Lookup[#, "AbsTime"] < verifiedAt) &]];
+        (* Lookup[{}, k, d] reads {} as an empty rule list and returns d *)
+        classes = If[fails === {}, <||>,
+          Counts[Replace[Lookup[fails, "FailureClass", "Error"],
+            Except[_String] -> "Error", {1}]]];
+        Which[
+          Length[fails] >= 2 && succ === 0,
+            <|"Health" -> "Failing", "ReasonCode" -> "CodexAllFailing",
+              "Failures" -> Length[fails], "Successes" -> 0,
+              "FailureClasses" -> classes,
+              "FirstFailure" -> DateString[Min[Lookup[fails, "AbsTime"]], "ISODate"],
+              "Message" -> iL[
+                "Codex \:304c\:76f4\:8fd1 " <> ToString[days] <> " \:65e5\:3067 " <>
+                  ToString[Length[fails]] <> " \:56de\:5931\:6557\:3057\:3001\:6210\:529f\:304c\:3042\:308a\:307e\:305b\:3093 (" <>
+                  StringRiffle[KeyValueMap[#1 <> " " <> ToString[#2] &, classes], ", "] <>
+                  "\:3001\:6700\:521d\:306e\:5931\:6557 " <>
+                  DateString[Min[Lookup[fails, "AbsTime"]], "ISODate"] <> ")\:3002" <>
+                  If[KeyExistsQ[classes, "SandboxRefused"],
+                    "ClaudeCodexSandboxSetup[] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002", ""],
+                "Codex failed " <> ToString[Length[fails]] <> " times in the last " <>
+                  ToString[days] <> " days with no success (" <>
+                  StringRiffle[KeyValueMap[#1 <> " " <> ToString[#2] &, classes], ", "] <>
+                  "; first failure " <>
+                  DateString[Min[Lookup[fails, "AbsTime"]], "ISODate"] <> ")." <>
+                  If[KeyExistsQ[classes, "SandboxRefused"],
+                    " Run ClaudeCodexSandboxSetup[].", ""]]|>,
+          used && st === "Failed",
+            <|"Health" -> "Failing", "ReasonCode" -> "CodexSandboxUnavailable",
+              "Message" -> iL[
+                "\:3053\:306e PC \:3067\:306f Codex \:306e\:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9\:304c\:4f7f\:3048\:307e\:305b\:3093 (ClaudeCodexSandboxStatus[] \:3092\:78ba\:8a8d)\:3002",
+                "The Codex sandbox does not work on this PC (see ClaudeCodexSandboxStatus[])."]|>,
+          used && st === "NotVerified",
+            <|"Health" -> "Degraded", "ReasonCode" -> "CodexSandboxNotVerified",
+              "Message" -> iL[
+                "Codex \:3092\:4f7f\:3063\:3066\:3044\:307e\:3059\:304c\:3001\:3053\:306e PC \:306e\:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9\:304c\:672a\:78ba\:8a8d\:3067\:3059 (ClaudeCodexSandboxSetup[] \:3092\:5b9f\:884c)\:3002",
+                "Codex is in use but its sandbox is not verified on this PC (run ClaudeCodexSandboxSetup[])."]|>,
+          True,
+            <|"Health" -> "OK", "ReasonCode" -> "CodexHealthy",
+              "Successes" -> succ, "Failures" -> Length[fails], "Refused" -> refused|>]];
+    $iCodexHealthProbeCache = <|"At" -> now, "Result" -> res|>;
+    res];
 
 (* NOTE (2026-05-27): Codex model-catalog discovery was moved to
    SourceVault. Per the SourceVault spec, concrete LLM model ids
@@ -46422,6 +47372,16 @@ iPrepareCodexRun[opts : OptionsPattern[]] :=
     (* --- step 1: capture the notebook object --- *)
     nb = OptionValue[iPrepareCodexRun, {opts}, "Notebook"];
     If[nb === Automatic, nb = EvaluationNotebook[]];
+
+    (* --- step 0 (2026-10-02): この PC でサンドボックスが確認済みか ---
+       未確認なら Codex を起動せず、アラート (「確認して有効化」ボタン) を出す。 *)
+    If[! TrueQ[ClaudeCodexSandboxGate["Notebook" -> nb]],
+      iCodexRecordOutcome["refused", "SandboxNotVerified", <|"Via" -> "prepare"|>];
+      Return @ iCodexPrepFailure["SandboxNotVerified",
+        iL["Codex \:3092\:8d77\:52d5\:3057\:307e\:305b\:3093\:3067\:3057\:305f: \:3053\:306e PC \:3067\:306f\:307e\:3060 Codex \:306e\:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9 (" <> ToString[iCodexWindowsSandboxMode[]] <> ") \:304c\:78ba\:8a8d\:3055\:308c\:3066\:3044\:307e\:305b\:3093\:3002\:300c\:78ba\:8a8d\:3057\:3066\:6709\:52b9\:5316\:300d\:30dc\:30bf\:30f3\:3092\:62bc\:3059\:304b ClaudeCodexSandboxSetup[] \:3092\:5b9f\:884c\:3057\:3066\:304b\:3089\:3001\:3082\:3046\:4e00\:5ea6\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002",
+          "Codex was not started: the Codex sandbox (" <>
+          ToString[iCodexWindowsSandboxMode[]] <>
+          ") is not verified on this PC. Click \"Check and enable\" or run ClaudeCodexSandboxSetup[], then run again."]]];
 
     (* resolve the directive repository root --- *)
     dirRoot = OptionValue[iPrepareCodexRun, {opts}, "DirectiveRoot"];
@@ -46722,6 +47682,7 @@ iRunChatgptCodexCLI[prompt_String, opts : OptionsPattern[]] :=
           ProcessEnvironment -> fullEnv]],
       $Failed];
     If[! AssociationQ[runResult],
+      iCodexRecordOutcome["error", "LaunchFailed", <|"Via" -> "sync"|>];
       Return @ iCodexRunFailure["Launch",
         "The Codex CLI process could not be run. Check that the " <>
         "Codex CLI is on PATH for the Wolfram kernel, or set " <>
@@ -46740,6 +47701,12 @@ iRunChatgptCodexCLI[prompt_String, opts : OptionsPattern[]] :=
       stdout];
     (* Automatic means the Codex CLI run-time default model was used. *)
     model    = $ChatgptCodexModel;
+    (* 2026-10-02: 結果を SIEM と台帳へ (失敗は分類コードだけ) *)
+    With[{ok = exitCode === 0 && StringQ[answerText] && StringTrim[answerText] =!= ""},
+      iCodexRecordOutcome[If[ok, "success", "error"],
+        If[ok, None, iCodexClassifyFailure[stderr, exitCode]],
+        <|"Via" -> "sync", "ExitCode" -> exitCode,
+          "Model" -> If[StringQ[model], model, "Automatic"]|>]];
 
     (* hashes for the run / bundle record *)
     profileHash = If[StringQ[configPath] && FileExistsQ[configPath],
@@ -47077,19 +48044,29 @@ EndPackage[];
 (* hardening 01 Inc2: SeatBroker を同ディレクトリから自動ロード (存在すれば)。
    無くても席ゲートは probe fallback で機能する。EndPackage 後に置くのは
    seatbroker の BeginPackage/EndPackage が ClaudeCode` のロード文脈を
-   汚さないようにするため。 *)
+   汚さないようにするため。
+   2026-10-02: 2 つの sub-file はどちらも BeginPackage["ClaudeRuntime`"] なので、
+   ClaudeRuntime.wl 本体が未ロードでも ClaudeRuntime` が $Packages に載り、後の
+   Needs["ClaudeRuntime`", "ClaudeRuntime.wl"] が何もしなくなっていた (本体が
+   読まれず ClaudeRunTurn 等が未定義のまま)。対話環境では ClaudeOrchestrator.wl
+   が「Needs で定義が立たなければ Get」で救っていたが、それを読まない経路では
+   欠ける。sub-file の読込は $Packages を Block して、本体の読込済み印を付け
+   ないようにする (定義・$ContextPath はそのまま残る)。本体が既に読まれていれば
+   Block 前の $Packages に含まれているので何も変わらない。 *)
 Module[{dir, f, g},
   dir = Quiet @ Check[
     If[StringQ[$InputFileName] && $InputFileName =!= "",
       DirectoryName[$InputFileName], Directory[]], Directory[]];
   f = FileNameJoin[{dir, "ClaudeRuntime_seatbroker.wl"}];
   If[Length[DownValues[ClaudeRuntime`ClaudeSeatAcquire]] === 0 && FileExistsQ[f],
-    Quiet @ Check[Block[{$CharacterEncoding = "UTF-8"}, Get[f]], Null]];
+    Quiet @ Check[Block[{$CharacterEncoding = "UTF-8", $Packages = $Packages},
+      Get[f]], Null]];
   (* hardening 03 Inc2: ProcessSupervisor も同様に自動ロード *)
   g = FileNameJoin[{dir, "ClaudeRuntime_processsupervisor.wl"}];
   If[Length[DownValues[ClaudeRuntime`ClaudeSupervisedStartProcess]] === 0 &&
      FileExistsQ[g],
-    Quiet @ Check[Block[{$CharacterEncoding = "UTF-8"}, Get[g]], Null]];
+    Quiet @ Check[Block[{$CharacterEncoding = "UTF-8", $Packages = $Packages},
+      Get[g]], Null]];
   (* hardening 03 Inc4: 前セッションの残骸 (孤児 manifest/プロセス) を
      起動時に回収する。ここが「tick が死ぬと漏れる」問題の最終補償点。
      ロード遅延を抑えるため TimeConstrained で上限を切る。 *)
@@ -47246,6 +48223,25 @@ Quiet @ Check[
       ClaudeDirectives`ClaudeLoadDirectiveRepository[],
       Null]],
   Null];
+
+(* === ClaudePackageManager.wl (sub-module) autoload ===
+   2026-10-01: ClaudeUpdatePackage / ClaudeCreatePackage / ClaudeRestorePackage 等は
+   Phase Q で ClaudePackageManager.wl へ移管されたが、claudecode.wl も起動スクリプト
+   (localInit.wl) もそれを読んでいなかった。ClaudeEval の指示 (rule 80 等) は
+   パッケージ修正に ClaudeUpdatePackage を使えと LLM に教えるので、提案の
+   ClaudeUpdatePackage[...] は Global`ClaudeUpdatePackage (定義なし) に解決されて
+   評価してもそのまま返り、runtime は「完了」と表示していた (何も更新されない)。
+   PM は claudecode.wl の後なら ClaudeRuntime より前に読んでも動く (実測 0.2 s・
+   警告なし) ので、ここで読む。読込済みなら何もしない。 *)
+If[!MemberQ[$Packages, "ClaudePackageManager`"],
+  Quiet @ Check[
+    Block[{$CharacterEncoding = "UTF-8"},
+      Get[With[{d = Quiet @ Check[DirectoryName[$InputFileName], ""]},
+        If[StringQ[d] && d =!= "" &&
+           FileExistsQ[FileNameJoin[{d, "ClaudePackageManager.wl"}]],
+          FileNameJoin[{d, "ClaudePackageManager.wl"}],
+          "ClaudePackageManager.wl"]]]],
+    Null]];
 
 
 (* === claudecode_editmodes.wl \:306f claudecode.wl \:672c\:4f53\:306b\:30de\:30fc\:30b8\:6e08\:307f (Phase 36 stage2 restart, 2026-04-29) ===

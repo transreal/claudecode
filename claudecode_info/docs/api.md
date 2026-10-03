@@ -262,7 +262,6 @@ $ClaudeCloudSendPreflightLog の最大エントリ数。超過時は古いエン
 プリフライト監査ログの永続化ファイルパス。設定するとタイムスタンプ・provider・decision・route・reason・正規化パス+SHA-256ハッシュ・privacy level・拒否パス等の固定フィールドのみを JSON Lines で追記する (payload 本文は記録しない)。
 
 ## LM Studio 統合設定
-
 lmstudio プロバイダー (/api/v1/chat) 呼び出し時の詳細設定群。
 
 ### $ClaudeLMStudioIntegrations
@@ -289,11 +288,8 @@ LM Studio 呼び出しの temperature (全モデル共通の強制値)。Automat
 ### $ClaudeLMStudioModelTemperatures
 型: Association, 初期値: `<|"qwen3.8-27b" -> 1.0|>`
 モデル別の推奨 temperature 表。キーはモデル ID (例 `"qwen3.8-27b"`) または `*` を含むワイルドカード (例 `"qwen3.8*"`)、値は temperature (数値) か None (そのモデルでは送らない)。照合は大文字小文字を無視し、完全一致 → 正規化 ID (`"qwen/"` などのベンダ接頭辞と `"@q4_k_m"` 量子化サフィックスを除去) の完全一致 → ワイルドカードの順。
-
 優先順位: 呼び出しオプション明示 > `$ClaudeLMStudioTemperature` (数値時) > 本表 > 送らない。
-
 `/api/v1/chat` 同期経路 (`iQueryLMStudioChat`)、PS1 非同期経路 (`iPrepareLMStudioMCPPS1`)、従来の `/v1/chat/completions` 経路のいずれでも適用される (マルチモーダル時の PS1 経路のみ未対応)。
-
 ```wl
 $ClaudeLMStudioModelTemperatures["qwen3.6*"] = 0.6;   (* ワイルドカードで一括指定 *)
 $ClaudeLMStudioModelTemperatures["gpt-oss-20b"] = None; (* このモデルは送らない *)
@@ -318,9 +314,7 @@ True で iQueryLMStudioChat の戻り値先頭に tool_call のトレース (ツ
 ### $ClaudeLMStudioModelReasoning
 型: Association, 初期値: `<||>`
 モデル別の reasoning effort 表。キーの照合規則は `$ClaudeLMStudioModelTemperatures` と同じ (完全一致 → 正規化 ID → ワイルドカード)。値は `"off"` (thinking 無効) / `"low"` / `"medium"` / `"high"` / `"max"` / Automatic。
-
 実際に送る値はモデルの `allowed_options` に合わせて段階的に選ばれます。
-
 | effort | 候補列 (先頭から allowed にあるものを採用) |
 |---|---|
 | `"max"` | xhigh → high → on → medium → low |
@@ -328,13 +322,9 @@ True で iQueryLMStudioChat の戻り値先頭に tool_call のトレース (ツ
 | `"medium"` | medium → on → high → low → xhigh |
 | `"low"` | low → on → medium → high → xhigh |
 | `"off"` | off → none → disabled (無ければ送らない) |
-
 `capabilities` に `reasoning` を持たないモデル (例: `qwen3.8-27b`, `qwen3.6-35b-a3b`) へは **一切送りません**。送ると LM Studio が `400 invalid_value / "Model '...' does not expose reasoning configuration."` を返して呼び出しごと失敗するためです。`capabilities` そのものを取得できない場合 (サーバー不通・モデルが一覧に無い) も本表由来の値は送りません。
-
 `$ClaudeLMStudioReasoning` に文字列を直接入れた場合だけ、capabilities 不明時にユーザー責任で正規化値を送ります (`"max"` は `xhigh` 対応を確認できないため `high` に落とす)。
-
 優先順位: `$ClaudeLMStudioReasoning` (文字列時) > 本表 > Automatic (allowed_options から最強値を自動選択)。
-
 パレットの Effort ボタン (標準モデル用・秘密モデル用の 2 つ) がこの表を書き換えます。
 
 ### $ClaudeLMStudioToolNudge
@@ -346,7 +336,6 @@ LM Studio MCP (integrations) 有効時にプロンプト先頭に前置するツ
 パレットの LM Studio モデル選択の情報源。True: メモリにロード済み (state=="loaded") のモデルのみ提示。False: ダウンロード済みの chat 対応モデル全体を提示。LM Studio に到達不可の場合は SourceVault カタログ/静的リストにフォールバック。
 
 ## ローカル LLM プロバイダー排他指定
-
 マシン自身 (localhost / 自機 IP) で動かすローカル LLM エンジンを 1 つに絞り、意図しないローカル推論サーバーへの誤送信を防ぐ仕組み (2026-09-08)。対象は「自機の localhost を指す接続」のみ。指定外のローカル provider でも、接続先が LAN 上の別機 (例: 192.168.x.x の llama-server) なら従来どおり使える (可否は URL と NBAccess の信頼判定に従う)。クラウド provider (claudecode/anthropic/openai/zai/kimi) は対象外。接続先の判定は URL のホスト部 (localhost / 127.* / ::1 / $MachineAddresses / $MachineName)。
 
 ### $ClaudeFreeTokenBaseURL
@@ -373,7 +362,6 @@ llama.cpp llama-server の既定 base URL。OpenAI 互換 /v1/chat/completions �
 自機のローカル LLM エンジン指定をこのカーネルで切り替える ("lmstudio" | "llamacpp" | "freetoken" | All | Automatic)。preflight キャッシュを捨て、パレットの P: / 秘密 P: が自機を指す指定外 provider になっていれば指定 provider へ寄せる。戻り値は実効 provider (ClaudeLocalLLMProvider[])。不正な値は $Failed (設定は変えない)。恒久設定は $ClaudeMachineLocalLLMProvider (localInit.wl) に書く。
 
 ## LLM ルーティング・使用量管理
-
 TaskClass ベースのバックエンド自動選択、日次課金上限、使用量集計を扱うサブシステム (hardening 04)。
 
 ### $ClaudeLLMTierTable
@@ -768,7 +756,6 @@ Options: Fallback -> False, References -> {} (URL/書籍リスト。README.md �
 Options: Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, Acknowledgments -> {}, License -> "", TargetFiles -> Automatic, Mode -> "Update", Baseline -> "LastDocUpdate"
 
 ## クライアント側ツールループ (SourceVault MCP をローカル/クラウド API モデルへ)
-
 LM Studio は `/api/v1/chat` の integrations でサーバ側がツールループを回すが、llama.cpp / FreeToken と OpenAI 互換のクラウド API にはその機能が無い。claudecode が `tools` を送り、`tool_calls` を受け、`SourceVaultMCPCallTool` をプロセス内で実行して `role:"tool"` で返すループを回す (同期 `iQueryOpenAIToolLoop`、非同期 URLSubmit `iToolLoopStart`)。
 
 ### $ClaudeLocalToolLoop
@@ -778,7 +765,7 @@ LM Studio は `/api/v1/chat` の integrations でサーバ側がツールルー�
 思考暴走ガード。実機 (qwen3.8-27b, LM Studio) で「光子の二重スリット実験のシミュレーションコード」が reasoning 22,430 tok (10.8 tok/s で約 35 分) を吐き続けて本文もツール呼び出しも無いまま 40K 文脈に達し、DAG は 30 分 (`$LLMGraphDAGMaxJobSeconds`) で kill された。
 - `$ClaudeLocalToolLoopMaxCompletionTokens` (既定 8192): ループの全往復に `max_tokens` として送る (思考トークンも数える)。None で無効。
 - `$ClaudeLocalToolLoopReasoningEffort`: Automatic (provider ごとに解決: lmstudio はパレット秘密モデル effort が「off」なら `"none"`、それ以外は `iResolveLMStudioReasoning`; freetoken は `iResolveFreeTokenReasoning`) / None (送らない) / `"none"` 等の文字列 (全往復に強制)。値は `/v1/chat/completions` の語彙 (none / minimal / low / medium / high / xhigh) に正規化する — `/api/v1/chat` 用の `"on"` を送ると LM Studio が 400 (`Invalid 'reasoning_effort' value: 'on'`) を返すため、off→none、on→送らない。
-- 往復が `finish_reason: "length"` かつ本文空かつツール呼び出し無し (= 出力予算を思考で使い切った) なら、`reasoning_effort: "none"` と「長考せず今すぐ回答せよ」の `[System]` メッセージで **1 回だけ再試行**し、それでも同じなら Error (同期は `Error: ...` 文字列、非同期ジョブは Failed) で即座に返す。freeze log `toolloop-thinking-exhausted-retry`。
+- 往復が `finish_reason: "length"` かつ本文空かつツール呼び出し無し (= 出力予算を思考で使い切った) なら、`reasoning_effort: "none"` と「長考せず今すぐ回答せよ」の `[System]` メッセージで **1 回だけ再試行**し、それでも同じなら Error (同期は `Error: ...` 文字列、非同期ジョブは Failed) で即座に返る。freeze log `toolloop-thinking-exhausted-retry`。
 - DAG の max-lifetime / stall kill は `toolLoopId` を持つノードの URLSubmit タスクも `TaskAbort`+`TaskRemove` する (`dag-kill-toolloop`)。これが無いと LM Studio は切断を検知せず、ジョブ死亡後も往復の最後まで生成を続けてスロットを塞ぐ。
 
 ### $ClaudeEvalToolIntegrations
@@ -828,7 +815,6 @@ Claude Directives ソースフォルダの内容を dir (CLAUDE.md / rules / ski
 → Null
 
 ## クラウド送信プリフライト
-
 LLM へのクラウド送信前に何が送られるかを監査・制御するシステム。外部パッケージ (SourceVault 等) が $ClaudeCloudSendPreflightContextResolver にフックを登録して使用する。
 
 ### ClaudeCloudSendPreflightDecision[provider, payload, opts]
@@ -901,7 +887,6 @@ Options: Fallback -> False, Owner -> Automatic, Repository -> Automatic, Branch 
 補足: ClaudeUpdatePackage / ClaudeCreatePackage / ClaudeConvertToPaclet / ClaudeBackupDataset / ClaudeRestorePackage / ClaudeUpdatePackageHistory / ClaudeMigrateBackupHistory / ClaudeBuildTransactionAdapter / ClaudeUpdatePackageViaRuntime 等のパッケージ編集系関数は ClaudePackageManager.wl へ移管済み (エイリアス経由で claudecode からも引き続き呼び出し可能)。それらの詳細は ClaudePackageManager 側の api.md を参照する。
 
 ## Markdown / Mermaid
-
 markdown 文字列をノートブックセル・新規ノートブック・インライン表示に変換する共通コンバータ群。spec-impl / workflow-catalog / commit-safety の各レンダラーが内部で共通利用する正準実装。
 
 ### MarkdownToCells[md, opts]
@@ -1050,7 +1035,6 @@ LLMGraph のインメモリキャッシュ。ノートブックオブジェク�
 LLMGraph キャッシュのノートブック参照インデックス。
 
 ## LLMGraphDAG
-
 タスクの有向非循環グラフを共有スケジューラ (共有 polling tick) 上で非同期実行する低レベルフレームワーク。ClaudeProcessFile / NBFileTranslate 等が内部でこの上に構築されている。
 
 ### $LLMGraphMaxConcurrency
@@ -1156,7 +1140,6 @@ LLMGraphExecute のジョブをキャンセルする。
 → True | $Failed
 
 ## ランタイム
-
 ClaudeRuntime` (別パッケージ) 上に構築された、承認ゲート付きマルチターン実行ブリッジ。
 
 ### $UseClaudeRuntime
@@ -1170,6 +1153,10 @@ True で ClaudeQuery / ClaudeEval 等がランタイムブリッジ (ClaudeStart
 ### $ClaudeRoutingProviders
 型: List
 $UseClaudeRuntime 経由のランタイムルーティング対象となるプロバイダー名のリスト。
+
+### $ClaudeRuntimeDisplayHook
+型: Function | None
+ランタイム結果の表示を差し替えるフック (public シンボル)。
 
 ### $ClaudeRuntimeAsyncExecution
 型: Boolean
@@ -1205,6 +1192,9 @@ Options: "Profile" -> "Eval", "Fallback" -> False, "Notebook" -> Automatic (Auto
 ### ClaudeApproveProposal[runtimeId]
 Status が "AwaitingApproval" のランタイムに対して承認/拒否ダイアログを表示し、承認後 ClaudeRuntime`ClaudeResumeAfterApproval でランタイムを再開する。proposal の ExpectedSeconds が設定されていればタイムアウトが自動延長される。AwaitingApproval でない場合は "NotAwaiting" を返す。
 → 実行結果 | "NotAwaiting"
+
+### ClaudeRuntimeDecide[...]
+承認ゲート付きランタイムの提案に対する承認/拒否判断を行う public シンボル (ClaudeApproveProposal の非ダイアログ版。引数詳細はソース側 usage を参照)。
 
 ### ClaudeRuntimeSnapshot[runtimeId]
 ランタイム状態のスナップショットを保存する。
@@ -1252,7 +1242,6 @@ NB 初段 hook (function_contract_wiring spec v0.3 §7.3、rule 11 の弱結合)
 NB 最終段 hook。SourceVault ロード時に `SourceVaultCellOutput` (URI envelope / wiring 実行結果 → MediaKind 別セル書き出し) が自動登録される。
 
 ## ClaudeEval コンテキストプランニング
-
 ClaudeEval の LLM 送信パスにおける、有界/遅延コンテキスト組み立てを制御するサブシステム。
 
 ### $ClaudeEvalContextPlanning
@@ -1442,9 +1431,7 @@ Claude CLI 呼び出し用のバッチ起動コマンド文字列を構築する
 画像処理時の最大サイズ上限。外部パッケージからの参照用に Public 化されている。
 
 ## オプション一覧
-
 以下のシンボルが ClaudeQuery / ClaudeEval / ClaudeQueryBg 等のオプションキーとして使用される:
-
 - `Fallback` → False: True で Claude Code 利用不可時にフォールバックモデルに自動切替。アクセスレベルに応じて利用可能なモデルのみにフォールバックする
 - `AutoPrivate` → False: True で機密変数を含むタスク時に Model -> $ClaudePrivateModel, PrivacySpec -> Automatic を付与する
 - `AutoEvaluate` → ClaudeEval/ContinueEval では True、ClaudeQuery/ClaudeWriteResponse では False: コード生成後 (または書き込み後) に自動評価するか

@@ -677,6 +677,18 @@ $ClaudeModelCapabilities = <|
     "Provider"         -> "claudecode",
     "Paid"             -> False
   |>,
+  (* 2026-10-01: Sonnet 5.5 (Claude 5 generation). Values copied from Sonnet 5. *)
+  {"claudecode", "claude-sonnet-5-5"} -> <|
+    "Generation"       -> 5,
+    "DirectiveLevel"   -> "Minimal",
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "ToolUse"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "claudecode",
+    "Paid"             -> False
+  |>,
   {"anthropic", "claude-fable-5"} -> <|
     "Generation"       -> 5,
     "DirectiveLevel"   -> "Minimal",
@@ -689,6 +701,17 @@ $ClaudeModelCapabilities = <|
     "Paid"             -> True
   |>,
   {"anthropic", "claude-sonnet-5"} -> <|
+    "Generation"       -> 5,
+    "DirectiveLevel"   -> "Minimal",
+    "ContextWindow"    -> 200000,
+    "Class"            -> "Heavy-Cloud",
+    "DefaultMode"      -> "Summary",
+    "Strengths"        -> {"Code", "Reasoning", "JSON", "ToolUse"},
+    "PreserveThinking" -> True,
+    "Provider"         -> "anthropic",
+    "Paid"             -> True
+  |>,
+  {"anthropic", "claude-sonnet-5-5"} -> <|
     "Generation"       -> 5,
     "DirectiveLevel"   -> "Minimal",
     "ContextWindow"    -> 200000,

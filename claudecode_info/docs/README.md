@@ -20,7 +20,7 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 **セッションによる会話の継続性**: セッション機構により、複数回のやり取りにわたって会話履歴を保持します。セッションはノートブックの TaggingRules に永続化されるため、ノートブックを閉じて再度開いた後でも会話を再開できます。履歴が長くなった場合はエントリ数ベースとサイズベースの二重チェックにより自動または手動でコンパクションが行われ、トークン消費を抑制します。名前付きセッションの作成・継承・復元・削除が可能で、複数の独立したタスクを並行して進められます。また、セッション単位の履歴削除機能により、不要な履歴を個別に削除してストレージを効率的に管理できます。反復エージェント(ClaudeEval / ClaudeRuntime)の継続プロンプトに載せる直近ターンの評価結果・ツール結果は `$ClaudeAgentResultMaxChars`(既定 6000 文字)で上限を制御でき、古いターンは従来どおり200文字の要約のまま保持されます。
 
-実装面では、Claude Code CLI をバックエンドとして利用し、`--output-format stream-json` モードでリアルタイムにストリーミング出力を解析します。問い合わせ中は経過時間に加え、現在の状態(思考中・テキスト生成中・ツール実行中)やフラグメント数をリアルタイムで表示します。エラー出力は stderr 経由で分離処理され、stdout の JSON ストリームと干渉しない設計になっています。ファイルパス操作には `FileNameJoin` を一貫して使用し、OS 非依存のパス構築を徹底しています。
+実装面では、Claude Code CLI をバックエンドとして利用し、`--output-format stream-json` モードでリアルタイムにストリーミング出力を解析します。問い合わせ中は経過時間に加え、現在の状態(思考中・テキスト生成中・ツール実行中)やフラグメント数をリアルタイムで表示します。エラー出力は stderr 経由で分離処理され、stdout の JSON ストリームと干渉しない設計になっています。Claude 5 世代のモデル(Opus 5.5 など)を使う場合は新しい版の CLI が必要で、古い CLI では API が `400 claude_code_version_too_old` を返します(CLI の API エラー本文は表示されるため原因を判別できます)。ファイルパス操作には `FileNameJoin` を一貫して使用し、OS 非依存のパス構築を徹底しています。
 
 作業ディレクトリ (`$ClaudeWorkingDirectory`) 配下の CLAUDE.md やディレクティブ (rules/skills) が Claude Code に自動的に読み込まれ、プロジェクト固有のガイドラインを反映した応答が得られます。プロジェクトディレクティブ機構により、NotebookDirectory ごとに独立したルール・スキルを定義し、メインのディレクティブと自動マージできます。Claude Code CLI が利用できない場合のフォールバック機構として、Anthropic API・OpenAI API・z.ai(GLM シリーズ)API・Kimi(Moonshot AI)API への直接呼び出しに加え、LM Studio・llama.cpp(llama-server)等のローカル LLM サーバーへの接続もサポートしています。フォールバックモデルは `$ClaudeFallbackModels` で優先順位付きで設定でき、`{provider, model, url}` の3要素形式でカスタム URL を指定できます。フォールバック候補を順に試行する際は、429(レート制限)やサーバー過負荷エラーが連続発生する事態を避けるため、次候補の起動を指数バックオフ(1秒→2秒→4秒を上限とする遅延)で行います。アクセスレベルに基づいて利用可能なモデルのみが選択されるプライバシー対応ルーティングにより、機密データの処理をローカルモデルへ自動転送できます。2026-08-28 の改訂では、Claude Code CLI の OAuth 認証切れ(401 authentication_failed)もレート制限と同格の検出対象に追加され、フォールバック判定に組み込まれるようになりました。`ClaudeAuthStatus[]` で認証状態を確認し、`ClaudeAuthClear[]` で検出済みの認証切れ状態を手動リセットできます。ドキュメント更新(`ClaudeUpdateDocumentation`)でも認証切れを検出した場合はレート制限と同格の投入前ゲートとして扱われ、新規ドキュメントを1件も投入せずに中断して再ログインを促します。
 
@@ -28,7 +28,7 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 **llama.cpp ローカルプロバイダとローカル LLM エンジンのマシン別排他**: LM Studio に加えて、llama.cpp(llama-server)をベースにしたローカルプロバイダも利用できます。`$ClaudeModel` / `$ClaudePrivateModel` に `{"llamacpp", モデル名, URL}` 形式で指定するか、`$ClaudeLlamaCppBaseURL`(既定 `http://127.0.0.1:8080`)で既定の接続先を設定します。同一マシン上で複数のローカル推論サーバーを同時に起動すると資源競合が起きるため、`$ClaudeLocalLLMProvider`(2026-09-08 追加)により、そのマシン自身が動かすローカル LLM エンジンを `"lmstudio"` / `"llamacpp"` / `"freetoken"` のいずれか一つに明示排他できます(既定 `Automatic` は `$ClaudeMachineLocalLLMProvider` のマシン名対応表 → 既定 `"lmstudio"` の順で解決)。
 
-**ChatGPT Codex CLI の provider 利用**: Claude Code CLI に加えて、OpenAI の ChatGPT Codex CLI を provider として利用できます。`$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定すると、ClaudeEval/ClaudeQuery が Codex CLI 経由で実行されます。Codex provider は Claude CLI と同じ非同期実行経路で動作し、Codex 実行ごとに一時的な作業ディレクトリと CODEX_HOME を作成して `codex login` の認証情報を引き継ぎます。Codex のモデル名は SourceVault のモデルレジストリが一元管理し、具体的な LLM モデル ID をパッケージソースに直書きしない設計を採っています。**仕様レビュー合意ワークフロー**では `$ClaudeAdvisaryModel`(既定: `{"chatgptcodex", "Automatic"}`)がアドバイザリーロールのモデルとして使用されますが、その役割は文脈により反転します。仕様生成ワークフローでは `$ClaudeAdvisaryModel` がドラフター役・`$ClaudeModel` がレビュアー役を、仕様実装ワークフロー(`CreateImplementationWorkflow`)では `$ClaudeAdvisaryModel` が検証役・`$ClaudeModel` が実装役を担います。単純な代入はカーネルセッション限りで再起動によりリセットされてしまうため、恒久的に変更したい場合は SourceVault の `SourceVaultSetModelIntent["$ClaudeAdvisaryModel", ...]` でインテントまたは固定モデル ID をディスクに永続化します。仕様生成/実装ワークフローの実装者ロールを ultra モデルクラス(例: claude-fable-5)へ昇格させるかどうかは `$ClaudeUltraEnabled` で制御しますが、対話セッションと共有の fable session limit を消費してしまう問題を避けるため既定は `False`(明示 opt-in)です。
+**ChatGPT Codex CLI の provider 利用**: Claude Code CLI に加えて、OpenAI の ChatGPT Codex CLI を provider として利用できます。`$ClaudeModel` を `{"chatgptcodex", Automatic}` に設定すると、ClaudeEval/ClaudeQuery が Codex CLI 経由で実行されます。Codex provider は Claude CLI と同じ非同期実行経路で動作し、Codex 実行ごとに一時的な作業ディレクトリと CODEX_HOME を作成して `codex login` の認証情報を引き継ぎます。Windows では Codex CLI 0.153 以降のサンドボックス方式のうち、許可リスト型の読取制限を守れる AppContainer ベースの **mxc** だけを許容します(2026-10-02 追加)。claudecode は Codex を起動する前に、この PC で mxc サンドボックスが設定どおりに動くことを PC ごと(`$MachineName` 単位)に検証し、確認できない場合は Codex を起動しません。検証結果は Codex CLI のバージョンとサンドボックス方式を含めて保存され、CLI やバックエンドが変わると「未検証」に戻って再検証が済むまで実行されません。現在の状態は `ClaudeCodexSandboxStatus[]` で確認できます。Codex の実行結果は SIEM spool(`LLMCall`)と直近 200 件の台帳に記録され、失敗は分類コードのみが残ります。Codex のモデル名は SourceVault のモデルレジストリが一元管理し、具体的な LLM モデル ID をパッケージソースに直書きしない設計を採っています。**仕様レビュー合意ワークフロー**では `$ClaudeAdvisaryModel`(既定: `{"chatgptcodex", "Automatic"}`)がアドバイザリーロールのモデルとして使用されますが、その役割は文脈により反転します。仕様生成ワークフローでは `$ClaudeAdvisaryModel` がドラフター役・`$ClaudeModel` がレビュアー役を、仕様実装ワークフロー(`CreateImplementationWorkflow`)では `$ClaudeAdvisaryModel` が検証役・`$ClaudeModel` が実装役を担います。単純な代入はカーネルセッション限りで再起動によりリセットされてしまうため、恒久的に変更したい場合は SourceVault の `SourceVaultSetModelIntent["$ClaudeAdvisaryModel", ...]` でインテントまたは固定モデル ID をディスクに永続化します。仕様生成/実装ワークフローの実装者ロールを ultra モデルクラス(例: claude-fable-5)へ昇格させるかどうかは `$ClaudeUltraEnabled` で制御しますが、対話セッションと共有の fable session limit を消費してしまう問題を避けるため既定は `False`(明示 opt-in)です。
 
 パッケージ管理機能 (`ClaudeUpdatePackage`, `ClaudeRestorePackage`) では、既存の .wl パッケージを Claude の支援で更新し、差分ベースの自動バックアップにより安全なイテレーションを実現します。バックアップシステムは `SequenceAlignment` ベースの差分保存を採用し、`.cz`(ベースライン)・`.cdiff`(差分)・`.unchanged`(参照)の3形式でストレージ消費を大幅に削減します。差分チェーンの中間ノードを削除する際も依存関係を自動解決し、復元不能になることを防止します。既存の生バックアップは `ClaudeMigrateBackupHistory` で差分形式に一括変換できます。コード生成・マージ後には検証テストが自動生成・実行され(`===BEGIN_TESTS===` ～ `===END_TESTS===` ブロック)、意図した変更が正しく反映されているか確認します。LLM レスポンスは「連続した行のかたまり(セグメント)」単位でマージされるため、マージ精度が大幅に向上しています。`パッケージ名\`関数名` / `パッケージ名\`Private\`内部関数名` のような完全修飾定義も正しく認識されます。
 
@@ -50,7 +50,7 @@ AI 生成機能として、OpenAI Images API による画像生成(`ClaudeImageG
 
 **claudecode_directives 連携とディレクティブ投影レイヤー**: オプションの独立パッケージ [claudecode_directives](https://github.com/transreal/claudecode_directives) をロードすることで、`rules/` および `skills/` ディレクトリのデフォルトセットが自動的にインストールされます。ロード後は Claude Code CLI のコンテキストに `rules/` の制約と `skills/` の手順が自動的に注入され、Claude がスキルを呼び出せるようになります。これらのディレクティブは Claude Code の振る舞いを規定するルールとスキルを体系的に提供し、claudecode.wl 本体はディレクティブの内容に非依存のまま、claudecode_directives がその管理・配布を担います。NotebookDirectory ごとに独立したプロジェクト固有のルール・スキルを定義してメインのディレクティブと自動マージすることも可能です。
 
-このパッケージは、単なる rules/skills の配布にとどまらず、**ディレクティブ投影レイヤー(ClaudeDirectives)** を備えています。正規ディレクティブ・リポジトリ(`.claude/CLAUDE.md` / `rules/` / `skills/`)を読み込み、モデルの能力(コンテキスト長・課金有無・クラス)・ロール・タスク内容に応じて、投影モード(**Full / Summary / Index / Lazy**)と適用するスキル・ルールを in-memory で動的に選択します。モデル能力は `$ClaudeModelCapabilities` テーブルで管理され、`"claudecode"`(CLI・課金なし)/`"anthropic"`(API・課金)/`"openai"`(API・課金)/`"lmstudio"`(ローカル・課金なし)の provider 別に登録されます。タスク内容に応じたルール選別は、常時注入対象(`$ClaudeAlwaysOnRules`)を除き、rule の frontmatter に記載されたキーワード・パスとタスクヒントとの一致度によってスコアリングされます。さらに Role(Plan/Draft/Verify/Commit/Explore/Reduce)別の既定モデル・優先スキル方針・既定投影モード・スキル上限をテーブルで管理し、ClaudeOrchestrator の worker 生成時に参照できます。2026-09-08 の改訂では、投影モード(Full/Summary/Index/Lazy、**どれだけ入るか**)と直交する第2軸として、モデルの世代・能力に応じた指示の必要水準を表す **DirectiveLevel**(Minimal / Standard / Full、**どれだけ必要か**)が導入されました。ルールの frontmatter `tier:`(safety/guardrail/procedure/style/evolved)とモデル別のレベルに基づき、Claude 5 系のような高性能モデルにはガードレール系ルールを索引のみ渡してツール経由でオンデマンド取得させる一方、旧世代・小型・ローカルモデルには従来どおり全文を渡す、という使い分けが可能です。レベルは `$ClaudeDirectiveLevelOverrides` による明示指定や、外部の適応学習レイヤー(例: ClaudeOrchestrator の TurnWiki)が接続できる `$ClaudeDirectiveLevelResolver` フックを介して解決され、`ClaudeResolveDirectiveLevel[modelSpec]` で確認、`ClaudeSetDirectiveLevelOverride[modelSpec, level]` で上書きできます。同改訂では、モデル能力解決を担う `ClaudeResolveModelCapability` の tuple キー照合バグも修正され、`{provider, model}` タプル・`"provider/model"` 文字列・素のモデル名のいずれからも正しくモデル能力が解決されるようになりました(従来はローカルモデルが常に不一致となり保守的な既定値 32K/Unknown にフォールバックしていました)。索引のみ渡された rule/skill を呼び出し側自身がツール経由で取得できる環境向けに、`ClaudeResolveDirectiveBundle` の `ToolAccess -> True` オプションを指定すると、投影末尾にディレクティブ取得ツール(`sourcevault_directives` / `sourcevault_directive_body`)経由での取得を促す案内が付加されます。さらに、単一の正規リポジトリから Claude CLI 用(`.claude/`)と Codex CLI 用(`AGENTS.md` / `.agents/`)のハーネスを生成・実体化する機能を備え、ファイル形式は Claude Code 互換を維持します。Claude CLI ハーネスの生成方式は `$ClaudeCLIHarnessMode` で制御でき、`"Direct"`(既定・作業中の `.claude/` をそのままコピー)と `"Generated"`(正規ディレクティブリポジトリから `.claude/` を生成するオプトインモード)を選択できます。投影レイヤーは claudecode.wl / NBAccess.wl に依存しない純 Wolfram Language 実装で、claudecode.wl 側から optional に統合されます。リポジトリのインベントリ・Manifest・ContentHash 算出による整合性管理も備えています。
+このパッケージは、単なる rules/skills の配布にとどまらず、**ディレクティブ投影レイヤー(ClaudeDirectives)** を備えています。正規ディレクティブ・リポジトリ(`.claude/CLAUDE.md` / `rules/` / `skills/`)を読み込み、モデルの能力(コンテキスト長・課金有無・クラス)・ロール・タスク内容に応じて、投影モード(**Full / Summary / Index / Lazy**)と適用するスキル・ルールを in-memory で動的に選択します。モデル能力は `$ClaudeModelCapabilities` テーブルで管理され、`"claudecode"`(CLI・課金なし)/`"anthropic"`(API・課金)/`"openai"`(API・課金)/`"lmstudio"`(ローカル・課金なし)の provider 別に登録されます(Anthropic CLI 版 Opus と Anthropic API 版 Opus は別モデルとして両方登録されます)。`ClaudeRegisterModelCapability[name, spec]` により、外部パッケージが独自のモデル(自社ホスト LLM 等)を能力テーブルへ追加登録することも可能です。タスク内容に応じたルール選別は、常時注入対象(`$ClaudeAlwaysOnRules`)を除き、rule の frontmatter に記載されたキーワード・パスとタスクヒントとの一致度によってスコアリングされます。さらに Role(Plan/Draft/Verify/Commit/Explore/Reduce)別の既定モデル・優先スキル方針・既定投影モード・スキル上限をテーブルで管理し、ClaudeOrchestrator の worker 生成時に参照できます。2026-09-08 の改訂では、投影モード(Full/Summary/Index/Lazy、**どれだけ入るか**)と直交する第2軸として、モデルの世代・能力に応じた指示の必要水準を表す **DirectiveLevel**(Minimal / Standard / Full、**どれだけ必要か**)が導入されました。ルールの frontmatter `tier:`(safety/guardrail/procedure/style/evolved)とモデル別のレベルに基づき、Claude 5 系のような高性能モデルにはガードレール系ルールを索引のみ渡してツール経由でオンデマンド取得させる一方、旧世代・小型・ローカルモデルには従来どおり全文を渡す、という使い分けが可能です。レベルは `$ClaudeDirectiveLevelOverrides` による明示指定や、外部の適応学習レイヤー(例: ClaudeOrchestrator の TurnWiki)が接続できる `$ClaudeDirectiveLevelResolver` フックを介して解決され、`ClaudeResolveDirectiveLevel[modelSpec]` で確認、`ClaudeSetDirectiveLevelOverride[modelSpec, level]` で上書きできます。同改訂では、モデル能力解決を担う `ClaudeResolveModelCapability` の tuple キー照合バグも修正され、`{provider, model}` タプル・`"provider/model"` 文字列・素のモデル名のいずれからも正しくモデル能力が解決されるようになりました(従来はローカルモデルが常に不一致となり保守的な既定値 32K/Unknown にフォールバックしていました)。索引のみ渡された rule/skill を呼び出し側自身がツール経由で取得できる環境向けに、`ClaudeResolveDirectiveBundle` の `ToolAccess -> True` オプションを指定すると、投影末尾にディレクティブ取得ツール(`sourcevault_directives` / `sourcevault_directive_body`)経由での取得を促す案内が付加されます。さらに、単一の正規リポジトリから Claude CLI 用(`.claude/`)と Codex CLI 用(`AGENTS.md` / `.agents/`)のハーネスを生成・実体化する機能を備え、ファイル形式は Claude Code 互換を維持します。Claude CLI ハーネスの生成方式は `$ClaudeCLIHarnessMode` で制御でき、`"Direct"`(既定・作業中の `.claude/` をそのままコピー)と `"Generated"`(正規ディレクティブリポジトリから `.claude/` を生成するオプトインモード)を選択できます。投影レイヤーは claudecode.wl / NBAccess.wl に依存しない純 Wolfram Language 実装で、claudecode.wl 側から optional に統合されます。リポジトリのインベントリ・Manifest・ContentHash 算出による整合性管理も備えています。
 
 **ClaudeRuntime 統合**: オプションの独立パッケージ [ClaudeRuntime](https://github.com/transreal/ClaudeRuntime) をロードすることで、`ClaudeEval` のバックエンドとしてランタイムセッション管理機能が有効になります。ランタイムはターン数・プロファイル・失敗履歴を追跡し、内部状態を保持した複数ターンにわたる対話を可能にします。危険な操作(内部変数の直接書き換え等)に対しては自動的に承認フロー(`NeedsApproval`)を介挿し、意図しない破壊的操作を防止します。ClaudeRuntime をロードすると `$UseClaudeRuntime = True` が自動的に設定され、以降の `ClaudeEval` 呼び出しは ClaudeRuntime 経由でルーティングされます(claudecode を単独でロードした場合はデフォルトの `$UseClaudeRuntime = False` のまま従来動作を維持)。LLM 応答から再抽出したコードブロックが runtime 側で既に実行済みの式と一致する場合、Input セルへの書き込みは行うものの自動評価は抑制する二重実行防止ガードが機能します(2026-09-18 修正)。
 
@@ -78,8 +78,8 @@ AI 生成機能として、OpenAI Images API による画像生成(`ClaudeImageG
 |------|-----------|
 | Wolfram Language | 12.0 以上(Mathematica または Wolfram Engine、14.x 推奨) |
 | Node.js | 16 以上 |
-| Claude Code CLI | 最新版 |
-| ChatGPT Codex CLI | 最新版(オプション・`chatgptcodex` provider 利用時) |
+| Claude Code CLI | 最新版(Claude 5 世代のモデルを使う場合は新しい版が必須。古い CLI では `400 claude_code_version_too_old` が返る) |
+| ChatGPT Codex CLI | 最新版(オプション・`chatgptcodex` provider 利用時。Windows では 0.153 以降の mxc サンドボックスを PC ごとに検証) |
 | OS | Windows 10/11(現在 Windows 専用実装。macOS/Linux ではパス区切りやシェルコマンドを適宜読み替えてください) |
 
 ### インストール
@@ -117,6 +117,8 @@ codex login
 ```
 
 `codex login` の認証情報は claudecode の Codex 実行に自動的に引き継がれます。Claude Code CLI も Codex CLI もサブスクリプション契約に基づく CLI であり、メーター制 API とは課金体系が異なります。
+
+Windows で Codex を使う場合、初回実行前に PC ごとのサンドボックス検証が自動的に行われ、成功すると「Codex sandbox を検証しました」と表示されます。失敗した場合は理由つきで警告され、Codex は起動されません。状態は `ClaudeCodexSandboxStatus[]` で確認できます(詳細は setup.md を参照)。
 
 #### 2. パッケージファイルの配置
 
@@ -243,6 +245,9 @@ ClaudeDeleteSession["セッション名", "All"]
 (* 認証状態の確認・リセット *)
 ClaudeAuthStatus[]
 ClaudeAuthClear[]
+
+(* ChatGPT Codex を使う場合、この PC の Codex サンドボックス検証状態を確認(Windows) *)
+ClaudeCodexSandboxStatus[]
 
 (* LM Studio のローカルモデルを使用(Model オプションで直接指定) *)
 ClaudeEval["階乗を計算して",
@@ -445,7 +450,7 @@ ShowClaudePalette[]
 
 **ディレクティブ投影レイヤー(ClaudeDirectives・claudecode_directives ロード時)**
 - 正規ディレクティブ・リポジトリ(`.claude/CLAUDE.md` / `rules/` / `skills/`)を読み込み、モデル能力・ロール・タスクに応じて投影モード(Full / Summary / Index / Lazy)と適用スキル・ルールを動的選択
-- `$ClaudeModelCapabilities` によるモデル能力テーブル管理(provider 別の課金有無・コンテキスト長・クラス)。モデル指定は `ClaudeResolveModelCapability`/`ClaudeNormalizeModelSpec` により `{provider, model}` タプル・`"provider/model"` 文字列・素のモデル名のいずれからも解決可能
+- `$ClaudeModelCapabilities` によるモデル能力テーブル管理(provider 別の課金有無・コンテキスト長・クラス)。モデル指定は `ClaudeResolveModelCapability`/`ClaudeNormalizeModelSpec` により `{provider, model}` タプル・`"provider/model"` 文字列・素のモデル名のいずれからも解決可能。`ClaudeRegisterModelCapability[name, spec]` により、外部パッケージが独自モデルの能力(コンテキスト長・課金有無・クラス等)をテーブルへ追加登録できる
 - タスクヒントに基づく rule/skill 選別(frontmatter のキーワード・パスとの一致度でスコアリング)と、常時注入対象を定義する `$ClaudeAlwaysOnRules`
 - `$ClaudeRoleDefaultModels`・`$ClaudeSkillRolePolicy`・`$ClaudeRoleDefaultMode`・`$ClaudeRoleMaxSkills` による Role 別(Plan/Draft/Verify/Commit/Explore/Reduce)の既定モデル・優先スキル・投影モード・スキル上限の管理(ClaudeOrchestrator の worker 生成時に参照)
 - **DirectiveLevel**(Minimal/Standard/Full、2026-09-08)によるモデル世代別の指示水準制御。投影モード(Full/Summary/Index/Lazy = どれだけ入るか)と直交する軸(どれだけ必要か)で、rule の frontmatter `tier:`(safety/guardrail/procedure/style/evolved)とモデル別レベルに応じて全文/索引のみ/除外を切替。`$ClaudeDirectiveLevelOverrides` による明示上書きや、外部の適応学習レイヤーが接続できる `$ClaudeDirectiveLevelResolver` フックを介して解決される。`ClaudeResolveDirectiveLevel`・`ClaudeSetDirectiveLevelOverride`・`ClaudeDirectiveBundleDiagnostics` 等の API を提供。ディレクティブ取得ツールを持つ呼び出し側向けの `ToolAccess -> True` オプションにも対応し、索引のみ渡した rule/skill をツール経由で取得する案内を投影末尾に付加できる
@@ -492,6 +497,7 @@ ShowClaudePalette[]
 - `ClaudeShowAccessConfig[]` — ファイルアクセス設定の確認(デバッグ用)
 - `ClaudeAuthStatus[]` — Claude Code CLI の OAuth 認証状態を確認(401 authentication_failed 等の認証切れを検出。2026-08-28 追加)
 - `ClaudeAuthClear[]` — 検出済みの認証切れ状態を手動でリセット(2026-08-28 追加)
+- `ClaudeCodexSandboxStatus[]` — この PC の Codex CLI サンドボックス(Windows の mxc 方式)検証状態を確認。`NotVerified`(未検証・CLI バージョン変更後を含む)・`AuthFailed`(認証失敗)等に分類される(2026-10-02 追加)
 - `ClaudeRegisterCLIMCPServer[spec]` — ヘッドレス Claude CLI 実行(`ClaudeQueryBg` 等)に組み込む MCP サーバーを登録する package-neutral な窓口(`$ClaudeCLIMCPServers` で管理。例: SourceVault の MCP サーバー連携が利用)
 
 ### 後方互換性について
@@ -690,6 +696,20 @@ Codex provider は Claude CLI と同じ非同期実行経路で動作します�
 
 Claude Code CLI も Codex CLI もサブスクリプション契約に基づく CLI であり、メーター制 API(`anthropic` / `openai` provider)とは課金体系が異なります。claudecode の課金 API ガードは `chatgptcodex` provider を無課金扱いとするため、課金 API を許可しない設定でも Codex 経由のコード生成が利用できます。
 
+#### Codex の Windows サンドボックス検証(2026-10-02 追加)
+
+Codex CLI 0.153 以降、Windows のサンドボックス方式は非昇格方式と AppContainer ベースの **mxc** に分かれており、許可リスト型の読取制限を守れるのは mxc だけです。claudecode は Codex を起動する前に、この PC で mxc サンドボックスが設定どおりに動くことを確認し、確認できない場合は Codex を起動しません。
+
+- 検証結果は PC ごと(`$MachineName` 単位)に保存され、Codex CLI のバージョンとサンドボックス方式を含みます。CLI やバックエンドが変わると「未検証」に戻り、再検証が済むまで Codex は実行されません。
+- 検証では、サンドボックスの外からは届くファイルやネットワークに、内側からは届かないことを確認します(ユーザープロファイル内の実ファイルが内側から読めないことも調べます)。
+- 成功すると「Codex sandbox を検証しました」と表示され、失敗した場合は理由つきで警告されます。Codex CLI 自体を起動できない場合は、インストールと `codex login` の確認を促す警告が表示されます。
+- Codex の実行結果は SIEM spool(`LLMCall`、Provider `chatgptcodex`)と直近 200 件の作業台帳に記録されます。失敗は分類コードのみが記録されます。
+
+```mathematica
+(* この PC の Codex サンドボックス検証状態を確認 *)
+ClaudeCodexSandboxStatus[]
+```
+
 #### ChatGPT Codex のモデル管理
 
 ChatGPT Codex のモデル名は **SourceVault** が一元管理します。具体的な LLM モデル ID をパッケージソースに直書きせず、SourceVault のモデルレジストリから解決する設計です。
@@ -816,7 +836,7 @@ ClaudeUpdateDocumentation["claudecode", "最新版に追従して",
 |---------|------|
 | `api.md` | API リファレンス(全関数・変数・オプションの詳細仕様) |
 | `api_directives.md` | claudecode_directives 補助 API リファレンス(ディレクティブリポジトリ読込・モデル能力管理・DirectiveLevel・Bundle/Projection・Inventory/Manifest/Hash) |
-| `setup.md` | セットアップガイド(インストール手順・トラブルシューティング) |
+| `setup.md` | セットアップガイド(インストール手順・Codex サンドボックス検証・トラブルシューティング) |
 | `user_manual.md` | ユーザーマニュアル(機能別の詳細な使い方) |
 | `example.md` | 使用例集(代表的なユースケースとコード例) |
 

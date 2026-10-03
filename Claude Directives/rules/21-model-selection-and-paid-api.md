@@ -31,3 +31,10 @@ LLM を呼ぶコード・シーム（`$CerezoGradeLLMFn` のような "prompt ->
 - 「クラウドの方が賢い/速い」「`LLMSynthesize` の方が手軽」は、既定モデルを外れる理由にならない。明示指示があるときだけ切り替える。
 - **`$ClaudePrivateModel` が指す先が localhost とは限らない。** `llamacpp` のように LAN 上の別ホストで動く provider を private スロットに入れている場合、PrivacyLevel >= 0.5 の内容がネットワークへ出る。その可否はネットワークの信頼判断であり rule 107 が支配する。
 - どのチャネル・どのモデルに送られるか確信が持てないシームは、送信前に経路を確認する（現に `$CerezoGradeLLMFn` を `LLMSynthesize` にしたため、パレットで Claude Code CLI・課金 API 禁止を選んでいたのに Wolfram AI Access が呼ばれ、未サポートモデルで全件失敗した事故がある）。
+
+## 新しいモデルを追加するとき（「○○が出たのでモデルに追加して」）
+
+- **パレットの候補と intent の既定 (heavy / code-heavy / extraction …) の正本は SourceVault の model registry。** API から取り込むなら `SourceVaultRefreshModelRegistry[]`（anthropic の一覧は claudecode にも写る）。API キーが無い・特定の intent に割り当てるなら `SourceVaultSetModel[provider, intent, modelId]`（同じ provider×intent の既存エントリを置き換えるので、旧モデルが外れることを応答に書く）。確認は `SourceVaultListModels[provider]`。
+- `claudecode.wl` の `$iPaletteModelsByProvider` は SourceVault 未ロード時の予備にすぎず、書き換えても通常環境のパレットには出ない。`"sonnet"` 等の旧 paletteModel 値の移行分岐も触らない。
+- モデル固有の能力 (Class / ContextWindow / DirectiveLevel / Paid) は `claudecode_directives.wl` の `$ClaudeModelCapabilities` に `{provider, model}` で登録する（claudecode 版 `Paid -> False` と anthropic 版 `Paid -> True`）。未登録のモデルは同じ provider の最強の登録モデルの値で代用される（Sonnet が Ultra-Cloud 扱いになる等）。
+- 既定モデル (`$ClaudeModel` 等) は変えない（rule 00 の保護対象）。
