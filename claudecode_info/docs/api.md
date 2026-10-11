@@ -29,7 +29,7 @@ ClaudeCheckSeparation / ClaudeFixSeparation などの分離検証で使用する
 ClaudeEval が生成する出力コード (Grid/Column/Style/Button 等) で統一的に使用するフォント名。プロンプトに埋め込まれ FontFamily 指定を強制する。
 
 ### $ClaudePrivateModel
-型: String, 初期値: なし
+型: {String, String} | {String, String, String} | String | List, 初期値: {}
 秘密データ処理用ローカルモデル指定。AutoPrivate -> True 時に機密変数を含むタスクに使用される。
 例: $ClaudePrivateModel = {"lmstudio", "openai/gpt-oss-20b", "http://127.0.0.1:1234"}
 
@@ -185,6 +185,14 @@ Claude CLI ハーネス (.claude/) の生成方式。"Direct" (既定) は従来
 型: AbsoluteTime
 高優先度モードの終了絶対時刻。ClaudeBeginHighPriority が設定する。現在時刻がこれより前なら "Suppressible"->True 登録の polling tick はスキップされる。
 
+### $ClaudeTickHandlerTimeLimit
+型: Number, 初期値: 60
+共有 polling tick の handler 1 件あたりの TimeConstrained 秒数。1 つの handler のハングが tick 全体を巻き込まないための制限で、3 連続超過した key は放棄され TickHandlerTimeout が emit される。runInline handler 実行前には FE 応答性 probe も行い、FE が応答しなければその周回は延期される。
+
+### $ClaudePristineBackgroundKernel
+型: Boolean, 初期値: True
+背景カーネルを init.m を読まない「素のカーネル」で起動するか (2026-08-20)。
+
 ### $ClaudeEditModesVersion
 型: String
 編集モードシステムのバージョン。
@@ -202,23 +210,23 @@ LLM 応答中の末尾追加開始タグ。
 位置指定挿入終了タグ。
 
 ### $ChatgptCodexExe
-型: String | Automatic
+型: String | Automatic, 初期値: Automatic
 ChatGPT Codex CLI の実行ファイルパス。Automatic で PATH から解決。
 
 ### $ChatgptWorkingDirectory
-型: String | Automatic
+型: String | Automatic, 初期値: Automatic
 Codex 実行のベース作業ディレクトリ。Automatic は $OpenaiWorkingDirectory を使用。
 
 ### $ChatgptAccessibleDirs
-型: List
+型: List, 初期値: {}
 Codex CLI に読み取り専用で公開する追加ディレクトリリスト。
 
 ### $ChatgptCodexHomeDirectory
-型: String | Automatic
+型: String | Automatic, 初期値: Automatic
 Codex 実行の CODEX_HOME ディレクトリ。Automatic は実行ごとの一時ディレクトリを作業ディレクトリ配下に作成する。
 
 ### $ChatgptCodexPermissionProfile
-型: String
+型: String, 初期値: "nbaccess-codex"
 config.toml に書き込む Codex 権限プロファイル名。
 
 ### $ChatgptCodexApprovalPolicy
@@ -234,12 +242,16 @@ Codex のモデル。Automatic は config.toml にモデルキーを書かず CL
 ディレクティブハーネスを Codex 用にどう構成するかの選択。
 
 ### $ChatgptCodexRetainTempProjects
-型: Boolean
+型: Boolean, 初期値: False
 Codex 実行ごとの一時プロジェクトディレクトリを実行後も保持するか。
 
 ### $ChatgptCodexSourceExposureMode
 型: String, 初期値: "PackageReadOnly"
 Codex へのパッケージソース公開方式。
+
+### $ChatgptCodexWindowsSandbox
+型: String, 初期値: "mxc"
+Windows 上で Codex CLI を実行する際のサンドボックス指定。
 
 ### $ClaudeCloudSendPreflightLog
 型: List, 初期値: {}
@@ -250,7 +262,7 @@ Codex へのパッケージソース公開方式。
 $ClaudeCloudSendPreflightLog の最大エントリ数。超過時は古いエントリを削除。
 
 ### $ClaudeCloudSendPreflightContextResolver
-型: Function | None
+型: Function | None, 初期値: None
 プリフライト判定時のコンテキスト解決フック。外部パッケージ (SourceVault 等) がロード時に登録する。resolver が失敗しても送信可否には影響せず、フィールドが Missing["ResolverFailed"] になるだけ。
 
 ### $ClaudeCloudSendRoutePolicy
@@ -1177,7 +1189,7 @@ $ClaudeRuntimeAsyncExecution の判定に関わらず非同期実行を強制す
 ### ClaudeBuildRuntimeAdapter[nb, opts]
 ノートブック nb 用のランタイムアダプター Association を構築する。ClaudeStartRuntime / ClaudeEvalViaRuntime で内部使用する。
 → Association
-Options: "AccessLevel" -> 0.5, "Secrets" -> {}, "MaxContinuations" -> 3, "SyncProvider" -> True, "Provider" -> Automatic, "Fallback" -> False, "Model" -> Automatic, "Timeout" -> Automatic ($ClaudeTimeout に解決), "ExecutionTimeoutSeconds" -> 30 (NBExecuteHeldExpr の TimeConstraint 既定値。adapter の "DefaultTimeoutSeconds" キーに保持。LLM proposal に ExpectedSeconds があればそちらを優先)
+Options: "AccessLevel" -> 0.5, "Secrets" -> {}, "MaxContinuations" -> 3, "SyncProvider" -> True, "Provider" -> Automatic, "Fallback" -> False, "Model" -> Automatic, "Timeout" -> Automatic ($ClaudeTimeout に解決), "ExecutionTimeoutSeconds" -> 30 (NBExecuteHeldExpr の TimeConstraint 既定値。adapter の "DefaultTimeoutSeconds" キーに保持。LLM proposal に ExpectedSeconds があればそちらを優先。優先順: proposal["ExpectedSeconds"] > adapter["DefaultTimeoutSeconds"] > 30)
 
 ### ClaudeStartRuntime[nb, input, opts]
 ノートブック nb 上でランタイムを起動し input で最初のターンを実行する。
@@ -1292,7 +1304,7 @@ Options: "Phase" -> "external" (デバッグラベル), "Caller" -> "External" (
 → List
 
 ### ClaudeEnqueueFinalAction[action, accessSpec, opts]
-承認済み final action を NBAccess の PendingFinalActionQueue に積み、共有 polling tick に NBFinalActionTick を登録する。queue が空になると tick は自己解除する。承認 UI の Approve から呼ぶ。
+承認済み final action を NBAccess の PendingFinalActionQueue に積み、共有 polling tick に NBFinalActionTick を登録する。queue が空になると tick は自己解除する。承認 UI の Approve から呼ぶ。action は action association (<|"Action"->...|>) または held expression (HoldComplete[...]) の両対応。
 → Null
 Options: NBAccess`NBEnqueueFinalAction のオプションを継承
 
@@ -1403,7 +1415,7 @@ Options: "Backup" -> True, "DryRun" -> False, "QueryFunction" -> Automatic (既�
 → String
 
 ### ClaudeDiagEvents[n]
-SIEM spool (diag-spool, machine-local) の直近 n 件 (既定 40) を新しい順の Dataset で返す。SourceVault service の ingest 前でも自マシンの運用イベント (SpawnFailed / ScheduleSubmitFailed 等) を確認できる。
+SIEM spool (diag-spool, machine-local) の直近 n 件 (既定 40) を新しい順の Dataset で返す。SourceVault service の ingest 前でも自マシンの運用イベント (SpawnFailed / ScheduleSubmitFailed 等) を確認できる。spool は $UserBaseDirectory 配下の per-process ファイル <producer>-<pid>-<yyyymmdd>.jsonl ($ClaudeDiagProducer 既定 "claudecode")。同一 class×payload の洪水は collapse される。
 → Dataset
 
 ## メール連携補助

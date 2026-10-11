@@ -71,6 +71,25 @@ If[StringQ[$InputFileName] && $InputFileName =!= "",
 ];
 BeginPackage["ClaudeCode`"];
 
+(* 公開部 (Begin["`Private`"] より前) には usage のほかに実装コード (パレット設定など)
+   も置かれている。そこで使うローカル変数・パターン変数の名前が ClaudeCode` の公開
+   シンボルになると、ノートブックで裸の v / x / nb / name などが ClaudeCode`v ... に
+   解決されてしまう (v::shdw 警告や、ClaudeOrchestrator で回避した ClaudeCode`nb 衝突の
+   原因)。専用コンテキストへ先に作り、パッケージを読む間だけ $ContextPath に載せて
+   そちらへ解決させる (EndPackage が $ContextPath を元に戻す)。載せるのはこの一覧の
+   名前だけなので、関数名 (i...) や $ 変数の解決はこれまでと変わらない。公開部の実装
+   コードに新しいローカル名を足したらこの一覧にも足すこと
+   (test codes/claudecode_public_context_leak_test.wls が検出する)。 *)
+Scan[Symbol["ClaudeCode`PublicSectionLocals`" <> #] &,
+  {"a", "b", "base", "byMachine", "caps", "cur", "currentDirs", "cyc", "d", "dialog",
+   "dir", "effURL", "effort", "explicit", "f", "fallback", "fallbackM", "fallbackP",
+   "fam", "famLabel", "fromCM", "h", "heavy", "hit", "idx", "intent", "known", "list",
+   "live", "m", "machine", "maj", "migrated", "min", "mine", "mn", "ms", "name", "nb",
+   "normDir", "p", "packageName", "parts", "perm", "perms", "pl", "prov", "provider",
+   "reg", "registry", "res", "s", "safeDirs", "sel", "shortDir", "spec", "sv", "t",
+   "tbl", "u", "url", "v", "v2", "vM", "vP", "val", "x"}];
+AppendTo[$ContextPath, "ClaudeCode`PublicSectionLocals`"];
+
 (* \:30d1\:30c3\:30b1\:30fc\:30b8\:30ea\:30ed\:30fc\:30c9\:6642\:306b\:53e4\:3044\:5185\:90e8\:95a2\:6570\:5b9a\:7fa9\:304c\:6b8b\:3089\:306a\:3044\:3088\:3046\:3001
    \:5909\:66f4\:3055\:308c\:305f\:4e3b\:8981\:5185\:90e8\:95a2\:6570\:3092\:30af\:30ea\:30a2\:3059\:308b *)
 Quiet[ClearAll[
@@ -1553,7 +1572,13 @@ ClaudeCreateDocumentation::usage =
   "$packageDirectory \:5185\:306e packageName.wl \:307e\:305f\:306f packageName/ Paclet \:3092\:5bfe\:8c61\:3068\:3059\:308b\:3002\n" <>
   "\:5358\:4e00 .wl: $packageDirectory/packageName_info/docs/ \:306b\:51fa\:529b\:3002\n" <>
   "Paclet: $packageDirectory/packageName/docs/ \:306b\:51fa\:529b\:3002\n" <>
-  "\:4f8b: ClaudeCreateDocumentation[\"claudecode\"]";ClaudeUpdateDocumentation::usage =
+  "Option \"EnglishDocs\" -> Automatic | True | False: $Language \:304c\:82f1\:8a9e\:3067\:306a\:3044\:3068\:304d\:3001\:82f1\:8a9e\:7248 (docs/en/) \:3082\:4f5c\:308b\:304b\:3002" <>
+  "True/False \:306f _info/references/doc_options.json \:306e \"EnglishDocs\" \:306b\:8a18\:9332\:3057\:3001\:4ee5\:5f8c\:306e ClaudeUpdateDocumentation \:3068 PackageCommit \:304c\:53c2\:7167\:3059\:308b\:3002" <>
+  "Automatic \:306f doc_options.json \:3092\:8e0f\:8972 (\:8a18\:8ff0\:306a\:3057 = $Language \:306e\:307f)\:3002False \:306f\:65e2\:5b58\:306e en/ \:3092 history \:3078\:9000\:907f\:3057\:3066\:524a\:9664\:3059\:308b\:3002\n" <>
+  "Option \"LicenseHolder\" -> \"\:6c0f\:540d\": README \:306e MIT \:30e9\:30a4\:30bb\:30f3\:30b9\:306e\:8457\:4f5c\:6a29\:8005\:3002doc_options.json \:306b\:8a18\:9332\:3055\:308c\:3001\:4ee5\:5f8c\:306e\:66f4\:65b0\:3067\:3082\:5909\:308f\:3089\:306a\:3044 " <>
+  "(\:672a\:6307\:5b9a\:3067 doc_options.json \:306b License \:304c\:7121\:3051\:308c\:3070\:65e2\:5b58 README \:306e\:30e9\:30a4\:30bb\:30f3\:30b9\:6587\:3092\:4fdd\:5168\:3001\:305d\:308c\:3082\:7121\:3051\:308c\:3070 $GitHubLicenseHolder)\:3002\n" <>
+  "\:4f8b: ClaudeCreateDocumentation[\"claudecode\"]\n" <>
+  "\:4f8b: ClaudeCreateDocumentation[\"pkg\", \"EnglishDocs\" -> True, \"LicenseHolder\" -> \"Taro Yamada\"]";ClaudeUpdateDocumentation::usage =
   "ClaudeUpdateDocumentation[\"packageName\"] \:306f\:30bd\:30fc\:30b9\:5dee\:5206\:306b\:57fa\:3065\:304d\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:81ea\:52d5\:66f4\:65b0\:3059\:308b\:3002\n" <>
   "ClaudeUpdateDocumentation[\"packageName\", \"\:66f4\:65b0\:6307\:793a\"] \:306f\:6307\:793a\:306b\:5f93\:3063\:3066\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0\:3059\:308b\:3002\n" <>
   "\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306e\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8\:3082\:53c2\:7167\:53ef\:80fd\:ff08\:300c\:4e0a\:3067\:8b70\:8ad6\:3055\:308c\:3066\:3044\:308b\:5185\:5bb9\:3092\:53cd\:6620\:3057\:3066\:300d\:306a\:3069\:ff09\:3002\n" <>
@@ -1564,6 +1589,10 @@ ClaudeCreateDocumentation::usage =
   "\:4f8b: ClaudeUpdateDocumentation[\"claudecode\", \"api.md\:306e\:307f\:66f4\:65b0\:3057\:3066\"]\n" <>
   "\:4f8b: ClaudeUpdateDocumentation[\"pkg\", Baseline -> \"Github\"]\n" <>
   "\:4f8b: ClaudeUpdateDocumentation[\"pkg\", \"...\", TargetFiles -> {\"api.md\"}]\n" <>
+  "Option \"EnglishDocs\" -> Automatic | True | False: True \:3067\:82f1\:8a9e\:7248 docs/en/ \:3092\:8ffd\:52a0 (\:7121\:3044\:30d5\:30a1\:30a4\:30eb\:3092\:82f1\:8a33\:3067\:4f5c\:6210)\:3001" <>
+  "False \:3067\:65e2\:5b58\:306e en/ \:3092 history \:3078\:9000\:907f\:3057\:3066\:524a\:9664 (\:65e5\:672c\:8a9e\:5074\:306e\:5207\:66ff\:884c\:3082\:9664\:53bb)\:3002\:6307\:5b9a\:306f doc_options.json \:306b\:8a18\:9332\:3055\:308c PackageCommit \:3082\:53c2\:7167\:3059\:308b\:3002" <>
+  "Automatic \:306f doc_options.json \:3092\:8e0f\:8972 (\:8a18\:8ff0\:306a\:3057 = $Language \:306e\:307f)\:3002\:6709\:52b9\:6642\:306f\:65e5\:672c\:8a9e doc \:3092\:66f8\:304d\:63db\:3048\:308b\:305f\:3073\:5bfe\:5fdc\:3059\:308b en/ \:3092\:82f1\:8a33\:3067\:8ffd\:5f93\:3059\:308b\:3002\n" <>
+  "Option \"LicenseHolder\" -> \"\:6c0f\:540d\": README \:306e MIT \:30e9\:30a4\:30bb\:30f3\:30b9\:306e\:8457\:4f5c\:6a29\:8005\:3092\:8a2d\:5b9a\:3057 doc_options.json \:306b\:8a18\:9332\:3002\n" <>
   "既定では生成パイプライン全体を外部 wolframscript ワーカーで実行し FE を塞がない ($ClaudeDocUpdateExternal=False で従来のカーネル内実行)。席枯渇・画像添付・非 claude CLI モデル時は自動で従来経路。";
 
 (* Phase Q-5 \:79fb\:7ba1: ClaudeUpdatePackageHistory::usage \:306f ClaudePackageManager.wl \:3078\:5b8c\:5168\:79fb\:7ba1 *)
@@ -6121,11 +6150,13 @@ iClaudeActiveLLMJobCount[] :=
    走らせると相互待ちで永久ハングする (2026-07-29 19:14 の
    "tick-start | dag-..." に tick-end が無い実例)。probe が通らなければ
    この周回は諦めて in-flight マーカーを解き、次の共有 tick に委ねる。
-   headless ($FrontEnd === Null) は probe が常に True で挙動不変。 *)
+   headless ($FrontEnd === Null) は probe が常に True で挙動不変。
+   2026-10-10: ボタン処理中 (iClaudeFEHeldExternallyQ) も probe を投げずに同じく見送る。
+   共有 tick が旗を見た直後に押されたボタンの FE 往復へ、予約済みのこの起動が重なる隙を塞ぐ *)
 iClaudeScheduleTickInstance[kk_String, fn_] :=
   iScheduleAtAsync[
     Module[{t0 = AbsoluteTime[]},
-      If[! iClaudeFEResponsiveQ[],
+      If[iClaudeFEHeldExternallyQ[] || ! iClaudeFEResponsiveQ[],
         iClaudeFreezeLog["tick-defer-febusy", kk];
         If[AssociationQ[$claudeProgress] && KeyExistsQ[$claudeProgress, kk] &&
            AssociationQ[$claudeProgress[kk]],
@@ -7030,6 +7061,48 @@ iClaudeFEResponsiveQ[] :=
         0.5, False],
       False]]];
 
+(* 他パッケージのボタン処理が FE とやり取りしている間は、tick から FE に一切触らない (2026-10-03)。
+   SlideWorkflow の「登録」の最中に上の probe (CurrentValue[$FrontEnd, ...]) が重なり、FE とカーネルが
+   待ち合って止まった (2 回とも freeze log の tick 記録が、登録処理のファイル書き込みの直前で途切れた)。
+   probe 自体が FE 往復なので、相手が FE 往復の途中だと probe が待ち合いを作る。TimeConstrained は
+   リンク待ちを切れない。共通の約束 SourceVault`$SourceVaultRealtimeHoldFE (SlideWorkflow が
+   ボタン処理中 True にする。SourceVault_realtime も見ている) を見て、この周回ごと見送る。
+   NameQ で見るのは、SourceVault/SlideWorkflow を読む前に記号を作らないため。
+   2026-10-10: claudecode 自身のパレットボタンも同じ穴を持っていた。「☁」が開いている 73MB のデッキを
+   NotebookSave → SourceVaultIndexNotebook (ForceReindex) で索引し直す間、NBFileSpec が FE 経由で全セルを
+   読み、そこへ probe が重なって止まった。SourceVault`$SourceVaultRealtimeHoldFE の定義は SlideWorkflow が
+   持つので上書きせず、claudecode は自前の数 (iClaudeHoldFE) を持ち、ここで併せて見る *)
+iClaudeFEHeldExternallyQ[] :=
+  iClaudeFEHeldQ[] ||
+    (NameQ["SourceVault`$SourceVaultRealtimeHoldFE"] &&
+      TrueQ[Quiet[Symbol["SourceVault`$SourceVaultRealtimeHoldFE"]]]);
+
+(* パレットボタン (Method -> "Queued") の処理を包む。SlideWorkflow の iSWHoldFE と同じ形:
+   数は WithCleanup で必ず戻り (Abort でも)、上限 3600 秒は「カーネルを落とした」ときの保険。
+   読み直しで 0 に戻す (押下中に読み直しても WithCleanup の減算は Max[0, ...] で止まる) *)
+$iClaudeFEHold = 0;
+$iClaudeFEHoldSince = 0.;
+SetAttributes[iClaudeHoldFE, HoldAll];
+iClaudeHoldFE[expr_] := WithCleanup[
+  If[$iClaudeFEHold <= 0, $iClaudeFEHold = 0; $iClaudeFEHoldSince = AbsoluteTime[]];
+  $iClaudeFEHold++,
+  expr,
+  $iClaudeFEHold = Max[0, $iClaudeFEHold - 1]];
+iClaudeFEHeldQ[] := $iClaudeFEHold > 0 && AbsoluteTime[] - $iClaudeFEHoldSince < 3600.;
+
+If[! ValueQ[$iClaudeTickHeldSince], $iClaudeTickHeldSince = None];
+iClaudeTickHeldNote[held_] := Which[
+  held && $iClaudeTickHeldSince === None,
+    $iClaudeTickHeldSince = AbsoluteTime[];
+    iClaudeFreezeLog["tick-held-skip",
+      If[iClaudeFEHeldQ[], "FE held by a claudecode palette button",
+        "FE held by another package's button"]],
+  ! held && $iClaudeTickHeldSince =!= None,
+    iClaudeFreezeLog["tick-held-resume",
+      ToString[Round[AbsoluteTime[] - $iClaudeTickHeldSince, 0.1]] <> "s"];
+    $iClaudeTickHeldSince = None,
+  True, Null];
+
 iClaudeTickHandlerTimeoutBump[k_String] := Module[{c},
   iClaudeFreezeLog["tick-inline-timeout", k];
   c = Quiet @ Check[
@@ -7071,7 +7144,12 @@ iSharedPollingTick[] :=
     $iSharedPollingLastTickAt = AbsoluteTime[];
     Block[{$iClaudeInLegacyTask = True}, iSharedPollingTickCore[]]];
 iSharedPollingTickCore[] := Module[{keys, tickFn, entry, suppressible,
-                                highPrio, sortedKeys, nbList},
+                                highPrio, sortedKeys, nbList, held},
+  (* 他パッケージのボタン処理中は FE probe も handler も回さない (iClaudeFEHeldExternallyQ)。
+     ジョブの実体はディスク側で進むので、ボタンが終わった次の周回で回収される *)
+  held = iClaudeFEHeldExternallyQ[];
+  iClaudeTickHeldNote[held];
+  If[held, Return[]];
   keys = Keys[$claudeProgress];
   If[!ListQ[keys] || Length[keys] === 0,
     (* 2026-06-22 (freeze fix 3): 追跡中の全共有タスク (孤児含む) を停止。
@@ -7082,9 +7160,13 @@ iSharedPollingTickCore[] := Module[{keys, tickFn, entry, suppressible,
        Notebooks[] \:304c\:9577\:6642\:9593\:30d6\:30ed\:30c3\:30af\:3057\:3001\:5171\:6709 tick \:304c\:8a70\:307e\:308b\:3002 *)
     nbList = Quiet @ Check[TimeConstrained[Notebooks[], 0.3, {}], {}];
     If[ListQ[nbList],
+      (* 空のときは書かない: 状態行はノートブックのオプションなので、書くだけで
+         開いている全ノートが「未保存」になる (2026-10-03 実測) *)
       Scan[Function[n,
         Quiet @ Check[
-          TimeConstrained[CurrentValue[n, WindowStatusArea] = "", 0.1],
+          TimeConstrained[
+            If[CurrentValue[n, WindowStatusArea] =!= "",
+              CurrentValue[n, WindowStatusArea] = ""], 0.1],
           Null]],
         nbList]];
     Return[]];
@@ -21898,8 +21980,25 @@ iSaveDocOptions[packageName_String] :=
         data["Figures"],
         Replace[Lookup[existing, "Figures", {}], Except[_List] -> {}]]
     |>;
-    Quiet @ Export[path, merged, "RawJSON"];
+    (* 2026-10-08: ここで扱わないキー (EnglishDocs / LicenseHolder / github.wl の Originals 等) は
+       保持する。従来は上の 6 キーだけを書き出し、他のキーを消していた。 *)
+    Quiet @ Export[path, Join[existing, merged], "RawJSON"];
   ];
+
+(* doc_options.json の生読み (無ければ <||>) と 1 キーの read-modify-write (他のキーは保持) *)
+iDocOptionsRead[packageName_String] :=
+  Module[{p = iDocOptionsPath[packageName], j},
+    If[!FileExistsQ[p], Return[<||>]];
+    j = Quiet @ Check[Import[p, "RawJSON"], <||>];
+    If[AssociationQ[j], j, <||>]];
+
+iDocOptionsSet[packageName_String, key_String, value_] :=
+  Module[{refDir = iReferencesDir[packageName], j},
+    If[!DirectoryQ[refDir],
+      Quiet @ CreateDirectory[refDir, CreateIntermediateDirectories -> True]];
+    j = iDocOptionsRead[packageName];
+    j[key] = value;
+    Quiet @ Export[iDocOptionsPath[packageName], j, "RawJSON"]];
 
 (* JSON \:304b\:3089\:8aad\:307f\:8fbc\:307f\:3001\:73fe\:5728\:306e\:30aa\:30d7\:30b7\:30e7\:30f3\:5024\:3068\:30de\:30fc\:30b8\:3002
    \:30aa\:30d7\:30b7\:30e7\:30f3\:3067\:660e\:793a\:7684\:306b\:6307\:5b9a\:3055\:308c\:305f\:5024\:3092\:512a\:5148\:3057\:3001\:6c38\:7d9a\:5316\:3055\:308c\:305f\:5024\:306f\:8ffd\:52a0\:306e\:307f\:3002 *)
@@ -24368,6 +24467,320 @@ iDocApplyPrivacyStamp[destPath_String, content_String, packageName_String] := Mo
     "<!-- :CodePrivacyLevel: " <> ToString[lvl] <> " -->"];
   marker <> "\n\n" <> stripped];
 
+(* === 日英ドキュメント (docs/en/) 対応 (2026-10-08) ===
+   英語版は <docsDir>/en/ に日本語と同名で置き、各ページに日英切替行を付ける規約
+   (日本語側 "**日本語** | [English](en/X.md)"、英語側 "[日本語](../X.md) | **English**"。
+   H1 の直後、H1 の無い api.md は先頭)。
+   (1) iCleanDocResponse は最初の見出しより前を前置きとして削るため、api.md 先頭の
+       切替行は再生成で必ず消え、H1 直後の行も LLM が落とせば消える。
+       → iSafeWriteDoc が書き込み直前に既存ファイルの切替行を決定的に戻す。
+   (2) 日本語 doc を書き換えても en/ は再生成対象外 (同名除外) なので古いまま残る。
+       → 日本語 doc を書き換える前に「現行 en/ はこの日本語版の訳」として旧内容の
+         ハッシュを <docsDir>/.en_source_hashes.json に記録し (未記録時のみ)、
+         更新完了後に記録と現内容が食い違う en/ だけを英訳で追従する
+         (iDocMaybeTranslateEnglish)。記録はディスク上なので外部ワーカー経路・
+         中断/再実行・iAutoUpdateApiMd 経由の書き換えにも同じく効く。 *)
+
+(* 柵 (``` / ~~~) の外にある行か を行ごとに返す + 開き柵の数。
+   判定は iDocFenceUnclosedQ と同じ CommonMark 準拠 (行頭インデント 3 まで、
+   閉じは同種・同長以上・info string 無し)。柵行自体は「柵内」扱い。 *)
+iDocFenceScan[lines_List] :=
+  Module[{openMark = None, opens = 0, s, mark, rest, flags},
+    flags = Table[
+      s = StringReplace[line, RegularExpression["^[ ]{0,3}"] -> "", 1];
+      Which[
+        !StringStartsQ[s, "```" | "~~~"], openMark === None,
+        openMark === None,
+          openMark = First @ StringCases[s, RegularExpression["^(`{3,}|~{3,})"]];
+          opens++; False,
+        True,
+          mark = First @ StringCases[s, RegularExpression["^(`{3,}|~{3,})"]];
+          rest = StringTrim @ StringDrop[s, StringLength[mark]];
+          If[StringTake[mark, 1] === StringTake[openMark, 1] &&
+             StringLength[mark] >= StringLength[openMark] && rest === "",
+            openMark = None];
+          False],
+      {line, lines}];
+    {flags, opens}];
+
+iDocSplitLines[content_String] :=
+  StringSplit[StringReplace[content, "\r\n" -> "\n"], "\n", All];
+
+$iDocLangSwitchLineRegex =   (* \:65e5\:672c\:8a9e = 日本語 *)
+  "[ \\t]*(\\*\\*\:65e5\:672c\:8a9e\\*\\*|\\[\:65e5\:672c\:8a9e\\]\\([^)\\r\\n]*\\)) \\| " <>
+  "(\\*\\*English\\*\\*|\\[English\\]\\([^)\\r\\n]*\\))[ \\t]*";
+
+iDocLangSwitchLineQ[line_String] :=
+  StringMatchQ[line, RegularExpression[$iDocLangSwitchLineRegex]];
+
+(* 柵外にある切替行 (前後空白を除いた形) の一覧 *)
+iDocLangSwitchLines[content_String] :=
+  Module[{lines = iDocSplitLines[content], flags},
+    flags = First @ iDocFenceScan[lines];
+    StringTrim /@ Pick[lines,
+      MapThread[#2 && iDocLangSwitchLineQ[#1] &, {lines, flags}]]];
+iDocLangSwitchLines[_] := {};
+
+(* 柵外の切替行を除去 (英訳応答から LLM の書いた行を捨てる用) *)
+iDocStripLangSwitch[content_String] :=
+  Module[{lines = iDocSplitLines[content], flags},
+    flags = First @ iDocFenceScan[lines];
+    StringRiffle[Pick[lines,
+      MapThread[!(#2 && iDocLangSwitchLineQ[#1]) &, {lines, flags}]], "\n"]];
+iDocStripLangSwitch[x_] := x;
+
+(* 切替行を挿入: 文書最初の (柵外) 見出しが H1 ならその直後、そうでなければ先頭。
+   既存の配置 "# Title\n\n<切替行>\n\n本文" を再現する。 *)
+iDocInsertLangSwitch[content_String, switchLine_String] :=
+  Module[{lines = iDocSplitLines[content], flags, firstHead, rest},
+    flags = First @ iDocFenceScan[lines];
+    firstHead = SelectFirst[Range[Length[lines]],
+      flags[[#]] && StringMatchQ[lines[[#]], RegularExpression["#{1,6}([ \\t].*)?"]] &,
+      None];
+    If[IntegerQ[firstHead] && StringMatchQ[lines[[firstHead]], RegularExpression["#([ \\t].*)?"]],
+      rest = Drop[lines, firstHead];
+      rest = Drop[rest, LengthWhile[rest, StringTrim[#] === "" &]];
+      StringRiffle[Join[Take[lines, firstHead], {"", switchLine, ""}, rest], "\n"],
+      switchLine <> "\n\n" <>
+        StringReplace[StringReplace[content, "\r\n" -> "\n"],
+          RegularExpression["\\A\\s+"] -> "", 1]]];
+
+(* destPath が <docsDir>/en/<rel> (docsDir の末尾成分は "docs") なら rel を
+   "/" 区切りで返す ("README.md", "examples/example.md")。それ以外は None。 *)
+iDocEnRelPath[destPath_String] :=
+  Module[{parts = FileNameSplit[destPath], idx},
+    idx = SelectFirst[Reverse @ Range[2, Length[parts] - 1],
+      parts[[#]] === "en" && parts[[# - 1]] === "docs" &, None];
+    If[IntegerQ[idx], StringRiffle[parts[[idx + 1 ;;]], "/"], None]];
+iDocEnRelPath[_] := None;
+
+iDocEnglishPathQ[path_] := StringQ[iDocEnRelPath[path]];
+
+(* 日本語 doc のパス → {docsDir, rel}。en/ 配下や docs 外は None *)
+iDocJaDocsSplit[destPath_String] :=
+  Module[{parts = FileNameSplit[destPath], idx},
+    If[iDocEnglishPathQ[destPath], Return[None]];
+    idx = SelectFirst[Reverse @ Range[1, Length[parts] - 1],
+      parts[[#]] === "docs" &, None];
+    If[!IntegerQ[idx], Return[None]];
+    {FileNameJoin[parts[[;; idx]]], StringRiffle[parts[[idx + 1 ;;]], "/"]}];
+iDocJaDocsSplit[_] := None;
+
+iDocJoinRel[dir_String, rel_String] := FileNameJoin[Join[{dir}, StringSplit[rel, "/"]]];
+
+(* 英語版の正準切替行: en/<rel> から日本語版 <rel> への相対リンク *)
+iDocEnCanonicalSwitchLine[destPath_String] :=
+  With[{rel = iDocEnRelPath[destPath]},
+    If[!StringQ[rel], None,
+      "[\:65e5\:672c\:8a9e](" <> StringRepeat["../", StringCount[rel, "/"] + 1] <> rel <>
+        ") | **English**"]];
+iDocEnCanonicalSwitchLine[_] := None;
+
+iDocReadUTF8[path_String] :=
+  Quiet @ Check[
+    With[{b = ReadByteArray[path]},
+      If[ByteArrayQ[b], ByteArrayToString[b, "UTF-8"], ""]],
+    ""];
+iDocReadUTF8[_] := "";
+
+(* 切替行の保全: newContent に切替行が無く、destPath の既存ファイルにあればその行を戻す。
+   既存に無くても英語版 (en/ 配下) なら正準の切替行を付ける。 *)
+iDocRestoreLangSwitch[destPath_String, newContent_String] :=
+  Module[{line},
+    If[iDocLangSwitchLines[newContent] =!= {}, Return[newContent]];
+    line = Replace[
+      If[FileExistsQ[destPath], iDocLangSwitchLines[iDocReadUTF8[destPath]], {}],
+      {{l_String, ___} :> l, _ :> iDocEnCanonicalSwitchLine[destPath]}];
+    If[StringQ[line], iDocInsertLangSwitch[newContent, line], newContent]];
+iDocRestoreLangSwitch[_, c_] := c;
+
+(* --- en/ 追従の基準ハッシュ (<docsDir>/.en_source_hashes.json: rel -> 日本語版ハッシュ) --- *)
+iDocEnHashPath[docsDir_String] := FileNameJoin[{docsDir, ".en_source_hashes.json"}];
+(* 切替行 (と直後の空行) を除き、連続空行を 1 行に詰めてハッシュする
+   (切替行の付け外しや挿入時の空行の差で en/ を stale にしない) *)
+iDocEnContentHash[s_String] :=
+  Hash[StringTrim @ StringReplace[
+      iDocRemoveLangSwitchLines[StringDelete[s, "\r"]],
+      RegularExpression["\n([ \t]*\n){2,}"] -> "\n\n"],
+    "SHA256", "HexString"];
+iDocEnFileHash[path_String] :=
+  If[FileExistsQ[path], iDocEnContentHash[iDocReadUTF8[path]], $Failed];
+iDocEnHashRead[docsDir_String] :=
+  Replace[Quiet @ Check[iDocExtReadJson[iDocEnHashPath[docsDir]], <||>],
+    Except[_Association] -> <||>];
+iDocEnHashSet[docsDir_String, rel_String, hash_String] :=
+  Module[{j = iDocEnHashRead[docsDir]},
+    j[rel] = hash;
+    iDocExtWriteJson[iDocEnHashPath[docsDir], j]];
+
+(* 日本語 doc を書き換える直前に呼ぶ: 対応する en/ があり基準が未記録なら、
+   旧内容 (= 現行 en/ の訳元とみなす) のハッシュを記録する。 *)
+iDocEnSeedBaseline[destPath_String] :=
+  Module[{sp = iDocJaDocsSplit[destPath], h},
+    If[!ListQ[sp] || !FileExistsQ[destPath], Return[Null]];
+    If[!FileExistsQ[iDocJoinRel[FileNameJoin[{sp[[1]], "en"}], sp[[2]]]], Return[Null]];
+    If[KeyExistsQ[iDocEnHashRead[sp[[1]]], sp[[2]]], Return[Null]];
+    h = iDocEnFileHash[destPath];
+    If[StringQ[h], iDocEnHashSet[sp[[1]], sp[[2]], h]];
+    Null];
+iDocEnSeedBaseline[_] := Null;
+
+(* 追従が必要な en/ 文書 (rel の一覧、README は最後): 基準記録があり、
+   日本語版の現内容ハッシュと食い違うもの。基準未記録は追従不要とみなす。 *)
+iDocEnStaleDocs[docsDir_String] :=
+  Module[{enDir = FileNameJoin[{docsDir, "en"}], hashes, rels},
+    If[!DirectoryQ[enDir], Return[{}]];
+    hashes = iDocEnHashRead[docsDir];
+    If[hashes === <||>, Return[{}]];
+    rels = Select[iDocEnRelPath /@
+      iDropConflictedCopies[FileNames["*.md", enDir, Infinity]], StringQ];
+    iEnsureReadmeLast @ Sort @ Select[rels, Function[rel,
+      Module[{rec = Lookup[hashes, rel, None], h},
+        h = iDocEnFileHash[iDocJoinRel[docsDir, rel]];
+        StringQ[rec] && StringQ[h] && h =!= rec]]]];
+iDocEnStaleDocs[_] := {};
+
+(* 英語版を持つべき日本語 doc (rel): docs 直下の *.md と examples/example.md。
+   他の examples/*.md は自動更新の対象外なので英語版も自動では作らない
+   (en/examples/ に手で置いたものは基準記録後に追従する)。 *)
+iDocEnTargetRels[docsDir_String] :=
+  Module[{root},
+    root = FileNameTake /@ iDropConflictedCopies[FileNames["*.md", docsDir]];
+    iEnsureReadmeLast @ Sort @ Join[root,
+      If[FileExistsQ[FileNameJoin[{docsDir, "examples", "example.md"}]],
+        {"examples/example.md"}, {}]]];
+iDocEnTargetRels[_] := {};
+
+(* 英語版がまだ無い日本語 doc (rel) *)
+iDocEnMissingDocs[docsDir_String] :=
+  Select[iDocEnTargetRels[docsDir],
+    !FileExistsQ[iDocJoinRel[FileNameJoin[{docsDir, "en"}], #]] &];
+iDocEnMissingDocs[_] := {};
+
+(* 日本語版の正準切替行: <rel> から en/<rel> への相対リンク *)
+iDocJaCanonicalSwitchLine[rel_String] :=
+  "**\:65e5\:672c\:8a9e** | [English](" <> StringRepeat["../", StringCount[rel, "/"]] <>
+    "en/" <> rel <> ")";
+
+(* 日本語 doc に切替行が無ければ正準行を付ける (英語版を新規作成するとき) *)
+iDocEnsureJaSwitchLine[docsDir_String, rel_String] :=
+  Module[{p = iDocJoinRel[docsDir, rel], s},
+    If[!FileExistsQ[p], Return[False]];
+    s = iDocReadUTF8[p];
+    If[iDocLangSwitchLines[s] =!= {}, Return[False]];
+    Export[p, StringReplace[iDocInsertLangSwitch[s, iDocJaCanonicalSwitchLine[rel]], "\r\n" -> "\n"],
+      "Text", CharacterEncoding -> "UTF-8"];
+    True];
+
+(* 切替行を除去し、直後の空行 1 行も詰める (英語版を削除するとき日本語側から外す用) *)
+iDocRemoveLangSwitchLines[content_String] :=
+  Module[{lines = iDocSplitLines[content], flags, out = {}, skipBlank = False},
+    flags = First @ iDocFenceScan[lines];
+    Do[
+      Which[
+        flags[[k]] && iDocLangSwitchLineQ[lines[[k]]], skipBlank = True,
+        skipBlank && StringTrim[lines[[k]]] === "", skipBlank = False,
+        True, skipBlank = False; AppendTo[out, lines[[k]]]],
+      {k, Length[lines]}];
+    StringRiffle[out, "\n"]];
+
+(* --- 英語版を作る/追従するかの設定 (doc_options.json の "EnglishDocs") ---
+   記述なし = $Language のみ。$Language が英語なら主言語が英語なので常に無効。 *)
+iDocEnglishDocsQ[packageName_String] :=
+  $Language =!= "English" &&
+    TrueQ[Lookup[iDocOptionsRead[packageName], "EnglishDocs", False]];
+iDocEnglishDocsQ[_] := False;
+
+(* エントリ (ClaudeCreate/UpdateDocumentation) で呼ぶ: "EnglishDocs" の明示指定を
+   doc_options.json に記録する。False なら既存の en/ を削除 (history へ退避)。 *)
+iDocApplyEnglishDocsOption[packageName_String, opt_, nb_, docsDir_] :=
+  Which[
+    !BooleanQ[opt], Null,
+    $Language === "English",
+      iDocEnPrint[nb, Style["ℹ $Language が English のため \"EnglishDocs\" は無視します (主言語が英語)。",
+        FontColor -> GrayLevel[0.5]]],
+    True,
+      iDocOptionsSet[packageName, "EnglishDocs", opt];
+      iDocEnPrint[nb, Style["doc_options.json: EnglishDocs = " <> ToString[opt] <>
+        If[opt, " (英語版 docs/en/ を作成・追従します)", " (英語版は作りません)"],
+        FontColor -> GrayLevel[0.4]]];
+      If[!opt && StringQ[docsDir], iDocRemoveEnglishDocs[packageName, nb, docsDir]]];
+
+(* 英語版を削除: en/ を history/<時刻>_en_removed/ へ退避してから消し、
+   日本語 doc の切替行と基準ハッシュも外す *)
+iDocRemoveEnglishDocs[packageName_String, nb_, docsDir_String] :=
+  Module[{enDir = FileNameJoin[{docsDir, "en"}], bk, n, stripped = {}},
+    If[DirectoryQ[enDir],
+      n = Length[Select[FileNames["*", enDir, Infinity], !DirectoryQ[#] &]];
+      bk = FileNameJoin[{backupDir[packageName],
+        DateString[Now, {"Year", "Month", "Day", "Hour24", "Minute", "Second"}] <> "_en_removed"}];
+      Quiet @ CreateDirectory[bk, CreateIntermediateDirectories -> True];
+      Quiet @ CopyDirectory[enDir, FileNameJoin[{bk, "en"}]];
+      If[Length[Select[FileNames["*", FileNameJoin[{bk, "en"}], Infinity], !DirectoryQ[#] &]] =!= n,
+        iDocEnPrint[nb, Style["⛔ en/ の退避に失敗したため削除を中止しました: " <> bk,
+          FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+        Return[$Failed]];
+      Quiet @ DeleteDirectory[enDir, DeleteContents -> True];
+      iDocEnPrint[nb, "英語版 docs/en/ を削除しました (" <> ToString[n] <> " ファイル、退避先: " <> bk <> ")"]];
+    Scan[Function[p,
+      Module[{s = iDocReadUTF8[p]},
+        If[iDocLangSwitchLines[s] =!= {},
+          Export[p, StringReplace[iDocRemoveLangSwitchLines[s], "\r\n" -> "\n"], "Text",
+            CharacterEncoding -> "UTF-8"];
+          AppendTo[stripped, p]]]],
+      Select[iDropConflictedCopies[FileNames["*.md", docsDir, Infinity]], !iDocEnglishPathQ[#] &]];
+    If[stripped =!= {},
+      iDocEnPrint[nb, "日本語 doc の切替行を外しました: " <> ToString[Length[stripped]] <> " 件"]];
+    With[{h = iDocEnHashPath[docsDir]}, If[FileExistsQ[h], Quiet @ DeleteFile[h]]];
+    Null];
+
+(* 見出し構成のシグネチャ: 柵外 ATX 見出しのレベル列 + 開き柵の数 (英訳の構造ゲート用) *)
+iDocHeadingSignature[text_String] :=
+  Module[{lines = iDocSplitLines[text], flags, opens},
+    {flags, opens} = iDocFenceScan[lines];
+    <|"Levels" -> Flatten @ MapThread[
+        If[#2, StringLength /@ StringCases[#1, RegularExpression["^#{1,6}(?=[ \\t]|$)"]], {}] &,
+        {lines, flags}],
+      "Fences" -> opens|>];
+
+(* 見出し行 (headRegex に行全体一致、柵外) の節範囲 {h, e}: h = 見出し行、
+   e = 次の H1/H2 見出しの手前 (末尾の空行・--- 区切りを除く)。無ければ None *)
+iDocSectionRange[lines_List, flags_List, headRegex_String] :=
+  Module[{n = Length[lines], h, e},
+    h = SelectFirst[Range[n],
+      flags[[#]] && StringMatchQ[lines[[#]], RegularExpression[headRegex]] &, None];
+    If[!IntegerQ[h], Return[None]];
+    e = SelectFirst[Range[h + 1, n],
+      flags[[#]] && StringMatchQ[lines[[#]], RegularExpression["#{1,2}[ \\t].*"]] &,
+      n + 1] - 1;
+    While[e > h && (StringTrim[lines[[e]]] === "" ||
+        StringMatchQ[StringTrim[lines[[e]]], RegularExpression["-{3,}"]]), e--];
+    {h, e}];
+
+(* 英語版 README の License 節を、日本語版 README の「## ライセンス」節本文で置き換える
+   (MIT 等のライセンス文は原文のまま。LLM の改変・欠落を決定的に排除)。
+   日本語版にライセンス節が無ければ何もしない。英語版に License 節が無ければ末尾に足す。 *)
+iDocEnApplyCanonicalLicense[content_String, enPath_String] :=
+  Module[{rel = iDocEnRelPath[enPath], jaPath, jaLines, jaFlags, jr, jaBody,
+          lines, flags, r},
+    If[!StringQ[rel], Return[content]];
+    jaPath = iDocJoinRel[FileNameJoin[Drop[FileNameSplit[enPath], -(StringCount[rel, "/"] + 2)]], rel];
+    If[!FileExistsQ[jaPath], Return[content]];
+    jaLines = iDocSplitLines[iDocReadUTF8[jaPath]];
+    jaFlags = First @ iDocFenceScan[jaLines];
+    jr = iDocSectionRange[jaLines, jaFlags, "##[ \\t]+\:30e9\:30a4\:30bb\:30f3\:30b9[ \\t]*"];  (* ライセンス *)
+    If[jr === None, Return[content]];
+    jaBody = StringTrim @ StringRiffle[jaLines[[jr[[1]] + 1 ;; jr[[2]]]], "\n"];
+    If[jaBody === "", Return[content]];
+    lines = iDocSplitLines[content];
+    flags = First @ iDocFenceScan[lines];
+    r = iDocSectionRange[lines, flags, "(?i)##[ \\t]+License[ \\t]*"];
+    If[r === None,
+      StringTrim[StringReplace[content, "\r\n" -> "\n"]] <>
+        "\n\n---\n\n## License\n\n" <> jaBody <> "\n",
+      StringRiffle[Join[Take[lines, r[[1]] - 1], {"## License", "", jaBody},
+        Drop[lines, r[[2]]]], "\n"]]];
+
 (* \:5b89\:5168\:306a\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f8\:304d\:8fbc\:307f: \:691c\:8a3c \[RightArrow] \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7 \[RightArrow] \:66f8\:304d\:8fbc\:307f\:3002
    \:7121\:52b9\:306a\:5fdc\:7b54\:306e\:5834\:5408\:306f\:30d5\:30a1\:30a4\:30eb\:3092\:4e00\:5207\:5909\:66f4\:305b\:305a $Failed \:3092\:8fd4\:3059\:3002 *)
 iSafeWriteDoc[destPath_String, response_String] :=
@@ -24375,7 +24788,12 @@ iSafeWriteDoc[destPath_String, response_String] :=
     If[!iIsValidDocContent[response],
       Return[$Failed]];
     cleaned = iNormalizeDocHead[iCleanDocResponse[response]];
+    (* 日英切替行の保全 (3 引数版と同じ, 2026-10-08) *)
+    cleaned = iDocRestoreLangSwitch[destPath, cleaned];
     cleaned = iDocApplyPrivacyStamp[destPath, cleaned, iDocPackageFromPath[destPath]];
+    iDocEnSeedBaseline[destPath];
+    (* Export "Text" は Windows で \n を \r\n に変換するので、CRLF の内容は \r\r\n になる *)
+    cleaned = StringReplace[cleaned, "\r\n" -> "\n"];
     Export[destPath, cleaned, "Text", CharacterEncoding -> "UTF-8"];
     destPath
   ];
@@ -24449,8 +24867,10 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
        \:3053\:3053\:3067 doc_options.json + \:65e2\:5b9a\:5024\:304b\:3089\:6c7a\:5b9a\:7684\:306b append \:3059\:308b\:3002\:3053\:308c\:306b\:3088\:308a
        \:6cd5\:7684\:7bc0\:306f\:51fa\:529b\:5207\:308a\:8a70\:3081\:306e\:5f71\:97ff\:3092\:539f\:7406\:7684\:306b\:53d7\:3051\:305a\:3001\:5e38\:306b verbatim \:53cd\:6620\:3055\:308c\:308b\:3002
        \:305f\:3060\:3057 append \:306f\:672c\:6587\:672a\:5b8c\:3092\:6b63\:5e38\:306a\:672b\:5c3e\:3067\:9690\:3057\:3066\:3057\:307e\:3046\:305f\:3081\:3001append \:524d\:306b
-       \:672c\:6587\:306e\:5b8c\:5168\:6027(\:5fc5\:9808\:306e\:4f7f\:7528\:4f8b\:7bc0\:306b\:5230\:9054\:3057\:305f\:304b)\:3092\:691c\:8a3c\:3059\:308b\:3002 *)
-    If[docFileName === "README.md",
+       \:672c\:6587\:306e\:5b8c\:5168\:6027(\:5fc5\:9808\:306e\:4f7f\:7528\:4f8b\:7bc0\:306b\:5230\:9054\:3057\:305f\:304b)\:3092\:691c\:8a3c\:3059\:308b\:3002
+       英語版 en/README.md (2026-10-08) は対象外: 日本語の法的節を付けず、
+       License 節だけ日本語版の原文に差し替える (下の分岐)。 *)
+    If[docFileName === "README.md" && !iDocEnglishPathQ[destPath],
       Module[{body, prevAck},
         (* LLM \:304c\:8aa4\:3063\:3066\:6cd5\:7684\:7bc0\:3092\:66f8\:3044\:3066\:3044\:305f\:3089\:9664\:53bb (\:91cd\:8907 append \:9632\:6b62) *)
         body = iStripReadmeLegalTail[cleaned];
@@ -24484,16 +24904,30 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
               Return[$Failed]];
             Print[iL["iSafeWriteDoc: \:65e2\:5b58 README \:306e\:8b1d\:8f9e\:3092 doc_options.json \:306b\:4fdd\:5168\:3057\:307e\:3057\:305f\:3002",
               "iSafeWriteDoc: preserved the existing README acknowledgments into doc_options.json."]]]];
+        (* ライセンス文を確定して doc_options.json に記録 (既存 README の著作権者を保全, 2026-10-08) *)
+        iDocEnsureLicenseRecorded[packageName, destPath];
         (* \:6cd5\:7684\:7bc0\:3092\:6c7a\:5b9a\:7684\:306b append (doc_options.json + \:65e2\:5b9a\:5024\:3002verbatim \:53cd\:6620\:4fdd\:8a3c) *)
         cleaned = iAppendCanonicalReadmeLegalTail[body, packageName];
       ]
     ];
+    (* 英語版 README: MIT 等のライセンス文は日本語版 README の原文そのまま (免責は英訳のまま) *)
+    If[docFileName === "README.md" && iDocEnglishPathQ[destPath],
+      cleaned = iDocEnApplyCanonicalLicense[cleaned, destPath]];
+    (* 日英切替行の保全 (2026-10-08): iCleanDocResponse が前置きとして削った api.md 先頭の
+       切替行や、LLM が落とした H1 直後の切替行を、既存ファイルから H1 の直後
+       (H1 が無ければ先頭) へ決定的に戻す。英語版で既存にも無ければ正準行を付ける。 *)
+    cleaned = iDocRestoreLangSwitch[destPath, cleaned];
     (* 最終ガード: 書き込み直前に先頭 --- を再度正規化する。法的節 append で
        末尾に --- 区切りが必ず入るため、先頭 --- が 1 行でも残ると GitHub が
        front matter とみなして README 全体が壊れる (2026-08-01) *)
     cleaned = iNormalizeDocHead[cleaned];
     (* CodePrivacyLevel 継承: 非公開ソース (>0) の doc に stamp を付ける *)
     cleaned = iDocApplyPrivacyStamp[destPath, cleaned, packageName];
+    (* en/ 追従の基準: 書き換え前の日本語版を「現行 en/ の訳元」として記録 (未記録時のみ) *)
+    iDocEnSeedBaseline[destPath];
+    (* Export "Text" は Windows で \n を \r\n に変換する。CRLF の応答 (既存ファイルの
+       読み戻し等) をそのまま渡すと \r\r\n になり、行単位の判定 (切替行等) が壊れる *)
+    cleaned = StringReplace[cleaned, "\r\n" -> "\n"];
     Export[destPath, cleaned, "Text", CharacterEncoding -> "UTF-8"];
     destPath
   ];
@@ -24728,7 +25162,14 @@ iReadmeLicenseSection[packageName_String] :=
     holder = Quiet @ Check[GitHubREST`$GitHubLicenseHolder, ""];
     If[!StringQ[holder] || StringTrim[holder] === "", Return[""]];
     yearStr = DateString[Now, "Year"];
-    licText = "MIT License\n\n" <>
+    licText = iDocMITLicenseText[holder, yearStr];
+    "## \:30e9\:30a4\:30bb\:30f3\:30b9\n\n```\n" <> licText <> "\n```\n"
+  ];
+iReadmeLicenseSection[_] := "";
+
+(* MIT ライセンス本文 (README のライセンス節の ``` 内) *)
+iDocMITLicenseText[holder_String, yearStr_String] :=
+      "MIT License\n\n" <>
       "Copyright (c) " <> yearStr <> " " <> holder <> "\n\n" <>
       "Permission is hereby granted, free of charge, to any person obtaining a copy " <>
       "of this software and associated documentation files (the \"Software\"), to deal " <>
@@ -24744,9 +25185,71 @@ iReadmeLicenseSection[packageName_String] :=
       "AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER " <>
       "LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, " <>
       "OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.";
-    "## \:30e9\:30a4\:30bb\:30f3\:30b9\n\n```\n" <> licText <> "\n```\n"
-  ];
-iReadmeLicenseSection[_] := "";
+
+(* === ライセンス文の固定 (2026-10-08) ===
+   従来は doc_options.json に License が無いと README を書くたびに
+   $GitHubLicenseHolder と今年の年から MIT を作り直していたため、既存 README の
+   著作権者 (例: CellularAutomata の "Takahiro Hatsuda and Katsunobu Imai") が
+   再生成で $GitHubLicenseHolder に置き換わっていた。README を書く前に
+   ライセンス文を決めて doc_options.json の License に記録し、以後はそれを使う。
+   優先順: doc_options LicenseHolder (License がその氏名を含まなければ MIT を作り直す)
+     > doc_options License > 既存 README のライセンス節 (``` 内) > $GitHubLicenseHolder。 *)
+
+(* README 本文から「## ライセンス」節の ``` 内のテキストを取り出す (無い/柵で囲まれていなければ "") *)
+iExtractReadmeLicenseText[content_String] :=
+  Module[{lines = iDocSplitLines[content], flags, r, body},
+    flags = First @ iDocFenceScan[lines];
+    r = iDocSectionRange[lines, flags, "##[ \\t]+\:30e9\:30a4\:30bb\:30f3\:30b9[ \\t]*"];
+    If[r === None, Return[""]];
+    body = StringTrim @ StringRiffle[lines[[r[[1]] + 1 ;; r[[2]]]], "\n"];
+    Replace[StringCases[body, RegularExpression["(?s)\\A```[^\\n]*\\n(.*)\\n```\\z"] :> "$1"],
+      {{t_String} :> StringTrim[t], _ -> ""}]];
+iExtractReadmeLicenseText[_] := "";
+
+iDocSetStateLicense[packageName_String, text_String] :=
+  Module[{state = Replace[Lookup[$iDocState, packageName, <||>], Except[_Association] -> <||>]},
+    state["License"] = text;
+    $iDocState[packageName] = state];
+
+(* README を書く直前に呼ぶ: ライセンス文を確定し doc_options.json の License に記録する *)
+iDocEnsureLicenseRecorded[packageName_String, readmePath_String] :=
+  Module[{lic = iDocGet[packageName, "License"], holder, text = "", how = ""},
+    If[!StringQ[lic], lic = ""];
+    holder = Lookup[iDocOptionsRead[packageName], "LicenseHolder", ""];
+    If[!StringQ[holder], holder = ""];
+    holder = StringTrim[holder];
+    Which[
+      (* LicenseHolder が変わった MIT (または License 未記録) は作り直す。
+         MIT 以外の独自 License 全文は LicenseHolder で上書きしない *)
+      holder =!= "" && (StringTrim[lic] === "" ||
+          (StringStartsQ[StringTrim[lic], "MIT License"] && !StringContainsQ[lic, holder])),
+        text = iDocMITLicenseText[holder, DateString[Now, "Year"]]; how = "LicenseHolder",
+      StringTrim[lic] =!= "",
+        Return[Null],
+      True,
+        text = If[FileExistsQ[readmePath],
+          iExtractReadmeLicenseText[iDocReadUTF8[readmePath]], ""];
+        how = "既存 README";
+        If[text === "",
+          With[{h = Quiet @ Check[GitHubREST`$GitHubLicenseHolder, ""]},
+            If[StringQ[h] && StringTrim[h] =!= "",
+              text = iDocMITLicenseText[StringTrim[h], DateString[Now, "Year"]];
+              how = "$GitHubLicenseHolder"]]]];
+    If[text === "", Return[Null]];
+    iDocSetStateLicense[packageName, text];
+    iDocOptionsSet[packageName, "License", text];
+    Print[iL["iSafeWriteDoc: README のライセンス文を doc_options.json に記録しました (" <> how <> ")。",
+      "iSafeWriteDoc: recorded the README license text in doc_options.json (" <> how <> ")."]]];
+
+(* エントリで呼ぶ: "LicenseHolder" オプション (文字列) を doc_options.json に記録し、
+   今回のライセンス文を作り直す。License オプションで全文を明示した場合はそちらが優先。 *)
+iDocApplyLicenseHolderOption[packageName_String, holder_, licenseOpt_] :=
+  If[StringQ[holder] && StringTrim[holder] =!= "" &&
+     !(StringQ[licenseOpt] && StringTrim[licenseOpt] =!= ""),
+    With[{text = iDocMITLicenseText[StringTrim[holder], DateString[Now, "Year"]]},
+      iDocOptionsSet[packageName, "LicenseHolder", StringTrim[holder]];
+      iDocOptionsSet[packageName, "License", text];
+      iDocSetStateLicense[packageName, text]]];
 
 (* LLM \:304c\:8aa4\:3063\:3066\:751f\:6210\:3057\:305f\:6cd5\:7684\:7bc0\:3092\:672b\:5c3e\:304b\:3089\:9664\:53bb (\:6700\:521d\:306e\:6cd5\:7684\:898b\:51fa\:3057\:4ee5\:964d\:3092\:5207\:308a\:843d\:3068\:3059\:3002\:91cd\:8907 append \:9632\:6b62) *)
 iStripReadmeLegalTail[content_String] :=
@@ -25088,6 +25591,8 @@ iGenDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
             Bold, FontColor -> RGBColor[0.8, 0.4, 0]]]];
         $iDocGenSkipped = KeyDrop[$iDocGenSkipped, packageName]];
       nbPrint[nb, "\:2705 \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306e\:751f\:6210\:304c\:5b8c\:4e86\:3057\:307e\:3057\:305f\:3002\n\:51fa\:529b\:5148: " <> outDir];
+      (* doc_options.json の EnglishDocs が true なら英語版 docs/en/ を作成・追従 (2026-10-08) *)
+      iDocMaybeTranslateEnglish[packageName, nb, outDir];
       Return[]];
     spec = queue[[idx]];
     {outFile, docTitle, promptTemplate} = spec;
@@ -25254,7 +25759,12 @@ iCheckDocResumption[packageName_String, outDir_String, srcFile_String] :=
       "sourceModified" -> (backupTime > 0 && srcTime > backupTime)|>
   ];
 
-Options[ClaudeCreateDocumentation] = {Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, Acknowledgments -> {}, License -> "", IncludeAuxiliaryAPIs -> Automatic};
+Options[ClaudeCreateDocumentation] = {Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, Acknowledgments -> {}, License -> "", IncludeAuxiliaryAPIs -> Automatic,
+  (* 2026-10-08: True = $Language (日本語) に加えて英語版 docs/en/ も作る、False = 作らない
+     (既存 en/ は削除)、Automatic = doc_options.json を踏襲 (記述なし = $Language のみ)。
+     True/False は doc_options.json に記録され、以後の ClaudeUpdateDocumentation と PackageCommit が参照する *)
+  "EnglishDocs" -> Automatic,
+  "LicenseHolder" -> Automatic};  (* 文字列 = README の MIT ライセンスの著作権者 (doc_options.json に記録) *)
 
 (* 1\:5f15\:6570\:7248: \:6307\:793a\:306a\:3057 *)
 ClaudeCreateDocumentation[packageName_String, opts:OptionsPattern[]] :=
@@ -25278,6 +25788,7 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
   ];
   (* \:6c38\:7d9a\:5316\:3055\:308c\:305f\:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:30de\:30fc\:30b8 *)
   iLoadAndMergeDocOptions[packageName];
+  iDocApplyLicenseHolderOption[packageName, OptionValue["LicenseHolder"], OptionValue[License]];
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, sourceCode, outDir, pkgDir, bdir, histDir, timestamp,
           resumeInfo, filteredQueue},
@@ -25314,6 +25825,9 @@ ClaudeCreateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     If[!DirectoryQ[FileNameJoin[{outDir, "examples"}]],
       CreateDirectory[FileNameJoin[{outDir, "examples"}],
         CreateIntermediateDirectories -> True]];
+    (* "EnglishDocs" の明示指定を doc_options.json に記録 (False なら既存 en/ を削除)。
+       英語版の作成は全 doc 生成後 (iGenDocNext の終端) に行う *)
+    iDocApplyEnglishDocsOption[packageName, OptionValue["EnglishDocs"], nb, outDir];
 
     (* ===== \:7d99\:7d9a\:5224\:5b9a: \:4f5c\:308a\:304b\:3051\:306e\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:304c\:3042\:308b\:304b ===== *)
     resumeInfo = iCheckDocResumption[packageName, outDir, srcFile];
@@ -25414,6 +25928,9 @@ iDocsAvailableAndFresh[packageName_String] :=
     docsDir = iPackageDocsDir[packageName];
     If[!StringQ[docsDir] || !DirectoryQ[docsDir], Return[False]];
     docFiles = iDropConflictedCopies[FileNames["*.md", docsDir, Infinity]];
+    (* 英語版 en/ は日本語版の訳 (再生成対象外) なので鮮度判定から除く。
+       en/ が新しいと日本語版の古さが隠れていた (2026-10-08) *)
+    docFiles = Select[docFiles, !iDocEnglishPathQ[#] &];
     If[Length[docFiles] === 0, Return[False]];
     (* \:30bd\:30fc\:30b9\:306e\:6700\:7d42\:66f4\:65b0\:65e5\:6642 *)
     srcFile = Which[
@@ -26202,8 +26719,12 @@ Options[ClaudeUpdateDocumentation] = {
   Acknowledgments -> {}, License -> "",
   TargetFiles -> Automatic,  (* Automatic=\:81ea\:52d5\:5224\:5b9a, {"api.md"} \:7b49\:3067\:30d5\:30a1\:30a4\:30eb\:6307\:5b9a *)
   Mode -> "Update",          (* "Update"=\:65e2\:5b58\:3092\:66f4\:65b0, "Create"=\:65b0\:898f\:4f5c\:6210\:ff08\:65e2\:5b58\:5185\:5bb9\:3092\:7121\:8996\:ff09 *)
-  Baseline -> "LastDocUpdate"  (* "LastDocUpdate"=\:76f4\:8fd1\:306e _documentupdate \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:57fa\:6e96(\:5f93\:6765),
+  Baseline -> "LastDocUpdate",  (* "LastDocUpdate"=\:76f4\:8fd1\:306e _documentupdate \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:57fa\:6e96(\:5f93\:6765),
                                   "Github"=GithubRepositories \:30b3\:30df\:30c3\:30c8\:7248\:57fa\:6e96(\:30bd\:30fc\:30b9\:5dee\:5206+design\:65b0\:898f\:5185\:5bb9) *)
+  "EnglishDocs" -> Automatic,  (* True = 英語版 docs/en/ を追加・追従、False = 既存 en/ を削除、
+                                  Automatic = doc_options.json の "EnglishDocs" を踏襲 (記述なし = $Language のみ)。
+                                  True/False は doc_options.json に記録され PackageCommit も参照する *)
+  "LicenseHolder" -> Automatic  (* 文字列 = README の MIT ライセンスの著作権者 (doc_options.json に記録) *)
 };
 
 (* 1\:5f15\:6570\:7248: \:524d\:56de _documentupdate \:4ee5\:964d\:306e\:5909\:66f4\:3092\:81ea\:52d5\:691c\:51fa\:3057\:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:3092\:66f4\:65b0 *)
@@ -26218,6 +26739,7 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     Replace[OptionValue[License], Except[_String] -> ""]];
   (* \:6c38\:7d9a\:5316\:3055\:308c\:305f\:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:30de\:30fc\:30b8 *)
   iLoadAndMergeDocOptions[packageName];
+  iDocApplyLicenseHolderOption[packageName, OptionValue["LicenseHolder"], OptionValue[License]];
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, sourceCode, docsDir, pkgDir, allDocs,
           prevBackup, prevSrcFile, diffText, autoInstruction,
@@ -26247,6 +26769,8 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
       nbPrint[nb, "\:30a8\:30e9\:30fc: \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093\:3002\:5148\:306b ClaudeCreateDocumentation[\"" <>
         packageName <> "\"] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
       Return[$Failed]];
+    (* "EnglishDocs" の明示指定を doc_options.json に記録 (False なら en/ をここで削除) *)
+    iDocApplyEnglishDocsOption[packageName, OptionValue["EnglishDocs"], nb, docsDir];
     (* \:5dee\:5206\:57fa\:6e96\:3092 Baseline \:30aa\:30d7\:30b7\:30e7\:30f3\:3067\:5207\:308a\:66ff\:3048\:308b *)
     baseline = Replace[OptionValue[Baseline],
       Except["Github" | "LastDocUpdate"] -> "LastDocUpdate"];
@@ -26297,6 +26821,8 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
       With[{mh = iAuxSourceHash[srcFile]},
         If[StringQ[mh], iAuxHashSet[docsDir, "@main", mh]]];
       nbPrint[nb, "\:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:306b\:5909\:66f4\:304c\:3042\:308a\:307e\:305b\:3093\:3002\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:6700\:65b0\:3067\:3059\:3002"];
+      (* 前回までに書き換わった日本語 doc (iAutoUpdateApiMd 等) の英語版が未追従なら追従 *)
+      iDocMaybeTranslateEnglish[packageName, nb, docsDir];
       Return[]];
     (* \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30d5\:30a1\:30a4\:30eb\:3092\:5bfe\:8c61\:306b\:3059\:308b *)
     (* TargetFiles \:30d0\:30ea\:30c7\:30fc\:30b7\:30e7\:30f3 *)
@@ -26332,6 +26858,9 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
         subFiles = FileNames["*.md", docsDir, 2];
         subFiles = Select[subFiles, DirectoryName[#] =!= docsDir &];
         subFiles = iDropConflictedCopies[subFiles];
+        (* 英語版 en/ は再生成しない (日本語版の書き換え後に iDocMaybeTranslateEnglish が
+           英訳で追従する)。同名除外に頼らず明示的に除く (2026-10-08) *)
+        subFiles = Select[subFiles, !iDocEnglishPathQ[#] &];
         nested = Select[subFiles,
           FileNameTake[DirectoryName[#], -1] === "docs" &];
         If[nested =!= {},
@@ -26379,7 +26908,10 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
     If[doneDocs =!= {} && remainingDocs === {},
       nbPrint[nb, iL["\:2705 \:5168\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:65e2\:306b\:4eca\:56de\:306e\:66f4\:65b0\:30b5\:30a4\:30af\:30eb\:3067\:66f4\:65b0\:6e08\:307f\:3067\:3059\:3002",
         "\:2705 All documents already updated in this cycle."]];
-      iDocProgressClear[docsDir]; Return[]];
+      iDocProgressClear[docsDir];
+      (* 前回の書き換え済み日本語 doc の英語版が未追従なら追従 (2026-10-08) *)
+      iDocMaybeTranslateEnglish[packageName, nb, docsDir];
+      Return[]];
     If[doneDocs =!= {},
       nbPrint[nb, "\:518d\:958b: " <> ToString[Length[doneDocs]] <> " \:4ef6\:306f\:66f4\:65b0\:6e08\:307f\:306e\:305f\:3081\:30b9\:30ad\:30c3\:30d7\:3001\:6b8b\:308a " <>
         ToString[Length[remainingDocs]] <> " \:4ef6\:3092\:66f4\:65b0\:3057\:307e\:3059\:3002"];
@@ -26448,6 +26980,7 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
   ];
   (* \:6c38\:7d9a\:5316\:3055\:308c\:305f\:30aa\:30d7\:30b7\:30e7\:30f3\:3092\:30de\:30fc\:30b8 *)
   iLoadAndMergeDocOptions[packageName];
+  iDocApplyLicenseHolderOption[packageName, OptionValue["LicenseHolder"], OptionValue[License]];
   With[{nb = EvaluationNotebook[]},
   Module[{srcFile, sourceCode, docsDir, pkgDir, targetDocs,
           prevBackup, prevSrcFile, diffText, enrichedInstruction, nbCtx,
@@ -26487,6 +27020,8 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
       nbPrint[nb, "\:30a8\:30e9\:30fc: \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:5b58\:5728\:3057\:307e\:305b\:3093\:3002\:5148\:306b ClaudeCreateDocumentation[\"" <>
         packageName <> "\"] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
       Return[$Failed]];
+    (* "EnglishDocs" の明示指定を doc_options.json に記録 (False なら en/ をここで削除) *)
+    iDocApplyEnglishDocsOption[packageName, OptionValue["EnglishDocs"], nb, docsDir];
     (* \:5dee\:5206\:57fa\:6e96\:3092 Baseline \:30aa\:30d7\:30b7\:30e7\:30f3\:3067\:5207\:308a\:66ff\:3048\:308b *)
     baseline = Replace[OptionValue[ClaudeUpdateDocumentation, {opts}, Baseline],
       Except["Github" | "LastDocUpdate"] -> "LastDocUpdate"];
@@ -26552,7 +27087,10 @@ ClaudeUpdateDocumentation[packageName_String, instruction_String, opts:OptionsPa
     If[doneDocs =!= {} && remainingDocs === {},
       nbPrint[nb, iL["\:2705 \:5bfe\:8c61\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:306f\:65e2\:306b\:4eca\:56de\:306e\:66f4\:65b0\:30b5\:30a4\:30af\:30eb\:3067\:66f4\:65b0\:6e08\:307f\:3067\:3059\:3002",
         "\:2705 Target documents already updated in this cycle."]];
-      iDocProgressClear[docsDir]; Return[]];
+      iDocProgressClear[docsDir];
+      (* 前回の書き換え済み日本語 doc の英語版が未追従なら追従 (2026-10-08) *)
+      iDocMaybeTranslateEnglish[packageName, nb, docsDir];
+      Return[]];
     If[doneDocs =!= {},
       nbPrint[nb, "\:518d\:958b: " <> ToString[Length[doneDocs]] <> " \:4ef6\:306f\:66f4\:65b0\:6e08\:307f\:306e\:305f\:3081\:30b9\:30ad\:30c3\:30d7\:3001\:6b8b\:308a " <>
         ToString[Length[remainingDocs]] <> " \:4ef6\:3092\:66f4\:65b0\:3057\:307e\:3059\:3002"];
@@ -26757,6 +27295,8 @@ iBuildDocPrompt[sourceCode_String, packageName_String, docsDir_String, docFile_S
                FileNameTake[DirectoryName[#], -1] =!= "docs") &]];
           (* 同期競合コピーも README 素材にしない (2026-08-21) *)
           siblingDocs = iDropConflictedCopies[siblingDocs];
+          (* 英語版 en/ は日本語版の重複なので README 素材にしない (2026-10-08) *)
+          siblingDocs = Select[siblingDocs, !iDocEnglishPathQ[#] &];
           siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
           If[Length[siblingDocs] > 0,
             siblingContent = "\n=== OTHER DOCUMENTATION FILES (use as source for README overview) ===\n" <>
@@ -26896,6 +27436,8 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
       (* \:30b5\:30a4\:30af\:30eb\:5b8c\:5168\:5b8c\:4e86 \[RightArrow] \:9032\:6357\:30d5\:30a1\:30a4\:30eb\:3092\:30af\:30ea\:30a2 (\:6b21\:56de\:306f\:30bd\:30fc\:30b9\:5909\:66f4\:3067\:65b0\:30b5\:30a4\:30af\:30eb) *)
       iDocProgressClear[docsDir];
       nbPrint[nb, iL["\:2705 \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:304c\:5b8c\:4e86\:3057\:307e\:3057\:305f\:3002", "\:2705 Document update complete."]];
+      (* 書き換えた日本語 doc に対応する en/ を英訳で追従 (2026-10-08) *)
+      iDocMaybeTranslateEnglish[packageName, nb, docsDir];
       Return[]];
     docFile = targetDocs[[idx]];
     docPath = FileNameJoin[{docsDir, docFile}];
@@ -27010,6 +27552,8 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
                FileNameTake[DirectoryName[#], -1] =!= "docs") &]];
           (* 同期競合コピーも README 素材にしない (2026-08-21) *)
           siblingDocs = iDropConflictedCopies[siblingDocs];
+          (* 英語版 en/ は日本語版の重複なので README 素材にしない (2026-10-08) *)
+          siblingDocs = Select[siblingDocs, !iDocEnglishPathQ[#] &];
           siblingDocs = Select[siblingDocs, FileNameTake[#] =!= "README.md" &];
           If[Length[siblingDocs] > 0,
             siblingContent = "\n=== OTHER DOCUMENTATION FILES (use as source for README overview) ===\n" <>
@@ -27031,6 +27575,11 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         iDocBuildLicensePrompt[packageName]]
     ];
 
+    (* 2026-10-08: README では下の分岐を通らず split が未代入のまま残り、コールバックが
+       それを次の iUpdateDocNext (splitCache_Association) へ渡してパターン不一致になっていた。
+       README は最後なので idx+1 = 完了処理 (バックアップ作成・進捗クリア・多重起動ガード解放・
+       英語版の追従) が一度も実行されなかった。既定値として受け取ったキャッシュを入れておく。 *)
+    split = effectiveCache;
     (* --- api.md / user_manual / setup / examples: \:30bd\:30fc\:30b9\:30b3\:30fc\:30c9\:6dfb\:4ed8 --- *)
     If[!isReadme,
       split = If[effectiveCache =!= <||>, effectiveCache, iSplitSource[useSource]];
@@ -27482,6 +28031,7 @@ iDocParallelComplete[jobId_String] :=
     Quiet @ ClaudeUnregisterPollingTick[Lookup[st, "statusKey", ""]];
     iSafeSetWindowStatus[st["nb"], iL["\:2705 \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:5b8c\:4e86", "\:2705 Document update complete"]];
     $iDocParallelJobs = KeyDrop[$iDocParallelJobs, jobId];
+    iDocMaybeTranslateEnglish[st["package"], st["nb"], st["docsDir"]];
   ];
 
 (* \:4e2d\:65ad: backup \:305b\:305a\:9032\:6357\:4fdd\:6301 (\:6210\:529f doc \:306f\:8a18\:9332\:6e08\:307f\:3001\:518d\:5b9f\:884c\:3067\:5931\:6557\:5206\:3060\:3051\:518d\:958b)\:3001\:672a\:5b8c\:4e86\:3092\:5831\:544a *)
@@ -27499,7 +28049,193 @@ iDocParallelFinalizeFailed[jobId_String] :=
     iSafeSetWindowStatus[st["nb"], iL["\:26d4 \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:4e2d\:65ad (\:5931\:6557 " <> ToString[Length[failedList]] <> " \:4ef6)",
       "\:26d4 Doc update aborted (" <> ToString[Length[failedList]] <> " failed)"]];
     $iDocParallelJobs = KeyDrop[$iDocParallelJobs, jobId];
+    (* 品質失敗だけ (API エラー/制限でない) なら、書き換え済みの日本語 doc の英語版は追従する *)
+    If[!TrueQ[st["systemic"]],
+      iDocMaybeTranslateEnglish[st["package"], st["nb"], st["docsDir"]]];
   ];
+
+(* ============================================================
+   英語版 docs/en/ の追従 (2026-10-08)
+   日本語 doc の更新完了後 (逐次/並列/外部ワーカーの各完了点と「変更なし」早期終了) に
+   iDocMaybeTranslateEnglish を呼ぶ。doc_options.json の "EnglishDocs" が true のときだけ動き
+   (ClaudeCreate/UpdateDocumentation の "EnglishDocs" オプションで記録)、
+   英語版が無い doc (iDocEnMissingDocs) は新規に英訳し、基準ハッシュと日本語版の現内容が
+   食い違う en/ (iDocEnStaleDocs) は英訳し直す。
+   1 件ずつ逐次に LLM へ英訳を投げ (iDocTranslateQuery)、iSafeWriteDocEn の構造ゲート
+   (見出しレベル列・コード柵数が日本語版と一致) と iSafeWriteDoc の既存ゲート
+   (サイズ退行/切り詰め/タイトル) を通ったものだけ書く。品質失敗は 1 回再試行して
+   スキップ (基準は更新しないので次回再試行)、API エラーは残りを打ち切る。
+   ============================================================ *)
+If[!AssociationQ[$iDocEnStepCurrent], $iDocEnStepCurrent = <||>];      (* pkg -> 有効 step トークン *)
+If[!AssociationQ[$iDocEnRetry], $iDocEnRetry = <||>];                  (* "pkg|rel" -> 再試行回数 *)
+
+iDocEnPrint[nb_, msg_] :=
+  If[MatchQ[nb, _NotebookObject], nbPrint[nb, msg],
+    Print[If[Head[msg] === Style, First[msg], msg]]];
+
+(* 英訳の LLM 呼び出し (単一点: 単体テストではここをモックする)。
+   モデルは doc 生成と同じ $ClaudeDocModel。ノートブックが無ければエラー応答を返し
+   チェーンを打ち切る (コールバックが永久に来ない事態を避ける)。 *)
+iDocTranslateQuery[prompt_String, callback_, nb_NotebookObject] :=
+  Module[{saved = $ClaudeModel},
+    $ClaudeModel = iDocModelOverride[];
+    WithCleanup[iClaudeQueryAsyncWithProgress[prompt, callback, nb],
+      $ClaudeModel = saved]];
+iDocTranslateQuery[_, callback_, _] :=
+  callback["Error: no notebook for the asynchronous translation query"];
+
+iDocBuildEnTranslatePrompt[packageName_String, rel_String, jaText_String,
+    enText_String, retryQ_:False] :=
+  Module[{readmeQ = (FileNameTake[rel] === "README.md"),
+          ja = StringTrim @ iDocStripLangSwitch[jaText],
+          en = StringTrim @ iDocStripLangSwitch[enText]},
+    StringJoin[
+      "You are a professional technical translator for Wolfram Language / Mathematica package documentation.\n",
+      "CRITICAL: Do NOT write any files. Do NOT use any tools. Output to stdout ONLY.\n\n",
+      "TASK: Translate the Japanese Markdown document docs/", rel, " of package \"", packageName,
+      "\" into natural, accurate English. The result is saved as docs/en/", rel, ".\n\n",
+      "RULES:\n",
+      "- Output ONLY the complete translated document, from its first line to its last. ",
+        "No preamble, no closing remarks, and do NOT wrap it in a code fence.\n",
+      "- Keep the heading structure IDENTICAL: the same headings in the same order at the same ",
+        "levels (#, ##, ###, ...). Translate only the heading text. Never add, remove, merge or split sections.\n",
+      "- Fenced code blocks (``` ... ```): copy the code VERBATIM. Translate ONLY the comments inside ",
+        "the code (Wolfram (* ... *), # or // comments) into English. Do not change code, string literals, ",
+        "identifiers, numbers or shown output. Keep the same number of code blocks.\n",
+      "- Keep inline code, function/option/symbol names, file names, paths, URLs and link targets ",
+        "unchanged; translate only the link text.\n",
+      "- Keep tables, lists, emphasis and images; translate the text inside them.\n",
+      "- Do NOT output the language-switch line (\"**\:65e5\:672c\:8a9e** | [English](...)\" / ",
+        "\"[\:65e5\:672c\:8a9e](...) | **English**\"); it is added automatically.\n",
+      If[readmeQ,
+        "- Translate the disclaimer section (## \:514d\:8cac\:4e8b\:9805 -> ## Disclaimer) and any acknowledgments " <>
+        "(## \:8b1d\:8f9e -> ## Acknowledgments) into English. The license section (## \:30e9\:30a4\:30bb\:30f3\:30b9 -> ## License) " <>
+        "is legal text: keep its body EXACTLY as in the original, do not translate or alter it.\n", ""],
+      "- The CURRENT ENGLISH VERSION below is the previous translation. Reuse its wording and terminology ",
+        "for passages whose Japanese did not change; translate changed or new passages afresh. The result must ",
+        "match the CURRENT Japanese document (drop content that is no longer in the Japanese).\n",
+      If[TrueQ[retryQ],
+        "\nRETRY NOTICE: the previous attempt was rejected (heading structure or code-block count differed " <>
+        "from the Japanese original, or the output was cut off). Reproduce EVERY heading and EVERY code block, " <>
+        "in order, and output the whole document in ONE response.\n", ""],
+      "\n=== JAPANESE DOCUMENT (source of truth) ===\n", ja, "\n\n",
+      "=== CURRENT ENGLISH VERSION (previous translation, reference only) ===\n",
+      If[en === "", "(none)", en], "\n\n",
+      "Output the COMPLETE English document now.\n"]];
+
+(* 英訳応答の書き込み: 構造ゲート → LLM の切替行除去 → iSafeWriteDoc (既存ゲート +
+   README License 原文差し替え + 切替行付与)。成功時は日本語版の現内容ハッシュを基準に記録。 *)
+iSafeWriteDocEn[enPath_String, jaPath_String, response_String, packageName_String] :=
+  Module[{cleaned, jaSig, enSig, w, sp, h},
+    $iDocLastFailReason = "";
+    If[!iIsValidDocContent[response],
+      $iDocLastFailReason = "無効応答(空/極小/エラー文)"; Return[$Failed]];
+    cleaned = iDocStripLangSwitch[iCleanDocResponse[response]];
+    jaSig = iDocHeadingSignature[iDocReadUTF8[jaPath]];
+    enSig = iDocHeadingSignature[cleaned];
+    If[jaSig["Levels"] =!= enSig["Levels"],
+      $iDocLastFailReason = "見出し構成が日本語版と不一致 (見出し数 " <>
+        ToString[Length[jaSig["Levels"]]] <> " → " <> ToString[Length[enSig["Levels"]]] <> ")";
+      Return[$Failed]];
+    If[jaSig["Fences"] =!= enSig["Fences"],
+      $iDocLastFailReason = "コードブロック数が日本語版と不一致 (" <>
+        ToString[jaSig["Fences"]] <> " → " <> ToString[enSig["Fences"]] <> ")";
+      Return[$Failed]];
+    If[!DirectoryQ[DirectoryName[enPath]],
+      Quiet @ CreateDirectory[DirectoryName[enPath], CreateIntermediateDirectories -> True]];
+    w = iSafeWriteDoc[enPath, cleaned, packageName];
+    If[w === $Failed, Return[$Failed]];
+    sp = iDocJaDocsSplit[jaPath];
+    h = iDocEnFileHash[jaPath];
+    If[ListQ[sp] && StringQ[h], iDocEnHashSet[sp[[1]], sp[[2]], h]];
+    (* 英語版ができたので日本語側にも切替行を付ける (無ければ。ハッシュは切替行を除いて計る) *)
+    If[ListQ[sp], iDocEnsureJaSwitchLine[sp[[1]], sp[[2]]]];
+    w];
+
+iDocMaybeTranslateEnglish[packageName_String, nb_, docsDir_] :=
+  Module[{missing, stale, todo},
+    If[!iDocEnglishDocsQ[packageName], Return[Null]];
+    If[!StringQ[docsDir] || !DirectoryQ[docsDir], Return[Null]];
+    missing = iDocEnMissingDocs[docsDir];
+    stale = iDocEnStaleDocs[docsDir];
+    todo = iEnsureReadmeLast @ Sort @ DeleteDuplicates @ Join[missing, stale];
+    If[todo === {}, Return[Null]];
+    iDocEnPrint[nb, Style["英語版 (en/): " <>
+      If[missing =!= {}, "新規作成 " <> ToString[Length[missing]] <> " 件", ""] <>
+      If[missing =!= {} && stale =!= {}, "・", ""] <>
+      If[stale =!= {}, "追従 " <> ToString[Length[stale]] <> " 件", ""] <>
+      " (" <> StringRiffle[todo, ", "] <> ")", Bold]];
+    $iDocEnRetry = KeySelect[$iDocEnRetry, !StringStartsQ[#, packageName <> "|"] &];
+    iDocTranslateEnNext[packageName, nb, docsDir, todo, 1, {}, {}]];
+iDocMaybeTranslateEnglish[___] := Null;
+
+iDocTranslateEnNext[packageName_String, nb_, docsDir_String, rels_List, idx_Integer,
+    ok_List, failed_List] :=
+  Module[{n = Length[rels], rel, jaPath, enPath, jaText, prompt, tok},
+    If[idx > n,
+      $iDocUpdateActive = KeyDrop[$iDocUpdateActive, packageName];
+      iDocEnPrint[nb, If[failed === {},
+        "✅ 英語版の追従が完了しました (" <> ToString[Length[ok]] <> " 件)。",
+        Style["⚠ 英語版の追従: 成功 " <> ToString[Length[ok]] <> " 件、未更新 " <>
+          ToString[Length[failed]] <> " 件 (" <> StringRiffle[failed, ", "] <>
+          ")。未更新分は次回のドキュメント更新で再試行します。",
+          FontColor -> RGBColor[0.8, 0.5, 0]]]];
+      Return[<|"Ok" -> ok, "Failed" -> failed|>]];
+    (* 英訳中も多重起動ガードを保持 (stale 自動解放あり) *)
+    $iDocUpdateActive[packageName] = AbsoluteTime[];
+    rel = rels[[idx]];
+    jaPath = iDocJoinRel[docsDir, rel];
+    enPath = iDocJoinRel[FileNameJoin[{docsDir, "en"}], rel];
+    jaText = iDocReadUTF8[jaPath];
+    If[StringTrim[jaText] === "",
+      Return[iDocTranslateEnNext[packageName, nb, docsDir, rels, idx + 1, ok,
+        Append[failed, rel]]]];
+    prompt = iDocBuildEnTranslatePrompt[packageName, rel, jaText, iDocReadUTF8[enPath],
+      Lookup[$iDocEnRetry, packageName <> "|" <> rel, 0] > 0];
+    iDocEnPrint[nb, "\[HorizontalLine] [" <> ToString[idx] <> "/" <> ToString[n] <> "] en/" <>
+      rel <> " を英訳中... (プロンプト: " <> ToString[StringLength[prompt]] <>
+      " chars, モデル: " <> iDocModelLabel[] <> ")"];
+    (* 二重発火ガード: この step の最初のコールバックだけ通す (逐次 doc 更新と同じ方式) *)
+    tok = ($iDocStepSerial = $iDocStepSerial + 1);
+    $iDocEnStepCurrent[packageName] = tok;
+    iDocTranslateQuery[prompt,
+      With[{pn = packageName, nb2 = nb, dd = docsDir, rs = rels, i = idx,
+            okA = ok, faA = failed, mt = tok},
+        Function[response,
+          If[Lookup[$iDocEnStepCurrent, pn, Null] === mt,
+            $iDocEnStepCurrent[pn] = -1;
+            iDocTranslateEnHandle[pn, nb2, dd, rs, i, okA, faA, response]]]],
+      nb]];
+
+iDocTranslateEnHandle[pn_String, nb_, dd_String, rels_List, i_Integer,
+    ok_List, failed_List, response_] :=
+  Module[{n = Length[rels], rel = rels[[i]], rkey, rc, tag},
+    rkey = pn <> "|" <> rel;
+    tag = "[" <> ToString[i] <> "/" <> ToString[n] <> "] en/" <> rel;
+    Which[
+      !StringQ[response] || iIsAPIErrorResponse[response],
+        $iDocUpdateActive = KeyDrop[$iDocUpdateActive, pn];
+        iDocEnPrint[nb, Style["⛔ " <> tag <> " の英訳を中断しました (API エラー/利用制限)。" <>
+          "残りの英語版は次回のドキュメント更新で追従します。\n" <>
+          StringTake[ToString[response], UpTo[300]], FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+        <|"Ok" -> ok, "Failed" -> Join[failed, rels[[i ;;]]], "Aborted" -> True|>,
+      iSafeWriteDocEn[iDocJoinRel[FileNameJoin[{dd, "en"}], rel], iDocJoinRel[dd, rel],
+          response, pn] === $Failed,
+        rc = Lookup[$iDocEnRetry, rkey, 0];
+        If[rc < $iDocMaxRetries,
+          $iDocEnRetry[rkey] = rc + 1;
+          iDocEnPrint[nb, Style["⚠ " <> tag <> " の英訳が不合格 [" <> $iDocLastFailReason <>
+            "]。再試行します (" <> ToString[rc + 1] <> "/" <> ToString[$iDocMaxRetries] <> ")...",
+            FontColor -> RGBColor[0.8, 0.5, 0]]];
+          iDocTranslateEnNext[pn, nb, dd, rels, i, ok, failed],
+          $iDocEnRetry = KeyDrop[$iDocEnRetry, rkey];
+          iDocEnPrint[nb, Style["⛔ " <> tag <> " は更新せずスキップ [" <> $iDocLastFailReason <> "]。",
+            FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+          iDocTranslateEnNext[pn, nb, dd, rels, i + 1, ok, Append[failed, rel]]],
+      True,
+        $iDocEnRetry = KeyDrop[$iDocEnRetry, rkey];
+        iDocEnPrint[nb, "  \[Checkmark] en/" <> rel <> " を更新しました"];
+        iDocTranslateEnNext[pn, nb, dd, rels, i + 1, Append[ok, rel], failed]]];
 
 
 (* ════════════════════════════════════════════════════════
@@ -27649,7 +28385,7 @@ iDocWorkerRun[jobDir_String] :=
 iDocWorkerRunCore[jobDir_String, job_Association] :=
   Module[{pkg, srcFile, docsDir, instruction, diffText, designContext, mode,
           targets, cycleKey, maxConc, maxRetries, perDocTimeout, jobDeadline,
-          model, effort, sourceCode, splitCache, statusPath, donePath, claimPath,
+          model, effort, lang, sourceCode, splitCache, statusPath, donePath, claimPath,
           events = {}, pending, launched = <||>, doneDocs = {}, okDocs = {},
           failedDocs = {}, systemic = False, authExpired = False,
           seq = 0, startT = AbsoluteTime[],
@@ -27669,6 +28405,9 @@ iDocWorkerRunCore[jobDir_String, job_Association] :=
     jobDeadline   = Replace[Lookup[job, "JobDeadlineSeconds", 7200], Except[_?NumericQ] -> 7200];
     model         = Lookup[job, "Model", Null];
     effort        = Replace[Lookup[job, "Effort", "medium"], Except[_String] -> "medium"];
+    (* FE の $Language (無い/不正ならこのカーネルの $Language のまま) *)
+    lang          = Replace[Lookup[job, "Language", None],
+      Except[_String?(StringMatchQ[#, LetterCharacter ..] &)] -> $Language];
     statusPath = FileNameJoin[{jobDir, "status.json"}];
     donePath   = FileNameJoin[{jobDir, "done.json"}];
     claimPath  = FileNameJoin[{docsDir, ".docupdate_worker.json"}];
@@ -27796,7 +28535,8 @@ iDocWorkerRunCore[jobDir_String, job_Association] :=
     (* ── 同期ポンプ: 最大 maxConc 並列。README は「他が全完了かつ全成功」時のみ
        最後に単独実行 (兄弟 doc をディスクから読むため)。 ── *)
     pending = iEnsureReadmeLast[targets];
-    Block[{$ClaudeModel = Which[
+    (* $Language: プロンプトの言語指示 (iLanguageInstruction) を FE と揃える *)
+    Block[{$Language = lang, $ClaudeModel = Which[
         StringQ[model] && model =!= "", model,
         ListQ[model] && Length[model] >= 2, model,
         True, $ClaudeModel],
@@ -27925,6 +28665,10 @@ iDocExternalDispatch[packageName_String, nb_, docsDir_String, instruction_String
       "JobDeadlineSeconds" -> 7200,
       "Model" -> iDocExtEncodeModel[iDocModelOverride[]],
       "Effort" -> If[StringQ[$iPaletteEffort], $iPaletteEffort, "medium"],
+      (* 2026-10-08: FE の出力言語をワーカーへ渡す。headless wolframscript の
+         $Language は FE と異なり English になるため、渡さないと
+         iLanguageInstruction が "Write in English." を組む。 *)
+      "Language" -> $Language,
       "References" -> Map[ToString,
         Replace[Lookup[state, "References", {}], Except[_List] -> {}]],
       "Demos" -> Map[ToString,
@@ -28186,6 +28930,10 @@ iClaudeDocExtFinish[jid_String, info_Association, d_Association] :=
     iClaudeSeatRelease[Lookup[info, "SeatToken", None]];
     If[pkg =!= "", $iDocUpdateActive = KeyDrop[$iDocUpdateActive, pkg]];
     $iClaudeDocExtJobs = KeyDrop[$iClaudeDocExtJobs, jid];
+    (* ワーカーが書き換えた日本語 doc の英語版を FE 側で追従 (英訳は少数なのでカーネル内
+       非同期)。API エラー/制限/認証切れ/ワーカー死亡のときは見送り、次回の更新で追従。 *)
+    If[pkg =!= "" && (ok || (!TrueQ[Lookup[d, "Systemic", False]] && err === "")),
+      iDocMaybeTranslateEnglish[pkg, nb, iPackageDocsDir[pkg]]];
   ];
 
 
@@ -30292,8 +31040,9 @@ iClaudePaletteButton[label_String, color_, action_] :=
   Button[
     Style[label, Bold, 10, White],
     (* \:30a2\:30af\:30b7\:30e7\:30f3\:5b9f\:884c\:5f8c\:3001\:30d5\:30a9\:30fc\:30ab\:30b9\:3092\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:306b\:660e\:793a\:7684\:306b\:623b\:3059\:3002
-       \:3053\:308c\:306b\:3088\:308a IME \:5165\:529b\:4f4d\:7f6e\:304c\:30d1\:30ec\:30c3\:30c8\:306b\:79fb\:52d5\:3059\:308b\:554f\:984c\:3092\:9632\:6b62 *)
-    CompoundExpression[action,
+       \:3053\:308c\:306b\:3088\:308a IME \:5165\:529b\:4f4d\:7f6e\:304c\:30d1\:30ec\:30c3\:30c8\:306b\:79fb\:52d5\:3059\:308b\:554f\:984c\:3092\:9632\:6b62\:3002
+       iClaudeHoldFE: \:51e6\:7406\:4e2d\:306f\:5171\:6709 tick \:304c FE \:306b\:89e6\:3089\:306a\:3044 (2026-10-10, iClaudeFEHeldExternallyQ) *)
+    iClaudeHoldFE @ CompoundExpression[action,
       With[{inb = InputNotebook[]},
         If[Head[inb] === NotebookObject,
           SetSelectedNotebook[inb]]]],
@@ -30309,7 +31058,7 @@ SetAttributes[iClaudePaletteButton2, HoldRest];
 iClaudePaletteButton2[label_String, color_, action_] :=
   Button[
     Style[label, Bold, 8, White],
-    CompoundExpression[action,
+    iClaudeHoldFE @ CompoundExpression[action,
       With[{inb = InputNotebook[]},
         If[Head[inb] === NotebookObject,
           SetSelectedNotebook[inb]]]],
@@ -33309,10 +34058,12 @@ ShowClaudePalette[] := (
       Dynamic[
         Button[
           Style[iCloudPaletteLabel[$iPaletteCloudState], Bold, 10, White],
-          (iCycleNotebookCloudState[];
+          (* iClaudeHoldFE: \:4fdd\:5b58\:3068\:518d\:7d22\:5f15\:306e\:9593\:306f\:5171\:6709 tick \:304c FE \:306b\:89e6\:3089\:306a\:3044 (2026-10-10) *)
+          iClaudeHoldFE[
+           iCycleNotebookCloudState[];
            With[{inb = InputNotebook[]},
              If[Head[inb] === NotebookObject,
-               SetSelectedNotebook[inb]]]),
+               SetSelectedNotebook[inb]]]],
           Appearance -> "Frameless",
           Background -> iCloudPaletteColor[$iPaletteCloudState],
           ImageSize -> {110, 18},
