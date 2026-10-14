@@ -112,6 +112,7 @@ claudecode パッケージは以下の依存関係があります：
 - **[ClaudeRuntime](https://github.com/transreal/ClaudeRuntime)** パッケージ（永続ランタイム機能用）― `$UseClaudeRuntime = True` に設定した場合にのみ使用されます。未インストールでも従来の ClaudeEval/ClaudeQuery ワークフローは影響を受けません。
 - **[ClaudeOrchestrator](https://github.com/transreal/ClaudeOrchestrator)** パッケージ（複数 Claude セッションのオーケストレーション用）― レート制限の自動検出・復帰やリトライタイミングの制御など、claudecode の上位レイヤーとして複数エージェントの並列管理・調整を行います。claudecode 本体の動作には影響しませんが、大規模な自動化タスクで活用できます。
 - **[ClaudeTestKit](https://github.com/transreal/ClaudeTestKit)** パッケージ（自動テスト・回帰テスト用）― ClaudeRuntime を使ったコード生成の品質検証に利用します。通常の使用には不要です。
+- **[SourceVault](https://github.com/transreal/SourceVault)** / **[SourceVault_webguard](https://github.com/transreal/SourceVault_webguard)** パッケージ（Web egress guard 用）― ローカル LLM のツールループ（`web_search` / `get_document`）が送るクエリ・URL の判定に、プロンプトの PrivacyLevel を申告します（後述の「Web egress guard への PrivacyLevel 申告」を参照）。未ロードの環境では申告は何もせず、動作に影響しません。
 
 これらのパッケージを `$packageDirectory` に配置してください。
 
@@ -413,6 +414,29 @@ $ClaudeAgentResultMaxChars = 12000
 
 以前は Summary 200 字 / RedactedResult 500 字 / ツール結果 3000 字が上限で、`SlideGraphSectionText` / `SlideNotebookText` のような長文の読み取りが毎回途中で切れ、エージェントが本文を読めないまま推敲を続けて迷走する（1 ページ目を読み直す → 今度は 2 ページ目が落ちる、の往復になる）事故がありました。既定値の引き上げにより、この往復は解消されています。
 
+### 10. ローカル LLM ツールループの表示レベル（オプション、2026-10-14 変更）
+
+ローカル LLM（`lmstudio` など）のツールループは、モデルがツールを呼ぶたびに情報行を出すことができます。`$ClaudeLocalToolLoopVerbose` はその表示レベルを制御します。
+
+```mathematica
+(* 既定: Automatic = 告知すべき事象だけを出す *)
+$ClaudeLocalToolLoopVerbose = Automatic
+
+(* デバッグ用: 1 呼び出しごとの情報行（"[ToolLoop] name -> N chars"）も出す *)
+$ClaudeLocalToolLoopVerbose = True
+
+(* 何も出さない *)
+$ClaudeLocalToolLoopVerbose = False
+```
+
+| 値 | 動作 |
+|----|------|
+| `Automatic`（既定） | 告知すべき事象（ツールが時間内に終わらない・Abort・例外で結果がエラー文字列に置き換わった）だけを `⚠ [ToolLoop] <ツール名>: ...` として警告表示します。 |
+| `True` | 上記に加え、1 呼び出しごとの情報行（`[ToolLoop] <ツール名> -> N chars`）も表示します（デバッグ用）。 |
+| `False` | 何も表示しません。 |
+
+以前の既定（`True`）では 1 ターンに十数行の情報行がメッセージ窓に並び、本当の警告が埋もれていたため、既定を `Automatic` に変更しました。従来どおり全呼び出しを表示したい場合は `True` を設定してください。
+
 ## 動作確認
 
 ### 1. 基本動作の確認
@@ -581,6 +605,8 @@ claudecode は ClaudeRuntime および ClaudeTestKit の導入にあたり、**�
 - ClaudeTestKit は開発・テスト用の独立したパッケージであり、claudecode 本体の動作には一切影響しません。
 - ClaudeOrchestrator は claudecode の上位レイヤーとして動作する独立したパッケージです。claudecode 本体の動作には影響しません。
 - `$ClaudeAgentResultMaxChars` は既定値（6000）のままでも従来の呼び出し方法を一切変更しません。継続プロンプトに載る直近ターンの情報量が増えるだけで、古いターンの Summary（200 字）要約は従来どおりです。
+- `$ClaudeLocalToolLoopVerbose` の既定値は `True` から `Automatic` に変わりました（2026-10-14）。従来の「毎回の情報行表示」が必要な場合は `True` を明示してください。
+- Web egress guard への PrivacyLevel 申告は、SourceVault / SourceVault_webguard が未ロードの環境では何もしません。
 
 また、`ClaudeUpdateDocumentation` の `Baseline` オプションの既定値は `"LastDocUpdate"` であり、従来どおり直近の `_documentupdate` バックアップを差分基準とします。`Baseline -> "Github"` を明示しない限り、既存のドキュメント更新ワークフローの挙動は変わりません。`"EnglishDocs"` オプションも既定は `Automatic` で、`doc_options.json` に記述が無ければ従来どおり日本語版（`$Language`）のみを生成・更新します。
 
@@ -597,6 +623,8 @@ $ClaudePrivateModel = {"lmstudio", "local-model", "http://127.0.0.1:1234"}
 (* 自動プライベートモード *)
 ClaudeEval["機密データの処理", AutoPrivate -> True]
 ```
+
+ローカル LLM へプロンプトを送る際の PrivacyLevel の扱い（Web egress guard への申告）については、後述の「高度な設定 > Web egress guard への PrivacyLevel 申告」を参照してください。
 
 ### パフォーマンス設定
 
@@ -1093,6 +1121,24 @@ ClaudeRuntime の承認 UI（❓ 通知 / NeedsApproval セル / 承認・中止
 
 これは異常ではありません。日本語版は更新済みで、英語版の基準（日本語版の内容ハッシュ）は更新されないため、`ClaudeUpdateDocumentation` を再実行すれば未更新分だけが再び英訳されます。品質ゲート（サイズ退行・切り詰め・タイトル・見出し構成の不整合）に落ちた場合は、1 回だけ再試行してもなお通らなければ、そのファイルの英語版は書き換えず次のファイルへ進みます。
 
+#### 25. ローカル LLM のツールループで警告が表示される・情報行が出なくなった（2026-10-14 追加）
+
+ローカル LLM のツールループ中に次のような警告が表示されることがあります：
+
+```
+⚠ [ToolLoop] <ツール名>: <理由>
+```
+
+これは、ツールが時間内に終わらなかった、Abort された、または例外で結果がエラー文字列に置き換わったことを示します。表示は `$ClaudeLocalToolLoopVerbose` が `False` 以外のとき常に行われます。一方、以前の既定で出ていた 1 呼び出しごとの情報行（`[ToolLoop] <ツール名> -> N chars`）は、既定の `Automatic` では出なくなりました。必要なら次のように `True` を設定してください（詳細は「初期設定 > 10. ローカル LLM ツールループの表示レベル」を参照）：
+
+```mathematica
+$ClaudeLocalToolLoopVerbose = True
+```
+
+#### 26. Web egress guard の判定が想定より厳しい・緩い（2026-10-14 追加）
+
+ローカル LLM のツールループが `web_search` / `get_document` で送るクエリや URL の判定は、claudecode が SourceVault_webguard へ申告した PrivacyLevel（文脈 PL）に基づきます。申告値は「評価セルの PL」「`ClaudeQuery` の `PrivacyLevel` オプション」「評価スコープの透かし」の最大値です（後述の「高度な設定 > Web egress guard への PrivacyLevel 申告」を参照）。想定と異なる判定になる場合は、評価セル側の PL と、`ClaudeQuery` に渡した `PrivacyLevel` を確認してください。SourceVault / SourceVault_webguard が未ロードの場合は申告自体が行われません。
+
 ### デバッグ情報の取得
 
 ```mathematica
@@ -1383,6 +1429,30 @@ ClaudeUpdateDocumentation["pkg", TargetFiles -> {"examples/*"}]
 
 **注意**：`examples/*.md` は、通常の自動更新（`Baseline` オプションによる差分検出）の対象からは除外されています。`examples/` 配下のドキュメントを更新するには、`TargetFiles` で個別ファイル（`"examples/<name>.md"`）または一括マーカー（`"examples/*"`）を明示的に指定する必要があります（2026-07-09 変更）。
 
+### Web egress guard への PrivacyLevel 申告（2026-10-14 追加）
+
+ローカル LLM（`lmstudio` / `llamacpp` / `freetoken` など）のツールループでは、モデルが `web_search` / `get_document` のクエリや URL を外部へ送ろうとします。claudecode は、プロンプトをローカル LLM へ送る直前に「渡しているデータの PrivacyLevel の最大値」を SourceVault の関所（SourceVault_webguard）へ申告します。関所はこの値（TTL 内の最大）を**文脈 PL**として、モデルが出す web_search / get_document の URL・クエリの判定に使います。claudecode 本体はパッケージ非依存の設計のため、SourceVault 側が未ロードの場合は申告は何もしません（弱結合）。
+
+申告される PL は次の最大値です：
+
+```
+PL = Max[評価セルの PL, ClaudeQuery の PrivacyLevel オプション (1 回で消費), 評価スコープ透かし]
+```
+
+| 要素 | 内容 |
+|------|------|
+| 評価セルの PL | 評価中のセルの PrivacyLevel（取得できない場合は 0.0） |
+| `PrivacyLevel` オプション | `ClaudeQuery` に渡した PrivacyLevel。内部変数 `$iClaudeRequestPrivacyLevel` に保持され、**1 回の申告で消費**されて 0.0 に戻ります（次の呼び出しへ持ち越されません）。 |
+| 評価スコープ透かし | `SourceVault`SourceVaultEvaluationPrivacy[]` が返す、評価スコープの透かし（SourceVault 未ロード時は 0.0） |
+
+```mathematica
+(* 機密を含むプロンプトを PrivacyLevel 付きでローカル LLM へ送る *)
+ClaudeQuery["...", PrivacyLevel -> 1.0,
+  Model -> {"lmstudio", "local-model", "http://127.0.0.1:1234"}]
+```
+
+申告内容には PrivacyLevel のほか、Provider・Model・URL、およびセッション ID が含まれます。ツールループの設定は不要で、SourceVault_webguard がロードされていれば自動的に有効になります。判定が想定と異なる場合の確認方法は「トラブルシューティング > 26」を参照してください。
+
 ### CLI MCP サーバの登録（ClaudeRegisterCLIMCPServer）
 
 `ClaudeRegisterCLIMCPServer` は、ヘッドレス claude CLI 実行（`ClaudeQueryBg` / `ClaudeQuery` の内部経路）に MCP サーバを接続登録する関数です。外部パッケージ（例: SourceVault MCP）が自身の MCP サーバを登録するために使用します。claudecode 本体はパッケージ非依存の設計を維持します。
@@ -1577,6 +1647,10 @@ ClaudeEffectiveDirectiveLevel[]
 
 `ClaudeEffectiveDirectiveLevel[]` は `Minimal` | `Standard` | `Full` の DirectiveLevel（モデルの生成世代に応じたディレクティブの詳細度）を、その決定元・実効モデルスペックとあわせて返します。
 
+#### ローカル LLM ツールループの表示レベル（$ClaudeLocalToolLoopVerbose）
+
+ローカル LLM のツールループが出す表示は `$ClaudeLocalToolLoopVerbose`（既定 `Automatic`、2026-10-14 変更）で制御します。`Automatic` ではタイムアウト・Abort・例外など告知すべき事象だけを警告し、`True` で 1 呼び出しごとの情報行（`[ToolLoop] name -> N chars`）も出し、`False` で何も出しません。詳細は「初期設定 > 10. ローカル LLM ツールループの表示レベル」を参照してください。
+
 ### 仕様実装ワークフロー（CreateImplementationWorkflow）
 
 `CreateImplementationWorkflow` は、承認済み設計仕様から SourceVault 管理下の codified ワークフローパッケージ（`SVWorkflow_<Name>`）を自動的に実装する機能です。実装担当は利用可能な場合にウルトラモデルクラス（`ClaudeUltraModelSpec` で解決、CLI 優先・有料 API ゲート付き）を使用し、`$ClaudeModel` はそのフォールバックとなります。検証担当（`$ClaudeAdvisaryModel`）との間で合意に達するまでラウンドを繰り返すほか、生成したテストを新規カーネルで実行して通過することを求める proven-code ゲートが課せられます。ウルトラクラスの実装担当は計画フェーズで実装スタイル（native / dag / petri）も選択します。
@@ -1697,6 +1771,7 @@ ShowClaudePalette[]
 ?ClaudeCodexSandboxStatus
 ?$ClaudeCloudToolLoop
 ?$ClaudeCloudToolLoopTools
+?$ClaudeLocalToolLoopVerbose
 ?ClaudeEffectiveDirectiveLevel
 ?CreateImplementationWorkflow
 ?LaunchImplementationWorkflow

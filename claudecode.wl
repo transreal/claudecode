@@ -12242,7 +12242,11 @@ iAgentResultMaxChars[] := If[IntegerQ[$ClaudeAgentResultMaxChars] && $ClaudeAgen
    エラー文字列へ変換して往復を続ける (servicemanager の iSMSafeHook と同じ構図)。 *)
 If[! NumericQ[ClaudeCode`$ClaudeLocalToolLoopToolTimeoutSeconds],
   ClaudeCode`$ClaudeLocalToolLoopToolTimeoutSeconds = 60];
-If[! ValueQ[$ClaudeLocalToolLoopVerbose], $ClaudeLocalToolLoopVerbose = True];
+(* 2026-10-14: ツールループの表示レベル。既定 Automatic = 告知すべき事象 (タイムアウト / Abort /
+   例外で結果をエラー文字列に置き換えた) だけを出す。True = 1 呼び出しごとの
+   "[ToolLoop] name -> N chars" も出す (デバッグ用)。False = 何も出さない。
+   旧既定 True は 1 ターンに十数行の情報行がメッセージ窓に並び、本当の警告が埋もれていた。 *)
+If[! ValueQ[$ClaudeLocalToolLoopVerbose], $ClaudeLocalToolLoopVerbose = Automatic];
 (* 2026-09-02: 無益なツール結果 (ERROR / 0 件 / 空) がこの回数連続したら
    予算を待たずに終端往復へ進む。実機では get_document の abort 2 回 +
    0 件検索 5 回で 8 往復を使い切り、最後に <tool_call> の生テキストが
@@ -12518,7 +12522,8 @@ iLocalToolLoopTrim[name_String, text_String] :=
         " chars total, showing first " <> ToString[lim] <>
         ". Narrow the query if you need more.]",
       text];
-    If[TrueQ[$ClaudeLocalToolLoopVerbose],
+    (* 情報行: 明示 True のときだけ (既定 Automatic では出さない) *)
+    If[$ClaudeLocalToolLoopVerbose === True,
       Print["  [ToolLoop] " <> name <> " \[Rule] " <>
         ToString[StringLength[text]] <> " chars" <>
         If[StringLength[text] > lim, " (truncated to " <> ToString[lim] <> ")", ""]]];
@@ -12589,8 +12594,10 @@ iToolLoopSafeExec[call_] :=
       guard = "nonstring";
       r = "ERROR: tool returned " <> ToString[Head[r]]];
     If[guard =!= None,
-      If[TrueQ[$ClaudeLocalToolLoopVerbose],
-        Print["  [ToolLoop] " <> name <> " \[Rule] " <> r]];
+      (* 告知すべき事象 (ツールが時間内に終わらない / Abort / 例外): False 以外は常に出す *)
+      If[$ClaudeLocalToolLoopVerbose =!= False,
+        Print[Style["\[WarningSign] [ToolLoop] " <> name <> ": " <> r,
+          RGBColor[0.75, 0.35, 0.]]]];
       Quiet @ iClaudeFreezeLog["toolloop-tool-guard",
         guard <> " | " <> name <> " | " <> r]];
     r];
@@ -12956,6 +12963,7 @@ iToolLoopStart[provider_String, model_String, prompt_String, url_String,
     apiKey_String, temperature_:Automatic, reasoningEffort_:None,
     sysPrompt_:None, toolsIn_:Automatic] :=
   Module[{id, tools, allowed},
+    iWebGuardDeclareContext[provider, model, url];   (* web guard へ文脈 PL を申告 *)
     tools = If[toolsIn === Automatic, iToolLoopToolsFor[provider], toolsIn];
     allowed = If[ListQ[iToolLoopAllowlistFor[provider]],
       Lookup[#["function"], "name", ""] & /@ tools, None];
@@ -14642,6 +14650,33 @@ Options[iQueryViaAPI] = {
   "Temperature"   -> Automatic,
   "APIToken"      -> Automatic
 };
+(* ---- Web egress guard への文脈申告 (SourceVault_webguard.wl, 弱結合) 2026-10-14 ----
+   ローカル LLM へプロンプトを送る直前に「渡しているデータの PrivacyLevel の最大値」を
+   SourceVault の関所へ申告する。関所はこの値 (TTL 内の最大) を文脈 PL として、
+   モデルの web_search / get_document の URL・クエリを判定する (spec webguard §5)。
+   PL = Max[評価セルの PL, ClaudeQuery の PrivacyLevel オプション (1 回で消費), 評価スコープ透かし]。 *)
+If[! ValueQ[$iClaudeRequestPrivacyLevel], $iClaudeRequestPrivacyLevel = 0.0];
+iWebGuardContextPL[] :=
+  Module[{cell, req, ev},
+    cell = If[NumericQ[$iClaudeEvalPromptPrivacyLevel], $iClaudeEvalPromptPrivacyLevel, 0.0];
+    req = If[NumericQ[$iClaudeRequestPrivacyLevel], $iClaudeRequestPrivacyLevel, 0.0];
+    ev = If[Length[DownValues[SourceVault`SourceVaultEvaluationPrivacy]] > 0,
+      Quiet @ Check[SourceVault`SourceVaultEvaluationPrivacy[], 0.0], 0.0];
+    If[! NumericQ[ev], ev = 0.0];
+    Max[cell, req, ev]];
+iWebGuardDeclareContext[prov_, model_, url_] :=
+  If[Length[DownValues[SourceVault`SourceVaultWebGuardDeclareContext]] > 0,
+    Module[{pl = iWebGuardContextPL[]},
+      $iClaudeRequestPrivacyLevel = 0.0;   (* 要求 PL は 1 回の申告で消費 *)
+      Quiet @ Check[
+        SourceVault`SourceVaultWebGuardDeclareContext[<|
+          "Provider" -> ToString[prov], "Model" -> ToString[model], "URL" -> url,
+          "PrivacyLevel" -> pl,
+          "SessionId" -> Quiet @ Check[iSessionTag[], Missing[]]|>],
+        Null]],
+    Null];
+iWebGuardDeclareContext[___] := Null;
+
 iQueryViaAPI[provider_String, model_String, prompt_String,
              customURL_String:"", opts:OptionsPattern[]] :=
   Module[{apiKey, url, prov = ToLowerCase[provider],
@@ -14673,6 +14708,7 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
     If[iLocalOAIProviderQ[prov],
       effectiveURL = If[customURL =!= "", customURL,
         iLocalOAIDefaultBaseURL[prov]];
+      iWebGuardDeclareContext[prov, model, effectiveURL];   (* web guard へ文脈 PL を申告 *)
       (* MCP (/api/v1/chat) \:306f LM Studio \:5c02\:7528\:3002freetoken \:306f\:5e38\:306b
          OpenAI \:4e92\:63db /v1/chat/completions \:7d4c\:8def (2026-08-24)\:3002 *)
       (* 2026-08-30: $ClaudeLocalToolLoop = True で lmstudio を明示的に
@@ -15146,6 +15182,7 @@ iPrepareLMStudioMCPPS1[apiKey_String, model_String, prompt_String,
     (* BreakPtr: 送信直前ブレーク (LM Studio MCP PS1) *)
     iLLMBreakpointGate["LM Studio MCP (PS1)", <|"Provider" -> "lmstudio",
       "Model" -> model, "URL" -> url, "Prompt" -> prompt|>];
+    iWebGuardDeclareContext["lmstudio", model, url];   (* web guard へ文脈 PL を申告 *)
     psExe = iResolvePowerShellExe[];
     If[!StringQ[psExe], Return[$Failed]];
     tmpDir = iMakeTempDir[];
@@ -16678,6 +16715,7 @@ ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
     (* BreakPtr: fresh kernel でも notebook タグから同期 *)
     iLLMBreakpointSyncFromNotebook[Quiet @ EvaluationNotebook[]];
     privLevel = Replace[OptionValue[PrivacyLevel], Automatic -> 0.0];
+    $iClaudeRequestPrivacyLevel = privLevel;   (* web guard 文脈申告用 (次の申告で消費) *)
     useFallback = TrueQ[OptionValue[Fallback]];
 
     (* === \:30e2\:30c7\:30eb\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0\:ff08\:30b3\:30a2\:30fb\:552f\:4e00\:306e\:5834\:6240\:ff09 ===
@@ -17810,6 +17848,7 @@ iClaudeQueryAsyncCore[prompt_String, callback_, nb_NotebookObject,
     modelSpec = iResolveDefaultModelSpec[modelSpec];
     autoCellize = TrueQ[OptionValue[AutoCellize]];
     privLevel = Replace[OptionValue[PrivacyLevel], Automatic -> 0.0];
+    $iClaudeRequestPrivacyLevel = privLevel;   (* web guard 文脈申告用 (次の申告で消費) *)
     useFallback = TrueQ[OptionValue[Fallback]];
     accessLevel = If[privLevel > 0, privLevel, 0.5];
 

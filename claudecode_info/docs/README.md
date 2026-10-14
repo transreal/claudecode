@@ -8,7 +8,7 @@ claudecode は、Mathematica のノートブック環境と Claude Code CLI を�
 
 **ノートブック中心のコンテキスト共有**: ClaudeEval や ClaudeQuery を呼び出す際、ノートブック内のセル履歴(入力・出力・エラーメッセージ)が自動的に収集され、Claude へのプロンプトに組み込まれます。これにより、ユーザーが手動でコードを貼り付ける必要がなく、Claude は現在の作業状態を正確に把握した上で応答を生成します。コンテキスト収集は [NBAccess](https://github.com/transreal/NBAccess) パッケージに委譲されており、セルの読み書き・プライバシー管理・変数追跡といった低レベル操作は分離されています。
 
-**機密データの自動保護**: API キーや個人情報を扱うセルは `Confidential` ラッパーや `MarkConfidential` によって機密マークされ、以降の Claude プロンプトから自動的に除外されます。さらに CellEpilog を利用した伝播機構により、機密変数を参照する下流のセルも自動検出・マーキングされます。機密変数が存在する場合のみ高コストな依存グラフ構築・走査を実行するため、通常使用時のオーバーヘッドは最小限に抑えられます。`NonConfidential` で明示的に公開指定することも可能で、きめ細かなプライバシー制御を実現しています。LLM 送信直前には全ノートブックを走査して完全な依存グラフを構築し、秘密依存変数の最終判定を行う精密チェック(第2層)が実行されます。別ノートブック経由の秘密依存も自動検出されます。`$NBSendDataSchema` が有効な場合、機密依存の出力にはスキーマ情報(型・キー一覧等)が自動付与され、ClaudeEval がプロービングなしで変数の構造を把握できます。
+**機密データの自動保護**: API キーや個人情報を扱うセルは `Confidential` ラッパーや `MarkConfidential` によって機密マークされ、以降の Claude プロンプトから自動的に除外されます。さらに CellEpilog を利用した伝播機構により、機密変数を参照する下流のセルも自動検出・マーキングされます。機密変数が存在する場合のみ高コストな依存グラフ構築・走査を実行するため、通常使用時のオーバーヘッドは最小限に抑えられます。`NonConfidential` で明示的に公開指定することも可能で、きめ細かなプライバシー制御を実現しています。LLM 送信直前には全ノートブックを走査して完全な依存グラフを構築し、秘密依存変数の最終判定を行う精密チェック(第2層)が実行されます。別ノートブック経由の秘密依存も自動検出されます。`$NBSendDataSchema` が有効な場合、機密依存の出力にはスキーマ情報(型・キー一覧等)が自動付与され、ClaudeEval がプロービングなしで変数の構造を把握できます。ローカル LLM のツールループ(`web_search` / `get_document`)が送るクエリ・URL についても、SourceVault の Web egress guard にプロンプトの PrivacyLevel が申告され、外部送信の可否判定に使われます(SourceVault 未ロードの環境では何もしません)。
 
 **ファイルアクセスのファイアウォール**: Claude Code が参照できるディレクトリはグローバル変数 `$ClaudeAccessibleDirs` で規定されており、その初期値は `$packageDirectory` のみです。`$packageDirectory` 配下以外の新規ディレクトリを追加すると、初回使用時に許可確認ダイアログが表示される安全機構も備えています。Claude の行動原理は次の通りです。
 
@@ -135,6 +135,7 @@ Windows で Codex を使う場合、初回実行前に PC ごとのサンドボ�
 | `ClaudeOrchestrator` | 複数 Claude セッションのオーケストレーション(オプション・[GitHub](https://github.com/transreal/ClaudeOrchestrator))。ロードすると ClaudeEval が非同期実行モードに切り替わり、呼び出しはジョブキューに追加されて即座に返りカーネルをブロックしない。レート制限の自動検出・復旧・リトライスケジューリングを担う上位レイヤーとして機能する |
 | `ClaudeTestKit` | 自動テスト・回帰テストフレームワーク(オプション・[GitHub](https://github.com/transreal/ClaudeTestKit))。ClaudeRuntime と組み合わせて使用 |
 | `SourceVault` | プロンプトルーティング機能(オプション・[GitHub](https://github.com/transreal/SourceVault))。ロードすると `ClaudeEval` の Order 2 ディスパッチに PromptRouter ブリッジが組み込まれ、登録済みルートに適合するプロンプトは LLM 呼び出しなしで直接評価される |
+| `SourceVault_webguard` | Web egress guard(オプション・[GitHub](https://github.com/transreal/SourceVault_webguard))。ローカル LLM のツールループ(`web_search` / `get_document`)が送るクエリ・URL の判定に、プロンプトの PrivacyLevel が申告される。未ロードの環境では何もしない |
 
 #### 3. パッケージの読み込み
 
@@ -412,6 +413,7 @@ ShowClaudePalette[]
 - `NonConfidential[expr]` — 機密依存でも明示的に公開扱い
 - `MarkConfidential[]` / `UnmarkConfidential[]` — セルの機密マーク操作
 - `ScanConfidentialCells[]` — 機密変数参照セルの自動検出・マーキング
+- Web egress guard への PrivacyLevel 申告 — ローカル LLM のツールループ(`web_search` / `get_document`)が送るクエリ・URL の判定に、プロンプトの PrivacyLevel を申告(SourceVault / SourceVault_webguard ロード時のみ。未ロード時は無動作)
 
 **プライバシー対応モデルルーティング**
 - `AutoPrivate -> True` — 秘密変数を含むタスクを `$ClaudePrivateModel` で指定したローカルモデルへ自動ルーティング
@@ -753,6 +755,10 @@ ClaudeEval["この複雑なデータを分析して傾向を可視化して"]
 
 SourceVault をロードすると、仕様書の審査から実装ワークフロー化までを支援する API 群(`ClaudeSpecStatus`・`ClaudeSpecVersions`・`ClaudeSpecText`・`ClaudeOpenSourceVaultURI`・`CreateImplementationWorkflow`・`LaunchImplementationWorkflow`・`ClaudeImplStatus`・`ClaudeImplMonitor`)も利用可能になります。`CreateImplementationWorkflow` が完了すると、生成されたワークフローの起動関数がスラッグ・表示名をキーワードとして PromptRouter に自動登録されるため、以降は `ClaudeEval` でスラッグ名を呼び出すだけでワークフローを起動できます。`$ClaudeAdvisaryModel` のようなロール別モデル指定を再起動後も保持したい場合は、`SourceVaultSetModelIntent["$ClaudeAdvisaryModel", intentOrModel]` でインテント(例: `{"claudecode", "code-heavy"}`)または固定モデル ID をディスクに永続化できます。手動でのカーネルセッション代入はこの永続化レイヤーによって上書きされません。
 
+### Web egress guard への PrivacyLevel 申告
+
+ローカル LLM のツールループ(`web_search` / `get_document`)が送るクエリ・URL は、[SourceVault](https://github.com/transreal/SourceVault) / [SourceVault_webguard](https://github.com/transreal/SourceVault_webguard) の Web egress guard が外部送信の可否を判定します。claudecode はこの判定に使われるよう、プロンプトの PrivacyLevel を guard へ申告します。SourceVault が未ロードの環境では申告は何もせず、動作に影響しません(詳細は setup.md を参照)。
+
 ### 認証切れ検出(ClaudeAuthStatus / ClaudeAuthClear)
 
 2026-08-28 の改訂により、Claude Code CLI の OAuth 認証切れ(401 authentication_failed)がレート制限と同格の検出対象として扱われるようになりました。
@@ -836,7 +842,7 @@ ClaudeUpdateDocumentation["claudecode", "最新版に追従して",
 |---------|------|
 | `api.md` | API リファレンス(全関数・変数・オプションの詳細仕様) |
 | `api_directives.md` | claudecode_directives 補助 API リファレンス(ディレクティブリポジトリ読込・モデル能力管理・DirectiveLevel・Bundle/Projection・Inventory/Manifest/Hash) |
-| `setup.md` | セットアップガイド(インストール手順・Codex サンドボックス検証・トラブルシューティング) |
+| `setup.md` | セットアップガイド(インストール手順・Codex サンドボックス検証・Web egress guard への PrivacyLevel 申告・トラブルシューティング) |
 | `user_manual.md` | ユーザーマニュアル(機能別の詳細な使い方) |
 | `examples/example.md` | 使用例集(代表的なユースケースとコード例) |
 

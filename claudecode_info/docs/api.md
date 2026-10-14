@@ -763,7 +763,7 @@ Web 検索を実行し結果をテキストで返す。Anthropic API の web_sea
 Options: Fallback -> False, References -> {} (URL/書籍リスト。README.md 参照文献セクションに追加), Demos -> {} (デモ URL リスト。README.md に反映), Disclaimer -> {} (免責事項テキストリスト。README.md のみ), License -> "" (ライセンス文字列。空で GitHubREST`$GitHubLicenseHolder 非空なら MIT 自動挿入), Acknowledgments -> {} (謝辞テキストリスト。README.md のみ), IncludeAuxiliaryAPIs -> Automatic
 
 ### ClaudeUpdateDocumentation[packageName, instruction, opts]
-既存ドキュメントを instruction に従って部分更新する。既定では生成パイプライン全体を外部 wolframscript ワーカーで実行し FrontEnd を塞がない ($ClaudeDocUpdateExternal を参照)。非同期連鎖で進行するため $ClaudeDocUpdateStaleSeconds 超のロックは自動解放される。
+既存ドキュメントを instruction に従って部分更新する。既定では生成パイプライン全体を外部 wolframscript ワーカーで実行し FrontEnd を塞がない ($ClaudeDocUpdateExternal を参照)。非同期連鎖で進行するため $ClaudeDocUpdateStaleSeconds 超のロックは自動解放される。英語版 docs/en/ も追従生成される (2026-10-08)。
 → True | $Failed
 Options: Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, Acknowledgments -> {}, License -> "", TargetFiles -> Automatic, Mode -> "Update", Baseline -> "LastDocUpdate"
 

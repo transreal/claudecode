@@ -184,6 +184,14 @@ $ClaudeLocalToolLoopMaxIterations = 8
 (* ローカルツールループの 1 ツール呼び出しあたりの実行時間上限(秒、既定 60) *)
 $ClaudeLocalToolLoopToolTimeoutSeconds = 60
 
+(* ローカルツールループのメッセージ窓への表示レベル (2026-10-14)。
+   Automatic (既定): 告知すべき事象 (ツールがタイムアウト / Abort / 例外で結果がエラー文字列に
+                     置き換わった) だけを警告として出す。
+   True: 1 呼び出しごとの情報行 "[ToolLoop] name -> N chars" も出す (デバッグ用)。
+   False: 何も出さない。
+   詳細は「ローカルプロバイダの非同期ツールループ」を参照 *)
+$ClaudeLocalToolLoopVerbose = Automatic
+
 (* クラウド API プロバイダ(openai/zai/kimi)にディレクティブ専用ツールループを与えるか
    (デフォルト Automatic = SourceVault ロード時のみ有効)。
    詳細は「ディレクティブ強度制御(DirectiveLevel)」を参照 *)
@@ -291,10 +299,13 @@ ClaudePrepareCommit["MyPackage"]
 | **プライバシー** | `$ClaudePrivateModel` | ローカルモデル設定 |
 | | `AutoPrivate -> True` | 機密データ自動ルーティング |
 | | `PrivacySpec` オプション | アクセスレベル明示指定 |
+| | `PrivacyLevel` オプション | `ClaudeQuery` に渡すデータの PrivacyLevel を Web egress guard へ申告(1 回で消費) |
 | **ローカル/クラウド実行制御** | `$ClaudeLocalLLMProvider` | このマシンで動かすローカル LLM エンジンの明示指定(マシン別排他) |
 | | `$ClaudeMachineLocalLLMProvider` | マシン名 → ローカル LLM エンジンの対応表 |
 | | `ClaudeLocalLLMProvider` | 実効ローカル LLM provider の取得 |
 | | `ClaudeSetLocalLLMProvider` | ローカル LLM provider をこのカーネルで切替 |
+| | `$ClaudeLocalToolLoop` | クライアント側ツールループの有効/無効 |
+| | `$ClaudeLocalToolLoopVerbose` | ローカルツールループのメッセージ窓への表示レベル(Automatic / True / False) |
 | | `$ClaudeCloudToolLoop` | クラウド API プロバイダのディレクティブオンデマンド取得の有効/無効 |
 | | `$ClaudeCloudToolLoopTools` | クラウド API プロバイダに許可する SourceVault MCP ツール名 |
 | | `ClaudeLlamaCppForgetModalities` | llamacpp/freetoken サーバの画像入力可否(vision)判定キャッシュを破棄 |
@@ -589,8 +600,29 @@ LM Studio は `/api/v1/chat` エンドポイント経由でサーバー側が MC
 - `$ClaudeLocalToolLoop`(既定 `Automatic`): `Automatic` は、`/api/v1/chat` のようなサーバー側ツールループ用エンドポイントを持たないプロバイダ(freetoken・llamacpp)にのみクライアント側ツールループを自動適用します。既にサーバー側ループを持つ lmstudio は既定では対象外です。`True` を指定すると lmstudio を含め常にクライアント側ツールループが使われ、`False` では常に無効になります。
 - `$ClaudeLocalToolLoopMaxIterations`(既定 `8`): ツール呼び出し→実行→再送信の往復回数の上限です。上限に達すると、最後の 1 往復だけツール定義を送らずに問い合わせ、必ず本文で応答を終わらせます(無限ループ防止)。
 - `$ClaudeLocalToolLoopToolTimeoutSeconds`(既定 `60`): ツール呼び出し 1 件あたりの実行時間上限(秒)です。単一のツール実行がこれを超えて応答しない場合、ループ全体が無期限に止まることを防ぎます。
+- `$ClaudeLocalToolLoopVerbose`(既定 `Automatic`、2026-10-14 追加): ツールループがメッセージ窓へ出す表示のレベルを制御します。従来の既定(`True` 相当)では、ツール呼び出しのたびに `[ToolLoop] name -> 結果` の情報行が出ていました。1 ターンで十数行の情報行がメッセージ窓に並び、本当の警告が埋もれてしまうため、既定を変更しました。
+
+  | 値 | 動作 |
+  |---|---|
+  | `Automatic`(既定) | **告知すべき事象だけ**を警告として出します。すなわち、ツールが制限時間内に終わらなかった・Abort された・例外が発生したことで、ツール結果がエラー文字列に置き換わったとき(`⚠ [ToolLoop] <ツール名>: <エラー内容>`、オレンジ色)のみ表示します。 |
+  | `True` | 上記の警告に加え、1 呼び出しごとの情報行 `[ToolLoop] name -> N chars`(結果の文字数)も出します。デバッグ用です。 |
+  | `False` | 何も出しません。 |
+
+  ```mathematica
+  (* ツール呼び出しごとの情報行も見たい(デバッグ) *)
+  $ClaudeLocalToolLoopVerbose = True
+
+  (* 何も表示しない *)
+  $ClaudeLocalToolLoopVerbose = False
+
+  (* 既定に戻す *)
+  $ClaudeLocalToolLoopVerbose = Automatic
+  ```
+
+  この変数はパッケージ読み込み時に未設定の場合のみ `Automatic` に初期化されるため、`localInit.wl` 等で先に設定した値は上書きされません。
 - 内部実装は `URLSubmit` ベースの非同期往復(応答をハンドラで受け取り、ツールを実行して次の往復を自動送信する)で、カーネルをブロックしません。応答本文は `"BodyBytes"` から UTF-8 で復号されるため、日本語が Latin-1 として誤復号されて化けることもありません。カーネルをブロックする同期的な実装(`RunProcess` 相当)も内部に残されており状況に応じて使い分けられますが、いずれも上記の公開変数で制御されるため、ユーザーから見た挙動・設定方法は共通です。
 - **ツール結果の切り詰め**: 1 回のツール呼び出しの戻り値は既定で 8000 文字を超えると切り詰められます。SourceVault のようなツールはカタログや検索結果を丸ごと返すことがあり、切り詰めずに履歴へ積み続けると 128k トークンの文脈を圧迫したうえ、モデルの出力が壊れて(未収束のツール呼び出し表現が繰り返される等)応答が収束しなくなる不具合が実際に確認されたための対策です。切り詰めが発生した場合は「切り詰めた事実」がモデルにも明示され、必要であればより絞り込んだクエリで再度ツールを呼び出すよう促されます。
+- **Web egress guard への文脈申告**: ツールループは実行を開始する際、これから渡すデータの PrivacyLevel を SourceVault の Web egress guard へ申告します(詳細は次項「Web egress guard への文脈 PrivacyLevel の申告」を参照)。
 
 **終端往復の契約(2026-09-02 強化、2026-09-09 拡張)**
 
@@ -604,7 +636,28 @@ LM Studio は `/api/v1/chat` エンドポイント経由でサーバー側が MC
 - **ハンドラ例外の封じ込め(2026-09-02)**: 非同期ツールループの応答ハンドラ内で Abort や Throw が起きた場合も、前面の評価へ漏らさずジョブを `Failed` として終了させ、監視側が即座に次のフォールバック候補へ進めるようにしています。
 - **中断時の接続切断(2026-09-09)**: ジョブを中止・破棄するときは HTTP 接続を先に abort してから台帳を消すため、ローカルサーバ(llama.cpp / LM Studio)側も生成を止め、スロットが占有されたままになることを防ぎます。
 
-これらはいずれもクライアント側ツールループ(`$ClaudeLocalToolLoop`)の内部的な信頼性強化であり、新しい公開 API の追加はありません。
+これらはいずれもクライアント側ツールループ(`$ClaudeLocalToolLoop`)の内部的な信頼性強化であり、新しい公開 API の追加はありません(`$ClaudeLocalToolLoopVerbose` による表示制御のみ、2026-10-14 に追加されました)。
+
+**Web egress guard への文脈 PrivacyLevel の申告(2026-10-14)**
+
+SourceVault の Web egress guard(`SourceVault_webguard.wl`)は、モデルが `web_search` / `get_document` で外部へ出す URL やクエリを判定します(SourceVault 側の webguard 仕様 §5)。この判定には「いま会話に載っているデータの機密度」が必要です。たとえば PrivacyLevel の高いデータを扱っている最中に、モデルが機密情報を埋め込んだ URL を外部へ送ろうとしても、関所側が止められるようにするためです。claudecode は、プロンプトを LLM へ送る直前に、渡しているデータの PrivacyLevel の最大値を関所へ**申告**します。
+
+- **申告のタイミング**: ローカル LLM(lmstudio / freetoken / llamacpp)へプロンプトを送る直前、クライアント側ツールループの開始時、クラウド API プロバイダ向けの送信時に、その `provider` / `model` / 接続先 URL とともに申告されます。
+- **申告する PrivacyLevel は次の 3 つの最大値です**:
+
+  | 要素 | 内容 |
+  |---|---|
+  | 評価セルの PL | 現在評価中のセルの PrivacyLevel(未設定なら 0.0) |
+  | `ClaudeQuery` の `PrivacyLevel` オプション | その呼び出しで明示指定した値。**1 回の申告で消費**され、申告後は 0.0 に戻ります(次の呼び出しへ持ち越されません) |
+  | 評価スコープの透かし | SourceVault の `SourceVaultEvaluationPrivacy[]` が返す、評価スコープ内で読み出されたデータの最大 PL |
+
+- **関所側の扱い**: 関所は申告された値(TTL 内の最大値)を**文脈 PL** として保持し、モデルの `web_search` / `get_document` の URL・クエリを判定する際に参照します。申告にはあわせて PrivacyLevel・Provider・Model・URL・SessionId が含まれます。
+- **弱結合**: この申告は SourceVault(`SourceVaultWebGuardDeclareContext` と `SourceVaultEvaluationPrivacy`)がロードされている場合にのみ行われ、未ロードの環境では何もしません(claudecode は SourceVault に依存しません)。申告処理で例外が起きても本来の LLM 呼び出しは妨げられません。ユーザー側で設定する変数はなく、通常は意識する必要がありません。
+
+```mathematica
+(* PrivacyLevel を明示して問い合わせる例: この値が web guard の文脈 PL に反映される(1 回で消費) *)
+ClaudeQuery["この内容を踏まえて調べて", PrivacyLevel -> 0.75]
+```
 
 **サブネット信用トグル**
 
@@ -688,6 +741,7 @@ ClaudeCode は機密データを含むタスクに対して、自動的にロー
 - **3段階フォールバック**: Claude Code CLI → アクセスレベル対応フォールバックモデル → エラーの順で試行します。次のフォールバック候補への切替は、429(レート制限)や過負荷エラーが連続発生する事態を避けるため、指数バックオフ(1秒→2秒→4秒を上限とする遅延)で行われます。
 - **サブネット信用トグル**: ローカルプロバイダ(lmstudio・freetoken・llamacpp)は、ノートブックが起動時と異なるサブネットで開かれていると判定されるとプライバシーレベルが 0.25 に強制されます。パレットの「Subnet: 信用する」トグルで一時的に緩和できますが、この状態はノートブックには保存されません(詳細は「操作パレット」の「サブネット信用トグル」を参照)。
 - **ローカル LLM エンジンのマシン別排他**: `$ClaudeLocalLLMProvider` / `$ClaudeMachineLocalLLMProvider` により、複数台のマシンで異なるローカル LLM エンジンを併用している環境でも、各マシンが「自機の localhost」に対しては常に指定した 1 つのエンジンだけに接続するよう強制できます(詳細は「操作パレット」の「ローカル LLM エンジンのマシン別排他」を参照)。
+- **Web egress guard への文脈申告(2026-10-14)**: プロンプトを LLM へ送る直前に、渡しているデータの PrivacyLevel の最大値(評価セルの PL・`PrivacyLevel` オプション・評価スコープ透かしの最大)を SourceVault の Web egress guard へ申告し、モデルが `web_search` / `get_document` で機密を外へ出すのを関所が判定できるようにします(詳細は「操作パレット」の「Web egress guard への文脈 PrivacyLevel の申告」を参照)。
 
 ### LM Studio の直接使用
 
@@ -1585,6 +1639,8 @@ CreateImplementationWorkflow["my-feature", specText,
 | `LaunchImplementationWorkflow[name, args]` | 生成ワークフローの起動。 |
 | `ClaudeImplStatus[]` | spec-impl ワークフロー実行状況の確認。 |
 | `ClaudeImplMonitor[]` | 実行状況の自動更新パネル。 |
+
+SourceVault の Web egress guard(`SourceVault_webguard.wl`)がロードされている場合、claudecode は LLM へプロンプトを送る直前に、渡しているデータの PrivacyLevel を関所へ自動的に申告します。詳細は「操作パレット」の「Web egress guard への文脈 PrivacyLevel の申告」を参照してください。
 
 ### セッション管理の改善
 
