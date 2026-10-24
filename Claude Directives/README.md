@@ -33,6 +33,7 @@ Claude Directives/
     99-adapter-tool-flow.md     adapter 経由 tool-based ClaudeEval の実装ルール（R1〜R7）
     100-async-tool-execution.md AsyncToolExec(Phase 32k Step 3 Phase A〜D2)の必須ルール
     101-sourcevault-stage-status.md SourceVault.wl 開発時の前提制約 (paths 制約: SourceVault*.wl / sourcevault*.md)。Phase 35 依存・iSanitizeForJSON 必須・ReadByteArray 経路必須等
+    111-lean-proof-workflow.md  証明の依頼は LeanAssist で: Mathematica で設定を表現 (GeometricScene / Graph / 論理式) して可視化 → Lean*Report で Lean に渡し Status・公理を正直に報告 (guardrail)
 
   skills/                    ← 特定タスクの具体手順とパターン集
     wolfram-general/            Wolfram Language コーディング手順・出力方針
@@ -70,6 +71,7 @@ Claude Directives/
     nbaccess-semantic-api/      NBAccess Stage 9 P1 で追加された semantic API 7 個 (NBReadHeader / NBReadTodos / NBFindCellByPredicate + 書き込み系 4 個) の設計詳細。FrontEnd 不要のファイル直接編集、AccessLevel RBAC + DryRun、CellPath、Header フィルタ、NBReadHeader 3 経路 fallback、罠 #26-#28 対応
     claudeeval-security-guard-placement/ ClaudeEval/ClaudeQuery にセキュリティ・プライバシーガードを追加するときの配置位置。$UseClaudeRuntime=True で Runtime Bridge 経由になるとバイパスされる落とし穴、Deny は最前段 (dispatch 前)・Substitute は共通入口
     sourcevault-packageapi-narrowing/ 本システムのパッケージで関数・実装箇所を探す初動で、広い rg でなく SourceVault MCP packageapi マイニング (sourcevault_search kinds=[packageapi]) を先に使う手順。1 呼び出し 1 概念トークン・sourcevault_get view=body・StaleDocs 確認・filters.packages scope・条件付き glob 境界 rg fallback
+    lean-assisted-proof/        LeanAssist による Lean 支援証明の手順。分野ごとの表現 (初等幾何=GeometricScene、グラフ=Graph、論理式・量化式、多項式の条件付き恒等式、その他は LeanTheorem)、作例、Status/公理の読み方、tactic 早見表
 ```
 
 ## rule の frontmatter: `tier:` と `models:` (2026-09-08)

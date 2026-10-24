@@ -551,6 +551,8 @@ $ClaudeModel = {"claudecode", "claude-opus-5"}
 
 Codex provider は専用の非同期 bridge（バックグラウンドでの CLI 起動と結果ポーリング）で動作するため、実行中にカーネルがブロックされることはありません。ただし Windows では、この PC のサンドボックスが未検証・検証失敗の間、Codex は起動されず警告が表示されます（「1b. ChatGPT Codex CLI のインストール」の「Codex の Windows サンドボックス検証」を参照）。
 
+Codex の健全性は SystemDoctor 向けの probe `ClaudeCodexHealthProbe[]` で確認できます（後述の「デバッグ情報の取得」を参照）。
+
 ### 8. 仕様実装ワークフローの動作確認（オプション）
 
 `CreateImplementationWorkflow` を使うと、承認済み設計仕様を SourceVault 管理下の codified ワークフローパッケージとして自動実装できます：
@@ -607,6 +609,7 @@ claudecode は ClaudeRuntime および ClaudeTestKit の導入にあたり、**�
 - `$ClaudeAgentResultMaxChars` は既定値（6000）のままでも従来の呼び出し方法を一切変更しません。継続プロンプトに載る直近ターンの情報量が増えるだけで、古いターンの Summary（200 字）要約は従来どおりです。
 - `$ClaudeLocalToolLoopVerbose` の既定値は `True` から `Automatic` に変わりました（2026-10-14）。従来の「毎回の情報行表示」が必要な場合は `True` を明示してください。
 - Web egress guard への PrivacyLevel 申告は、SourceVault / SourceVault_webguard が未ロードの環境では何もしません。
+- `ClaudeQueryAsync` の `"CallbackOnFailure"` オプション（2026-10-20 追加）は既定 `True` です。見えるノートブックで失敗したとき、従来の赤字表示に加えて callback が `"Error: …"` で 1 回呼ばれるようになります。従来どおり赤字だけにしたい場合は `"CallbackOnFailure" -> False` を指定してください。
 
 また、`ClaudeUpdateDocumentation` の `Baseline` オプションの既定値は `"LastDocUpdate"` であり、従来どおり直近の `_documentupdate` バックアップを差分基準とします。`Baseline -> "Github"` を明示しない限り、既存のドキュメント更新ワークフローの挙動は変わりません。`"EnglishDocs"` オプションも既定は `Automatic` で、`doc_options.json` に記述が無ければ従来どおり日本語版（`$Language`）のみを生成・更新します。
 
@@ -1091,7 +1094,7 @@ ClaudeRuntime の実行結果が内部の表示サイズ上限を超えた場合
 
 #### 22. CLI が API エラーを返す（古い CLI で新しいモデルを指定した場合など、2026-09-24 追加）
 
-claude CLI が API エラー（4xx 等）を result 行で返した場合（例：Opus 5.5 を古い CLI 2.1.278 で呼ぶと `400 claude_code_version_too_old`）、以前は `ReasonClass` 由来の「TransportTransient」などの分類名しか表示されず、原因が分かりませんでした。現在は、result 行の API エラー文言（本文は result 行の `"result"` 文字列）がそのまま失敗理由として返されます。
+claude CLI が API エラー（4xx 等）を result 行で返した場合（例：Opus 5.5 を古い CLI 2.1.278 で呼ぶと `400 claude_code_version_too_old`）、以前は `ReasonClass` 由来の「TransportTransient」などの分類名しか表示されず、原因が分かりませんでした。現在は、result 行の API エラー文言（本文は result 行の `"result"` 文字列）がそのまま失敗理由として返されます。同期 CLI 呼び出しでは CLI の出力形式を JSON にして result オブジェクトを受け取ることで、この文言と usage 情報を取り出しています（2026-10-23）。`2>&1` で混ざる stderr の行（CLI の警告など）は JSON ではないため読み飛ばされます。
 
 新しいモデルを指定して `claude_code_version_too_old` が出た場合は、Claude Code CLI を更新してください。
 
@@ -1139,6 +1142,19 @@ $ClaudeLocalToolLoopVerbose = True
 
 ローカル LLM のツールループが `web_search` / `get_document` で送るクエリや URL の判定は、claudecode が SourceVault_webguard へ申告した PrivacyLevel（文脈 PL）に基づきます。申告値は「評価セルの PL」「`ClaudeQuery` の `PrivacyLevel` オプション」「評価スコープの透かし」の最大値です（後述の「高度な設定 > Web egress guard への PrivacyLevel 申告」を参照）。想定と異なる判定になる場合は、評価セル側の PL と、`ClaudeQuery` に渡した `PrivacyLevel` を確認してください。SourceVault / SourceVault_webguard が未ロードの場合は申告自体が行われません。
 
+#### 27. ClaudeQueryAsync が失敗したのに callback が呼ばれる・呼ばれない（2026-10-20 追加）
+
+`ClaudeQueryAsync` は、CLI のタイムアウト・空応答・利用上限・Fallback 全滅などで失敗した場合、見えるノートブックでは従来どおり赤字のエラーを表示したうえで、`"CallbackOnFailure"`（既定 `True`）に従い callback を `"Error: …"` で 1 回呼びます。callback へ渡す文面が `Error` で始まらない場合は `Error: ` が前置されます。赤字のエラー表示はそのまま残り、自動セル化は行われません。
+
+callback で状態を戻す呼び出し元（たとえば PresentationListener の `llmBusy`）が、失敗時に callback が呼ばれないために「処理中」のまま固まる事故を防ぐための動作です。応答（または Fallback 経路の失敗）が先に届いた場合は、失敗通知は重複して送られません。
+
+```mathematica
+(* 従来どおり赤字だけにして callback を呼ばない場合 *)
+ClaudeQueryAsync["...", callback, nb, "CallbackOnFailure" -> False]
+```
+
+隠しノートブックでは既定でこの通知は行われません。詳細は後述の「高度な設定 > 非同期クエリ（ClaudeQueryAsync）の失敗通知と画像つき問い合わせ」を参照してください。
+
 ### デバッグ情報の取得
 
 ```mathematica
@@ -1163,11 +1179,26 @@ ClaudeDiagEvents[20]
 
 (* この PC の Codex サンドボックス検証状態 *)
 ClaudeCodexSandboxStatus[]
+
+(* この PC の Codex 健全性 probe（SystemDoctor 用。ローカルファイルのみ読む） *)
+ClaudeCodexHealthProbe[]
 ```
 
 `ClaudeDiagEvents[n]` は SIEM spool（diag-spool、マシンローカル）の直近 n 件を新しい順の Dataset で返します。SourceVault service による ingest 前でも、自マシンの運用イベント（SpawnFailed / ScheduleSubmitFailed 等）をリアルタイムで確認できます。Codex の実行結果（`LLMCall`、Provider `chatgptcodex`）や、LLMGraph DAG・チャンクジョブの非同期 LLM 呼び出しの最終結果も同じ spool に記録されます（失敗は分類コードのみ）。
 
-また、サンドボックス起因の失敗は、その後に自己テストが通っていれば解決済みとして数えられません。
+`ClaudeCodexHealthProbe[]` は、この PC の Codex の健全性を返す SystemDoctor 用 probe です（`SourceVault_diagnostics` が `"Codex"` として登録します）。Codex 作業ディレクトリの実行結果台帳、直近の `codex_stderr_*.log`、サンドボックスの状態という**ローカルファイルだけ**を読み、プロセスは起動しません。結果は `"Health"`（`OK` / `Degraded` / `Failing`）と `"ReasonCode"` を持つ Association です。判定は次のとおりで、結果は 10 分間キャッシュされます。
+
+| Health / ReasonCode | 条件 |
+|------|------|
+| `Failing` / `CodexAllFailing` | 直近 7 日間に Codex が 2 回以上失敗し、成功が 1 回もない |
+| `Failing` / `CodexSandboxUnavailable` | Codex を使っているが、サンドボックスの自己テストに失敗している |
+| `Degraded` / `CodexSandboxNotVerified` | Codex を使っているが、この PC のサンドボックスが未検証 |
+| `OK` / `CodexHealthy` | 上記のいずれにも当てはまらない |
+| `OK` / `NotApplicable` | Codex を使っていない |
+
+オプションは `"WindowDays"`（既定 7）と `"UseCache"`（既定 `True`）です。台帳が空でも stderr ログから失敗を数えます。
+
+サンドボックス起因の失敗は、その後に自己テストが通っていれば解決済みとして数えられません（`ClaudeCodexSandboxSetup[]` 実行直後に再び「Setup を実行して」と警告し続けないための措置です）。認証切れなどほかの原因による失敗は、検証では直らないため残ります。
 
 ## 高度な設定
 
@@ -1428,6 +1459,41 @@ ClaudeUpdateDocumentation["pkg", TargetFiles -> {"examples/*"}]
 `TargetFiles` に `"api.md"` を含めると、ソースが新鮮な（未反映の変更がある）補助 api_*.md が自動的に更新対象へ追加されます（前述の「補助 api_*.md の鮮度判定」を参照）。`"examples/*"` を含めると、`docsDir/examples` 内に実在する `*.md` 全件が更新対象に展開されます（2026-07-09 追加）。
 
 **注意**：`examples/*.md` は、通常の自動更新（`Baseline` オプションによる差分検出）の対象からは除外されています。`examples/` 配下のドキュメントを更新するには、`TargetFiles` で個別ファイル（`"examples/<name>.md"`）または一括マーカー（`"examples/*"`）を明示的に指定する必要があります（2026-07-09 変更）。
+
+### 非同期クエリ（ClaudeQueryAsync）の失敗通知と画像つき問い合わせ（2026-10-20 追加）
+
+#### 失敗通知（`"CallbackOnFailure"` オプション）
+
+`ClaudeQueryAsync` は、応答が届かないまま失敗した場合に、呼び出し元の callback へ失敗を知らせることができます。
+
+```mathematica
+(* 既定 True: 失敗しても callback["Error: …"] を 1 回呼ぶ *)
+ClaudeQueryAsync[prompt, callback, nb, "CallbackOnFailure" -> True]
+
+(* 従来どおり赤字のエラー表示だけにする *)
+ClaudeQueryAsync[prompt, callback, nb, "CallbackOnFailure" -> False]
+```
+
+| 値 | 動作 |
+|----|------|
+| `True`（見えるノートブックでの既定） | CLI のタイムアウト・空応答・利用上限・Fallback 全滅などで失敗しても、赤字のエラー表示はそのままに、callback を `"Error: …"` で 1 回呼びます。自動セル化は行いません。文面が `Error` で始まらない場合は `Error: ` が前置されます。 |
+| `False` | 従来どおり赤字のエラー表示だけです。callback は呼ばれません。 |
+
+隠しノートブックでは、既定で失敗通知は行われません。失敗通知は、ジョブを閉じる前に呼び出し元へ届きます。応答（または Fallback 経路の失敗）がすでに届いている場合は、重複して通知されません。
+
+callback で状態を戻す呼び出し元（PresentationListener の `llmBusy` など）が、失敗時に callback が呼ばれないために状態が戻らず固まる事故を防ぐための仕組みです。
+
+#### 画像つき問い合わせ
+
+`ClaudeQueryAsync` は、`ClaudeQuery` と同じく `{文字列, Image[…], File[path], …}` 形式のリストをプロンプトとして受け付けます。リストの問い合わせは、正規化した本文と画像が渡されます。課金 API が許可されている場合は画像つきで API へ送られ、そうでない場合は CLI 経路で画像ディレクトリが読み取り対象に追加されます。
+
+```mathematica
+ClaudeQueryAsync[{"この図を説明してください", img}, callback, nb]
+```
+
+#### 応答本文の表示（Markdown / TeX）
+
+応答本文のセルは、`**太字**` を太字に、`` `コード` `` を等幅に変換し、TeX の数式（`\begin{pmatrix}`、`cases`、`aligned` などの環境、ギリシャ文字、`\sum` などの演算子を含む）を組版して表示します。数式の組版方式は、`Typeset` ベースの方式と claudecode 自前のパーサー方式があり、自前方式で解釈できない数式は `Typeset` 方式へ切り替わります。文字列をまたぐ太字の記法は、文字列部分だけを太字にし、数式セルはそのまま保持されます。対にならない `**` や `__` は消されます。設定は不要です。
 
 ### Web egress guard への PrivacyLevel 申告（2026-10-14 追加）
 
@@ -1748,6 +1814,7 @@ ShowClaudePalette[]
 
 (* ヘルプ情報 *)
 ?ClaudeEval
+?ClaudeQueryAsync
 ?ClaudeUpdatePackage
 ?ContinueUpdate
 ?ClaudeCreateDocumentation
@@ -1769,6 +1836,7 @@ ShowClaudePalette[]
 ?ClaudeSetLocalLLMProvider
 ?ClaudeLlamaCppForgetModalities
 ?ClaudeCodexSandboxStatus
+?ClaudeCodexHealthProbe
 ?$ClaudeCloudToolLoop
 ?$ClaudeCloudToolLoopTools
 ?$ClaudeLocalToolLoopVerbose

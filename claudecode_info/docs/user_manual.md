@@ -281,9 +281,11 @@ ClaudePrepareCommit["MyPackage"]
 | カテゴリ | 機能 | 説明 |
 |---|---|---|
 | **問い合わせ** | `ClaudeQuery` | 同期的にテキスト応答を取得 |
+| | `ClaudeQueryAsync` | 非同期に問い合わせ(`{文字列, Image[…], File[path], …}` 形式の画像付き問い合わせ、失敗時の `"CallbackOnFailure"` 通知に対応) |
 | | `ClaudeEval` | 非同期でコード生成・実行 |
 | | `ContinueEval` | 会話の継続・エラー修正 |
 | | `ClaudeSpec` | 仕様書の生成 |
+| | `MarkdownToCells` | markdown 文字列をノートブックセル式のリストに変換 |
 | **パッケージ管理** | `ClaudeCreatePackage` | 新規パッケージ作成 |
 | | `ClaudeUpdatePackage` | バックアップ付きパッケージ更新 |
 | | `ContinueUpdate` | 直前の更新を継続・バグ修正 |
@@ -310,6 +312,7 @@ ClaudePrepareCommit["MyPackage"]
 | | `$ClaudeCloudToolLoopTools` | クラウド API プロバイダに許可する SourceVault MCP ツール名 |
 | | `ClaudeLlamaCppForgetModalities` | llamacpp/freetoken サーバの画像入力可否(vision)判定キャッシュを破棄 |
 | **ChatGPT Codex** | `ClaudeCodexSandboxStatus` | Codex の Windows サンドボックス(mxc)の PC ごとの検証状態の確認・検証の実行 |
+| | `ClaudeCodexHealthProbe` | SystemDoctor 向けの Codex 健全性 probe(ローカルファイルのみ参照、プロセスは起動しない) |
 | **セッション** | `CreateClaudeSession` | 名前付きセッション作成 |
 | | `ClaudeShowHistory` | 履歴表示 |
 | | `ClaudeCompactHistory` | 履歴コンパクション |
@@ -886,6 +889,21 @@ ClaudeCodexSandboxStatus[]
 
 Codex を使えない状態になったときは、まず `ClaudeCodexSandboxStatus[]` で状態を確認してください。Codex CLI を更新した後は、再検証が完了するまで Codex は起動しません。
 
+#### Codex 健全性 probe(ClaudeCodexHealthProbe)
+
+`ClaudeCodexHealthProbe[]` は、SourceVault_diagnostics を通じて SystemDoctor に `"Codex"` として登録される、この PC の Codex 向け健全性 probe です。ローカルファイル(Codex の実行結果の台帳、最近の `codex_stderr_*.log`、サンドボックスの検証状態)だけを読み、プロセスは一切起動しません。
+
+- 結果は `Health`(`"OK"` / `"Degraded"` / `"Failing"`)と `ReasonCode` を含む Association です。Codex を使っていない PC では問題なしとして扱われます。
+- Codex を使っているのに 7 日窓で成功が無く失敗が続く場合や、サンドボックスが使えない・未検証の場合は、それぞれ `Degraded` / `Failing` になります。サンドボックスの自己テストが通った後は、それ以前のサンドボックス起因の失敗は解決済みとして数えません。
+- 結果は 10 分間キャッシュされます。オプション `"WindowDays"`(既定 7)と `"UseCache"`(既定 True)で窓の長さとキャッシュの利用を制御できます。
+- probe の本体はメッセージの漏れを検出して印を付け、`CheckedAt`(地方時の ISO 文字列)付きで結果を返します。SystemDoctor の tick から呼ばれても、FrontEnd カーネルへ余計なメッセージを出さないように作られています(2026-10-17〜20 の改訂)。結果が不正な形(`Health` が上の 3 値以外)の場合は採用されません。
+- 認証切れなど、サンドボックスの再検証では直らない原因による失敗は、検証後も失敗として残ります。
+
+```mathematica
+ClaudeCodexHealthProbe[]
+ClaudeCodexHealthProbe["WindowDays" -> 3, "UseCache" -> False]
+```
+
 ### 多言語対応($Language ベースの言語切り替え)
 
 ClaudeCode は Wolfram Language の `$Language` 変数を参照して、Claude への応答言語指示を自動生成します。
@@ -975,6 +993,15 @@ Claude Code CLI は、API がエラー(4xx など)を返したとき、ストリ
 
 - 従来は失敗理由の分類(`ReasonClass`)だけが使われ、「TransportTransient」のような分類名しか表示されなかったため、原因(CLI のバージョンが古い)が分かりませんでした。
 - 現在は、`result` 行が API エラーであればその文言がそのまま失敗理由として返され、ノートブックに表示されます。新しいモデルを選んで失敗した場合は、まずメッセージ本文を確認し、必要なら Claude Code CLI を更新してください。
+
+#### 同期 CLI 呼び出しの出力形式(JSON、2026-10-23)
+
+同期の CLI 呼び出し(`ClaudeQuery` などが使う `iClaudeQueryRaw` / `iClaudeQueryRawNonBlocking`)は、これまで `--print` のプレーンテキスト出力を使っていたため、トークン使用量(usage)が得られず、LLM 呼び出しログに「LLMLogGap」(記録の欠落)が出ることがありました。
+
+- 2026-10-23 の改訂で、これらの同期経路だけが CLI の出力形式を `json` にして、usage つきの `result` オブジェクトを 1 つ受け取るようになりました。本文はその `result` から取り出され、同時に LLM 呼び出しの記録(emit)にも渡されます。
+- `2>&1` で混ざる stderr の行(CLI の警告など)は JSON ではないため読み飛ばされます。
+- 出力形式の既定は従来どおり(プレーンテキストの `--print`)です。非同期・ストリーミング経路の挙動は変わりません。
+- ユーザーが設定する変数や新しい公開 API はありません。応答として返る文字列は従来と同じ形です。
 
 ### 自動実行安全ガード(NBAutoEvalProhibitedPatterns)
 
@@ -1100,6 +1127,63 @@ LLMGraph の DAG ジョブやチャンクジョブのような非同期 LLM 呼�
 - **通知位置**: 従来は `NBWriteCell` でノートブックの「現在の選択位置」に書いていたため、利用者が別の場所を操作していると結果が思わぬ場所に出たり、行方不明になったりしました。現在は、通知はジョブのアンカー直後(結果セルと同じ場所)に書かれます。進行表示と失敗行の位置が揃うため、ノードの失敗行しか見えないといった状況が避けられます。
 
 これらは内部的な信頼性強化であり、新しい公開 API の追加はありません。
+
+### ClaudeQueryAsync の画像付き問い合わせと失敗通知(2026-10-20)
+
+`ClaudeQueryAsync` は、カーネルをブロックしない非同期の LLM 問い合わせです。2026-10-20 の改訂で、画像つきの問い合わせと、失敗時の callback 通知が追加されました。
+
+#### 画像つきの非同期問い合わせ
+
+`ClaudeQuery` / `ClaudeQueryBg` と同じく、プロンプトに `{文字列, Image[…], File[path], …}` 形式のリストを渡せます。リストの問い合わせは、本文と画像を正規化したうえで各経路へ渡されます。
+
+```mathematica
+img = Import[FileNameJoin[{Quiet @ Check[NotebookDirectory[], $packageDirectory], "screenshot.png"}]];
+
+(* nb と callback を渡す形式 *)
+ClaudeQueryAsync[{"この画像を説明してください", img},
+  Function[text, Print[text]], EvaluationNotebook[]]
+```
+
+- メディアを含む問い合わせの経路は provider によって異なります。`claudecode` は CLI 経由(画像は一時 PNG に保存して参照)、`chatgptcodex` は画像ファイルを `--add-dir` で Codex に読ませ、課金 API が許可されているときは画像つきで API へ送ります。`lmstudio` / `freetoken` / `llamacpp` は OpenAI 互換のマルチモーダル形式で送信します(`llamacpp` / `freetoken` では送信前に画像入力可否が確認されます)。
+- 画像を含まないリスト(文字列のみ)は、従来どおりテキストとして結合されて送られます。
+
+#### 失敗時の callback 通知(`"CallbackOnFailure"`)
+
+従来は、見えているノートブックで CLI のタイムアウト・空応答・利用上限・Fallback 全滅などが起きても、赤字のエラー表示が出るだけで、`ClaudeQueryAsync` の呼び出し元の callback は呼ばれませんでした。callback の中で状態を戻す呼び出し元(例: PresentationListener の `llmBusy`)は、失敗後も「処理中」のまま固まってしまう問題がありました。
+
+- `"CallbackOnFailure" -> True`(見えるノートブックでの既定): 失敗しても、callback を **1 回だけ** `"Error: …"` で呼びます。赤字のエラー表示は従来どおり出ますが、結果の自動セル化は行いません。メッセージが `"Error"` で始まらない場合は前置されるため、呼び出し側は `"Error"` 始まりで失敗を判定できます。
+- `"CallbackOnFailure" -> False`: 従来どおり、赤字のエラー表示だけです。
+- 隠しノートでは、失敗は従来どおり呼び出し元へ通知されます。この通知はジョブを閉じる前に行われます(ジョブの失敗が `NBAbortJob` 経由ではなく、callback へも知らせる内部処理に切り替わりました)。
+- 応答(または Fallback 経路の失敗)がすでに届いている場合は、二重通知を避けるため失敗通知は行われません。
+
+```mathematica
+(* 失敗時も callback を呼んで呼び出し元の状態を戻す *)
+ClaudeQueryAsync["要約してください",
+  Function[r, If[StringStartsQ[r, "Error"], 状態リセット[], 結果表示[r]]],
+  EvaluationNotebook[],
+  "CallbackOnFailure" -> True]
+```
+
+### 応答本文の数式・太字・コード表示(2026-10-20)
+
+LLM の応答テキストをノートブックに表示するとき、**太字**・`コード`・TeX 数式が次のように組まれます。表示方法を `Parse` から `Typeset` に切り替えたときに劣っていた点を揃える改訂です。
+
+- **太字と等幅**: `**太字**` は太字に、`` `コード` `` は等幅フォントにして組まれます。対にならない `**` や `__` はそのまま残ります(文字の途中にある `__` や 1 文字の変数は斜体化されないように注意されています)。数式セルをまたぐ太字は、文字列部分だけが太字になります(数式セルはそのままです)。
+- **TeX 数式**: `$…$` や `\[…\]`、`\begin{…}…\end{…}` 環境が、トークン分割から構文木、ボックス式への変換を経て数式セルに変換されます。
+  - ギリシャ文字(`\alpha`, `\beta`, …)や記号(`\approx`, `\sim`, `\equiv`, `\propto`, `\oplus`, `\otimes`, `\aleph`, `\hbar` など)は対応する Unicode 文字になります。
+  - `\sin`, `\arcsin`, `\lim` などの演算子名、上付き・下付き、分数 `\frac`、根号は対応するボックスに変換されます。
+  - 行列・場合分け環境(`pmatrix`, `bmatrix`, `Bmatrix`, `cases`, `dcases`, `array` など)は `&` で列、`\\` で行を分けた `GridBox` になります(`array` の列指定 `{cc}` は読み飛ばされ、入れ子の環境は各セルの中でまた環境として組まれます)。`aligned`, `align`, `split`, `gathered` などの整列環境も扱われます。
+  - 大きさ指定(`\Bigr`, `\middle`, `\displaystyle` など)の命令は読み飛ばされます。
+- **変換の経路**: 内部の `$iTeXMathMethod`(`"Typeset"` またはパーサー)に応じて、`iTeXEquationToBoxes` または `iTeXTypesetBoxes` が使われます。変換に失敗したときの表示は、従来のようにそのまま斜体の `$tex$` として出すのではなく、元の本文セルに戻される経路に変更されました。
+
+```mathematica
+(* markdown → セル式の変換自体は公開関数 MarkdownToCells でも使える *)
+MarkdownToCells["# 見出し\n\n**太字** と `code` と $x^2 + y^2 = r^2$"]
+```
+
+`MarkdownToCells[md]` は、markdown 文字列を、見出し・箇条書き/番号付きリスト・コードフェンス・GFM のパイプ表・画像・mermaid 図などのセル式のリストに変換します。
+
+この改善は表示の品質向上であり、利用者が設定する変数や新しい公開 API はありません。
 
 ### アクセス可能ディレクトリ制御
 
@@ -1518,7 +1602,7 @@ result = ClaudeQueryBg[{"この PDF の要点を教えて", File["C:\\...\\doc.p
 | メディアあり + provider = `lmstudio` / `freetoken` / `llamacpp`(OpenAI 互換 chat/completions 系) | OpenAI 互換 chat/completions パス | OpenAI 互換のマルチモーダル形式(`content` 配列、`image_url` ブロック)で直接送信。2026-07-29 に LM Studio で先行対応し、2026-09-05 の改訂で freetoken・llamacpp にも同じ経路が一般化された。2026-07-29 以前は `/api/v1/chat` がテキスト専用のため画像が破棄されていた。 |
 | メディアあり + `Fallback -> True`、provider = `anthropic` 等 | Anthropic API マルチモーダルパス | `content` 配列にテキストブロックと画像ブロックを組み立てて API に直接送信 |
 
-CLI パスでは画像ファイルが一時ディレクトリに保存され(最大 1024 px にリサイズ)、Claude Code CLI が `--image` フラグでそれを参照します。API パスでは PNG バイト列を Base64 エンコードした `image` コンテンツブロックを `content` 配列に追加して送信します。LM Studio・freetoken・llamacpp パスでは OpenAI 互換の chat/completions エンドポイントにマルチモーダルリクエストを送信します。llamacpp・freetoken 経由で画像を送信する際は、送信前に画像入力可否(vision)が確認され、非対応と判明している場合は送信せず `"Error: NoVision: ..."` を返します(詳細は「操作パレット」の「llamacpp/freetoken の画像入力可否検出(NoVision 検出)」を参照)。
+CLI パスでは画像ファイルが一時ディレクトリに保存され(最大 1024 px にリサイズ)、Claude Code CLI が `--image` フラグでそれを参照します。API パスでは PNG バイト列を Base64 エンコードした `image` コンテンツブロックを `content` 配列に追加して送信します。LM Studio・freetoken・llamacpp パスでは OpenAI 互換の chat/completions エンドポイントにマルチモーダルリクエストを送信します。llamacpp・freetoken 経由で画像を送信する際は、送信前に画像入力可否(vision)が確認され、非対応と判明している場合は送信せず `"Error: NoVision: ..."` を返します(詳細は「操作パレット」の「llamacpp/freetoken の画像入力可否検出(NoVision 検出)」を参照)。非同期版の `ClaudeQueryAsync` も同じ形式の画像つき入力を受け付けます(詳細は「ClaudeQueryAsync の画像付き問い合わせと失敗通知」を参照)。
 
 #### Anthropic API 通信の Windows エンコーディング対応
 
@@ -1553,6 +1637,8 @@ Claude Code CLI は、未 trust のワークスペースで実行された場合
 CLI をプレーンテキスト経路(`iMakeBat`)で呼び出す実行方式では、`2>&1` によって stderr がプレーン応答の先頭に混入することがあります。ストリーミング JSON 経路(`iStreamJsonLikeQ` を用いる経路)はこの種の混入に以前から対策済みでしたが、プレーン経路は未対策のままでした。実際に 2026-07-16 に、未 trust のワークスペースで実行した際の警告文がそのまま「正常な応答」として採用されてしまう事故が発生しています。
 
 この対策として、内部関数 `iStripLeadingCLIWarnings` が導入されました。応答テキストの先頭から連続する CLI 警告行(および空行)のみを、厳格な signature 一致(`"has not been trusted"` + `"permissions."` + `"settings.json"` の組み合わせ、または `"Ignoring"` で始まる行など)で判定して除去します。本文中に警告文言に似た引用が含まれる場合でも、先頭以外は判定対象外のため誤って削除されることはありません。応答全体が警告行のみで構成されていた場合は空文字列 `""` を返すため、下流の空応答判定(fail-fast 分類等)が正しく機能します。この処理はプレーンテキスト応答を返すすべての経路に自動的に適用される内部的な信頼性強化であり、ユーザーが意識して呼び出す新しい公開 API はありません。
+
+なお、2026-10-23 の改訂以降、同期の CLI 呼び出しは出力形式を JSON にして `result` オブジェクトから本文を取り出すため、この除去処理は主にプレーンテキストの経路(非同期・その他)で働きます(詳細は「CLI の API エラー本文の表示」の「同期 CLI 呼び出しの出力形式」を参照)。
 
 ### SourceVault 連携
 

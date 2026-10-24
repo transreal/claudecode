@@ -449,7 +449,7 @@ Options: Fallback -> False, Model -> Automatic, PrivacySpec -> Automatic, Privac
 Options: Fallback -> False, Model -> Automatic, Timeout -> Automatic, NonBlocking -> False (True でノンブロッキング), "TaskClass" -> Automatic
 
 ### ClaudeQueryAsync[task, callback, nb, opts]
-非同期クエリ。Job システム経由で実行し完了時に callback[応答文字列] を呼ぶ。"ResponseFormat" 指定時は ClaudeResponseFormatInstruction[fmt] のプロンプト規則を自動付加し、応答を ClaudeResponseFormatValidate で検証。違反時は 1 回だけ再問合せし、それでも駄目なら Failure["ResponseFormat", ...] を callback に渡す。
+非同期クエリ。Job システム経由で実行し完了時に callback[応答文字列] を呼ぶ。task は文字列のほか {文字列, Image[...], File[path], ...} も可 (画像つき。ClaudeQuery と同じ形。CLI 経路では画像を書き出して添付ファイルとして読ませ、課金API 許可なら画像つきで API へ送る。"ResponseFormat" は文字列の task のときだけ)。"ResponseFormat" 指定時は ClaudeResponseFormatInstruction[fmt] のプロンプト規則を自動付加し、応答を ClaudeResponseFormatValidate で検証。違反時は 1 回だけ再問合せし、それでも駄目なら Failure["ResponseFormat", ...] を callback に渡す。
 → Null
 Options: Fallback -> False, Model -> Automatic, PrivacyLevel -> Automatic, Timeout -> Automatic, Integrations -> Automatic, AutoCellize -> True, "TaskClass" -> Automatic, "ResponseFormat" -> None ("PlainText" | "Markdown" | "Cells" | "Expression")
 
@@ -904,7 +904,7 @@ markdown 文字列をノートブックセル・新規ノートブック・イ�
 ### MarkdownToCells[md, opts]
 markdown 文字列をノートブック Cell 式のリストに変換する (見出し、箇条書き/番号リスト、コードフェンス、GFM パイプテーブル、画像、mermaid フローチャート)。markdown → cells 変換の正準実装。
 → List[Cell]
-Options: "HeadingStyles" -> {"Subsection","Subsubsection","Subsubsubsection","Subsubsubsection"} (#/##/###/#### 用スタイル), "DefaultMode" -> "Para" ("Para" | "Code"; "Code" はフェンスなしテキストを単一 Input セルにする), "TeXMath" -> Automatic (True で $...$ をインライン数式に), "CleanInline" -> Automatic (True で **太字**/__下線__/`code` マーカーを除去), "MermaidGraphs" -> Automatic (True で ```mermaid``` ブロックを MermaidGraph 経由の Graph 出力セルに), "UntaggedCodeStyle" -> "Program" ("Program" | "Input"、タグなし ``` ブロック用), "Tables" -> Automatic (True で | a | b | 形式を Dataset 出力セルに), "TableStyle" -> "Dataset" ("Dataset" | "Grid" | "Text"), "Images" -> Automatic (True で ![alt](path) を埋め込み、末尾の pandoc 属性 {width=6.1in}/{height=7.0in} 等 (in/cm/mm/pt/px) に対応), "BaseDirectory" -> Automatic (相対画像パスの基準ディレクトリ。Automatic はソースファイルのディレクトリ、なければ NotebookDirectory[]), "MaxImageWidth" -> 600 (埋め込み画像の表示幅上限 (ポイント)。None で自然サイズ)
+Options: "HeadingStyles" -> {"Subsection","Subsubsection","Subsubsubsection","Subsubsubsection"} (#/##/###/#### 用スタイル), "DefaultMode" -> "Para" ("Para" | "Code"; "Code" はフェンスなしテキストを単一 Input セルにする), "TeXMath" -> Automatic (True で $...$ / $$...$$ / \(...\) / \[...\] を TeX の式として読んでインライン数式に。"Typeset" なら式として読まずに書かれたとおり組む (F(x) が F[x] に、E が ⅇ にならず、[0,1] や |x| も組める) ので文章向き。どちらでも式として読めないものは書かれたとおり組む), "CleanInline" -> Automatic (True で **太字**/__下線__/`code` マーカーを除去), "InlineMarkup" -> False (True で **太字** を太字、`code` を等幅にする。マーカーを消す代わりに装飾する), "MermaidGraphs" -> Automatic (True で ```mermaid``` ブロックを MermaidGraph 経由の Graph 出力セルに), "UntaggedCodeStyle" -> "Program" ("Program" | "Input"、タグなし ``` ブロック用), "Tables" -> Automatic (True で | a | b | 形式を Dataset 出力セルに), "TableStyle" -> "Dataset" ("Dataset" | "Grid" | "Text"), "Images" -> Automatic (True で ![alt](path) を埋め込み、末尾の pandoc 属性 {width=6.1in}/{height=7.0in} 等 (in/cm/mm/pt/px) に対応), "BaseDirectory" -> Automatic (相対画像パスの基準ディレクトリ。Automatic はソースファイルのディレクトリ、なければ NotebookDirectory[]), "MaxImageWidth" -> 600 (埋め込み画像の表示幅上限 (ポイント)。None で自然サイズ)
 
 ### MarkdownToNotebook[md, opts]
 markdown ファイルまたは文字列を CreateDocument 経由で新規ノートブックに展開する。単一行文字列で既存の .md/.markdown/.txt ファイルを指す場合はファイルパスとして扱う (ノートブックディレクトリ基準でも解決)。相対画像パスはファイル自身のディレクトリを基準に解決する。

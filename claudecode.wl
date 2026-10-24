@@ -1409,8 +1409,11 @@ ClaudeQueryAsync::usage =
   "nb \:306f\:51fa\:529b\:5148 NotebookObject\:ff08\:30d1\:30ec\:30c3\:30c8\:304b\:3089\:547c\:3076\:5834\:5408\:306f iUserNotebook[] \:7b49\:3067\:89e3\:6c7a\:6e08\:307f\:306e\:3082\:306e\:ff09\:3002\n" <>
   "\:30ab\:30fc\:30cd\:30eb\:3092\:30d6\:30ed\:30c3\:30af\:3057\:306a\:3044\:3002WindowStatusArea \:306b\:7d4c\:904e\:6642\:9593\:3092\:8868\:793a\:3059\:308b\:3002\n" <>
   "Job \:30b7\:30b9\:30c6\:30e0 (NBBeginJobAtEvalCell) \:3092\:4f7f\:7528\:3057\:3001iClaudeQueryImpl \:3068\:540c\:3058\:975e\:540c\:671f\:30d1\:30b9\:3092\:901a\:308b\:3002\n" <>
+  "prompt \:306f\:6587\:5b57\:5217\:306e\:307b\:304b {\:6587\:5b57\:5217, Image[...], File[path], ...} \:3082\:53ef (\:753b\:50cf\:3064\:304d\:3002ClaudeQuery \:3068\:540c\:3058\:5f62\:3001\"ResponseFormat\" \:306f\:6587\:5b57\:5217\:306e\:3068\:304d\:3060\:3051)\:3002\n" <>
   "Options: Fallback -> False, Model -> Automatic, PrivacyLevel -> Automatic, Timeout -> Automatic\n" <>
   "Integrations -> {\"mcp/exa\", ...} \:3067 LM Studio MCP \:3092\:6709\:52b9\:5316 (lmstudio \:30e2\:30c7\:30eb\:6642\:306e\:307f\:6709\:52b9)\:3002\n" <>
+  "\"CallbackOnFailure\" -> True (既定): CLI のタイムアウト・空応答・利用上限・Fallback 全滅などで失敗しても、" <>
+  "callback を 1 回 \"Error: …\" で呼ぶ (赤字のエラー表示はそのまま、自動セル化はしない)。False なら従来どおり赤字だけ。\n" <>
   "\:4f8b: ClaudeQueryAsync[\"Hello\", Print, EvaluationNotebook[]]\n" <>
   "    ClaudeQueryAsync[prompt, callback, nb, PrivacyLevel -> 1.0]";
 
@@ -2593,7 +2596,7 @@ ClaudeCodexSandboxSetup::usage =
 ClaudeCodexSandboxGate::usage =
   "ClaudeCodexSandboxGate[] returns True when Codex may run on this PC (ClaudeCodexSandboxStatus[] is \"Ready\" or \"NotApplicable\"). Otherwise it shows an alert with a button that runs ClaudeCodexSandboxSetup[] (in the notebook when a front end is available, printed otherwise) and returns False. Option \"Notebook\" (default Automatic).";
 ClaudeCodexHealthProbe::usage =
-  "ClaudeCodexHealthProbe[] is the SystemDoctor probe for Codex on this PC (registered as \"Codex\" by SourceVault_diagnostics). It reads only local files (the Codex outcome ledger in the Codex working directory, recent codex_stderr_*.log files and the sandbox state) and never starts a process. Health \"Failing\" / ReasonCode \"CodexAllFailing\" when Codex failed at least twice in the last 7 days with no success; \"Failing\" / \"CodexSandboxUnavailable\" when Codex is in use but the sandbox self-test failed; \"Degraded\" / \"CodexSandboxNotVerified\" when Codex is in use but the sandbox is not verified. Cached for 10 minutes. Options: \"WindowDays\" (7), \"UseCache\" (True).";
+  "ClaudeCodexHealthProbe[] is the SystemDoctor probe for Codex on this PC (registered as \"Codex\" by SourceVault_diagnostics). It reads only local files (the Codex outcome ledger in the Codex working directory, recent codex_stderr_*.log files and the sandbox state) and never starts a process. Health \"Failing\" / ReasonCode \"CodexAllFailing\" when Codex failed at least twice in the last 7 days with no success; \"Failing\" / \"CodexSandboxUnavailable\" when Codex is in use but the sandbox self-test failed; \"Degraded\" / \"CodexSandboxNotVerified\" when Codex is in use but the sandbox is not verified. It always returns an Association with a string Health and ReasonCode: an internal fault (a Throw, a malformed value) gives \"Degraded\" / \"ProbeInternalError\" with GotHead / Got (a short form of what was produced); an Abort is passed on. Well-formed results are cached for 10 minutes, faults are not. Options: \"WindowDays\" (7), \"UseCache\" (True).";
 ClaudeCodexSandboxedExec::usage =
   "ClaudeCodexSandboxedExec[prompt] runs `codex exec` once in a fresh per-run CODEX_HOME that holds only the nbaccess-codex permission profile (Windows: the $ChatgptCodexWindowsSandbox backend) and the login credential, so the user's own ~/.codex config (MCP servers, plugins) is not loaded. It returns <|\"Output\" -> answer, \"ExitCode\" -> ..., ...|> or a Failure; the per-run CODEX_HOME is deleted afterwards. It refuses to run (Failure \"SandboxNotVerified\") until ClaudeCodexSandboxGate[] passes. Options: \"Model\" (Automatic = Codex CLI default), \"Workspace\" (Automatic = a new folder under the Codex working directory, deleted afterwards), \"ReadOnlyRoots\" ({}), \"TimeConstraint\" (900 seconds).";
 
@@ -2603,7 +2606,7 @@ $ClaudeCLIHarnessMode::usage =
 
 (* === Markdown -> notebook cells / mermaid graphs (canonical, 2026-07-15) === *)
 MarkdownToCells::usage =
-  "MarkdownToCells[md] converts a markdown string into a list of notebook Cell expressions (headings, bullet/numbered items, code fences, GFM pipe tables, images, mermaid flowcharts). It is the canonical markdown -> cells converter; the spec-impl, workflow-catalog and commit-safety renderers delegate here. Options: \"HeadingStyles\" (styles for #/##/###/####, default {\"Subsection\", \"Subsubsection\", \"Subsubsubsection\", \"Subsubsubsection\"}), \"DefaultMode\" (\"Para\" | \"Code\"; \"Code\" turns fence-less text into a single Input cell), \"TeXMath\" (True renders $...$ as inline formulas), \"CleanInline\" (True strips **bold**, __underline__ and `code` markers), \"MermaidGraphs\" (True renders ```mermaid blocks as Graph output cells via MermaidGraph), \"UntaggedCodeStyle\" (\"Program\" (default) | \"Input\" for bare ``` blocks), \"Tables\" (True renders | a | b | tables as Dataset output cells), \"TableStyle\" (\"Dataset\" (default) | \"Grid\" | \"Text\"), \"Images\" (True embeds ![alt](path) images, honouring a trailing pandoc attribute block such as {width=6.1in} or {height=7.0in}; in/cm/mm/pt/px units are supported), \"BaseDirectory\" (directory that relative image paths resolve against; Automatic uses the source file's directory, else NotebookDirectory[]), \"MaxImageWidth\" (display width cap in points for embedded images, default 600; None keeps the natural size).";
+  "MarkdownToCells[md] converts a markdown string into a list of notebook Cell expressions (headings, bullet/numbered items, code fences, GFM pipe tables, images, mermaid flowcharts). It is the canonical markdown -> cells converter; the spec-impl, workflow-catalog and commit-safety renderers delegate here. Options: \"HeadingStyles\" (styles for #/##/###/####, default {\"Subsection\", \"Subsubsection\", \"Subsubsubsection\", \"Subsubsubsection\"}), \"DefaultMode\" (\"Para\" | \"Code\"; \"Code\" turns fence-less text into a single Input cell), \"TeXMath\" (True renders $...$, $$...$$, \\(...\\) and \\[...\\] as inline formulas by reading them as TeX expressions; \"Typeset\" typesets them as written instead (F(x) stays F(x), E stays E, intervals and |x| work), which suits prose; anything that cannot be read is typeset as written either way), \"CleanInline\" (True strips **bold**, __underline__ and `code` markers), \"InlineMarkup\" (True renders **bold** as bold and `code` in a monospace font instead of stripping the markers; default False), \"MermaidGraphs\" (True renders ```mermaid blocks as Graph output cells via MermaidGraph), \"UntaggedCodeStyle\" (\"Program\" (default) | \"Input\" for bare ``` blocks), \"Tables\" (True renders | a | b | tables as Dataset output cells), \"TableStyle\" (\"Dataset\" (default) | \"Grid\" | \"Text\"), \"Images\" (True embeds ![alt](path) images, honouring a trailing pandoc attribute block such as {width=6.1in} or {height=7.0in}; in/cm/mm/pt/px units are supported), \"BaseDirectory\" (directory that relative image paths resolve against; Automatic uses the source file's directory, else NotebookDirectory[]), \"MaxImageWidth\" (display width cap in points for embedded images, default 600; None keeps the natural size).";
 
 MarkdownToNotebook::usage =
   "MarkdownToNotebook[File[path]] or MarkdownToNotebook[md] expands a markdown file or string into a new notebook via CreateDocument and returns the NotebookObject (or a Notebook[...] expression when no front end is available). A single-line string that names an existing .md/.markdown/.txt file is treated as a file path (also resolved against the notebook directory). Relative image paths resolve against the file's own directory. Accepts all MarkdownToCells options plus \"WindowTitle\".";
@@ -8181,6 +8184,12 @@ ClaudeLLMBreakpointDetail[] :=
       "ブレークポイント記録がありません ($ClaudeLLMBreakpoint = True で LLM 呼び出しを行うと記録されます)。",
       "No breakpoint payload recorded ($ClaudeLLMBreakpoint = True records one on each LLM call)."]]];
 
+(* 2026-10-23: iMakeBat の CLI 出力形式。既定 None = 従来どおり --print の
+   テキスト出力 (ClaudeOrchestrator / PDFIndex / チャンク処理などの呼び出し元は
+   これを前提に outFile を読む)。iClaudeQueryRaw / iClaudeQueryRawNonBlocking
+   だけが Block で "json" にして、usage つきの result オブジェクトを受け取る。 *)
+$iMakeBatOutputFormat = None;
+
 iMakeBat[promptFile_String, outFile_String, imageDirs_List:{},
          excludeRead_:False, excludeDirs_List:{}] :=
   Module[{batFile, bc, strm, addDirFlags, permFlags, workDir, allDirs,
@@ -8224,6 +8233,7 @@ iMakeBat[promptFile_String, outFile_String, imageDirs_List:{},
          "cd /d \"" <> workDir <> "\"\r\n" <>
          iClaudeCallPrefix[] <>
          "\"" <> $ClaudeExe <> "\" --print" <>
+         If[$iMakeBatOutputFormat === "json", " --output-format json", ""] <>
          Which[
            ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 2 && StringQ[$ClaudeModel[[1]]] && StringQ[$ClaudeModel[[2]]] && ToLowerCase[$ClaudeModel[[1]]] === "claudecode" && $ClaudeModel[[2]] =!= "",
              " --model \"" <> $ClaudeModel[[2]] <> "\"",
@@ -8673,6 +8683,42 @@ iEndJobCleanSlot[jid_String] := (
   NBAccess`NBJobResetSlotWritten[jid, 1];
   NBAccess`NBEndJob[jid]);
 
+(* 2026-10-20: ClaudeQueryAsync の失敗通知。
+   見えるノート (jobId あり) では CLI のタイムアウト・空応答/利用上限・Fallback 全滅・
+   出力ファイル無し・再試行予約の失敗で NBAbortJob (赤字) だけを呼び、callback を
+   呼ばなかった。callback で状態を戻す呼び出し元 (PresentationListener の llmBusy、
+   PDFIndex の $PDFJobProcessing 等) はそこで止まる。
+   iClaudeQueryAsyncCore は "CallbackOnFailure" -> True のときジョブごとに通知関数を
+   登録し、失敗の分岐は iAbortJobNotify で「通知 → NBAbortJob」の順に呼ぶ。
+   - 通知は userCb を 1 回だけ "Error: …" で呼ぶ。自動セル化はしない (赤字が表示)、
+     ジョブを閉じるのは NBAbortJob の 1 回。
+   - wrappedCallback が先に走れば登録を消すので二重には呼ばない。
+   - 登録の無いジョブ (ClaudeEval / ClaudeQuery など ClaudeQueryAsync 以外の利用者、
+     $NBLLMQueryFunc 経由) は従来どおり赤字だけ。 *)
+If[!AssociationQ[$iJobFailureNotify], $iJobFailureNotify = <||>];
+
+(* callback へ渡す文面: "Error" で始まらなければ前置する
+   (ResponseFormat の検証層は "Error…" を素通しする = 再問合せしない) *)
+iJobFailureMessage[msg_String] :=
+  If[StringStartsQ[StringTrim[msg], "Error"], msg, "Error: " <> msg];
+iJobFailureMessage[_] :=
+  iL["Error: LLM \:306e\:5fdc\:7b54\:3092\:53d6\:5f97\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f\:3002",
+     "Error: Could not get an LLM response."];
+
+(* 登録を取り出して消し、あれば呼ぶ。呼んだら True *)
+iJobFailureNotify[jid_String, msg_] :=
+  Module[{f = Lookup[$iJobFailureNotify, jid, None]},
+    If[f === None, Return[False]];
+    $iJobFailureNotify = KeyDrop[$iJobFailureNotify, jid];
+    Quiet @ Check[f[iJobFailureMessage[msg]], Null];
+    True];
+iJobFailureNotify[_, _] := False;
+
+(* NBAbortJob の代わり: 失敗を callback に知らせてから赤字でジョブを閉じる *)
+iAbortJobNotify[jid_String, msg_String] := (
+  iJobFailureNotify[jid, msg];
+  NBAccess`NBAbortJob[jid, msg]);
+
 (* \:30d7\:30ed\:30b0\:30ec\:30b9\:8868\:793a\:4ed8\:304d\:975e\:540c\:671f\:5b9f\:884c (Job \:30b7\:30b9\:30c6\:30e0\:5bfe\:5fdc) \[LongDash] stream-json \:7248 *)
 iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
     extraImageDirs_List:{}, jobId_String:"", fallbackModels_List:{},
@@ -8718,7 +8764,12 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
           iClaudeDiagEmit["ScheduleSubmitFailed",
             <|"Context" -> "job-deferred-retry", "JobId" -> ToString[j1],
               "Detail" -> "SessionSubmit[ScheduledTask] retry scheduling failed; job dropped"|>,
-            "error"]]];
+            "error"];
+          (* 2026-10-20: ジョブを閉じ、ClaudeQueryAsync の呼び出し元へ失敗を知らせる *)
+          If[j1 =!= "",
+            iAbortJobNotify[j1, iL[
+              "Error: \:518d\:8a66\:884c\:306e\:4e88\:7d04\:306b\:5931\:6557\:3057\:307e\:3057\:305f (\:4e26\:884c\:30b8\:30e7\:30d6\:4e0a\:9650)\:3002",
+              "Error: Could not schedule the retry (concurrent job limit)."]]]]];
       Return[Null]];
     useJob = (jobId =!= "");
     norm       = iNormalizePrompt[iInjectAttachments[prompt]];
@@ -8819,7 +8870,8 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                   KillProcess[p];
                   $claudeProgress[k]["phase"] = "done";
                   If[uj,
-                    NBAccess`NBAbortJob[jid,
+                    (* 2026-10-20: NBAbortJob → iAbortJobNotify (callback へも失敗を知らせる) *)
+                    iAbortJobNotify[jid,
                       iL["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08", "Error: Timeout ("] <> ToString[$ClaudeTimeout] <> iL["\:79d2\:ff09", " sec)"]],
                     iSafeSelectionMoveAfter[pNb];
                     cb[iL["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08", "Error: Timeout ("] <> ToString[$ClaudeTimeout] <> iL["\:79d2\:ff09\:3057\:307e\:3057\:305f\:3002", " sec)."]]],
@@ -8852,7 +8904,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                                 If[!uj, iSafeSelectionMoveAfter[pNb]];
                                 cb[fbResult],
                                 If[uj,
-                                  NBAccess`NBAbortJob[jid, result2],
+                                  iAbortJobNotify[jid, result2],
                                   iFlushFallbackLog[pNb];
                                   iSafeSelectionMoveAfter[pNb];
                                   NBAccess`NBWriteCell[pNb, Cell[result2, "Text"]]]]],
@@ -8864,7 +8916,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                              ScheduledTask \:304c\:7121\:9650\:30eb\:30fc\:30d7\:3059\:308b\:5371\:967a\:304c\:3042\:308b\:305f\:3081\:76f4\:63a5 done \:306b\:9077\:79fb\:3002 *)
                           $claudeProgress[k]["phase"] = "done";
                           If[uj,
-                            NBAccess`NBAbortJob[jid, result2],
+                            iAbortJobNotify[jid, result2],
                             iSafeSelectionMoveAfter[pNb];
                             Quiet @ cb[result2]],
                           (* \:6b63\:5e38\:7d50\:679c: \:6b21\:306e\:30c6\:30a3\:30c3\:30af\:3067 callback \:5b9f\:884c *)
@@ -8873,7 +8925,7 @@ iClaudeQueryAsyncWithProgress[prompt_, callback_, nb_NotebookObject,
                       (* \:30a8\:30e9\:30fc\:306a\:3057\:30fb\:30d5\:30a9\:30fc\:30eb\:30d0\:30c3\:30af\:4e0d\:8981: \:30d5\:30a1\:30a4\:30eb\:306a\:3057 *)
                       $claudeProgress[k]["phase"] = "done";
                       If[uj,
-                        NBAccess`NBAbortJob[jid, iL["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f", "Error: Output file was not generated"]],
+                        iAbortJobNotify[jid, iL["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f", "Error: Output file was not generated"]],
                         iSafeSelectionMoveAfter[pNb];
                         cb[iL["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f", "Error: Output file was not generated"]]]
                     ]]]],
@@ -9677,11 +9729,232 @@ iTeXEquationToBoxes[tex_String] :=
     $Failed
   ];
 
+(* ---- TeX を意味解釈せず「書かれたとおり」に組む (iTeXTypesetBoxes, 2026-10-20) ----
+   iTeXToBoxes は ToExpression[…, TeXForm] で式として読むため、文章中の数式では
+   F(x) が F[x]、O(n \log n) が O[n log n]、E が ⅇ になり、[0,1] や |x| は読めずに
+   生の TeX が残る。文章の数式は見た目を写せばよいので、トークンを順に箱へ写すだけの
+   組版器を用意する (失敗しない)。^ _ → 上下付き、\frac \sqrt \binom、\mathbb \mathcal
+   \mathfrak → 白抜き/筆記/ドイツ文字、\mathbf → 太字、\text \mathrm \operatorname → 立体、
+   ギリシャ文字・関係/演算記号 → Unicode、log/sin/lim 等は立体の関数名、未知の
+   コマンドは名前をそのまま出す。呼ぶ側は TraditionalForm の FormBox に入れる
+   (1 文字の変数が斜体になる)。 *)
+$iTeXSymbolChars = <|
+  "alpha" -> "α", "beta" -> "β", "gamma" -> "γ", "delta" -> "δ", "epsilon" -> "ϵ",
+  "varepsilon" -> "ε", "zeta" -> "ζ", "eta" -> "η", "theta" -> "θ", "vartheta" -> "ϑ",
+  "iota" -> "ι", "kappa" -> "κ", "lambda" -> "λ", "mu" -> "μ", "nu" -> "ν", "xi" -> "ξ",
+  "omicron" -> "ο", "pi" -> "π", "varpi" -> "ϖ", "rho" -> "ρ", "varrho" -> "ϱ",
+  "sigma" -> "σ", "varsigma" -> "ς", "tau" -> "τ", "upsilon" -> "υ", "phi" -> "ϕ",
+  "varphi" -> "φ", "chi" -> "χ", "psi" -> "ψ", "omega" -> "ω",
+  "Gamma" -> "Γ", "Delta" -> "Δ", "Theta" -> "Θ", "Lambda" -> "Λ", "Xi" -> "Ξ",
+  "Pi" -> "Π", "Sigma" -> "Σ", "Upsilon" -> "Υ", "Phi" -> "Φ", "Psi" -> "Ψ", "Omega" -> "Ω",
+  "in" -> "∈", "notin" -> "∉", "ni" -> "∋", "le" -> "≤", "leq" -> "≤", "ge" -> "≥", "geq" -> "≥",
+  "ne" -> "≠", "neq" -> "≠", "lt" -> "<", "gt" -> ">", "ll" -> "≪", "gg" -> "≫",
+  "approx" -> "≈", "sim" -> "∼", "simeq" -> "≃", "equiv" -> "≡", "cong" -> "≅", "propto" -> "∝",
+  "to" -> "→", "rightarrow" -> "→", "leftarrow" -> "←", "gets" -> "←", "leftrightarrow" -> "↔",
+  "Rightarrow" -> "⇒", "Leftarrow" -> "⇐", "Leftrightarrow" -> "⇔", "implies" -> "⟹",
+  "iff" -> "⟺", "mapsto" -> "↦", "longrightarrow" -> "⟶", "longmapsto" -> "⟼",
+  "hookrightarrow" -> "↪", "uparrow" -> "↑", "downarrow" -> "↓",
+  "times" -> "×", "cdot" -> "·", "cdots" -> "⋯", "ldots" -> "…", "dots" -> "…", "vdots" -> "⋮",
+  "ddots" -> "⋱", "pm" -> "±", "mp" -> "∓", "div" -> "÷", "ast" -> "∗", "star" -> "⋆",
+  "circ" -> "∘", "bullet" -> "•", "oplus" -> "⊕", "otimes" -> "⊗", "odot" -> "⊙",
+  "infty" -> "∞", "partial" -> "∂", "nabla" -> "∇", "emptyset" -> "∅", "varnothing" -> "∅",
+  "subset" -> "⊂", "subseteq" -> "⊆", "subsetneq" -> "⊊", "supset" -> "⊃", "supseteq" -> "⊇",
+  "cup" -> "∪", "cap" -> "∩", "bigcup" -> "⋃", "bigcap" -> "⋂", "setminus" -> "∖",
+  "forall" -> "∀", "exists" -> "∃", "nexists" -> "∄", "neg" -> "¬", "lnot" -> "¬",
+  "land" -> "∧", "wedge" -> "∧", "lor" -> "∨", "vee" -> "∨", "top" -> "⊤", "bot" -> "⊥",
+  "perp" -> "⊥", "parallel" -> "∥", "mid" -> "|", "vert" -> "|", "Vert" -> "‖",
+  "vdash" -> "⊢", "models" -> "⊨", "prec" -> "≺", "succ" -> "≻", "preceq" -> "⪯", "succeq" -> "⪰",
+  "sum" -> "∑", "prod" -> "∏", "coprod" -> "∐", "int" -> "∫", "oint" -> "∮",
+  "langle" -> "⟨", "rangle" -> "⟩", "lfloor" -> "⌊", "rfloor" -> "⌋", "lceil" -> "⌈",
+  "rceil" -> "⌉", "lbrace" -> "{", "rbrace" -> "}", "backslash" -> "\\",
+  "aleph" -> "ℵ", "ell" -> "ℓ", "hbar" -> "ℏ", "Re" -> "ℜ", "Im" -> "ℑ", "wp" -> "℘",
+  "prime" -> "′", "angle" -> "∠", "triangle" -> "△", "square" -> "□", "Box" -> "□",
+  "colon" -> ":"|>;
+
+$iTeXFunctionNames = {"log", "ln", "lg", "exp", "sin", "cos", "tan", "cot", "sec", "csc",
+  "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh", "lim", "limsup", "liminf",
+  "max", "min", "sup", "inf", "det", "dim", "ker", "deg", "gcd", "lcm", "arg", "Pr",
+  "hom", "mod", "bmod", "rank", "tr"};
+
+(* \mathbb{Z} → ℤ 等。Mathematica の名前付き文字 (\[DoubleStruckCapitalZ] / \[ScriptA] …) *)
+iTeXFontChars[kind_String, s_String] := StringJoin[Map[
+  Function[c, If[StringMatchQ[c, RegularExpression["[A-Za-z]"]],
+    Replace[Quiet @ Check[ToExpression["\"\\[" <> kind <>
+        If[UpperCaseQ[c], "Capital" <> c, ToUpperCase[c]] <> "]\""], c],
+      Except[_String] -> c],
+    c]], Characters[s]]];
+
+iTeXAttachScript[SubscriptBox[b_, x_], "sup", s_] := SubsuperscriptBox[b, x, s];
+iTeXAttachScript[SuperscriptBox[b_, x_], "sub", s_] := SubsuperscriptBox[b, s, x];
+iTeXAttachScript[b_, "sup", s_] := SuperscriptBox[b, s];
+iTeXAttachScript[b_, "sub", s_] := SubscriptBox[b, s];
+
+iTeXRow[items_List] := Which[items === {}, "", Length[items] == 1, First[items],
+  True, RowBox[items]];
+
+iTeXFunctionBoxQ[StyleBox[nm_String, FontSlant -> "Plain"]] := MemberQ[$iTeXFunctionNames, nm];
+iTeXFunctionBoxQ[(SubscriptBox | SuperscriptBox | SubsuperscriptBox)[b_, __]] := iTeXFunctionBoxQ[b];
+iTeXFunctionBoxQ[_] := False;
+
+iTeXTypesetBoxes[tex_String] := Module[{toks, n, pos = 1, skipWS, arg, raw, rest, atom, seq, envBox},
+  toks = StringCases[tex, {
+    "\\" ~~ c : RegularExpression["[A-Za-z]+"] :> {"cmd", c},
+    "\\" ~~ c_ :> {"sym", c},
+    "{" :> {"open", "{"}, "}" :> {"close", "}"},
+    "^" :> {"sup", "^"}, "_" :> {"sub", "_"},
+    w : WhitespaceCharacter .. :> {"ws", " "},
+    d : RegularExpression["[0-9]+(\\.[0-9]+)?"] :> {"chr", d},
+    c_ :> {"chr", c}}];
+  n = Length[toks];
+  skipWS[] := While[pos <= n && toks[[pos, 1]] === "ws", pos++];
+  (* 引数 1 つ: {…} ならその中身全体、そうでなければ次の 1 記号 *)
+  arg[] := (skipWS[];
+    Which[pos > n, "",
+      toks[[pos, 1]] === "open", pos++; seq[True],
+      True, Replace[atom[], Nothing -> ""]]);
+  (* \text{…} などの中身を文字のまま (空白も残す) *)
+  raw[] := Module[{depth, out = {}, t},
+    skipWS[];
+    If[pos > n, Return["", Module]];
+    If[toks[[pos, 1]] =!= "open", t = toks[[pos]]; pos++; Return[t[[2]], Module]];
+    pos++; depth = 1;
+    While[pos <= n && depth > 0,
+      t = toks[[pos]]; pos++;
+      Switch[t[[1]],
+        "open", depth++,
+        "close", depth--,
+        "cmd", AppendTo[out, Lookup[$iTeXSymbolChars, t[[2]], t[[2]]]],
+        _, AppendTo[out, t[[2]]]]];
+    StringJoin[out]];
+  (* {\rm hex} のような旧式の書体切り替え: 同じ {…} の残りを文字のまま (閉じ括弧・& ・\\ は
+     seq / envBox に残す)。2026-10-20 AskQuestion の実応答 \delta_{\rm hex} が δ_rmhex になった *)
+  rest[] := Module[{depth = 0, out = {}, t},
+    While[pos <= n,
+      t = toks[[pos]];
+      If[depth == 0 && (t[[1]] === "close" || t === {"chr", "&"} || t === {"sym", "\\"}), Break[]];
+      pos++;
+      Switch[t[[1]],
+        "open", depth++,
+        "close", depth--,
+        "cmd", AppendTo[out, Lookup[$iTeXSymbolChars, t[[2]], t[[2]]]],
+        _, AppendTo[out, t[[2]]]]];
+    StringTrim[StringJoin[out]]];
+  atom[] := Module[{t = toks[[pos]], name, a, b, idx = {}},
+    pos++;
+    Switch[t[[1]],
+      "ws" | "close" | "sup" | "sub", Nothing,
+      "open", seq[True],
+      "sym", Switch[t[[2]],
+        "," | ":" | ">" | ";", " ", "!", Nothing, "\\", " ", "|", "‖", _, t[[2]]],
+      "chr", Switch[t[[2]], "~", " ", "&", " ", "'", "′", _, t[[2]]],
+      "cmd", name = t[[2]];
+        Which[
+          MemberQ[{"frac", "dfrac", "tfrac", "cfrac"}, name],
+            a = arg[]; b = arg[]; FractionBox[a, b],
+          name === "binom", a = arg[]; b = arg[]; RowBox[{"(", GridBox[{{a}, {b}}], ")"}],
+          name === "sqrt",
+            skipWS[];
+            If[pos <= n && toks[[pos]] === {"chr", "["},
+              pos++;
+              While[pos <= n && toks[[pos]] =!= {"chr", "]"},
+                With[{x = atom[]}, If[x =!= Nothing, AppendTo[idx, x]]]];
+              pos++;
+              RadicalBox[arg[], iTeXRow[idx]],
+              SqrtBox[arg[]]],
+          name === "mathbb" || name === "Bbb", iTeXFontChars["DoubleStruck", raw[]],
+          name === "mathcal" || name === "mathscr", iTeXFontChars["Script", raw[]],
+          name === "mathfrak", iTeXFontChars["Gothic", raw[]],
+          MemberQ[{"mathbf", "boldsymbol", "bm", "textbf"}, name],
+            StyleBox[arg[], FontWeight -> "Bold"],
+          MemberQ[{"mathit", "textit", "emph"}, name], StyleBox[arg[], FontSlant -> "Italic"],
+          MemberQ[{"text", "textrm", "mathrm", "mathsf", "mathtt", "texttt", "operatorname",
+              "mbox", "textnormal"}, name],
+            StyleBox[raw[], FontSlant -> "Plain"],
+          MemberQ[{"rm", "sf", "tt", "rmfamily", "sffamily", "ttfamily", "upshape"}, name],
+            StyleBox[rest[], FontSlant -> "Plain"],
+          MemberQ[{"bf", "bfseries"}, name], StyleBox[rest[], FontWeight -> "Bold"],
+          MemberQ[{"it", "itshape", "sl"}, name], StyleBox[rest[], FontSlant -> "Italic"],
+          name === "cal", iTeXFontChars["Script", rest[]],
+          MemberQ[{"hat", "widehat"}, name], OverscriptBox[arg[], "^"],
+          MemberQ[{"bar", "overline"}, name], OverscriptBox[arg[], "_"],
+          MemberQ[{"tilde", "widetilde"}, name], OverscriptBox[arg[], "~"],
+          name === "vec", OverscriptBox[arg[], "→"],
+          name === "dot", OverscriptBox[arg[], "."],
+          name === "ddot", OverscriptBox[arg[], ".."],
+          name === "underline", UnderscriptBox[arg[], "_"],
+          MemberQ[{"left", "right", "big", "Big", "bigg", "Bigg", "bigl", "bigr", "Bigl",
+              "Bigr", "middle", "displaystyle", "textstyle", "limits", "nolimits"}, name],
+            Nothing,
+          MemberQ[{"quad", "qquad"}, name], "  ",
+          name === "begin", envBox[raw[]],
+          name === "pmod", RowBox[{" ", "(", StyleBox["mod", FontSlant -> "Plain"], " ", arg[], ")"}],
+          KeyExistsQ[$iTeXSymbolChars, name], $iTeXSymbolChars[name],
+          True, StyleBox[name, FontSlant -> "Plain"]],
+      _, Nothing]];
+  (* \begin{pmatrix} a & b \\ c & d \end{pmatrix} など: & で列、\\ で行を分けて GridBox に
+     (2026-10-20、応答表示を Typeset に切り替えたとき Parse より劣っていたところ)。
+     array の列指定 {cc} は読み飛ばす。入れ子の環境は各セルの中でまた envBox になる *)
+  envBox[env_String] := Module[{rows = {}, row = {}, t, cols, grid},
+    If[env === "array", raw[]];
+    While[pos <= n,
+      AppendTo[row, seq[False, True]];
+      If[pos > n, Break[]];
+      t = toks[[pos]]; pos++;
+      Which[t === {"chr", "&"}, Null,
+        t === {"sym", "\\"}, AppendTo[rows, row]; row = {},
+        True, raw[]; Break[]]];                                  (* \end{env} *)
+    If[row =!= {""}, AppendTo[rows, row]];                       (* 末尾の \\ の空行は捨てる *)
+    If[rows === {}, Return["", Module]];
+    cols = Max[Length /@ rows];
+    grid[al_] := GridBox[PadRight[#, cols, ""] & /@ rows,
+      GridBoxAlignment -> {"Columns" -> al}];
+    Switch[StringDelete[env, "*"],
+      "pmatrix", RowBox[{"(", grid[{{Center}}], ")"}],
+      "bmatrix", RowBox[{"[", grid[{{Center}}], "]"}],
+      "Bmatrix", RowBox[{"{", grid[{{Center}}], "}"}],
+      "vmatrix", RowBox[{"|", grid[{{Center}}], "|"}],
+      "Vmatrix", RowBox[{"‖", grid[{{Center}}], "‖"}],
+      "cases" | "dcases", RowBox[{"{", grid[{{Left}}]}],
+      "aligned" | "align" | "alignat" | "split" | "eqnarray" | "gathered" | "gather",
+        grid[{{Right, Left}}],
+      _, grid[{{Center}}]]];
+  (* 並び。関数名 (log 等) の前後には空白を入れる。^ _ は直前の要素に付ける。
+     inEnv (環境のセルの中) では & \\ \end の手前で止まる *)
+  seq[inGroup_, inEnv_:False] := Module[{items = {}, t, a, s, last},
+    While[pos <= n,
+      t = toks[[pos]];
+      Which[
+        inEnv && (t === {"chr", "&"} || t === {"sym", "\\"} || t === {"cmd", "end"}), Break[],
+        t[[1]] === "close", pos++; If[inGroup, Break[]],
+        t[[1]] === "sup" || t[[1]] === "sub",
+          pos++; s = arg[];
+          last = If[items === {}, "", Last[items]];
+          If[items =!= {}, items = Most[items]];
+          AppendTo[items, iTeXAttachScript[last, t[[1]], s]],
+        True,
+          a = atom[];
+          If[a =!= Nothing,
+            If[items =!= {} && (iTeXFunctionBoxQ[Last[items]] && !MatchQ[a, "(" | "[" | "{"] ||
+                  iTeXFunctionBoxQ[a] && !MatchQ[Last[items], "(" | "[" | "{" | " "]),
+              AppendTo[items, " "]];
+            AppendTo[items, a]]]];
+    iTeXRow[items]];
+  seq[False]];
+iTeXTypesetBoxes[_] := "";
+
+(* 応答の表示 (ClaudeQuery / ClaudeEval / 履歴の再出力) は "Typeset" で組む (2026-10-20 に Parse から
+   切替)。MarkdownToCells は "TeXMath" の値で Block するので、その既定 (True = "Parse") は変わらない *)
+$iTeXMathMethod = "Typeset";
+
 iTeXMathToCell[text_String, style_String] :=
   Module[{preprocessed, parts, result = {}, tex, boxes},
     (* $$...$$ \[RightArrow] $...$ \:306b\:6b63\:898f\:5316\:ff08\:6539\:884c\:3092\:542b\:3080\:30b1\:30fc\:30b9\:306b\:3082\:5bfe\:5fdc\:ff09\:3002
        \:5185\:5074\:306e\:524d\:5f8c\:7a7a\:767d\:306f\:843d\:3068\:3059 (\:4e0b\:306e\:533a\:5207\:308a\:898f\:5247\:304c\:7a7a\:767d\:306b\:63a5\:3057\:305f $ \:3092\:8a8d\:3081\:306a\:3044\:305f\:3081)\:3002 *)
-    preprocessed = StringReplace[text,
+    (* \[ … \] / \( … \) (LaTeX の別記法) も $$ / $ に揃える (2026-10-20) *)
+    preprocessed = StringReplace[text, {
+      "\\[" ~~ x : Shortest[__] ~~ "\\]" :> "$$" <> x <> "$$",
+      "\\(" ~~ x : Shortest[Except["\n"] ..] ~~ "\\)" :> "$" <> StringTrim[x] <> "$"}];
+    preprocessed = StringReplace[preprocessed,
       RegularExpression["(?s)\\$\\$(.+?)\\$\\$"] :>
         "$" <> StringTrim["$1"] <> "$"];
     (* $...$ を区切りとして分割する。2026-10-01: 応答本文はバッククォートを
@@ -9701,16 +9974,16 @@ iTeXMathToCell[text_String, style_String] :=
     Do[
       If[StringStartsQ[p, "$TEXMATH$"],
         tex = StringDrop[p, StringLength["$TEXMATH$"]];
-        boxes = iTeXEquationToBoxes[tex];
+        boxes = If[$iTeXMathMethod === "Typeset", $Failed, iTeXEquationToBoxes[tex]];
         If[boxes =!= $Failed,
           AppendTo[result,
             Cell[BoxData[boxes], "InlineFormula"]];
           Continue[]
         ];
-        (* \:5909\:63db\:5931\:6557 \[RightArrow] $tex$ \:5f62\:5f0f\:306e\:307e\:307e\:30a4\:30bf\:30ea\:30c3\:30af\:3067\:8868\:793a *)
+        (* "Typeset" 指定、または式として読めなかった ([0,1] や |x| 等) → 書かれたとおりに組む。
+           旧版は $tex$ を灰色斜体の生 TeX のまま残していた。 *)
         AppendTo[result,
-          Cell[BoxData[StyleBox["$" <> tex <> "$",
-            FontSlant -> "Italic", FontColor -> GrayLevel[0.4]]],
+          Cell[BoxData[FormBox[iTeXTypesetBoxes[tex], TraditionalForm]],
             "InlineFormula"]],
         (* \:901a\:5e38\:30c6\:30ad\:30b9\:30c8\:90e8\:5206 *)
         If[p =!= "", AppendTo[result, p]]
@@ -9721,13 +9994,39 @@ iTeXMathToCell[text_String, style_String] :=
       Cell[TextData[result], style]]
   ];
 
+(* 応答本文のセル (2026-10-20): **太字** を太字、`コード` を等幅にして iTeXMathToCell で組む
+   (MarkdownToCells "InlineMarkup" -> True と同じ。コードの中の $ は数式にしない)。
+   $iQueryInlineMarkup = False で従来どおり ** と __ を消すだけ。 *)
+$iQueryInlineMarkup = True;
+iQueryTextCell[text_String, style_String] :=
+  If[TrueQ[$iQueryInlineMarkup],
+    Module[{t, codes},
+      {t, codes} = iMarkdownInlineMark[text];
+      iMarkdownInlineExpand[iTeXMathToCell[t, style], codes]],
+    iTeXMathToCell[StringReplace[text, {"**" -> "", "__" -> ""}], style]];
+
+(* ClaudeEval の本文セル: textOnly (cleanMarkdown 済み) と同じ下ごしらえで、太字とコードの印は残す *)
+iCleanMarkdownKeepInline[s_String] := StringTrim @ StringReplace[s, {
+  RegularExpression["(?m)^#{1,6}\\s*"] -> "",
+  RegularExpression["(?m)^[-*]{3,}\\s*$"] -> "",
+  RegularExpression["(?m)^\\|.*\\|\\s*$"] -> "",
+  RegularExpression["(?m)^[|:\\-\\s]+$"] -> "",
+  RegularExpression["\\n{3,}"] -> "\n\n"
+}];
+iEvalTextCell[response_String, textOnly_String] :=
+  If[TrueQ[$iQueryInlineMarkup],
+    iQueryTextCell[iStripContinueEvalGuidance @ iCleanMarkdownKeepInline @ StringTrim @
+      iStripCodeBlocks[response], "Text"],
+    iTeXMathToCell[textOnly, "Text"]];
+iEvalTextCell[_, textOnly_String] := iTeXMathToCell[textOnly, "Text"];
+
 (* ClaudeQuery \:5fdc\:7b54\:3092\:30de\:30fc\:30af\:30c0\:30a6\:30f3\:89e3\:6790\:3057\:3066\:9069\:5207\:306a\:30b9\:30bf\:30a4\:30eb\:306e\:30bb\:30eb\:3067\:51fa\:529b *)
 iFlushQueryTextBuf[nb_NotebookObject, buf_List] :=
   If[Length[buf] > 0,
     (* Job \:30b7\:30b9\:30c6\:30e0\:304c\:30ab\:30fc\:30bd\:30eb\:3092\:30a2\:30f3\:30ab\:30fc\:4f4d\:7f6e\:306b\:914d\:7f6e\:6e08\:307f\:3002
        NotebookWrite[..., After] \:3067\:9806\:6b21\:30c1\:30a7\:30a4\:30f3\:3059\:308b\:3002 *)
     NBAccess`NBWriteCell[nb,
-      iTeXMathToCell[StringJoin[Riffle[buf, "\n"]], "Text"]]];
+      iQueryTextCell[StringJoin[Riffle[buf, "\n"]], "Text"]]];
 
 (* \:30ec\:30b9\:30dd\:30f3\:30b9\:6587\:5b57\:5217\:4e2d\:306e Mathematica \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:3092\:4f9d\:5b58\:89e3\:6790\:3057\:7d50\:5408\:3059\:308b\:3002
    \:4f9d\:5b58\:95a2\:4fc2\:306e\:3042\:308b\:30d6\:30ed\:30c3\:30af\:7fa4\:3092 1 \:3064\:306e\:30d6\:30ed\:30c3\:30af\:306b\:307e\:3068\:3081\:308b\:3002
@@ -10218,7 +10517,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^#{3,}\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsubsection"]],
+          NBAccess`NBWriteCell[nb, iQueryTextCell[content, "Subsubsection"]],
 
         (* ## \:898b\:51fa\:3057 \[RightArrow] Subsection *)
         StringContainsQ[trimmed, RegularExpression["^#{2}\\s"]],
@@ -10226,7 +10525,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^#{2}\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsection"]],
+          NBAccess`NBWriteCell[nb, iQueryTextCell[content, "Subsection"]],
 
         (* # \:898b\:51fa\:3057 \[RightArrow] Subsection *)
         StringContainsQ[trimmed, RegularExpression["^#\\s"]],
@@ -10234,39 +10533,35 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^#\\s*"] -> ""]];
           content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsection"]],
+          NBAccess`NBWriteCell[nb, iQueryTextCell[content, "Subsection"]],
 
         (* \:6df1\:3044\:30a4\:30f3\:30c7\:30f3\:30c8\:30ea\:30b9\:30c8 \[RightArrow] Subsubitem *)
         StringContainsQ[line, RegularExpression["^(\\s{4,}|\\t\\t)[-*\[Bullet]]\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^[-*\[Bullet]]\\s*"] -> ""]];
-          content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subsubitem"]],
+          NBAccess`NBWriteCell[nb, iQueryTextCell[content, "Subsubitem"]],
 
         (* \:6d45\:3044\:30a4\:30f3\:30c7\:30f3\:30c8\:30ea\:30b9\:30c8 \[RightArrow] Subitem *)
         StringContainsQ[line, RegularExpression["^(\\s{2,3}|\\t)[-*\[Bullet]]\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^[-*\[Bullet]]\\s*"] -> ""]];
-          content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Subitem"]],
+          NBAccess`NBWriteCell[nb, iQueryTextCell[content, "Subitem"]],
 
         (* \:30ea\:30b9\:30c8\:9805\:76ee (\:7b87\:6761\:66f8\:304d) \[RightArrow] Item *)
         StringContainsQ[trimmed, RegularExpression["^[-*\[Bullet]]\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^[-*\[Bullet]]\\s*"] -> ""]];
-          content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Item"]],
+          NBAccess`NBWriteCell[nb, iQueryTextCell[content, "Item"]],
 
         (* \:756a\:53f7\:4ed8\:304d\:30ea\:30b9\:30c8 \[RightArrow] Item *)
         StringContainsQ[trimmed, RegularExpression["^\\d+\\.\\s"]],
           iFlushQueryTextBuf[nb, textBuf]; textBuf = {};
           content = StringTrim[StringReplace[trimmed,
             RegularExpression["^\\d+\\.\\s*"] -> ""]];
-          content = StringReplace[content, "**" -> ""];
-          NBAccess`NBWriteCell[nb, iTeXMathToCell[content, "Item"]],
+          NBAccess`NBWriteCell[nb, iQueryTextCell[content, "Item"]],
 
         (* \:6c34\:5e73\:7dda \[RightArrow] \:7121\:8996 *)
         StringMatchQ[trimmed, RegularExpression["^[-*_]{3,}$"]],
@@ -10274,7 +10569,7 @@ iWriteQueryResponse[nb_NotebookObject, text_String, autoEvaluate_:False] :=
 
         (* \:901a\:5e38\:30c6\:30ad\:30b9\:30c8 \[RightArrow] \:30d0\:30c3\:30d5\:30a1\:306b\:8ffd\:52a0 *)
         True,
-          content = StringReplace[trimmed, {"**" -> "", "__" -> ""}];
+          content = trimmed;
           AppendTo[textBuf, content]
       ],
       {i, Length[lines]}];
@@ -10310,7 +10605,7 @@ iWriteQueryResponseQueued[nb_NotebookObject, text_String, autoEvaluate_:False] :
             With[{buf2 = textBuf},
               AppendTo[thunks, Function[
                 NBAccess`NBWriteCell[nb,
-                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+                  iQueryTextCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
             textBuf = {}];
           codeLang = StringTrim[StringReplace[trimmed,
             RegularExpression["^```\\s*"] -> ""]];
@@ -10338,7 +10633,7 @@ iWriteQueryResponseQueued[nb_NotebookObject, text_String, autoEvaluate_:False] :
             With[{buf2 = textBuf},
               AppendTo[thunks, Function[
                 NBAccess`NBWriteCell[nb,
-                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+                  iQueryTextCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
             textBuf = {}],
 
         StringContainsQ[trimmed, RegularExpression["^#{3,}\\s"]],
@@ -10346,102 +10641,102 @@ iWriteQueryResponseQueued[nb_NotebookObject, text_String, autoEvaluate_:False] :
             With[{buf2 = textBuf},
               AppendTo[thunks, Function[
                 NBAccess`NBWriteCell[nb,
-                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+                  iQueryTextCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
             textBuf = {}];
           content = StringReplace[StringTrim[StringReplace[trimmed,
             RegularExpression["^#{3,}\\s*"] -> ""]], "**" -> ""];
           With[{c2 = content},
             AppendTo[thunks, Function[
-              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Subsubsection"]]]]],
+              NBAccess`NBWriteCell[nb, iQueryTextCell[c2, "Subsubsection"]]]]],
 
         StringContainsQ[trimmed, RegularExpression["^#{2}\\s"]],
           If[Length[textBuf] > 0,
             With[{buf2 = textBuf},
               AppendTo[thunks, Function[
                 NBAccess`NBWriteCell[nb,
-                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+                  iQueryTextCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
             textBuf = {}];
           content = StringReplace[StringTrim[StringReplace[trimmed,
             RegularExpression["^#{2}\\s*"] -> ""]], "**" -> ""];
           With[{c2 = content},
             AppendTo[thunks, Function[
-              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Subsection"]]]]],
+              NBAccess`NBWriteCell[nb, iQueryTextCell[c2, "Subsection"]]]]],
 
         StringContainsQ[trimmed, RegularExpression["^#\\s"]],
           If[Length[textBuf] > 0,
             With[{buf2 = textBuf},
               AppendTo[thunks, Function[
                 NBAccess`NBWriteCell[nb,
-                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+                  iQueryTextCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
             textBuf = {}];
           content = StringReplace[StringTrim[StringReplace[trimmed,
             RegularExpression["^#\\s*"] -> ""]], "**" -> ""];
           With[{c2 = content},
             AppendTo[thunks, Function[
-              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Subsection"]]]]],
+              NBAccess`NBWriteCell[nb, iQueryTextCell[c2, "Subsection"]]]]],
 
         StringContainsQ[line, RegularExpression["^(\\s{4,}|\\t\\t)[-*\[Bullet]]\\s"]],
           If[Length[textBuf] > 0,
             With[{buf2 = textBuf},
               AppendTo[thunks, Function[
                 NBAccess`NBWriteCell[nb,
-                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+                  iQueryTextCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
             textBuf = {}];
-          content = StringReplace[StringTrim[StringReplace[trimmed,
-            RegularExpression["^[-*\[Bullet]]\\s*"] -> ""]], "**" -> ""];
+          content = StringTrim[StringReplace[trimmed,
+            RegularExpression["^[-*\[Bullet]]\\s*"] -> ""]];
           With[{c2 = content},
             AppendTo[thunks, Function[
-              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Subsubitem"]]]]],
+              NBAccess`NBWriteCell[nb, iQueryTextCell[c2, "Subsubitem"]]]]],
 
         StringContainsQ[line, RegularExpression["^(\\s{2,3}|\\t)[-*\[Bullet]]\\s"]],
           If[Length[textBuf] > 0,
             With[{buf2 = textBuf},
               AppendTo[thunks, Function[
                 NBAccess`NBWriteCell[nb,
-                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+                  iQueryTextCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
             textBuf = {}];
-          content = StringReplace[StringTrim[StringReplace[trimmed,
-            RegularExpression["^[-*\[Bullet]]\\s*"] -> ""]], "**" -> ""];
+          content = StringTrim[StringReplace[trimmed,
+            RegularExpression["^[-*\[Bullet]]\\s*"] -> ""]];
           With[{c2 = content},
             AppendTo[thunks, Function[
-              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Subitem"]]]]],
+              NBAccess`NBWriteCell[nb, iQueryTextCell[c2, "Subitem"]]]]],
 
         StringContainsQ[trimmed, RegularExpression["^[-*\[Bullet]]\\s"]],
           If[Length[textBuf] > 0,
             With[{buf2 = textBuf},
               AppendTo[thunks, Function[
                 NBAccess`NBWriteCell[nb,
-                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+                  iQueryTextCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
             textBuf = {}];
-          content = StringReplace[StringTrim[StringReplace[trimmed,
-            RegularExpression["^[-*\[Bullet]]\\s*"] -> ""]], "**" -> ""];
+          content = StringTrim[StringReplace[trimmed,
+            RegularExpression["^[-*\[Bullet]]\\s*"] -> ""]];
           With[{c2 = content},
             AppendTo[thunks, Function[
-              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Item"]]]]],
+              NBAccess`NBWriteCell[nb, iQueryTextCell[c2, "Item"]]]]],
 
         StringContainsQ[trimmed, RegularExpression["^\\d+\\.\\s"]],
           If[Length[textBuf] > 0,
             With[{buf2 = textBuf},
               AppendTo[thunks, Function[
                 NBAccess`NBWriteCell[nb,
-                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+                  iQueryTextCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
             textBuf = {}];
-          content = StringReplace[StringTrim[StringReplace[trimmed,
-            RegularExpression["^\\d+\\.\\s*"] -> ""]], "**" -> ""];
+          content = StringTrim[StringReplace[trimmed,
+            RegularExpression["^\\d+\\.\\s*"] -> ""]];
           With[{c2 = content},
             AppendTo[thunks, Function[
-              NBAccess`NBWriteCell[nb, iTeXMathToCell[c2, "Item"]]]]],
+              NBAccess`NBWriteCell[nb, iQueryTextCell[c2, "Item"]]]]],
 
         StringMatchQ[trimmed, RegularExpression["^[-*_]{3,}$"]],
           If[Length[textBuf] > 0,
             With[{buf2 = textBuf},
               AppendTo[thunks, Function[
                 NBAccess`NBWriteCell[nb,
-                  iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
+                  iQueryTextCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]];
             textBuf = {}],
 
         True,
-          content = StringReplace[trimmed, {"**" -> "", "__" -> ""}];
+          content = trimmed;
           AppendTo[textBuf, content]
       ],
       {i, Length[lines]}];
@@ -10457,7 +10752,7 @@ iWriteQueryResponseQueued[nb_NotebookObject, text_String, autoEvaluate_:False] :
       With[{buf2 = textBuf},
         AppendTo[thunks, Function[
           NBAccess`NBWriteCell[nb,
-            iTeXMathToCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]]];
+            iQueryTextCell[StringJoin[Riffle[buf2, "\n"]], "Text"]]]]]];
     thunks
   ];
 
@@ -10491,8 +10786,10 @@ ClearAll[MarkdownToCells, MarkdownToNotebook, MarkdownDisplay,
 Options[MarkdownToCells] = {
   "HeadingStyles" -> {"Subsection", "Subsubsection", "Subsubsubsection", "Subsubsubsection"},
   "DefaultMode" -> "Para",          (* "Code": no ``` fence -> whole text as one Input cell *)
-  "TeXMath" -> True,                (* render $...$ / $$...$$ as inline formulas *)
+  "TeXMath" -> True,                (* render $...$ / $$...$$ as inline formulas; "Typeset" =
+                                       typeset as written (no TeXForm parse: F(x) stays F(x)) *)
   "CleanInline" -> True,            (* strip **bold** / __underline__ / `code` markers *)
+  "InlineMarkup" -> False,          (* True: **bold** -> bold, `code` -> monospace (instead of stripping) *)
   "MermaidGraphs" -> True,          (* render ```mermaid blocks as Graph output cells *)
   "UntaggedCodeStyle" -> "Program", (* style for bare ``` blocks: "Program" | "Input" *)
   "Tables" -> True,                 (* GFM pipe tables -> Dataset/Grid output cells *)
@@ -10619,8 +10916,48 @@ iMarkdownCodeCell[code_String, lang_String, mermaidQ_, untaggedStyle_String] :=
           Cell[code, "Program"]],
       True, Cell[code, "Program"]]];
 
+(* ---- inline markup ("InlineMarkup" -> True, 2026-10-20) ----
+   **太字** を太字、`コード` を等幅にする (既定の CleanInline は記号を消すだけ)。
+   コードの中身は $…$ の数式判定から守るため、先に私用領域の印 + 番号へ置き換えてから
+   iTeXMathToCell に渡し、文字列部分を StyleBox へ展開するときに戻す。太字が数式を
+   またぐときは文字列部分だけを太字にする (数式セルはそのまま)。対にならない ** と __ は
+   従来どおり消す。 *)
+$iMDBoldMark = FromCharacterCode[57344];                                 (* U+E000 *)
+$iMDCodeOpen = FromCharacterCode[57345]; $iMDCodeClose = FromCharacterCode[57346];
+
+iMarkdownInlineMark[s_String] := Module[{codes = {}, t},
+  t = StringReplace[s, "`" ~~ c : Except["`" | "\n"] .. ~~ "`" :>
+    (AppendTo[codes, c]; $iMDCodeOpen <> ToString[Length[codes]] <> $iMDCodeClose)];
+  t = StringReplace[t, "**" ~~ b : Shortest[Except["\n"] ..] ~~ "**" :>
+    $iMDBoldMark <> b <> $iMDBoldMark];
+  {StringReplace[t, {"**" -> "", "__" -> ""}], codes}];
+
+iMarkdownInlinePieces[s_String, codes_List, bold0_] := Module[{bold = bold0, out = {}},
+  Scan[Function[p, Which[
+      p === $iMDBoldMark, bold = !bold,
+      StringMatchQ[p, $iMDCodeOpen ~~ DigitCharacter .. ~~ $iMDCodeClose],
+        AppendTo[out, StyleBox[codes[[ToExpression[StringTake[p, {2, -2}]]]],
+          FontFamily -> "Source Code Pro"]],
+      p === "", Null,
+      True, AppendTo[out, If[bold, StyleBox[p, FontWeight -> "Bold"], p]]]],
+    StringSplit[s, d : ($iMDBoldMark | ($iMDCodeOpen ~~ DigitCharacter .. ~~ $iMDCodeClose)) :> d]];
+  {out, bold}];
+
+iMarkdownInlineExpand[Cell[content_, style_, o___], codes_List] := Module[
+  {parts, bold = False, out = {}, r},
+  parts = Replace[content, {s_String :> {s}, TextData[l_List] :> l, TextData[x_] :> {x},
+    _ :> None}];
+  If[parts === None, Return[Cell[content, style, o], Module]];
+  Scan[Function[p, If[StringQ[p],
+      r = iMarkdownInlinePieces[p, codes, bold]; out = Join[out, r[[1]]]; bold = r[[2]],
+      AppendTo[out, p]]], parts];
+  Which[out === {}, Cell["", style, o],
+    Length[out] == 1 && StringQ[First[out]], Cell[First[out], style, o],
+    True, Cell[TextData[out], style, o]]];
+iMarkdownInlineExpand[other_, _] := other;
+
 MarkdownToCells[mdRaw_String, opts : OptionsPattern[]] := Module[
-  {md, hs, texQ, cleanQ, mermQ, untagged, tablesQ, tableStyle, imagesQ,
+  {md, hs, texQ, texMethod, cleanQ, inlineQ, mermQ, untagged, tablesQ, tableStyle, imagesQ,
    baseDir, maxImgW, lines, cells = {}, buf = {}, skipThrough = 0,
    inCode = False, codeLang = "", codeBuf = {},
    clean, mkText, flushPara, flushCode},
@@ -10631,8 +10968,10 @@ MarkdownToCells[mdRaw_String, opts : OptionsPattern[]] := Module[
   If[!ListQ[hs] || hs === {},
     hs = {"Subsection", "Subsubsection", "Subsubsubsection", "Subsubsubsection"}];
   hs = PadRight[hs, 4, Last[hs]];
-  texQ = TrueQ[OptionValue["TeXMath"]];
+  texQ = TrueQ[OptionValue["TeXMath"]] || OptionValue["TeXMath"] === "Typeset";
+  texMethod = If[OptionValue["TeXMath"] === "Typeset", "Typeset", "Parse"];
   cleanQ = TrueQ[OptionValue["CleanInline"]];
+  inlineQ = TrueQ[OptionValue["InlineMarkup"]];
   mermQ = TrueQ[OptionValue["MermaidGraphs"]];
   tablesQ = TrueQ[OptionValue["Tables"]];
   tableStyle = OptionValue["TableStyle"];
@@ -10650,11 +10989,12 @@ MarkdownToCells[mdRaw_String, opts : OptionsPattern[]] := Module[
   clean[s_String] := If[cleanQ,
     StringReplace[s, {"**" -> "", "__" -> "",
       RegularExpression["`([^`\n]*)`"] -> "$1"}], s];
-  mkText[s_String, style_String] := Module[{t = StringTrim[s]},
+  mkText[s_String, style_String] := Module[{t = StringTrim[s], codes = {}, c},
     If[t === "", Nothing,
-      t = clean[t];
-      If[texQ && Length[DownValues[iTeXMathToCell]] > 0,
-        iTeXMathToCell[t, style], Cell[t, style]]]];
+      If[inlineQ, {t, codes} = iMarkdownInlineMark[t], t = clean[t]];
+      c = If[texQ && Length[DownValues[iTeXMathToCell]] > 0,
+        Block[{$iTeXMathMethod = texMethod}, iTeXMathToCell[t, style]], Cell[t, style]];
+      If[inlineQ, iMarkdownInlineExpand[c, codes], c]]];
   flushPara[] := (
     If[buf =!= {},
       With[{c = mkText[StringRiffle[buf, "\n"], "Text"]},
@@ -11121,9 +11461,51 @@ MermaidGraph[src_String, gopts___Rule] := Module[
    \:30b3\:30a2\:547c\:3073\:51fa\:3057\:95a2\:6570
    ============================================================ *)
 
+(* 2026-10-23: 同期 CLI 呼び出し (iClaudeQueryRaw / iClaudeQueryRawNonBlocking) の
+   LLMCall 会計。以前は --print のテキスト出力で usage が無く、成功も失敗も
+   LLMCall に残らなかった (DocImportPaper を回した日に SystemDoctor LogCoverage
+   が claudecode の LLMLogGap を出した)。いまは iMakeBat を --output-format json
+   で走らせ、1 行の result オブジェクトから本文を取り出すと同時に emit する。
+   result が無い失敗 (タイムアウト・出力なし・CLI が JSON を出さずに落ちた) も
+   Outcome -> "error" で 1 件残す。 *)
+iClaudeCLISyncEmit[outcome_String, failureClass_, durationMs_] :=
+  iClaudeDiagEmit["LLMCall", <|
+    "Provider" -> "claudecode",
+    "Model" -> If[ListQ[$ClaudeModel] && Length[$ClaudeModel] >= 2 &&
+        StringQ[$ClaudeModel[[2]]], $ClaudeModel[[2]], ToString[$ClaudeModel]],
+    "TaskClass" -> If[StringQ[$iClaudeCurrentTaskClass],
+      $iClaudeCurrentTaskClass, "general"],
+    "Outcome" -> outcome, "FailureClass" -> failureClass,
+    "DurationMs" -> durationMs, "Via" -> "sync"|>,
+    If[outcome === "success", "info", "warn"]];
+
+(* 出力ファイルの中身 -> 呼び出し元へ返す文字列 (従来のテキスト出力と同じ形)。
+   2>&1 で混ざる stderr の行 (CLI の警告など) は JSON でないので読み飛ばす。 *)
+iClaudeCLISyncResultText[raw_String, durationMs_] :=
+  Module[{j, usage, err, res},
+    j = SelectFirst[
+      Quiet @ Check[Developer`ReadRawJSONString[#], $Failed] & /@
+        Select[StringSplit[raw, {"\r\n", "\n"}], StringStartsQ[StringTrim[#], "{"] &],
+      AssociationQ[#] && Lookup[#, "type", ""] === "result" &, None];
+    If[!AssociationQ[j],
+      iClaudeCLISyncEmit["error",
+        If[StringTrim[raw] === "", "EmptyOutput", "NoResult"], durationMs];
+      Return[cleanOutput[stripANSI[raw]], Module]];
+    err = iStreamJsonResultErrorText[j];
+    usage = Lookup[j, "usage", <||>];
+    If[(AssociationQ[usage] && usage =!= <||>) || NumberQ[Lookup[j, "total_cost_usd"]],
+      iClaudeEmitLLMCallFromResult[j],
+      iClaudeCLISyncEmit[If[StringQ[err], "error", "success"],
+        If[StringQ[err], "Error", Null], durationMs]];
+    res = Lookup[j, "result", None];
+    Which[
+      StringQ[err], err,
+      StringQ[res], cleanOutput[stripANSI[res]],
+      True, ""]];
+
 (* \:4f4e\:30ec\:30d9\:30eb\:540c\:671f\:547c\:3073\:51fa\:3057\:ff08\:5c65\:6b74\:4fdd\:5b58\:306a\:3057\:ff09 *)
 iClaudeQueryRaw[prompt_] := Module[
-  {outFile, promptFile, batFile, res, raw, norm, workDir},
+  {outFile, promptFile, batFile, res, raw, norm, workDir, t0, dur},
 
   norm       = iNormalizePrompt[iInjectAttachments[prompt]];
   (* Claude Code \:304c\:30a2\:30af\:30bb\:30b9\:3067\:304d\:308b\:30ed\:30fc\:30ab\:30eb\:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:306b\:51fa\:529b\:3002
@@ -11152,21 +11534,29 @@ iClaudeQueryRaw[prompt_] := Module[
     Close[strm]
   ];
 
-  batFile = iMakeBat[promptFile, outFile, norm["imageDirs"]];
+  batFile = Block[{$iMakeBatOutputFormat = "json"},
+    iMakeBat[promptFile, outFile, norm["imageDirs"]]];
+  t0 = AbsoluteTime[];
   res = TimeConstrained[RunProcess[{"cmd", "/c", batFile}, All], $ClaudeTimeout, "TIMEOUT"];
+  dur = Round[1000 (AbsoluteTime[] - t0)];
   Quiet[DeleteFile[batFile]];
   Quiet[DeleteFile[promptFile]];
 
-  If[res === "TIMEOUT", Return[iL["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08", "Error: Timeout ("] <> ToString[$ClaudeTimeout] <> iL["\:79d2\:ff09\:3057\:307e\:3057\:305f\:3002", " sec)."]]];
-  If[res === $Failed,   Return[iL["Error: RunProcess \:304c $Failed \:3092\:8fd4\:3057\:307e\:3057\:305f", "Error: RunProcess returned $Failed"]]];
+  If[res === "TIMEOUT",
+    iClaudeCLISyncEmit["error", "Timeout", dur];
+    Return[iL["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8\:ff08", "Error: Timeout ("] <> ToString[$ClaudeTimeout] <> iL["\:79d2\:ff09\:3057\:307e\:3057\:305f\:3002", " sec)."]]];
+  If[res === $Failed,
+    iClaudeCLISyncEmit["error", "SpawnFailed", dur];
+    Return[iL["Error: RunProcess \:304c $Failed \:3092\:8fd4\:3057\:307e\:3057\:305f", "Error: RunProcess returned $Failed"]]];
   If[!FileExistsQ[outFile],
+    iClaudeCLISyncEmit["error", "NoOutput", dur];
     Return["Error (ExitCode=" <> ToString[res["ExitCode"]] <>
            "): \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f\n" <> res["StandardError"]]
   ];
 
   raw = Import[outFile, "Text"];
   Quiet[DeleteFile[outFile]];
-  cleanOutput[stripANSI[raw]]
+  iClaudeCLISyncResultText[raw, dur]
 ];
 
 (* \:975e\:30d6\:30ed\:30c3\:30ad\:30f3\:30b0\:7248: StartProcess + Pause \:30dd\:30fc\:30ea\:30f3\:30b0\:3002
@@ -11201,7 +11591,8 @@ iClaudeQueryRawNonBlocking[prompt_, timeoutSpec_:Automatic] := Module[
       ExportString[norm["text"], "Text", CharacterEncoding -> "UTF-8"]];
     Close[strm]];
 
-  batFile   = iMakeBat[promptFile, outFile, norm["imageDirs"]];
+  batFile   = Block[{$iMakeBatOutputFormat = "json"},
+    iMakeBat[promptFile, outFile, norm["imageDirs"]]];
   proc      = StartProcess[{"cmd", "/c", batFile}];
   startTime = AbsoluteTime[];
 
@@ -11213,6 +11604,7 @@ iClaudeQueryRawNonBlocking[prompt_, timeoutSpec_:Automatic] := Module[
   If[ProcessStatus[proc] === "Running",
     KillProcess[proc];
     Quiet[DeleteFile /@ {batFile, promptFile}];
+    iClaudeCLISyncEmit["error", "Timeout", Round[1000 (AbsoluteTime[] - startTime)]];
     Return["Error: \:30bf\:30a4\:30e0\:30a2\:30a6\:30c8 (" <>
       ToString[Round[timeout]] <> "\:79d2)"]];
 
@@ -11220,10 +11612,11 @@ iClaudeQueryRawNonBlocking[prompt_, timeoutSpec_:Automatic] := Module[
   Quiet[DeleteFile[promptFile]];
 
   If[!FileExistsQ[outFile],
+    iClaudeCLISyncEmit["error", "NoOutput", Round[1000 (AbsoluteTime[] - startTime)]];
     Return["Error: \:51fa\:529b\:30d5\:30a1\:30a4\:30eb\:304c\:751f\:6210\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"]];
   raw = Import[outFile, "Text"];
   Quiet[DeleteFile[outFile]];
-  cleanOutput[stripANSI[raw]]
+  iClaudeCLISyncResultText[raw, Round[1000 (AbsoluteTime[] - startTime)]]
 ];
 
 (* \:30a8\:30e9\:30fc\:5fdc\:7b54\:304b\:3089\:5229\:7528\:5236\:9650\:30fb\:63a5\:7d9a\:4e0d\:53ef\:3092\:691c\:51fa *)
@@ -17701,7 +18094,8 @@ Options[ClaudeQueryAsync] = {
   AutoCellize -> True,
   "TaskClass" -> Automatic,   (* hardening 04 Inc2b *)
   "ResponseFormat" -> Automatic,   (* 2026-09-02: 応答型契約 *)
-  "ResponseFormatRetry" -> 0       (* 内部用: 形式違反の再問合せ回数 *)
+  "ResponseFormatRetry" -> 0,      (* 内部用: 形式違反の再問合せ回数 *)
+  "CallbackOnFailure" -> True      (* 2026-10-20: 見えるノートで失敗しても callback["Error: …"] を 1 回呼ぶ *)
 };
 
 (* ============================================================
@@ -17831,7 +18225,15 @@ ClaudeQueryAsync[prompt_String, callback_, nb_NotebookObject, opts:OptionsPatter
           cb]]];
     iClaudeQueryAsyncCore[promptEff, cbEff, nb, opts]];
 
-iClaudeQueryAsyncCore[prompt_String, callback_, nb_NotebookObject,
+(* 2026-10-20: 画像つきの非同期問い合わせ。ClaudeQuery と同じく {文字列, Image[…], File[path], …}
+   を受け付ける (例: PresentationListener の AskQuestion がスライド画像を渡す)。下の経路は
+   もともとリストを扱える: CLI は iNormalizePrompt が画像を書き出して「添付ファイル:」行と
+   --add-dir で読ませ、課金API 許可なら画像つきで API へ送る (hasMedia)。
+   "ResponseFormat" の検証・再問い合わせは文字列の問い合わせだけ。 *)
+ClaudeQueryAsync[items_List, callback_, nb_NotebookObject, opts:OptionsPattern[]] :=
+  iClaudeQueryAsyncCore[items, callback, nb, opts];
+
+iClaudeQueryAsyncCore[prompt : (_String | _List), callback_, nb_NotebookObject,
     opts:OptionsPattern[ClaudeQueryAsync]] :=
   Block[{$iLMStudioIntegrationsOverride =
       With[{ig = OptionValue[Integrations]},
@@ -17926,6 +18328,8 @@ iClaudeQueryAsyncCore[prompt_String, callback_, nb_NotebookObject,
              \:305d\:306e\:5834\:5408\:306f\:5fdc\:7b54\:672c\:6587\:3092\:81ea\:52d5\:3067\:30bb\:30eb\:5316\:3059\:308b (usage \:306e Print \:4f8b\:3068\:6574\:5408)\:3002
              callback \:304c\:65e2\:306b thunk \:30ea\:30b9\:30c8\:3092\:8fd4\:3059\:9ad8\:5ea6\:306a\:5229\:7528\:306f\:305d\:306e\:307e\:307e\:5c0a\:91cd (\:4e8c\:91cd\:66f8\:304d\:8fbc\:307f\:56de\:907f)\:3002 *)
           If[jid =!= "",
+            (* 2026-10-20: 応答 (または Fallback 経路の失敗) が届いたので失敗通知は不要 *)
+            $iJobFailureNotify = KeyDrop[$iJobFailureNotify, jid];
             NBAccess`NBJobMoveToAnchor[jid];
             $iJobActiveNb = nb2;
             (* userCb \:306e\:623b\:308a\:5024\:3092\:53d6\:5f97\:3059\:308b\:304c\:3001Print \:7b49\:5358\:7d14 callback \:306e
@@ -17961,6 +18365,22 @@ iClaudeQueryAsyncCore[prompt_String, callback_, nb_NotebookObject,
         ]]
     ];
 
+    (* === 2026-10-20: 失敗通知 (iAbortJobNotify の注記) ===
+       wrappedCallback と同じ手順 (アンカーへ移動・Print 抑制・thunk はアンカーで実行) から
+       自動セル化と NBEndJob を抜いたもの。赤字の表示とジョブの終了は NBAbortJob が行う。 *)
+    If[jobId =!= "" && TrueQ[OptionValue["CallbackOnFailure"]],
+      $iJobFailureNotify[jobId] = With[{nb2 = nb, jid = jobId, userCb = callback},
+        Function[msg,
+          Module[{userRet},
+            NBAccess`NBJobMoveToAnchor[jid];
+            $iJobActiveNb = nb2;
+            userRet = Block[{Print}, Print[___] := Null;
+              Quiet @ Check[userCb[msg], Null]];
+            If[ListQ[userRet] && Length[userRet] > 0 &&
+                AllTrue[userRet, (Head[#] === Function) &],
+              Scan[Function[thk, Quiet @ Check[thk[], Null]], userRet]];
+            $iJobActiveNb = None]]]];
+
     (* === \:975e\:540c\:671f\:30c7\:30a3\:30b9\:30d1\:30c3\:30c1 ===
        \:512a\:5148\:9806\:4f4d:
        1. hasMedia (\:8ab2\:91d1API\:8a31\:53ef + \:30e1\:30c7\:30a3\:30a2\:30d5\:30a1\:30a4\:30eb) \[RightArrow] Anthropic API \:30de\:30eb\:30c1\:30e2\:30fc\:30c0\:30eb
@@ -17978,17 +18398,18 @@ iClaudeQueryAsyncCore[prompt_String, callback_, nb_NotebookObject,
         StringQ[modelSpec[[1]]] && ToLowerCase[modelSpec[[1]]] === "claudecode",
         iClaudeQueryAsyncWithProgress[
           prompt, wrappedCallback, nb, {}, jobId, availModels],
-      (* Model \:660e\:793a\:6307\:5b9a (\:8ab2\:91d1 API / lmstudio): API \:7d4c\:7531\:3067\:975e\:540c\:671f *)
+      (* Model \:660e\:793a\:6307\:5b9a (\:8ab2\:91d1 API / lmstudio): API \:7d4c\:7531\:3067\:975e\:540c\:671f
+         (リストの問い合わせは正規化した本文と画像を渡す) *)
       modelSpec =!= Automatic && ListQ[modelSpec] && Length[modelSpec] >= 2,
-        iStartFallbackAsync[prompt, nb, wrappedCallback,
-          {modelSpec}, 1, jobId, OptionValue[Timeout], {}],
+        iStartFallbackAsync[If[StringQ[prompt], prompt, norm["text"]], nb, wrappedCallback,
+          {modelSpec}, 1, jobId, OptionValue[Timeout], If[StringQ[prompt], {}, mediaFiles]],
       (* Automatic: \:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb\:306b\:57fa\:3065\:304f\:30eb\:30fc\:30c6\:30a3\:30f3\:30b0 *)
       useClaudeCode,
         iClaudeQueryAsyncWithProgress[
           prompt, wrappedCallback, nb, {}, jobId, availModels],
       Length[availModels] > 0,
-        iStartFallbackAsync[prompt, nb, wrappedCallback,
-          availModels, 1, jobId, OptionValue[Timeout], {}],
+        iStartFallbackAsync[If[StringQ[prompt], prompt, norm["text"]], nb, wrappedCallback,
+          availModels, 1, jobId, OptionValue[Timeout], If[StringQ[prompt], {}, mediaFiles]],
       (* \:3069\:306e\:30e2\:30c7\:30eb\:3082\:5bfe\:5fdc\:4e0d\:53ef *)
       True,
         NBAccess`NBWriteSlot[jobId, 1,
@@ -17996,6 +18417,14 @@ iClaudeQueryAsyncCore[prompt_String, callback_, nb_NotebookObject,
             " \:306b\:5bfe\:5fdc\:3059\:308b\:30e2\:30c7\:30eb\:304c\:3042\:308a\:307e\:305b\:3093\:3002", "Print",
             FontWeight -> Bold, FontColor -> Red, FontSize -> 11]];
         $iJobActiveNb = None;
+        (* 2026-10-20: 呼び出し元へも知らせる (ジョブを閉じる前に)。隠しノートは
+           上の早期 Return の分岐と同じく callback を直接呼ぶ *)
+        With[{msg = iL["Error: AccessLevel " <> ToString[accessLevel] <>
+              " \:306b\:5bfe\:5fdc\:3059\:308b\:30e2\:30c7\:30eb\:304c\:3042\:308a\:307e\:305b\:3093\:3002",
+            "Error: No model available for AccessLevel " <> ToString[accessLevel] <> "."]},
+          Which[
+            jobId =!= "", iJobFailureNotify[jobId, msg],
+            TrueQ[OptionValue["CallbackOnFailure"]], Quiet @ Check[callback[msg], Null]]];
         NBAccess`NBEndJob[jobId]
     ];
   ]
@@ -19611,7 +20040,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
           textOnly = iStripContinueEvalGuidance @ cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
           If[textOnly =!= "",
             AppendTo[queue, Function[
-              NBAccess`NBWriteCell[nb2, iTeXMathToCell[textOnly, "Text"]]]]];
+              NBAccess`NBWriteCell[nb2, iEvalTextCell[response, textOnly]]]]];
           (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:3092\:500b\:5225\:306b\:30ad\:30e5\:30fc\:306b\:8ffd\:52a0\:3002
              NBWriteSmartCode \:306e ToExpression \:306f\:30b7\:30f3\:30dc\:30eb\:4f5c\:6210\:6642\:306b
              DeclarePackage \:7b49\:306e\:30aa\:30fc\:30c8\:30ed\:30fc\:30c9\:3092\:30c8\:30ea\:30ac\:30fc\:3057\:3066
@@ -21372,7 +21801,7 @@ iContinueEvalImpl[nb_NotebookObject, tag_String, instruction_String,
             Return[]];
           textOnly = iStripContinueEvalGuidance @ cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
           If[textOnly =!= "",
-            NBAccess`NBWriteCell[nb2, iTeXMathToCell[textOnly, "Text"]]];
+            NBAccess`NBWriteCell[nb2, iEvalTextCell[response, textOnly]]];
           blocks = iWriteResponseBlocks[nb2, response, autoEvaluate];
           If[Length[blocks] === 0,
             Module[{fallbackCode, lines},
@@ -30952,7 +31381,7 @@ iHistoryReplay[nb_NotebookObject, entry_Association] :=
       StringTake[task, UpTo[200]]];
     textOnly = iStripContinueEvalGuidance @ cleanMarkdown @ StringTrim @ iStripCodeBlocks[response];
     If[textOnly =!= "",
-      NBAccess`NBWriteCell[nb, iTeXMathToCell[textOnly, "Text"]]];
+      NBAccess`NBWriteCell[nb, iEvalTextCell[response, textOnly]]];
     blocks = iWriteResponseBlocks[nb, response, True];
   ];
 
@@ -40671,11 +41100,16 @@ NBFileTranslate[inputPath_String, outputPath_String,
    セルへのインプレース書き込みのみを行い、thunk リストを返さない。
    そのため ClaudeQueryAsync の「単純 callback → 応答を自動マークダウン展開セル化」
    ヒューリスティックが誤発火し、応答が重複セルとして追加書き込まれる問題を防ぐ。
-   $NBLLMQueryFunc の契約は「応答文字列を callback に渡す」だけで、セル化は含まない。 *)
+   $NBLLMQueryFunc の契約は「応答文字列を callback に渡す」だけで、セル化は含まない。
+   2026-10-20: "CallbackOnFailure" はここでは既定 False (失敗は従来どおり赤字だけ)。
+   SlideWorkflow / documentation の受け取り側に "Error: …" を中身として扱う箇所が残る
+   (SlideGraphRelated が候補を空で上書き等) ため。呼び出し側が明示すればそれが勝つ
+   (OptionValue は先に現れた指定を取る)。 *)
 iNBLLMQueryFuncImpl[prompt_String, callback_, nb_NotebookObject, opts:OptionsPattern[ClaudeCode`ClaudeQueryAsync]] :=
   ClaudeCode`ClaudeQueryAsync[prompt, callback, nb,
     AutoCellize -> False,
-    Sequence @@ FilterRules[{opts}, Except[AutoCellize]]];
+    Sequence @@ FilterRules[{opts}, Except[AutoCellize]],
+    "CallbackOnFailure" -> False];
 
 (* 2026-08-06: NBAccess \:7ba1\:7406\:5909\:6570\:3078\:306e\:76f4\:63a5\:4ee3\:5165\:3092\:3084\:3081\:3001\:767b\:9332 API \:3092\:901a\:3059 *)
 Quiet @ Check[
@@ -45526,7 +45960,7 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
     If[!TrueQ[isAfterDaemon] && textOnly =!= "",
       AppendTo[queue, Function[
         NBAccess`NBWriteCell[nb,
-          iTeXMathToCell[textOnly, "Text"]]]]];
+          iEvalTextCell[response, textOnly]]]]];
     
     (* \:30b3\:30fc\:30c9\:30d6\:30ed\:30c3\:30af\:3092\:500b\:5225\:306b\:30ad\:30e5\:30fc\:306b\:8ffd\:52a0\:ff08\:65e7 evalCallback \:3068\:540c\:3058\:30d1\:30bf\:30fc\:30f3\:ff09
        Phase 20: Runtime \:30de\:30eb\:30c1\:30bf\:30fc\:30f3\:6642\:3001\:6700\:7d42\:30bf\:30fc\:30f3\:304c TextOnly
@@ -47826,81 +48260,144 @@ iCodexStderrFailures[since_?NumericQ, until_?NumericQ] :=
 
 If[! AssociationQ[$iCodexHealthProbeCache], $iCodexHealthProbeCache = <||>];
 
+(* 2026-10-17: SystemDoctor の tick (strixhalo128 の FE カーネル) がこの probe から
+   文字列でも Association でもない値を受け取って ProbeBadResult を出したが、値は捨てられ
+   原因が分からなかった。probe は常に <|"Health" -> "OK"|"Degraded"|"Failing",
+   "ReasonCode" -> _String, ...|> を返す: 本体 iCodexHealthProbeCompute を Catch
+   (タグ付き・タグ無しの両方) で包み、漏れたメッセージは Check で検出して印を付け、
+   形の崩れた値や Throw は Degraded / "ProbeInternalError" (GotHead / Got = 受け取った
+   値の頭部と短い形) に置き換える。Which の条件は TrueQ で包む (条件が True/False 以外
+   だと Which が未評価のまま返る)。キャッシュには形の正しい結果だけを入れ、故障は
+   キャッシュしない (次の呼び出しで取り直す)。Abort は握りつぶさず呼び手へ伝える。 *)
+iCodexHealthResultQ[r_] :=
+  AssociationQ[r] && MemberQ[{"OK", "Degraded", "Failing"}, Lookup[r, "Health", None]] &&
+    StringQ[Lookup[r, "ReasonCode", None]];
+
+iCodexClip[s_String] := If[StringLength[s] > 300, StringTake[s, 297] <> "...", s];
+
+(* 例外を出さず、時間と大きさに上限がある。Short は PageWidth が有限のときだけ省略する
+   (ToString の既定は Infinity) *)
+iCodexShortForm[x_] :=
+  Module[{s},
+    s = Quiet @ Check[
+      TimeConstrained[
+        If[ByteCount[x] > 2*10^6,
+          "<" <> ToString[Head[x], InputForm] <> ", " <> ToString[ByteCount[x]] <> " bytes>",
+          ToString[Short[InputForm[x], 3], OutputForm, PageWidth -> 100]],
+        2, "<format timeout>"],
+      "<unprintable>"];
+    If[! StringQ[s], s = "<unprintable>"];
+    (* 改行は "\n \n>   " の形で来るので、継続記号 ">" を先に外してから空白を詰める *)
+    iCodexClip @ StringTrim @ StringReplace[StringReplace[s, "\n>" -> "\n"], Whitespace -> " "]];
+
+iCodexHealthProbeFault[gotHead_String, got_String, msgs_] :=
+  <|"Health" -> "Degraded", "ReasonCode" -> "ProbeInternalError",
+    "GotHead" -> gotHead, "Got" -> got, "InternalMessages" -> TrueQ[msgs],
+    "Message" -> iL[
+      "Codex \:306e\:5065\:5168\:6027\:30c1\:30a7\:30c3\:30af (ClaudeCodexHealthProbe) \:304c\:5185\:90e8\:3067\:60f3\:5b9a\:5916\:306e\:72b6\:614b\:306b\:306a\:308a\:307e\:3057\:305f (Codex \:306e\:6545\:969c\:3067\:306f\:3042\:308a\:307e\:305b\:3093)\:3002",
+      "The Codex health check (ClaudeCodexHealthProbe) ended in an unexpected state (this is not a Codex failure)."]|>;
+
+iCodexHealthProbeCompute[now_?NumericQ, days_?NumericQ] :=
+  Module[{since, led, ledStart, recent, hist, succ, fails, refused, projects, used, st,
+          verifiedAt, classes},
+    If[$OperatingSystem =!= "Windows",
+      Return[<|"Health" -> "OK", "ReasonCode" -> "NotApplicable"|>]];
+    since = now - days*86400;
+    led = iCodexReadLedger[];
+    If[! ListQ[led], led = {}];
+    (* 数値でない AbsTime が混じると Min が記号のまま残り、iCodexStderrFailures が未評価になる *)
+    ledStart = If[led === {}, now,
+      With[{ts = Select[Lookup[led, "AbsTime", now], NumericQ]},
+        If[ts === {}, now, Min[ts]]]];
+    recent = Select[led, NumericQ[#AbsTime] && #AbsTime >= since &];
+    hist = iCodexStderrFailures[since, ledStart];
+    If[! ListQ[hist], hist = {}];
+    succ = Count[recent, r_ /; r["Outcome"] === "success"];
+    fails = Join[Select[recent, #Outcome === "error" &], hist];
+    refused = Count[recent, r_ /; r["Outcome"] === "refused"];
+    projects = Length @ Select[
+      Quiet @ Check[FileNames["codex_project_*", iCodexResolveWorkingBase[]], {}],
+      Quiet @ Check[AbsoluteTime[FileDate[#, "Creation"]], 0] >= since &];
+    used = TrueQ[succ + Length[fails] + refused + projects > 0];
+    st = iCodexSandboxStatusCached[];
+    (* サンドボックス起因の失敗は、その後に自己テストが通っていれば解決済みとして数えない
+       (ClaudeCodexSandboxSetup[] 直後に「Setup を実行して」と警告し続けないため)。
+       CheckedAt は地方時の ISO 文字列。認証切れ等ほかの原因は検証では直らないので残す。 *)
+    verifiedAt = If[st === "Ready",
+      With[{s = Lookup[Lookup[iCodexSandboxReadState[], $MachineName, <||>], "CheckedAt", None]},
+        If[StringQ[s], Quiet @ Check[AbsoluteTime[s], None], None]], None];
+    If[NumericQ[verifiedAt],
+      fails = Select[fails,
+        ! (MemberQ[{"SandboxRefused", "SandboxNotVerified"}, Lookup[#, "FailureClass"]] &&
+           NumericQ[Lookup[#, "AbsTime"]] && Lookup[#, "AbsTime"] < verifiedAt) &]];
+    (* Lookup[{}, k, d] reads {} as an empty rule list and returns d *)
+    classes = If[fails === {}, <||>,
+      Counts[Replace[Lookup[fails, "FailureClass", "Error"],
+        Except[_String] -> "Error", {1}]]];
+    Which[
+      TrueQ[Length[fails] >= 2 && succ === 0],
+        <|"Health" -> "Failing", "ReasonCode" -> "CodexAllFailing",
+          "Failures" -> Length[fails], "Successes" -> 0,
+          "FailureClasses" -> classes,
+          "FirstFailure" -> DateString[Min[Lookup[fails, "AbsTime"]], "ISODate"],
+          "Message" -> iL[
+            "Codex \:304c\:76f4\:8fd1 " <> ToString[days] <> " \:65e5\:3067 " <>
+              ToString[Length[fails]] <> " \:56de\:5931\:6557\:3057\:3001\:6210\:529f\:304c\:3042\:308a\:307e\:305b\:3093 (" <>
+              StringRiffle[KeyValueMap[#1 <> " " <> ToString[#2] &, classes], ", "] <>
+              "\:3001\:6700\:521d\:306e\:5931\:6557 " <>
+              DateString[Min[Lookup[fails, "AbsTime"]], "ISODate"] <> ")\:3002" <>
+              If[KeyExistsQ[classes, "SandboxRefused"],
+                "ClaudeCodexSandboxSetup[] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002", ""],
+            "Codex failed " <> ToString[Length[fails]] <> " times in the last " <>
+              ToString[days] <> " days with no success (" <>
+              StringRiffle[KeyValueMap[#1 <> " " <> ToString[#2] &, classes], ", "] <>
+              "; first failure " <>
+              DateString[Min[Lookup[fails, "AbsTime"]], "ISODate"] <> ")." <>
+              If[KeyExistsQ[classes, "SandboxRefused"],
+                " Run ClaudeCodexSandboxSetup[].", ""]]|>,
+      used && st === "Failed",
+        <|"Health" -> "Failing", "ReasonCode" -> "CodexSandboxUnavailable",
+          "Message" -> iL[
+            "\:3053\:306e PC \:3067\:306f Codex \:306e\:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9\:304c\:4f7f\:3048\:307e\:305b\:3093 (ClaudeCodexSandboxStatus[] \:3092\:78ba\:8a8d)\:3002",
+            "The Codex sandbox does not work on this PC (see ClaudeCodexSandboxStatus[])."]|>,
+      used && st === "NotVerified",
+        <|"Health" -> "Degraded", "ReasonCode" -> "CodexSandboxNotVerified",
+          "Message" -> iL[
+            "Codex \:3092\:4f7f\:3063\:3066\:3044\:307e\:3059\:304c\:3001\:3053\:306e PC \:306e\:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9\:304c\:672a\:78ba\:8a8d\:3067\:3059 (ClaudeCodexSandboxSetup[] \:3092\:5b9f\:884c)\:3002",
+            "Codex is in use but its sandbox is not verified on this PC (run ClaudeCodexSandboxSetup[])."]|>,
+      True,
+        <|"Health" -> "OK", "ReasonCode" -> "CodexHealthy",
+          "Successes" -> succ, "Failures" -> Length[fails], "Refused" -> refused|>]];
+
 Options[ClaudeCodexHealthProbe] = {"WindowDays" -> 7, "UseCache" -> True};
 ClaudeCodexHealthProbe[opts : OptionsPattern[]] :=
-  Module[{now = AbsoluteTime[], days, since, led, ledStart, recent, hist, succ,
-          fails, refused, projects, used, st, verifiedAt, classes, res},
-    If[TrueQ[OptionValue["UseCache"]] &&
-       NumericQ[Lookup[$iCodexHealthProbeCache, "At", None]] &&
-       now - $iCodexHealthProbeCache["At"] < 600,
-      Return[$iCodexHealthProbeCache["Result"]]];
-    res = Which[
-      $OperatingSystem =!= "Windows",
-        <|"Health" -> "OK", "ReasonCode" -> "NotApplicable"|>,
+  Module[{now = AbsoluteTime[], days = OptionValue["WindowDays"],
+          cache = $iCodexHealthProbeCache, val, res, msgs = False, returned = False,
+          tag = None},
+    If[! (NumericQ[days] && days > 0), days = 7];
+    If[TrueQ[OptionValue["UseCache"]] && AssociationQ[cache] &&
+       NumericQ[Lookup[cache, "At", None]] && now - cache["At"] < 600 &&
+       iCodexHealthResultQ[Lookup[cache, "Result", None]],
+      Return[cache["Result"]]];
+    (* Catch[e, _, f] はタグ付きの Throw だけを取り、タグ無しの Throw[v] は素通しする
+       (WL 15.0 で実測) ので外側の Catch[e] で取る。Check の失敗式は本体が評価し終えて
+       から評価されるので、val には本体の値が残る。 *)
+    res = Catch[
+      Catch[
+        Check[val = iCodexHealthProbeCompute[now, days], msgs = True];
+        returned = True;
+        val,
+        _, Function[{v, t}, tag = {t}; v]]];
+    Which[
+      ! returned,
+        res = iCodexHealthProbeFault["Throw",
+          iCodexClip["Throw[" <> iCodexShortForm[res] <>
+            If[tag === None, "", ", " <> iCodexShortForm[First[tag]]] <> "]"], msgs],
+      iCodexHealthResultQ[res],
+        If[msgs, res = Append[res, "InternalMessages" -> True]];
+        $iCodexHealthProbeCache = <|"At" -> now, "Result" -> res|>,
       True,
-        days = OptionValue["WindowDays"];
-        since = now - days*86400;
-        led = iCodexReadLedger[];
-        ledStart = If[led === {}, now, Min[Lookup[led, "AbsTime", now]]];
-        recent = Select[led, NumericQ[#AbsTime] && #AbsTime >= since &];
-        hist = iCodexStderrFailures[since, ledStart];
-        succ = Count[recent, r_ /; r["Outcome"] === "success"];
-        fails = Join[Select[recent, #Outcome === "error" &], hist];
-        refused = Count[recent, r_ /; r["Outcome"] === "refused"];
-        projects = Length @ Select[
-          Quiet @ Check[FileNames["codex_project_*", iCodexResolveWorkingBase[]], {}],
-          Quiet @ Check[AbsoluteTime[FileDate[#, "Creation"]], 0] >= since &];
-        used = succ + Length[fails] + refused + projects > 0;
-        st = iCodexSandboxStatusCached[];
-        (* サンドボックス起因の失敗は、その後に自己テストが通っていれば解決済みとして数えない
-           (ClaudeCodexSandboxSetup[] 直後に「Setup を実行して」と警告し続けないため)。
-           CheckedAt は地方時の ISO 文字列。認証切れ等ほかの原因は検証では直らないので残す。 *)
-        verifiedAt = If[st === "Ready",
-          With[{s = Lookup[Lookup[iCodexSandboxReadState[], $MachineName, <||>], "CheckedAt", None]},
-            If[StringQ[s], Quiet @ Check[AbsoluteTime[s], None], None]], None];
-        If[NumericQ[verifiedAt],
-          fails = Select[fails,
-            ! (MemberQ[{"SandboxRefused", "SandboxNotVerified"}, Lookup[#, "FailureClass"]] &&
-               NumericQ[Lookup[#, "AbsTime"]] && Lookup[#, "AbsTime"] < verifiedAt) &]];
-        (* Lookup[{}, k, d] reads {} as an empty rule list and returns d *)
-        classes = If[fails === {}, <||>,
-          Counts[Replace[Lookup[fails, "FailureClass", "Error"],
-            Except[_String] -> "Error", {1}]]];
-        Which[
-          Length[fails] >= 2 && succ === 0,
-            <|"Health" -> "Failing", "ReasonCode" -> "CodexAllFailing",
-              "Failures" -> Length[fails], "Successes" -> 0,
-              "FailureClasses" -> classes,
-              "FirstFailure" -> DateString[Min[Lookup[fails, "AbsTime"]], "ISODate"],
-              "Message" -> iL[
-                "Codex \:304c\:76f4\:8fd1 " <> ToString[days] <> " \:65e5\:3067 " <>
-                  ToString[Length[fails]] <> " \:56de\:5931\:6557\:3057\:3001\:6210\:529f\:304c\:3042\:308a\:307e\:305b\:3093 (" <>
-                  StringRiffle[KeyValueMap[#1 <> " " <> ToString[#2] &, classes], ", "] <>
-                  "\:3001\:6700\:521d\:306e\:5931\:6557 " <>
-                  DateString[Min[Lookup[fails, "AbsTime"]], "ISODate"] <> ")\:3002" <>
-                  If[KeyExistsQ[classes, "SandboxRefused"],
-                    "ClaudeCodexSandboxSetup[] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002", ""],
-                "Codex failed " <> ToString[Length[fails]] <> " times in the last " <>
-                  ToString[days] <> " days with no success (" <>
-                  StringRiffle[KeyValueMap[#1 <> " " <> ToString[#2] &, classes], ", "] <>
-                  "; first failure " <>
-                  DateString[Min[Lookup[fails, "AbsTime"]], "ISODate"] <> ")." <>
-                  If[KeyExistsQ[classes, "SandboxRefused"],
-                    " Run ClaudeCodexSandboxSetup[].", ""]]|>,
-          used && st === "Failed",
-            <|"Health" -> "Failing", "ReasonCode" -> "CodexSandboxUnavailable",
-              "Message" -> iL[
-                "\:3053\:306e PC \:3067\:306f Codex \:306e\:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9\:304c\:4f7f\:3048\:307e\:305b\:3093 (ClaudeCodexSandboxStatus[] \:3092\:78ba\:8a8d)\:3002",
-                "The Codex sandbox does not work on this PC (see ClaudeCodexSandboxStatus[])."]|>,
-          used && st === "NotVerified",
-            <|"Health" -> "Degraded", "ReasonCode" -> "CodexSandboxNotVerified",
-              "Message" -> iL[
-                "Codex \:3092\:4f7f\:3063\:3066\:3044\:307e\:3059\:304c\:3001\:3053\:306e PC \:306e\:30b5\:30f3\:30c9\:30dc\:30c3\:30af\:30b9\:304c\:672a\:78ba\:8a8d\:3067\:3059 (ClaudeCodexSandboxSetup[] \:3092\:5b9f\:884c)\:3002",
-                "Codex is in use but its sandbox is not verified on this PC (run ClaudeCodexSandboxSetup[])."]|>,
-          True,
-            <|"Health" -> "OK", "ReasonCode" -> "CodexHealthy",
-              "Successes" -> succ, "Failures" -> Length[fails], "Refused" -> refused|>]];
-    $iCodexHealthProbeCache = <|"At" -> now, "Result" -> res|>;
+        res = iCodexHealthProbeFault[iCodexShortForm[Head[res]], iCodexShortForm[res], msgs]];
     res];
 
 (* NOTE (2026-05-27): Codex model-catalog discovery was moved to
