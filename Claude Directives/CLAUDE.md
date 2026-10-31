@@ -145,8 +145,8 @@
 - パッケージに関する質問（変更でなく情報提供）には、ドキュメント参照ルールに従い、docs があればそれを先に参照する。
 - パッケージの Paclet 変換には `ClaudeConvertToPaclet["パッケージ名"]` を使用する。
 - Claude Code CLI のスラッシュコマンドは `ClaudeCommand["/command"]` で実行できる。
-- NBAccess 分離原則の検証には `ClaudeCheckSeparation["パッケージ名"]` を使用する。
-  - 違反の修正には `ClaudeFixSeparation["パッケージ名"]` を使用する。
+- NBAccess 分離原則・認証情報・プライバシー/アクセスレベルの検査には `ClaudeCheckSeparation["パッケージ名"]` を使用する (中身は `NBAccess`NBAuditPackageSource`)。
+  - 結果の確認と修正は `ClaudeSeparationView["パッケージ名"]` (違反ごとの修正案・問題なしの記録)。`ClaudeFixSeparation["パッケージ名"]` はファイル全文を LLM に書き直させる旧来の修正で、通常は使わない。詳細は `skills/nbaccess-separation-check`。
   - `$NBSeparationIgnoreList` に登録されたパッケージ（NBAccess, NotebookExtensions）は検査対象外。
 - ドキュメント生成 `ClaudeCreateDocumentation` はリミット到達時に自動リトライし、再実行で未生成分のみ続行する。
 - `_info/design/` フォルダが存在すれば、README の「設計思想」セクション生成時に参考にする（優先度: docs > コード > design メモ）。

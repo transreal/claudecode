@@ -1721,21 +1721,12 @@ $ClaudeTestModel::usage =
   "\:5225\:30e2\:30c7\:30eb\:3067\:5ba2\:89b3\:7684\:306b\:691c\:8a3c\:3059\:308b\:305f\:3081\:306b\:5909\:66f4\:53ef\:80fd\:3002\n" <>
   "\:4f8b: $ClaudeTestModel = \"claude-sonnet-4-6\"";
 ClaudeCheckSeparation::usage =
-  "ClaudeCheckSeparation[target] \:306f target \:306e\:30b3\:30fc\:30c9\:304c NBAccess \:306e\:5206\:96e2\:539f\:5247\:306b\n" <>
-  "\:9055\:53cd\:3057\:3066\:3044\:308b\:7b87\:6240\:3092\:30ea\:30b9\:30c8\:30a2\:30c3\:30d7\:3059\:308b\:3002\n" <>
-  "target: \:30d5\:30a1\:30a4\:30eb\:30d1\:30b9 | $packageDirectory \:306e .wl \:540d | \:30d1\:30af\:30ec\:30c3\:30c8\:540d\:3002\n" <>
-  "\:691c\:67fb\:5bfe\:8c61 (\:9759\:7684\:8d70\:67fb + LLM\:5224\:5b9a):\n" <>
-  "  a. SystemCredential\:76f4\:63a5\:5229\:7528\n" <>
-  "  b. CellObject\:76f4\:63a5\:64cd\:4f5c (NotebookWrite/NotebookRead/CellGroupData\:76f4\:63a5\:69cb\:7bc9)\n" <>
-  "  c. CellEpilog/CellProlog/NotebookEventActions\:76f4\:63a5\:64cd\:4f5c\n" <>
-  "  d. NBAccess`Private`\:95a2\:6570\:547c\:3073\:51fa\:3057\n" <>
-  "  e. NBAccess\:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:76f4\:63a5\:66f4\:65b0\n" <>
-  "  f. EvaluationCell[]/CellPrint[]/SetSelectedNotebook[]\:76f4\:63a5\:4f7f\:7528\n" <>
-  "  g. CurrentValue/SetOptions\:306b\:3088\:308bTaggingRules/CellTags/CellEpilog\:5c5e\:6027\:76f4\:63a5\:30a2\:30af\:30bb\:30b9\n" <>
-  "  h. CellObject\:306e\:516c\:958bAPI\:30fb\:623b\:308a\:5024\:30fb\:72b6\:614b\:4fdd\:6301\:3078\:306e\:6f0f\:6d29\n" <>
-  "  i. SelectionEvaluate/FrontEndTokenExecute\:7b49FE\:72b6\:614b\:64cd\:4f5c\n" <>
-  "  j. NBAccess\:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 (AppendTo/AssociateTo\:7b49)\n" <>
-  "$ClaudeTestModel \:306e\:30e2\:30c7\:30eb\:3067\:691c\:67fb\:3059\:308b\:3002\n" <>
+  "ClaudeCheckSeparation[target] \:306f target \:306e\:30d1\:30c3\:30b1\:30fc\:30b8\:30bd\:30fc\:30b9\:3092 NBAccess`NBAuditPackageSource (\:69cb\:6587\:6728) \:3067\:691c\:67fb\:3057\:3001\n" <>
+  "NBAccess \:5206\:96e2 (SEP-)\:30fb\:8a8d\:8a3c\:60c5\:5831 (CRED-)\:30fb\:30d7\:30e9\:30a4\:30d0\:30b7\:30fc\:30ec\:30d9\:30eb (PRIV-)\:30fb\:30a2\:30af\:30bb\:30b9\:30ec\:30d9\:30eb (ACC-) \:306e\:898f\:5247\:9055\:53cd\:3092\:8868\:793a\:3057\:3066\:8fd4\:3059\:3002\n" <>
+  "target: \:30d1\:30c3\:30b1\:30fc\:30b8\:540d (\:4e3b\:30bd\:30fc\:30b9 + \:88dc\:52a9\:30e2\:30b8\:30e5\:30fc\:30eb) | .wl \:30d5\:30a1\:30a4\:30eb\:30d1\:30b9 | \:305d\:306e\:30ea\:30b9\:30c8 | All ($packageDirectory \:76f4\:4e0b\:306e\:5168 .wl)\:3002\n" <>
+  "LLM \:306f\:4f7f\:308f\:306a\:3044\:3002\:30bd\:30fc\:30b9\:306b waiver (:PolicyWaiver: \:30b3\:30e1\:30f3\:30c8) \:306e\:4ed8\:3044\:305f\:691c\:51fa\:306f\:542b\:3081\:306a\:3044\:3002\n" <>
+  "\:623b\:308a\:5024: {<|\"file\" -> path, \"violations\" -> {<|\"line\", \"code\", \"violation\" (\:898f\:5247 ID), \"description\", \"severity\"|>..}|>..}\n" <>
+  "\:8868\:3067\:78ba\:8a8d\:30fb\:4fee\:6b63\:3059\:308b\:306b\:306f ClaudeSeparationView[target]\:3002\:898f\:5247\:306e\:4e00\:89a7\:306f NBAccess`NBAuditPackageSourceRules[]\:3002\n" <>
   "\:4f8b: ClaudeCheckSeparation[\"claudecode\"]\n" <>
   "\:4f8b: ClaudeCheckSeparation[\"C:\\\\path\\\\to\\\\file.wl\"]";
 ClaudeFixSeparation::usage =
@@ -6217,11 +6208,12 @@ If[!ValueQ[ClaudeCode`$ClaudeCellOutputProvider],
 If[ClaudeCode`$ClaudeCellInputProvider === None &&
    Names["SourceVault`SourceVaultCellInput"] =!= {},
   ClaudeCode`$ClaudeCellInputProvider =
-    Symbol["SourceVault`SourceVaultCellInput"]];
+    (* Symbol[Identity[...]], not a literal Symbol["Ctx`name"]: a literal lookup that once came back unevaluated stays unevaluated on every later call (WL 15, 2026-10-30) *)
+    Symbol[Identity["SourceVault`SourceVaultCellInput"]]];
 If[ClaudeCode`$ClaudeCellOutputProvider === None &&
    Names["SourceVault`SourceVaultCellOutput"] =!= {},
   ClaudeCode`$ClaudeCellOutputProvider =
-    Symbol["SourceVault`SourceVaultCellOutput"]];
+    Symbol[Identity["SourceVault`SourceVaultCellOutput"]]];
 
 (* 既定の externalizable head を「不足分だけ」補充する。
    旧実装は If[! AssociationQ] でのみ初期化していたため、パッケージが既に
@@ -7074,11 +7066,28 @@ iClaudeFEResponsiveQ[] :=
    2026-10-10: claudecode 自身のパレットボタンも同じ穴を持っていた。「☁」が開いている 73MB のデッキを
    NotebookSave → SourceVaultIndexNotebook (ForceReindex) で索引し直す間、NBFileSpec が FE 経由で全セルを
    読み、そこへ probe が重なって止まった。SourceVault`$SourceVaultRealtimeHoldFE の定義は SlideWorkflow が
-   持つので上書きせず、claudecode は自前の数 (iClaudeHoldFE) を持ち、ここで併せて見る *)
+   持つので上書きせず、claudecode は自前の数 (iClaudeHoldFE) を持ち、ここで併せて見る。
+   2026-10-30: 旗は iClaudeWeakValue で名前から引く。右辺に直書きした
+   Symbol["SourceVault`..."] は一度未評価で返ると固まり、以後ずっと「塞がっていない」に
+   なる (下の注)。引けなかった周回は塞がっているとみなして見送る *)
+(* 名前で値を引く (記号は作らない)。名前は引数で渡し、Symbol[...] を呼び出しごとに組み立て直す:
+   定義の右辺に Symbol["Ctx`x"] と直に書くと、その部分式は呼び出しをまたいで共有され、一度でも
+   未評価で返ると「評価済み」の印が付いて、以後ずっと未評価のまま返る (WL 15.0 で実測。
+   引数のある定義や Module の中でも同じ。Update[] で外れる)。2026-10-30 strixhalo128 の FE
+   カーネルで、SystemDoctor の Codex probe がこれで 16:02 から再起動まで固まった。
+   名前が無ければ Missing["NoSymbol"]、Symbol[] が評価されなければ Missing["Unresolved"] *)
+iClaudeWeakValue[name_String] :=
+  If[! NameQ[name], Missing["NoSymbol"],
+    With[{v = Symbol[name]},
+      If[MatchQ[Unevaluated[v], HoldPattern[Symbol[_String]]], Missing["Unresolved"], v]]];
+(* Symbol[name] そのもの (無ければ作る・値があれば値になる、も同じ)。他パッケージの記号を名前で
+   引く箇所は、直書きの Symbol["Ctx`f"] でなくこれを使う: 名前を引数で渡すので、一度失敗しても
+   次の呼び出しでは引き直す (上の注)。2026-10-30 に claudecode.wl の 24 か所を置き換えた *)
+iClaudeSymbolByName[name_String] := Symbol[name];
 iClaudeFEHeldExternallyQ[] :=
   iClaudeFEHeldQ[] ||
-    (NameQ["SourceVault`$SourceVaultRealtimeHoldFE"] &&
-      TrueQ[Quiet[Symbol["SourceVault`$SourceVaultRealtimeHoldFE"]]]);
+    With[{v = Quiet[iClaudeWeakValue["SourceVault`$SourceVaultRealtimeHoldFE"]]},
+      TrueQ[v] || v === Missing["Unresolved"]];
 
 (* パレットボタン (Method -> "Queued") の処理を包む。SlideWorkflow の iSWHoldFE と同じ形:
    数は WithCleanup で必ず戻り (Abort でも)、上限 3600 秒は「カーネルを落とした」ときの保険。
@@ -14634,10 +14643,10 @@ ClaudeUsageReport[OptionsPattern[]] := Module[
     FileNames["*.jsonl", iClaudeDiagSpoolDir[]], {}];
   (* 2026-07-09 fix: DownValues[Symbol[..]] は HoldAll で機能しない *)
   If[Names["SourceVault`Private`iSVDiagLogPath"] =!= {} &&
-     With[{sym = Symbol["SourceVault`Private`iSVDiagLogPath"]},
+     With[{sym = iClaudeSymbolByName["SourceVault`Private`iSVDiagLogPath"]},
        Length[DownValues[sym]]] > 0,
     With[{p = Quiet @ Check[
-        Symbol["SourceVault`Private`iSVDiagLogPath"][], $Failed]},
+        iClaudeSymbolByName["SourceVault`Private`iSVDiagLogPath"][], $Failed]},
       If[StringQ[p] && FileExistsQ[p], AppendTo[files, p]]]];
   lines = Flatten[Quiet @ Check[
       Select[StringTrim /@ StringSplit[
@@ -16500,7 +16509,7 @@ iClaudeTaskKill[task_Association] :=
       "svasync",   With[{wid = Lookup[task, "Key", ""]},
         If[StringQ[wid] && wid =!= "" &&
            Length[Names["ClaudeOrchestrator`Workflow`ClaudeCancelWorkflow"]] > 0,
-          Quiet @ Check[Symbol["ClaudeOrchestrator`Workflow`ClaudeCancelWorkflow"][wid], Null]]],
+          Quiet @ Check[iClaudeSymbolByName["ClaudeOrchestrator`Workflow`ClaudeCancelWorkflow"][wid], Null]]],
       _, Null],
     "Kernel", With[{ker = Lookup[task, "Kernel", None]},
       If[ker =!= None, Quiet @ Check[CloseKernels[ker], Null]]],
@@ -19371,7 +19380,7 @@ iWriteResponseBlocks[nb_NotebookObject, response_String, autoEvaluate_:True] :=
                   aturn = ClaudeCode`$iClaudeEvalAutoSaveTurn},
             If[StringQ[atask] && StringQ[aturn] &&
                Length[Names["SourceVault`SourceVaultAutoSaveLastPrompt"]] > 0,
-              Symbol["SourceVault`SourceVaultAutoSaveLastPrompt"][atask,
+              iClaudeSymbolByName["SourceVault`SourceVaultAutoSaveLastPrompt"][atask,
                 "TurnId" -> aturn,
                 "ExprString" -> ClaudeCode`$ClaudeEvalLastProposedExprString]]],
           Null];
@@ -20141,7 +20150,7 @@ iClaudeEvalImpl[nb_NotebookObject, tag_String, task_String, imageDirs_List:{},
                       aturn = ClaudeCode`$iClaudeEvalAutoSaveTurn},
                 If[StringQ[atask] && StringQ[aturn] &&
                    Length[Names["SourceVault`SourceVaultAutoSaveLastPrompt"]] > 0,
-                  Symbol["SourceVault`SourceVaultAutoSaveLastPrompt"][atask,
+                  iClaudeSymbolByName["SourceVault`SourceVaultAutoSaveLastPrompt"][atask,
                     "TurnId" -> aturn,
                     "ExprString" -> ClaudeCode`$ClaudeEvalLastProposedExprString]]],
               Null]]];
@@ -20649,9 +20658,9 @@ iClaudeEvalExtractAccessLevel[___] := None;
 iClaudeEvalExtractScope[task_String] :=
   Module[{},
     Which[
-      StringContainsQ[task, "$onWork"], Quiet @ Symbol["Global`$onWork"],
+      StringContainsQ[task, "$onWork"], Quiet @ iClaudeSymbolByName["Global`$onWork"],
       StringContainsQ[task, "$packageDirectory"],
-        Quiet @ Symbol["Global`$packageDirectory"],
+        Quiet @ iClaudeSymbolByName["Global`$packageDirectory"],
       True, Automatic
     ]
   ];
@@ -20673,7 +20682,7 @@ iClaudeEvalExtractMailbox[task_String] :=
     known = Quiet @ Check[
       If[Names["SourceVault`SourceVaultMailAvailableShards"] =!= {},
         DeleteDuplicates @ Cases[
-          Symbol["SourceVault`SourceVaultMailAvailableShards"][All],
+          iClaudeSymbolByName["SourceVault`SourceVaultMailAvailableShards"][All],
           {mb_String, _} :> mb],
         {}],
       {}];
@@ -20772,7 +20781,7 @@ iClaudeEvalNaturalAct[action_String, task_String, optsList_List] :=
            definitions, so the DownValues check stays essential). *)
         agendaLoaded =
           Names["SourceVault`SourceVaultRoutineAgendaView"] =!= {} &&
-          With[{sym = Symbol["SourceVault`SourceVaultRoutineAgendaView"]},
+          With[{sym = iClaudeSymbolByName["SourceVault`SourceVaultRoutineAgendaView"]},
             Length[DownValues[sym]]] > 0;
         result = Which[
           (* fail-closed: no agenda -> refuse, never unrestricted data *)
@@ -20793,7 +20802,7 @@ iClaudeEvalNaturalAct[action_String, task_String, optsList_List] :=
                though the view had rendered fine. Quiet keeps the output
                clean; only a genuinely failed VALUE degrades to $Failed. *)
             Module[{v = Quiet[
-                Symbol["SourceVault`SourceVaultRoutineAgendaView"][
+                iClaudeSymbolByName["SourceVault`SourceVaultRoutineAgendaView"][
                   Quantity[periodDays, "Days"],
                   (* option symbols match by NAME across contexts (verified:
                      OptionValue/FilterRules), so our own PrivacySpec symbol
@@ -20805,7 +20814,7 @@ iClaudeEvalNaturalAct[action_String, task_String, optsList_List] :=
                  MatchQ[v, _Failure], $Failed, v]],
           True,
             Quiet @ Check[
-              Symbol["SourceVault`SourceVaultUpcomingSchedule"][
+              iClaudeSymbolByName["SourceVault`SourceVaultUpcomingSchedule"][
                 "Scope" -> scope,
                 "Period" -> Quantity[periodDays, "Days"],
                 "IncludeOverdue" -> True,
@@ -20841,7 +20850,7 @@ iClaudeEvalNaturalAct[action_String, task_String, optsList_List] :=
             "[Natural Dispatch] refresh_summary: Scope=" <> ToString[scope],
             Italic, RGBColor[0.2, 0.5, 0.7]]]];
         result = Quiet @ Check[
-          Symbol["SourceVault`SourceVaultRefreshAllSummaries"][
+          iClaudeSymbolByName["SourceVault`SourceVaultRefreshAllSummaries"][
             "Scope" -> scope,
             "Recursive" -> True,
             "FallbackToCloud" -> "Deny"],
@@ -20881,11 +20890,11 @@ iClaudeEvalNaturalAct[action_String, task_String, optsList_List] :=
               <|"Submitted" -> False|>];
             If[! (AssociationQ[spawnR] && TrueQ[Lookup[spawnR, "Submitted", False]]),
               Quiet @ Check[
-                Symbol["SourceVault`SourceVaultMailFetchNew"][mbox, "Period" -> "Latest"],
+                iClaudeSymbolByName["SourceVault`SourceVaultMailFetchNew"][mbox, "Period" -> "Latest"],
                 Null]]]];
         result = Quiet @ If[StringQ[mbox] && mbox =!= "",
-          Symbol["SourceVault`SourceVaultMailView"]["", "MBox" -> mbox],
-          Symbol["SourceVault`SourceVaultMailView"][""]];
+          iClaudeSymbolByName["SourceVault`SourceVaultMailView"]["", "MBox" -> mbox],
+          iClaudeSymbolByName["SourceVault`SourceVaultMailView"][""]];
         (* fall back to the LLM only when MailView produced no renderable result
            (unevaluated head / $Failed / Missing), not merely a message *)
         If[result === $Failed || result === Null || MissingQ[result] ||
@@ -31254,7 +31263,7 @@ iDetachCleanupIndex[cachedPath_String] :=
      StringMatchQ[cachedPath, __ ~~ ".pdf", IgnoreCase -> True] &&
      MemberQ[$Packages, "PDFIndex`"] &&
      Length[Names["PDFIndex`pdfDeleteIndex"]] > 0,
-    With[{deleteIndex = Symbol["PDFIndex`pdfDeleteIndex"]},
+    With[{deleteIndex = iClaudeSymbolByName["PDFIndex`pdfDeleteIndex"]},
       Quiet @ deleteIndex[cachedPath]]];
 
 (* \:30c7\:30d5\:30a9\:30eb\:30c8\:30bb\:30c3\:30b7\:30e7\:30f3\:304b\:3089\:30c7\:30bf\:30c3\:30c1 *)
@@ -31726,7 +31735,7 @@ iCycleNotebookCloudState[] :=
     (* (5) SourceVault \:304c\:30ed\:30fc\:30c9\:6e08\:307f\:306a\:3089 mtime cache \:3092\:8d8a\:3048\:308b *)
     Quiet @ Check[
       If[Length[Names["SourceVault`SourceVaultIndexNotebook"]] > 0,
-        Symbol["SourceVault`SourceVaultIndexNotebook"][path,
+        iClaudeSymbolByName["SourceVault`SourceVaultIndexNotebook"][path,
           "ForceReindex" -> True]],
       Null];
 
@@ -33565,7 +33574,7 @@ iSpecImplLegacyTickOne[jid_, job0_] :=
 iSpecImplSessionDrain[wid_] := Module[{n = 0},
   While[n < 24 &&
     Lookup[Quiet @ Check[
-      Symbol["ClaudeOrchestrator`Workflow`ClaudeStepWorkflow"][wid],
+      iClaudeSymbolByName["ClaudeOrchestrator`Workflow`ClaudeStepWorkflow"][wid],
       <||>], "Status", None] === "Fired", n++];
   n];
 
@@ -35145,15 +35154,11 @@ ClaudeCommand[command_String] :=
    ============================================================ *)
 
 (* \:5206\:96e2\:691c\:8a3c\:7528\:306e\:5185\:90e8\:30e2\:30c7\:30eb\:3067\:30af\:30a8\:30ea\:5b9f\:884c *)
+(* 2026-10-31: Block \:3067\:5207\:308a\:66ff\:3048\:308b\:3002\:4ee5\:524d\:306f\:4ee3\:5165\:3057\:3066\:623b\:3057\:3066\:3044\:305f\:306e\:3067\:3001\:4e2d\:65ad\:3059\:308b\:3068 $ClaudeModel \:304c\:623b\:3089\:306a\:304b\:3063\:305f *)
 iSeparationQuery[prompt_String] :=
-  Module[{savedModel, result},
-    savedModel = $ClaudeModel;
-    $ClaudeModel = If[StringQ[$ClaudeTestModel] && $ClaudeTestModel =!= "",
-      $ClaudeTestModel, savedModel];
-    result = iClaudeQueryRaw[prompt];
-    $ClaudeModel = savedModel;
-    result
-  ];
+  Block[{$ClaudeModel = If[StringQ[$ClaudeTestModel] && $ClaudeTestModel =!= "",
+      $ClaudeTestModel, $ClaudeModel]},
+    iClaudeQueryRaw[prompt]];
 
 (* \:30bf\:30fc\:30b2\:30c3\:30c8\:89e3\:6c7a: \:30d5\:30a1\:30a4\:30eb\:30d1\:30b9 or \:30d1\:30c3\:30b1\:30fc\:30b8\:540d \[RightArrow] {\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:30ea\:30b9\:30c8, \:30d1\:30c3\:30b1\:30fc\:30b8\:540d or None} *)
 iResolveSeparationTarget[target_String] :=
@@ -35194,301 +35199,84 @@ iSeparationDocsContext[packageName_String] :=
       Take[docFiles, UpTo[3]]]
   ];
 
-(* ============================================================
-   AccessLevel \:5909\:6570\:4f7f\:7528\:306e\:5f37\:5236\:66f8\:304d\:63db\:3048
-   "AccessLevel" -> \:5909\:6570\:540d \:3092 "AccessLevel" -> 0.5 \:306b\:5f37\:5236\:7f6e\:63db\:3059\:308b\:3002
-   ClaudeFixSeparation \:3067 LLM \:4fee\:6b63\:306e\:524d\:5f8c\:306b\:9069\:7528\:3057\:3001
-   \:5909\:6570\:306b\:3088\:308b AccessLevel \:6307\:5b9a\:3092\:78ba\:5b9f\:306b\:6392\:9664\:3059\:308b\:3002
-   ============================================================ *)
-iForceAccessLevelLiterals[code_String] :=
-  Module[{result, count = 0},
-    result = StringReplace[code,
-      RegularExpression["(\"AccessLevel\"\\s*->\\s*)[a-zA-Z$][a-zA-Z0-9$]*"] :>
-        "${1}0.5"];
-    count = StringCount[code,
-      RegularExpression["\"AccessLevel\"\\s*->\\s*[a-zA-Z$][a-zA-Z0-9$]*"]];
-    If[count > 0,
-      Print[iL[
-        "\:26a0\:fe0f AccessLevel \:306e\:5909\:6570\:4f7f\:7528\:3092 " <> ToString[count] <> " \:7b87\:6240\:3001\:5f37\:5236\:7684\:306b 0.5 \:306b\:66f8\:304d\:63db\:3048\:307e\:3057\:305f",
-        "\:26a0\:fe0f Forced " <> ToString[count] <> " variable AccessLevel(s) to 0.5"]]];
-    result
-  ];
+(* 2026-10-31: iForceAccessLevelLiterals (AccessLevel \:5909\:6570\:3092 0.5 \:306b\:5f37\:5236\:7f6e\:63db) \:3092\:5ec3\:6b62\:3002
+   \:7f6e\:63db\:5148 "${1}0.5" \:304c WL \:3067\:306f\:5f8c\:65b9\:53c2\:7167\:306b\:306a\:3089\:305a\:30b3\:30fc\:30c9\:3092\:58ca\:3057\:3001\:4e00\:5f8b 0.5 \:5316\:306f
+   rule 107 \:7b49\:306e\:8a08\:7b97\:5024 AccessLevel \:3092\:4e0a\:3052\:308b\:65b9\:5411\:306b\:3082\:50cd\:304f\:305f\:3081\:3002AccessLevel /
+   PrivacyLevel \:306e\:5024\:306f\:81ea\:52d5\:4fee\:6b63\:3057\:306a\:3044\:3002
+   \:8a73\:7d30: \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8/NBAccess_policy_lint_redesign_proposal_v0_1.md *)
 
-(* ============================================================
-   \:9759\:7684\:30d1\:30bf\:30fc\:30f3\:8d70\:67fb: \:6b63\:898f\:8868\:73fe\:30d9\:30fc\:30b9\:306e\:7981\:6b62\:30b7\:30f3\:30dc\:30eb\:691c\:51fa
-   LLM \:5224\:5b9a\:306e\:524d\:6bb5\:3067\:78ba\:5b9f\:306b\:9055\:53cd\:5019\:88dc\:3092\:62fe\:3044\:3001\:507d\:9670\:6027\:3092\:6e1b\:3089\:3059\:3002
-   ============================================================ *)
-iStaticSeparationScan[source_String, fileName_String] :=
-  Module[{lines, results = {}, patterns, nbAccessWl, notebookExtWl},
-    (* NBAccess.wl / NotebookExtensions.wl \:81ea\:4f53\:306f\:691c\:67fb\:5bfe\:8c61\:5916 *)
-    nbAccessWl = StringMatchQ[fileName, "*NBAccess*", IgnoreCase -> True];
-    notebookExtWl = StringMatchQ[fileName, "*NotebookExtensions*", IgnoreCase -> True];
-    If[nbAccessWl || notebookExtWl, Return[{}]];
-    lines = StringSplit[source, "\n"];
-    (* \:7981\:6b62\:30d1\:30bf\:30fc\:30f3\:5b9a\:7fa9: {regex, violationCategory, description} *)
-    patterns = {
-      (* --- 1. EvaluationCell / CellPrint / SetSelectedNotebook \:7981\:6b62 --- *)
-      {"EvaluationCell\\s*\\[", "f",
-       "EvaluationCell[] \:76f4\:63a5\:4f7f\:7528 (NBBeginJobAtEvalCell/NBWriteAnchorAfterEvalCell/NBParentNotebookOfCurrentCell \:3092\:4f7f\:7528)"},
-      {"CellPrint\\s*\\[", "f",
-       "CellPrint \:76f4\:63a5\:4f7f\:7528 (NBWriteCell/NBWritePrintNotice \:3092\:4f7f\:7528)"},
-      {"SetSelectedNotebook\\s*\\[", "f",
-       "SetSelectedNotebook \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
-      {"SelectedCells\\s*\\[", "f",
-       "SelectedCells \:76f4\:63a5\:4f7f\:7528 (NBSelectedCellIndices \:3092\:4f7f\:7528)"},
-      {"ParentNotebook\\s*\\[\\s*EvaluationCell", "f",
-       "ParentNotebook[EvaluationCell[]] \:76f4\:63a5\:4f7f\:7528 (NBParentNotebookOfCurrentCell \:3092\:4f7f\:7528)"},
+(* 2026-10-31 (\:518d\:8a2d\:8a08 Phase 2): \:884c\:5358\:4f4d\:306e\:6b63\:898f\:8868\:73fe\:8d70\:67fb iStaticSeparationScan \:3068\:3001\:30d5\:30a1\:30a4\:30eb\:5168\:6587\:3092 LLM \:306b
+   \:9001\:308b\:5224\:5b9a\:6bb5\:968e\:3092\:5ec3\:6b62\:3057\:3001NBAccess`NBAuditPackageSource (\:69cb\:6587\:6728\:30d9\:30fc\:30b9) \:306b\:7f6e\:304d\:63db\:3048\:305f\:3002
+   \:8a73\:7d30: \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8/NBAccess_policy_lint_redesign_proposal_v0_1.md *)
 
-      (* --- 2. CurrentValue/SetOptions \:306b\:3088\:308b\:5c5e\:6027\:76f4\:64cd\:4f5c\:7981\:6b62 --- *)
-      {"CurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*TaggingRules", "g",
-       "CurrentValue[..., TaggingRules] \:76f4\:63a5\:4f7f\:7528 (NBCellGetTaggingRule/NBGetConfidentialTag \:3092\:4f7f\:7528)"},
-      {"AbsoluteCurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*TaggingRules", "g",
-       "AbsoluteCurrentValue[..., TaggingRules] \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
-      {"SetOptions\\s*\\[[^,]+,\\s*TaggingRules", "g",
-       "SetOptions[..., TaggingRules -> ...] \:76f4\:63a5\:4f7f\:7528 (NBCellSetOptions \:3092\:4f7f\:7528)"},
-      {"CurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*CellTags", "g",
-       "CurrentValue[..., CellTags] \:76f4\:63a5\:4f7f\:7528 (NBCellIndicesByTag \:3092\:4f7f\:7528)"},
-      {"SetOptions\\s*\\[[^,]+,\\s*CellTags", "g",
-       "SetOptions[..., CellTags -> ...] \:76f4\:63a5\:4f7f\:7528 (NBCellSetOptions \:3092\:4f7f\:7528)"},
-      {"CurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*CellEpilog", "g",
-       "CurrentValue[..., CellEpilog] \:76f4\:63a5\:4f7f\:7528 (NBInstallCellEpilog/NBCellEpilogInstalledQ \:3092\:4f7f\:7528)"},
-      {"AbsoluteCurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*CellEpilog", "g",
-       "AbsoluteCurrentValue[..., CellEpilog] \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
-      {"SetOptions\\s*\\[[^,]+,\\s*CellEpilog", "g",
-       "SetOptions[..., CellEpilog ...] \:76f4\:63a5\:4f7f\:7528 (NBInstallConfidentialEpilog \:3092\:4f7f\:7528)"},
-      {"CurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*CellProlog", "g",
-       "CurrentValue[..., CellProlog] \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
-      {"SetOptions\\s*\\[[^,]+,\\s*CellProlog", "g",
-       "SetOptions[..., CellProlog ...] \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
-      {"CurrentValue\\s*\\[[^,]+,\\s*\\{?\\s*NotebookEventActions", "g",
-       "CurrentValue[..., NotebookEventActions] \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
-      {"SetOptions\\s*\\[[^,]+,\\s*NotebookEventActions", "g",
-       "SetOptions[..., NotebookEventActions ...] \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
+(* \:691c\:67fb\:5bfe\:8c61\:306e .wl \:30d5\:30a1\:30a4\:30eb\:3002\:30d1\:30c3\:30b1\:30fc\:30b8\:540d -> \:4e3b\:30bd\:30fc\:30b9 + \:88dc\:52a9\:30e2\:30b8\:30e5\:30fc\:30eb (<pkg>_*.wl\:3001\:7af6\:5408\:30b3\:30d4\:30fc\:306f\:9664\:304f)\:3001
+   Paclet -> Kernel/*.wl\:3001.wl/.m \:306e\:30d1\:30b9 -> \:305d\:306e\:307e\:307e\:3001All -> $packageDirectory \:76f4\:4e0b\:306e\:5168 .wl
+   (\:7af6\:5408\:30b3\:30d4\:30fc\:3068\:3001\:540d\:524d\:306b\:7a7a\:767d\:3092\:542b\:3080\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:985e\:306f\:9664\:304f)\:3001\:30ea\:30b9\:30c8 -> \:5404\:8981\:7d20\:306e\:548c\:3002
+   ClaudePackageManager \:306e ClaudeSeparationFindings / ClaudeSeparationView \:3082\:3053\:308c\:3092\:4f7f\:3046\:3002 *)
+iSeparationTargetFiles[t_List] := DeleteDuplicates[Flatten[iSeparationTargetFiles /@ t]];
+iSeparationTargetFiles[All] := Module[{pkgDir = Global`$packageDirectory},
+  If[!StringQ[pkgDir] || pkgDir === "", Return[{}]];
+  Select[iDropConflictedCopies[FileNames["*.wl", pkgDir]],
+    !StringContainsQ[FileBaseName[#], WhitespaceCharacter] &]];
+iSeparationTargetFiles[t_String] := Module[{pkgDir = Global`$packageDirectory, main},
+  Which[
+    MemberQ[{"wl", "m"}, ToLowerCase[FileExtension[t]]], If[FileExistsQ[t], {t}, {}],
+    !StringQ[pkgDir] || pkgDir === "", {},
+    FileExistsQ[main = FileNameJoin[{pkgDir, t <> ".wl"}]],
+      Prepend[Select[
+        FileNameJoin[{pkgDir, t <> "_" <> # <> ".wl"}] & /@
+          Replace[Quiet @ iScanAuxPackages[t], Except[_List] -> {}],
+        FileExistsQ], main],
+    FileExistsQ[FileNameJoin[{pkgDir, t, "PacletInfo.wl"}]],
+      iDropConflictedCopies[FileNames["*.wl", FileNameJoin[{pkgDir, t, "Kernel"}]]],
+    True, {}]];
+iSeparationTargetFiles[_] := {};
 
-      (* --- 3. CellObject \:6f0f\:6d29\:691c\:51fa --- *)
-      {"Cells\\s*\\[", "h",
-       "Cells[] \:76f4\:63a5\:4f7f\:7528\:306b\:3088\:308b CellObject \:53d6\:5f97 (NBCellIndicesByTag/NBCellIndicesByStyle \:3092\:4f7f\:7528)"},
-      {"_CellObject", "h",
-       "CellObject \:30d1\:30bf\:30fc\:30f3\:5f15\:6570 (\:516c\:958b API \:306b CellObject \:578b\:3092\:9732\:51fa\:3055\:305b\:306a\:3044)"},
-
-      (* --- 4. FE \:72b6\:614b\:64cd\:4f5c\:7981\:6b62 --- *)
-      {"SelectionEvaluate\\s*\\[", "i",
-       "SelectionEvaluate \:76f4\:63a5\:4f7f\:7528 (NBEvaluatePreviousCell/NBInsertAndEvaluateInput \:3092\:4f7f\:7528)"},
-      {"SelectionEvaluateCreateCell\\s*\\[", "i",
-       "SelectionEvaluateCreateCell \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
-      {"FrontEndTokenExecute\\s*\\[", "i",
-       "FrontEndTokenExecute \:76f4\:63a5\:4f7f\:7528 (NBAccess API \:306b\:59d4\:8b72)"},
-      {"SelectionMove\\s*\\[", "i",
-       "SelectionMove \:76f4\:63a5\:4f7f\:7528 (NBMoveAfterCell \:3092\:4f7f\:7528)"},
-
-      (* --- 5. NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 --- *)
-      {"AppendTo\\s*\\[\\s*NBAccess`", "j",
-       "AppendTo \:306b\:3088\:308b NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 (setter API \:3092\:4f7f\:7528)"},
-      {"AssociateTo\\s*\\[\\s*NBAccess`", "j",
-       "AssociateTo \:306b\:3088\:308b NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 (setter API \:3092\:4f7f\:7528)"},
-      {"PrependTo\\s*\\[\\s*NBAccess`", "j",
-       "PrependTo \:306b\:3088\:308b NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 (setter API \:3092\:4f7f\:7528)"},
-      {"KeyDropFrom\\s*\\[\\s*NBAccess`", "j",
-       "KeyDropFrom \:306b\:3088\:308b NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 (setter API \:3092\:4f7f\:7528)"},
-      {"Unset\\s*\\[\\s*NBAccess`", "j",
-       "Unset \:306b\:3088\:308b NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:306e\:7834\:58ca\:7684\:66f4\:65b0 (setter API \:3092\:4f7f\:7528)"},
-      {"NBAccess`\\$NB\\w+\\s*=\\s*", "j",
-       "NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:3078\:306e\:76f4\:63a5\:4ee3\:5165 (setter API \:3092\:4f7f\:7528)"},
-      {"NBAccess`\\$NB\\w+\\[", "j",
-       "NBAccess \:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:3078\:306e Part \:4ee3\:5165\:306e\:53ef\:80fd\:6027 (setter API \:3092\:4f7f\:7528)"},
-
-      (* --- \:65e2\:5b58\:30eb\:30fc\:30eb: NotebookWrite / NotebookRead \:76f4\:63a5\:4f7f\:7528 --- *)
-      {"NotebookWrite\\s*\\[", "b",
-       "NotebookWrite \:76f4\:63a5\:4f7f\:7528 (NBWriteCell/NBWriteCode/NBWriteText \:3092\:4f7f\:7528)"},
-      {"NotebookRead\\s*\\[", "b",
-       "NotebookRead \:76f4\:63a5\:4f7f\:7528 (NBCellRead \:3092\:4f7f\:7528)"},
-
-      (* --- \:65e2\:5b58\:30eb\:30fc\:30eb: SystemCredential \:76f4\:63a5\:4f7f\:7528 --- *)
-      {"SystemCredential\\s*\\[", "a",
-       "SystemCredential \:76f4\:63a5\:4f7f\:7528 (NBGetAPIKey \:3092\:4f7f\:7528)"},
-
-      (* --- \:65e2\:5b58\:30eb\:30fc\:30eb: NBAccess`Private` \:95a2\:6570\:547c\:3073\:51fa\:3057 --- *)
-      {"NBAccess`Private`", "d",
-       "NBAccess`Private` \:95a2\:6570\:306e\:76f4\:63a5\:547c\:3073\:51fa\:3057 (\:516c\:958b API \:3092\:4f7f\:7528)"},
-
-      (* --- CellGroupData \:76f4\:69cb\:7bc9 --- *)
-      {"Cell\\s*\\[\\s*CellGroupData", "b",
-       "CellGroupData \:3092\:4f34\:3046\:30bb\:30eb\:30b0\:30eb\:30fc\:30d7\:76f4\:69cb\:7bc9 (NBWriteCell \:306b Cell[CellGroupData[...]] \:3092\:6e21\:3059\:304b\:5c02\:7528API\:3092\:4f7f\:7528)"},
-
-      (* --- 6. PrivacySpec AccessLevel \:306b\:5909\:6570\:4f7f\:7528\:306e\:691c\:51fa --- *)
-      {"\"AccessLevel\"\\s*->\\s*(?![0-9])", "k",
-       "AccessLevel \:306b\:5909\:6570\:3092\:4f7f\:7528 (\:6570\:5024\:5b9a\:6570 0.5, 0.75, 1.0 \:7b49\:306e\:307f\:8a31\:53ef\:3002\:30b3\:30fc\:30c9\:691c\:7d22\:3067\:6a5f\:5bc6\:30a2\:30af\:30bb\:30b9\:7b87\:6240\:3092\:691c\:8a3c\:53ef\:80fd\:306b\:3059\:308b\:305f\:3081)"}
-    };
-    (* \:5404\:884c\:3092\:8d70\:67fb *)
-    Do[
-      Module[{line, lineNum, trimmed},
-        lineNum = idx;
-        line = lines[[idx]];
-        (* \:30b3\:30e1\:30f3\:30c8\:884c\:306f\:30b9\:30ad\:30c3\:30d7 *)
-        trimmed = StringTrim[line];
-        If[StringStartsQ[trimmed, "(*"], Continue[]];
-        Do[
-          Module[{regex, cat, desc},
-            {regex, cat, desc} = pat;
-            If[StringContainsQ[line, RegularExpression[regex]],
-              (* NBAccess` API \:547c\:3073\:51fa\:3057\:306f\:8a31\:53ef: NBAccess`NBxxxxx[ \:30d1\:30bf\:30fc\:30f3 *)
-              If[cat === "b" && StringContainsQ[line, "NBAccess`NB"],
-                Continue[]];
-              (* NBWriteCell \:306b CellGroupData \:3092\:6e21\:3059\:306e\:306f\:8a31\:53ef *)
-              If[cat === "b" && StringContainsQ[line, RegularExpression["Cell\\s*\\[\\s*CellGroupData"]] &&
-                 StringContainsQ[line, "NBAccess`NBWriteCell"],
-                Continue[]];
-              AppendTo[results,
-                <|"line" -> lineNum,
-                  "code" -> StringTake[StringTrim[line], UpTo[120]],
-                  "violation" -> cat,
-                  "description" -> desc,
-                  "source" -> "static"|>]
-            ]
-          ],
-        {pat, patterns}]
-      ],
-    {idx, Length[lines]}];
-    results
-  ];
-
-(* \:5206\:96e2\:30c1\:30a7\:30c3\:30af\:5b9f\:884c *)
-ClaudeCheckSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
-  Module[{resolved, files, pkgName, prompt, result, docsCtx, ignoreList,
-          nb = Quiet[InputNotebook[]]},
+(* \:5206\:96e2\:30c1\:30a7\:30c3\:30af\:5b9f\:884c: NBAccess`NBAuditPackageSource \:3067\:691c\:67fb\:3057\:3066\:7d50\:679c\:3092\:8868\:793a\:3057\:3001
+   {<|"file" -> path, "violations" -> {<|"line", "code", "violation" (\:898f\:5247 ID), "description", "severity"|>..}|>..}
+   \:3092\:8fd4\:3059 (ClaudeFixSeparation \:306e\:30ad\:30e3\:30c3\:30b7\:30e5\:3068\:4e92\:63db)\:3002waiver \:306e\:4ed8\:3044\:305f\:691c\:51fa\:306f\:542b\:3081\:306a\:3044\:3002LLM \:306f\:4f7f\:308f\:306a\:3044\:3002 *)
+ClaudeCheckSeparation[target:(All | _String | {__String}), opts:OptionsPattern[{Fallback -> False}]] :=
+  Module[{files, res, result, failed, label, nb = Quiet[InputNotebook[]]},
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     iPrecisionConfidentialCheck[nb];
-    {files, pkgName} = iResolveSeparationTarget[target];
-    If[Length[files] === 0,
-      Print["\:30a8\:30e9\:30fc: \:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> target];
+    files = iSeparationTargetFiles[target];
+    label = If[StringQ[target], target, ToString[target, InputForm]];
+    If[files === {},
+      Print["\:30a8\:30e9\:30fc: \:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> label];
       Return[$Failed]];
-    (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
-      "\[FilledRightTriangle] ClaudeCheckSeparation: " <> target <>
+      "\[FilledRightTriangle] ClaudeCheckSeparation: " <> label <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
-    (* \:7121\:8996\:30ea\:30b9\:30c8\:30c1\:30a7\:30c3\:30af *)
-    ignoreList = If[ListQ[NBAccess`$NBSeparationIgnoreList],
-      NBAccess`$NBSeparationIgnoreList, {}];
-    If[StringQ[pkgName] && MemberQ[ignoreList, pkgName],
-      Print[target <> " \:306f\:5206\:96e2\:691c\:67fb\:306e\:7121\:8996\:30ea\:30b9\:30c8\:306b\:767b\:9332\:3055\:308c\:3066\:3044\:307e\:3059\:3002"];
-      Return[{}]];
-    (* NBAccess \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:30b3\:30f3\:30c6\:30ad\:30b9\:30c8 *)
-    docsCtx = iSeparationDocsContext["NBAccess"];
-    (* \:5404\:30d5\:30a1\:30a4\:30eb\:306b\:5bfe\:3057\:3066\:30c1\:30a7\:30c3\:30af *)
-    result = {};
+    res = NBAccess`NBAuditPackageSource[files];
+    If[!AssociationQ[res],
+      Print["\:30a8\:30e9\:30fc: \:691c\:67fb\:306b\:5931\:6557\:3057\:307e\:3057\:305f: " <> ToString[res]];
+      Return[$Failed]];
+    result = Map[Function[f, <|"file" -> f,
+        "violations" -> Map[<|"line" -> #Line, "code" -> #Code, "violation" -> #RuleID,
+            "description" -> #Message, "severity" -> #Severity|> &,
+          Select[res["Findings"], #File === f && #Waived === False &]]|>],
+      files];
+    If[StringQ[target], $iSeparationCheckCache[target] = result];
+    failed = res["Coverage"]["Failed"];
     Do[
-      Module[{fPath, fContent, checkPrompt, resp, staticHits, llmHits, merged},
-        fPath = fileInfo["path"];
-        fContent = fileInfo["content"];
-        If[!StringQ[fContent] || StringLength[fContent] === 0, Continue[]];
-        (* \:7121\:8996\:30ea\:30b9\:30c8\:306e\:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:30c1\:30a7\:30c3\:30af *)
-        If[AnyTrue[ignoreList, StringContainsQ[fPath, # <> ".wl", IgnoreCase -> True] &],
-          Continue[]];
-        (* Phase 1: \:9759\:7684\:30d1\:30bf\:30fc\:30f3\:8d70\:67fb *)
-        staticHits = iStaticSeparationScan[fContent, FileNameTake[fPath]];
-        (* Phase 2: LLM \:306b\:3088\:308b\:6587\:8108\:5224\:5b9a *)
-        checkPrompt =
-          "You are a code auditor for Wolfram Language packages.\n" <>
-          "Check the following source file for violations of the NBAccess separation principle.\n\n" <>
-          "RULES:\n" <>
-          "The following operations are VIOLATIONS when found outside of NBAccess.wl and NotebookExtensions.wl:\n" <>
-          "a. SystemCredential direct usage (must use NBGetAPIKey instead)\n" <>
-          "b. CellObject direct retention/manipulation (Cells[], NotebookRead[], NotebookWrite[], SelectionMove[], " <>
-          "CellPrint[], Cell[CellGroupData[...]] direct construction, etc.)\n" <>
-          "c. CellEpilog/CellProlog/NotebookEventActions direct manipulation " <>
-          "(must use NBInstallCellEpilog/NBInstallConfidentialEpilog etc.)\n" <>
-          "d. Calling NBAccess`Private` functions (internal functions starting with i)\n" <>
-          "e. Directly updating NBAccess public globals ($NBConfidentialSymbols, $NBPrivacySpec etc.) " <>
-          "without using the setter functions. Includes AppendTo, AssociateTo, PrependTo, KeyDropFrom, " <>
-          "Unset, Part assignment on NBAccess` globals.\n" <>
-          "f. Direct use of EvaluationCell[], SelectedCells[], ParentNotebook[EvaluationCell[]], " <>
-          "CellPrint[], SetSelectedNotebook[] " <>
-          "(must use NBBeginJobAtEvalCell, NBParentNotebookOfCurrentCell, NBWriteCell, NBWritePrintNotice etc.)\n" <>
-          "g. CurrentValue/AbsoluteCurrentValue/SetOptions for TaggingRules, CellTags, CellEpilog, CellProlog, " <>
-          "NotebookEventActions, CellDynamicExpression, NotebookDynamicExpression " <>
-          "(must use NBCellGetTaggingRule, NBCellSetOptions, NBInstallCellEpilog etc.)\n" <>
-          "h. CellObject leakage: public function arguments with _CellObject pattern, returning CellObject " <>
-          "from public functions, storing CellObject in Association/global state, " <>
-          "holding Cells[]/EvaluationCell[] results in non-local variables.\n" <>
-          "i. FrontEnd state manipulation: SelectionEvaluate[], SelectionEvaluateCreateCell[], " <>
-          "SetSelectedNotebook[], FrontEndTokenExecute[], SelectionMove[] " <>
-          "(must use NBEvaluatePreviousCell, NBInsertAndEvaluateInput, NBWriteInputCellAndMaybeEvaluate, " <>
-          "NBMoveAfterCell etc.)\n" <>
-          "j. Destructive updates to NBAccess public globals via AppendTo, AssociateTo, PrependTo, " <>
-          "KeyDropFrom, Unset, Increment, Decrement, Part assignment (x[key]=...) " <>
-          "(must use NBRegisterConfidentialVar, NBSetConfidentialVars etc.)\n" <>
-          "k. Using a variable for PrivacySpec AccessLevel value " <>
-          "(\"AccessLevel\" -> variable is FORBIDDEN; must use numeric literals like 0.5, 0.75, 1.0 " <>
-          "so that grep/search can audit all sensitive data access points).\n\n" <>
-          "EXCEPTION: Calls through the NBAccess public API (NBAccess`NBxxx[...]) are ALLOWED.\n" <>
-          "EXCEPTION: Passing Cell[CellGroupData[...]] as argument to NBAccess`NBWriteCell is ALLOWED.\n\n" <>
-          If[Length[staticHits] > 0,
-            "=== STATIC SCAN PRE-RESULTS (verify these with context) ===\n" <>
-            StringJoin[
-              ("L" <> ToString[#["line"]] <> " [" <> #["violation"] <> "]: " <>
-               #["code"] <> "\n") & /@ Take[staticHits, UpTo[30]]] <> "\n",
-            ""] <>
-          "Respond in JSON format ONLY. No other text.\n" <>
-          "Format: [{\"line\": <line_number>, \"code\": \"<offending code snippet>\", " <>
-          "\"violation\": \"<a|b|c|d|e|f|g|h|i|j|k>\", \"description\": \"<explanation in " <> iLanguageName[] <> ">\"}]\n" <>
-          "If no violations found, respond with: []\n\n" <>
-          If[docsCtx =!= "",
-            "=== NBAccess DOCUMENTATION (for reference) ===\n" <> docsCtx <> "\n", ""] <>
-          "=== SOURCE FILE: " <> FileNameTake[fPath] <> " ===\n" <> fContent;
-        resp = iSeparationQuery[checkPrompt];
-        llmHits = {};
-        If[StringQ[resp] && !StringStartsQ[resp, "Error:"],
-          Module[{json, parsed},
-            json = StringReplace[resp, {
-              RegularExpression["^```(?:json)?\\s*\n"] -> "",
-              RegularExpression["\n```\\s*$"] -> ""}];
-            parsed = Quiet @ Check[
-              ImportString[json, "RawJSON"],
-              $Failed];
-            If[ListQ[parsed],
-              llmHits = parsed,
-              llmHits = {<|"line" -> 0,
-                "description" -> "\:89e3\:6790\:5931\:6557: " <> StringTake[resp, UpTo[300]]|>}]
-          ],
-          llmHits = {<|"line" -> 0,
-            "description" -> "\:30af\:30a8\:30ea\:5931\:6557: " <> ToString[resp]|>}
-        ];
-        (* Phase 3: \:9759\:7684\:8d70\:67fb\:7d50\:679c\:3068 LLM \:7d50\:679c\:3092\:30de\:30fc\:30b8 (\:91cd\:8907\:6392\:9664) *)
-        merged = llmHits;
-        Do[
-          If[!AnyTrue[merged,
-            Lookup[#, "line", -1] === sh["line"] &&
-            StringContainsQ[Lookup[#, "violation", ""], sh["violation"]] &],
-            AppendTo[merged, KeyDrop[sh, "source"]]],
-        {sh, staticHits}];
-        AppendTo[result, <|"file" -> fPath, "violations" -> merged|>]
-      ],
-    {fileInfo, files}];
-    (* \:30ad\:30e3\:30c3\:30b7\:30e5\:306b\:4fdd\:5b58 *)
-    $iSeparationCheckCache[target] = result;
-    (* \:8868\:793a *)
-    Module[{catLabels = <|
-      "a" -> "SystemCredential\:76f4\:63a5", "b" -> "\:30bb\:30eb\:76f4\:63a5\:64cd\:4f5c",
-      "c" -> "CellEpilog\:76f4\:63a5", "d" -> "Private`\:547c\:3073\:51fa\:3057",
-      "e" -> "\:30b0\:30ed\:30fc\:30d0\:30eb\:76f4\:63a5\:66f4\:65b0", "f" -> "EvalCell/CellPrint/SetSelectedNB",
-      "g" -> "\:5c5e\:6027\:76f4\:63a5\:30a2\:30af\:30bb\:30b9", "h" -> "CellObject\:6f0f\:6d29",
-      "i" -> "FE\:72b6\:614b\:64cd\:4f5c", "j" -> "\:30b0\:30ed\:30fc\:30d0\:30eb\:7834\:58ca\:7684\:66f4\:65b0"|>},
-    Do[
-      Module[{f = entry["file"], vs = entry["violations"]},
-        If[Length[vs] === 0,
+      Module[{f = entry["file"], vs = entry["violations"], nErr},
+        nErr = Count[vs, v_ /; v["severity"] === "Error"];
+        If[vs === {},
           Print[Style["\:2705 " <> FileNameTake[f] <> ": \:9055\:53cd\:306a\:3057", Bold]],
-          Print[Style["\:26a0\:fe0f " <> FileNameTake[f] <> ": " <>
-            ToString[Length[vs]] <> " \:4ef6\:306e\:9055\:53cd", Bold, FontColor -> RGBColor[0.8, 0, 0]]];
-          Do[
-            Module[{vCat = Lookup[v, "violation", ""],
-                    vLabel},
-              vLabel = If[StringQ[vCat] && vCat =!= "",
-                "[" <> vCat <> ":" <> Lookup[catLabels, vCat, vCat] <> "]", ""];
-              Print["  L" <> ToString[Lookup[v, "line", "?"]] <> ": " <>
-                Lookup[v, "description", ""] <> " " <> vLabel]],
-          {v, vs}]]
-      ],
-    {entry, result}]];
+          Print[Style[If[nErr > 0, "\:26a0\:fe0f ", ""] <> FileNameTake[f] <> ": " <>
+            ToString[Length[vs]] <> " \:4ef6 (Error " <> ToString[nErr] <> ")", Bold,
+            FontColor -> If[nErr > 0, RGBColor[0.8, 0, 0], GrayLevel[0.3]]]];
+          Do[Print["  L" <> ToString[v["line"]] <> " [" <> v["violation"] <>
+              If[v["severity"] === "Review", "\:30fb\:8981\:78ba\:8a8d", ""] <> "] " <>
+              v["description"] <> "  " <> StringTake[v["code"], UpTo[80]]], {v, vs}]]],
+      {entry, result}];
+    If[failed =!= {},
+      Print[Style["\:89e3\:6790\:3067\:304d\:306a\:304b\:3063\:305f\:7bc4\:56f2 (\:3053\:306e\:7bc4\:56f2\:306f\:691c\:67fb\:3067\:304d\:3066\:3044\:307e\:305b\:3093):", Bold,
+        FontColor -> RGBColor[0.8, 0, 0]]];
+      Do[Print["  " <> FileNameTake[fl["File"]] <> " " <> ToString[Lookup[fl, "Lines", ""]] <> " " <>
+        ToString[fl["Reason"]]], {fl, failed}]];
+    Print[Style["\:8868\:3067\:78ba\:8a8d\:30fb\:4fee\:6b63\:3059\:308b\:306b\:306f ClaudeSeparationView[" <>
+      If[StringQ[target], "\"" <> target <> "\"", label] <> "]", GrayLevel[0.4]]];
     result
   ];
 
@@ -35532,8 +35320,6 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
         (* ClaudeUpdatePackage \:76f8\:5f53\:306e\:4fee\:6b63 *)
         Module[{src, fixPrompt, fixResult},
           src = Import[target, "Text"];
-          (* AccessLevel \:5909\:6570\:4f7f\:7528\:3092\:5148\:306b\:5f37\:5236\:4fee\:6b63 *)
-          src = iForceAccessLevelLiterals[src];
           fixPrompt =
             "Fix the following NBAccess separation violations in this Wolfram Language source file.\n" <>
             "Use the NBAccess public API instead of direct operations.\n\n" <>
@@ -35549,8 +35335,8 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
             "- Cells[nb, CellTags->...] -> NBAccess`NBCellIndicesByTag[nb, tag]\n" <>
             "- CurrentValue[..., TaggingRules] -> NBAccess`NBCellGetTaggingRule[nb, idx, path]\n" <>
             "- SetOptions[..., TaggingRules->...] -> NBAccess`NBCellSetOptions[nb, idx, opts]\n" <>
-            "- AppendTo/AssociateTo on NBAccess` globals -> use setter APIs (NBRegisterConfidentialVar etc.)\n" <>
-            "- \"AccessLevel\" -> variable -> must use numeric literal (0.5, 0.75, 1.0 etc.)\n\n" <>
+            "- AppendTo/AssociateTo on NBAccess` globals -> use setter APIs (NBRegisterConfidentialVar etc.)\n\n" <>
+            "Do NOT change any AccessLevel or PrivacyLevel value.\n\n" <>
             "VIOLATIONS:\n" <> violationDesc <> "\n\n" <>
             "Output the COMPLETE corrected source file. Do NOT wrap in code fences.\n\n" <>
             "=== SOURCE ===\n" <> src;
@@ -35593,8 +35379,6 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
                 ]
               ];
               If[finalCode =!= None,
-                (* LLM \:304c\:5909\:6570 AccessLevel \:3092\:518d\:5c0e\:5165\:3057\:305f\:5834\:5408\:306b\:5099\:3048\:3001\:6700\:7d42\:51fa\:529b\:3082\:5f37\:5236\:4fee\:6b63 *)
-                finalCode = iForceAccessLevelLiterals[finalCode];
                 Export[target, finalCode, "Text", CharacterEncoding -> "UTF-8"];
                 Print[Style["\:2705 " <> FileNameTake[target] <> " \:3092\:4fee\:6b63\:3057\:307e\:3057\:305f", Bold]];
                 $iSeparationCheckCache = KeyDrop[$iSeparationCheckCache, target],
@@ -35626,19 +35410,9 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
           "CurrentValue/SetOptions\:306b\:3088\:308bTaggingRules/CellTags/CellEpilog\:76f4\:63a5\:30a2\:30af\:30bb\:30b9\:306fNBAccess API\:306b\:7f6e\:63db\:3002\n" <>
           "SelectionEvaluate/SelectionMove/FrontEndTokenExecute\:306fNBAccess API\:306b\:7f6e\:63db\:3002\n" <>
           "NBAccess\:516c\:958b\:30b0\:30ed\:30fc\:30d0\:30eb\:3078\:306eAppendTo/AssociateTo\:7b49\:306fsetter API\:306b\:7f6e\:63db\:3002\n" <>
-          "AccessLevel\:306e\:5024\:306b\:5909\:6570\:4f7f\:7528\:306f\:7981\:6b62\:3001\:6570\:5024\:5b9a\:6570(0.5, 0.75, 1.0\:7b49)\:306e\:307f\:8a31\:53ef\:3002\n\n" <>
+          "Do NOT change any AccessLevel or PrivacyLevel value.\n\n" <>
           "\:9055\:53cd\:4e00\:89a7:\n" <> violationDesc,
           Fallback -> TrueQ[OptionValue[Fallback]]];
-        (* ClaudeUpdatePackage \:5b8c\:4e86\:5f8c\:3001AccessLevel \:5909\:6570\:4f7f\:7528\:3092\:5f37\:5236\:4fee\:6b63 *)
-        Scan[
-          Function[fi,
-            Module[{fPath = fi["path"], orig, fixed},
-              If[FileExistsQ[fPath],
-                orig = Import[fPath, "Text"];
-                fixed = iForceAccessLevelLiterals[orig];
-                If[fixed =!= orig,
-                  Export[fPath, fixed, "Text", CharacterEncoding -> "UTF-8"]]]]],
-          files];
         $iSeparationCheckCache = KeyDrop[$iSeparationCheckCache, target]
       ];
       Return[]];
@@ -43373,7 +43147,7 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                     aturn = ClaudeCode`$iClaudeEvalAutoSaveTurn},
               If[StringQ[atask] && StringQ[aturn] &&
                  Length[Names["SourceVault`SourceVaultAutoSaveLastPrompt"]] > 0,
-                Symbol["SourceVault`SourceVaultAutoSaveLastPrompt"][atask,
+                iClaudeSymbolByName["SourceVault`SourceVaultAutoSaveLastPrompt"][atask,
                   "TurnId" -> aturn,
                   "ExprString" ->
                     ClaudeCode`$ClaudeEvalLastProposedExprString]]],
@@ -43496,7 +43270,7 @@ ClaudeBuildRuntimeAdapter[nb_, opts:OptionsPattern[]] :=
                SourceVault 未ロード時は従来どおり素の呼び出し。 *)
             If[iRuntimeSVPrivacyScopeAvailableQ[],
               svScoped = With[{
-                  scope = Symbol["SourceVault`SourceVaultWithPrivacyScope"]},
+                  scope = iClaudeSymbolByName["SourceVault`SourceVaultWithPrivacyScope"]},
                 scope[NBAccess`NBExecuteHeldExpr[heldExpr, accessSpec,
                   "TimeConstraint" -> effectiveTimeout,
                   "ApprovalMode" -> userApprovalMode]]];
@@ -45080,7 +44854,7 @@ $iRuntimeDisplayMaxBoxBytes = 4*2^20;
    (NBAccess + claudecode だけの環境でも動くよう名前で引く)。 *)
 iRuntimeSVPrivacyScopeAvailableQ[] :=
   Names["SourceVault`SourceVaultWithPrivacyScope"] =!= {} &&
-  With[{s = Symbol["SourceVault`SourceVaultWithPrivacyScope"]},
+  With[{s = iClaudeSymbolByName["SourceVault`SourceVaultWithPrivacyScope"]},
     Length[DownValues[s]] > 0 &&
     MemberQ[Attributes[s], HoldFirst | HoldAll]];
 
@@ -45089,7 +44863,7 @@ iRuntimeSVPrivacyScopeAvailableQ[] :=
 iRuntimeEmbeddedPrivacy[raw_] :=
   Module[{labels = {}, keys},
     If[Names["SourceVault`SourceVaultPrivate"] =!= {},
-      With[{w = Symbol["SourceVault`SourceVaultPrivate"]},
+      With[{w = iClaudeSymbolByName["SourceVault`SourceVaultPrivate"]},
         labels = Cases[raw, w[_, pl_?NumericQ] :> N[pl],
           {0, Infinity}, Heads -> True]]];
     keys = Join[
@@ -45181,7 +44955,7 @@ iRuntimeMergeResultPrivacy[res_Association] :=
       If[! measured && iRuntimeHeldRefsSourceVaultQ[Lookup[res, "HeldExpr", None]],
         iRuntimeClipPrivacy[
           If[Names["SourceVault`$SourceVaultPrivacyDefaultLevel"] =!= {},
-            Symbol["SourceVault`$SourceVaultPrivacyDefaultLevel"], 1.]],
+            iClaudeSymbolByName["SourceVault`$SourceVaultPrivacyDefaultLevel"], 1.]],
         0.]];
     Append[res, "EvaluationPrivacy" -> Max[ev, extra]]];
 iRuntimeMergeResultPrivacy[res_] := res;
@@ -46182,7 +45956,7 @@ iRuntimeDisplayResult[nb_NotebookObject, tag_String,
                   aturn = ClaudeCode`$iClaudeEvalAutoSaveTurn},
             If[StringQ[atask] && StringQ[aturn] &&
                Length[Names["SourceVault`SourceVaultAutoSaveLastPrompt"]] > 0,
-              Symbol["SourceVault`SourceVaultAutoSaveLastPrompt"][atask,
+              iClaudeSymbolByName["SourceVault`SourceVaultAutoSaveLastPrompt"][atask,
                 "TurnId" -> aturn,
                 "ExprString" -> ClaudeCode`$ClaudeEvalLastProposedExprString]]],
           Null]]]];

@@ -37,6 +37,8 @@ Mathematica / Wolfram Language の機能を扱う時、Claude が陥りがちな
 | Cell metadata / TaggingRules | `NotebookImport[path, _ -> "TaggingRules"]` |
 | Notebook を開かずに編集 | `NotebookOpen[path, Visible -> False]` + `NotebookPut/Get` |
 
+> **利用者のノートブックを読む・書く経路では rules/10 が優先する (2026-10-31)。** 上の表は「手書きパースより標準関数」という原則の例で、NBAccess 自身の実装や、PrivacyLevel が関係しない用途 (自分で生成したばかりのノートブック等) に当てはまる。パッケージから利用者のノートブックを読み書きするときは、PrivacyLevel を見る NBAccess API (`NBFileOpen` / `NBFileReadCellsInRange` / `NBReadHeader` / `NBFileWriteAllCells` 等) を使う。`NBAccess`NBAuditPackageSource` はこれを PRIV-NB-READ (Review) / PRIV-NB-WRITE (Error) として検出する。正当な用途なら `(* :PolicyWaiver: PRIV-NB-READ 理由 *)` を書く (skills/nbaccess-separation-check)。
+
 ### 必ず先に確認する標準関数 (expression 解析)
 
 | 用途 | 推奨関数 |

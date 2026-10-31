@@ -22,7 +22,7 @@ True で履歴コンパクション等の詳細ログを Messages に出力す�
 
 ### $ClaudeTestModel
 型: {String, String} | String, 初期値: $ClaudeModel
-ClaudeCheckSeparation / ClaudeFixSeparation などの分離検証で使用するモデル。未設定なら $ClaudeModel と同じ値に初期化される。
+ClaudeFixSeparation などの分離検証の LLM 段で使用するモデル (ClaudeCheckSeparation は LLM を使わない)。未設定なら $ClaudeModel と同じ値に初期化される。
 
 ### $ClaudeStandardFont
 型: String, 初期値: "Yu Gothic UI"
@@ -773,6 +773,30 @@ LM Studio は `/api/v1/chat` の integrations でサーバ側がツールルー�
 ### $ClaudeLocalToolLoop
 型: Automatic | True | False (既定 Automatic)。ローカル OpenAI 互換 provider で SourceVault MCP のツールをモデルに使わせるか (クライアント側ツールループ)。Automatic: /api/v1/chat を持たない provider (llamacpp / freetoken) で有効。True: lmstudio も含め常に有効。False: 無効 (従来どおり素の1往復)。有効な provider は **全 SourceVault ツール**を受ける。ツール可否と可視範囲は SourceVault の delivery profile に従う。`$ClaudeLocalToolLoopMaxIterations` (8), `$ClaudeLocalToolLoopMaxResultChars` (8000), `$ClaudeLocalToolLoopToolTimeoutSeconds` (60)。反復エージェント (ClaudeEval / ClaudeRuntime) の継続プロンプトに詳細表示する直近 3 ターンの評価結果 (RedactedResult) とツール結果 1 件は `$ClaudeAgentResultMaxChars` (6000、NBAccess`$NBRedactedResultMaxLength と揃える。それより古いターンは Summary 200 字。エージェントはターン履歴以外に記憶を持たないので、複数ページを読んでから差分を書く作業には直近数ターンの全文が要る), `$ClaudeLocalToolLoopMaxUselessResults` (3), `$ClaudeLocalToolLoopVerbose` (既定 True)。
 
+### $ClaudeLocalToolLoopMaxIterations
+型: Integer, 初期値: 8
+クライアント側ツールループの最大ターン数。
+
+### $ClaudeLocalToolLoopMaxResultChars
+型: Integer, 初期値: 8000
+ツールループで LLM に返すツール結果の最大文字数。
+
+### $ClaudeLocalToolLoopToolTimeoutSeconds
+型: Number, 初期値: 60
+SourceVault MCP ツール 1 件の実行タイムアウト秒数。
+
+### $ClaudeAgentResultMaxChars
+型: Integer, 初期値: 6000
+反復エージェント (ClaudeEval / ClaudeRuntime) の継続プロンプトに詳細表示する直近ターンの評価結果 (RedactedResult) とツール結果の最大文字数。NBAccess`$NBRedactedResultMaxLength と揃える。それより古いターンは Summary 200 字。
+
+### $ClaudeLocalToolLoopMaxUselessResults
+型: Integer, 初期値: 3
+ツールループで「有用な結果なし」判定が連続した場合に早期終了するまでの回数。
+
+### $ClaudeLocalToolLoopVerbose
+型: Boolean, 初期値: True
+True でツールループの各往復の結果サマリーをセルに表示する。
+
 ### $ClaudeLocalToolLoopMaxCompletionTokens / $ClaudeLocalToolLoopReasoningEffort (2026-09-09)
 思考暴走ガード。実機 (qwen3.8-27b, LM Studio) で「光子の二重スリット実験のシミュレーションコード」が reasoning 22,430 tok (10.8 tok/s で約 35 分) を吐き続けて本文もツール呼び出しも無いまま 40K 文脈に達し、DAG は 30 分 (`$LLMGraphDAGMaxJobSeconds`) で kill された。
 - `$ClaudeLocalToolLoopMaxCompletionTokens` (既定 8192): ループの全往復に `max_tokens` として送る (思考トークンも数える)。None で無効。
@@ -786,6 +810,10 @@ ContextPlan の ToolDefinitions ゲート (Mode -> "None") が効いている間
 
 ### $ClaudeCloudToolLoop (2026-09-08)
 型: Automatic | True | False (既定 Automatic = SourceVault ロード時に有効)。OpenAI 互換クラウド provider (openai / zai / kimi) にも同じループを回すが、モデルに見せる・実行できるツールは **`$ClaudeCloudToolLoopTools` のみ** (既定 `{"sourcevault_directives", "sourcevault_directive_body"}` = CLAUDE.md/rules/skills、PrivacyLevel 0.0)。SourceVault のデータツール (メール・セッションログ・ノート) はスキーマにも載らず、実行時の許可リスト (`iExecSourceVaultToolCall`) でも拒否される。ディレクティブ一覧の絶対パスはクラウド向け結果から除去する。同期 (`iQueryViaAPI` の openai/zai/kimi 分岐)、非同期 fallback (`iStartFallbackAsync`)、RT-Async (`QueryProviderAsync`) の 3 経路で有効。ツールループの往復には `SystemPrompt` オプションを `role:"system"` として載せられる。
+
+### $ClaudeCloudToolLoopTools
+型: List, 初期値: {"sourcevault_directives", "sourcevault_directive_body"}
+クラウド API ツールループ ($ClaudeCloudToolLoop) でモデルに公開するツール名リスト。既定は CLAUDE.md/rules/skills 取得ツールのみ (PrivacyLevel 0.0)。SourceVault のデータツール (メール等) はここに列挙されない限りスキーマにも実行許可にも載らない。
 
 ### ClaudeEffectiveDirectiveLevel[] → Association
 現在のターンが受ける DirectiveLevel (Minimal/Standard/Full, ClaudeDirectives) とその根拠、実効モデル (`$iClaudeEvalCurrentModelSpec` → privacy 要求レベル ≥0.5 なら `$ClaudePrivateModel` → `$ClaudeModel`)、ツールによるディレクティブ取得可否 (`ToolAccess`)。`iClaudeSysPrompt[]` は 2026-09-08 からこの実効モデル (タプル) で投影する (旧版は `ToString[$ClaudeModel]` の `"{lmstudio, qwen3.8-27b}"` を能力表に渡していて常に不一致だった)。
@@ -877,12 +905,12 @@ Options: "Columns" -> Automatic ("Columns"->All で全フィールド表示)
 ## パッケージ操作補助
 
 ### ClaudeCheckSeparation[target, opts]
-パッケージの NBAccess 分離原則 (ノートブック依存コードが Private にあるか) を検証する。結果は $iSeparationCheckCache にキャッシュされ ClaudeFixSeparation で再利用される。$NBSeparationIgnoreList 登録パッケージ (NBAccess, NotebookExtensions) は対象外。
-→ Association (violations, summary)
+パッケージソースを NBAccess`NBAuditPackageSource (構文木) で検査し、NBAccess 分離 (SEP-)・認証情報 (CRED-)・プライバシーレベル (PRIV-)・アクセスレベル (ACC-) の規則違反を表示して返す。LLM は使わない。waiver (`(* :PolicyWaiver: RULE-ID 理由 *)`) の付いた検出は含めない。target: パッケージ名 (主ソース + 補助モジュール <pkg>_*.wl) | Paclet 名 (Kernel/*.wl) | .wl ファイルパス | そのリスト | All ($packageDirectory 直下の全 .wl)。SEP- 規則は $NBSeparationIgnoreList 登録パッケージ (NBAccess, NotebookExtensions) には適用しない。解析できなかった範囲は「検査できていない」と表示する。結果は ClaudeFixSeparation 用にキャッシュされる。表で確認・修正するには ClaudeSeparationView[target] (ClaudePackageManager.wl)、規則の一覧は NBAccess`NBAuditPackageSourceRules[]。
+→ {<|"file" -> path, "violations" -> {<|"line", "code", "violation" (規則 ID), "description", "severity" ("Error"|"Review")|>...}|>...} | $Failed (ファイルなし・検査失敗)
 Options: Fallback -> False
 
 ### ClaudeFixSeparation[target, opts]
-ClaudeCheckSeparation で検出された分離原則違反を修正する。$iSeparationCheckCache のキャッシュを使用する。
+分離違反をファイル全文の LLM 書き直しで修正する旧来の関数。通常は ClaudeSeparationView の違反ごとの修正案を使う。ClaudeCheckSeparation の結果がキャッシュにあれば利用し、なければ先に検査する。target がファイルパスならバックアップを作って元ファイルを修正、パッケージ名なら ClaudeUpdatePackage を呼ぶ。
 → True | $Failed
 Options: Fallback -> False
 
@@ -1242,7 +1270,7 @@ high priority モードを seconds 秒間有効にする。$ClaudePriorityModeUn
 → Null
 
 ### ClaudeEndHighPriority[]
-high priority モードを即時終了する。
+高優先度モードを即時終了する。
 → Null
 
 ### $ClaudeCellInputProvider
