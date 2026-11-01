@@ -198,6 +198,9 @@ Quiet[Scan[
    "$ClaudeAutoCompactThresholdTokens",
    "ClaudeWebSearch","ClaudeWebFetch","WebFetch","WebSearch",
    "ClaudeCommand","ClaudeCheckSeparation","ClaudeFixSeparation","ClaudeStatus","ClaudeAbort",
+   "ClaudeSeparationRuns","ClaudeSeparationRunInfo","ClaudeSeparationRunStart",
+   "ClaudeSeparationRunCancel","ClaudeSeparationRunRestore","ClaudeSeparationRunsView",
+   "ClaudeSeparationHealthProbe","ClaudeHoldFrontEnd",
    "ClaudeProcessList",
    "ClaudePrepareCommit",
    "NotebookLLMGraph","NotebookLLMGraphPlot","NotebookLLMGraphBuild",
@@ -237,6 +240,7 @@ Quiet[Scan[
    "$ClaudeTestModel", "$ClaudeVerbose",
    "$ClaudeFallbackModels", "$ClaudeWorkingDirectory", "$ClaudeAccessibleDirs",
    "$ClaudeDocRetryDelay", "$ClaudeDocMaxRetries", "$ClaudeDocMaxChunkChars",
+   "$ClaudeDocApiMaxBytes",
    "$ClaudeDocModel",
    "$ClaudePrivateModel",
    "$ClaudePackageKeywordMap",
@@ -590,6 +594,10 @@ $ClaudeDocMaxRetries::usage =
   "$ClaudeDocMaxRetries \:306f\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:306e\:6700\:5927\:30ea\:30c8\:30e9\:30a4\:56de\:6570\:3002\:30c7\:30d5\:30a9\:30eb\:30c8 3\:3002";
 $ClaudeDocMaxChunkChars::usage =
   "$ClaudeDocMaxChunkChars \:306f\:30d7\:30ed\:30f3\:30d7\:30c8\:4e2d\:30bd\:30fc\:30b9\:306e\:6700\:5927\:6587\:5b57\:6570\:3002\:30c7\:30d5\:30a9\:30eb\:30c8 60000\:3002";
+$ClaudeDocApiMaxBytes::usage =
+  "$ClaudeDocApiMaxBytes は ClaudeUpdateDocumentation が API リファレンス (api.md / api_*.md) を LLM の 1 回の応答で再生成してよい既存ファイルの上限バイト数 (既定 128000)。" <>
+  "これを超える API doc は LLM に投げずにスキップし、旧ファイルをそのまま残す (出力上限で途中切れした応答が書き込まれるのを防ぐ)。" <>
+  "補助モジュール <pkg>_<aux>.wl に分けて api_<aux>.md に分割するか、手で追記する。Infinity でこの検査を無効にする。";
 
 References::usage =
   "References \:306f ClaudeCreateDocumentation/ClaudeUpdateDocumentation \:306e\:30aa\:30d7\:30b7\:30e7\:30f3\:3002\n" <>
@@ -628,6 +636,10 @@ iSyncFallbackModelsToNBAccess[];
 If[!NumericQ[$ClaudeDocRetryDelay], $ClaudeDocRetryDelay = 60];
 If[!IntegerQ[$ClaudeDocMaxRetries], $ClaudeDocMaxRetries = 3];
 If[!IntegerQ[$ClaudeDocMaxChunkChars], $ClaudeDocMaxChunkChars = 60000];
+(* 2026-10-31: 114 KB の claudecode api.md は 1 応答で再生成できたが、141 KB の
+   SlideWorkflow api.md は 2 回とも途中切れした。その間を既定値にする。 *)
+If[!(NumericQ[$ClaudeDocApiMaxBytes] || $ClaudeDocApiMaxBytes === Infinity),
+  $ClaudeDocApiMaxBytes = 128000];
 
 $ClaudeDocModel::usage =
   "$ClaudeDocModel \:306f\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:751f\:6210\:30fb\:66f4\:65b0\:6642\:306b\:4f7f\:7528\:3059\:308b\:30e2\:30c7\:30eb\:3002\n" <>
@@ -1735,6 +1747,48 @@ ClaudeFixSeparation::usage =
   "target \:304c\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:306e\:307f\:306e\:5834\:5408: ClaudeUpdatePackage \:3092\:547c\:3073\:51fa\:3059\:3002\n" <>
   "\:4e8b\:524d\:306b ClaudeCheckSeparation \:306e\:7d50\:679c\:304c\:3042\:308c\:3070\:305d\:308c\:3092\:5229\:7528\:3059\:308b\:3002\n" <>
   "\:4f8b: ClaudeFixSeparation[\"claudecode\"]";
+ClaudeSeparationRuns::usage =
+  "ClaudeSeparationRuns[n] は ClaudeCheckSeparation / ClaudeFixSeparation の実行記録を新しい順に最大 n 件 (既定 50) 返す。\n" <>
+  "各実行は $UserBaseDirectory/ClaudeRuntime/separationruns/<RunId>/ にマシンごとに記録される (直接呼んだ実行も含む)。\n" <>
+  "各行のキー: \"RunId\", \"Kind\" (\"Check\"|\"Fix\"), \"Target\", \"Mode\" (\"Foreground\"|\"Background\"), \"Caller\",\n" <>
+  "  \"State\" (\"Running\"|\"Done\"|\"Failed\"|\"Aborted\"|\"Cancelled\"|\"Delegated\"|\"NotStarted\"|\"Abandoned\"), \"Outcome\",\n" <>
+  "  \"StartedAt\", \"DurationSeconds\", \"Files\", \"Violations\", \"Errors\", \"Phase\", \"ParentRunId\"。\n" <>
+  "\"Abandoned\" は終了記録が無いまま実行プロセスが消えたもの。\n" <>
+  "Options: \"Kind\" -> All, \"Cheap\" -> False (True でプロセスを照会せず経過時間だけで判定)。\n" <>
+  "例: Dataset[ClaudeSeparationRuns[20]]";
+ClaudeSeparationRunInfo::usage =
+  "ClaudeSeparationRunInfo[runId] は 1 実行の記録をすべて返す: \"Run\" (開始情報), \"Status\" (途中経過とバックアップ),\n" <>
+  "\"Done\" (結果の要約), \"Result\" (検査結果。ClaudeCheckSeparation の戻り値と同じ形), \"Restore\" (巻き戻しの記録), \"State\", \"Dir\"。";
+ClaudeSeparationRunStart::usage =
+  "ClaudeSeparationRunStart[kind, target] は分離検査 (kind \"Check\") または修正 (\"Fix\") を実行記録つきで始め、RunId を返す。\n" <>
+  "\"Mode\" -> Automatic: パッケージ 1 つ / ファイルの検査はこのカーネルで、全体検査 (All) とファイルの修正は外部 wolframscript\n" <>
+  "  (ライセンス席が要る) で実行する。外部実行中もカーネルは塞がず、終了はノートブックに知らせる。席が無いとき、検査はこのカーネルで\n" <>
+  "  続け、修正は Failure[\"NoSeat\", ...] を返す。\"Foreground\" / \"Background\" で固定できる。\n" <>
+  "パッケージ名での修正 (ClaudeUpdatePackage へ委譲) はこのカーネルでだけ実行できる。\n" <>
+  "同じ対象の同じ種類の実行、または同じファイルの修正が進行中なら Failure[\"AlreadyRunning\", ...]。\n" <>
+  "ClaudeSeparationRunStart[kind] は対象をダイアログで選ばせる。\n" <>
+  "Options: \"Mode\" -> Automatic, \"Caller\" -> \"Direct\", \"Notebook\" -> Automatic (知らせを書くノートブック。None で書かない), Fallback -> False。";
+ClaudeSeparationRunCancel::usage =
+  "ClaudeSeparationRunCancel[runId] は外部で実行中の分離検査・修正を止め (wolframscript とその子プロセスを終了)、\n" <>
+  "記録を \"Cancelled\" で閉じる。実行プロセスが消えた \"Abandoned\" の記録はこれで閉じる。\n" <>
+  "別のカーネルのノートブックで実行中のものは止められない (そのノートブックで評価を中断する)。";
+ClaudeSeparationRunRestore::usage =
+  "ClaudeSeparationRunRestore[runId] はファイルを対象にした ClaudeFixSeparation の実行が書き換えたファイルを、実行前のバックアップに戻す。\n" <>
+  "戻す前に今のファイルを $packageDirectory/bak へ保存する。修正後にファイルが変わっていれば戻さない (\"Force\" -> True で戻す)。\n" <>
+  "パッケージ名での修正 (ClaudeUpdatePackage へ委譲) は対象外 (その履歴を使う)。";
+ClaudeSeparationRunsView::usage =
+  "ClaudeSeparationRunsView[] は分離検査・修正の実行記録を表で表示する。行ごとに [詳細] [表で開く] (検査結果を ClaudeSeparationView で)\n" <>
+  "[中止] [閉じる] [元に戻す] を出し、上部の [検査…] [全体検査] [修正…] で新しい実行を始める。表示は [更新] で更新する (自動更新はしない)。\n" <>
+  "Options: \"MaxRows\" -> 40, \"OpenWindow\" -> False (True で別ウインドウに開き NotebookObject を返す)。";
+ClaudeSeparationHealthProbe::usage =
+  "ClaudeSeparationHealthProbe[] は SystemDoctor の probe (SourceVault_diagnostics が \"Separation\" として登録する)。\n" <>
+  "記録ファイルだけを読み、プロセスは照会しない。終了記録の無い実行が残っていれば Health \"Degraded\" / \"SeparationRunAbandoned\"、\n" <>
+  "24 時間以内に失敗した実行があれば \"Degraded\" / \"SeparationRunFailed\"、それ以外は \"OK\"。\n" <>
+  "\"Running\", \"Abandoned\", \"FailedLast24h\", \"LastCheck\" も返す。結果は 60 秒キャッシュする。";
+ClaudeHoldFrontEnd::usage =
+  "ClaudeHoldFrontEnd[expr] は expr を評価する間、claudecode の共有 polling tick がフロントエンドに触れないようにする\n" <>
+  "(claudecode パレットのボタンと同じ保護)。他パッケージのパレットのボタン処理 (Method -> \"Queued\") で、\n" <>
+  "ダイアログやウインドウを開くなどフロントエンドとやり取りする処理を包む。Abort でも解除される。";
 
 (* ============================================================
    Notebook LLMGraph: DAG-based LLM call tracking (Phase 1a)
@@ -7101,6 +7155,9 @@ iClaudeHoldFE[expr_] := WithCleanup[
   expr,
   $iClaudeFEHold = Max[0, $iClaudeFEHold - 1]];
 iClaudeFEHeldQ[] := $iClaudeFEHold > 0 && AbsoluteTime[] - $iClaudeFEHoldSince < 3600.;
+(* 2026-11-01: 他パッケージのパレット (SourceVault の SystemDoctor パレット等) のボタン処理も同じ数で包む *)
+SetAttributes[ClaudeHoldFrontEnd, HoldAll];
+ClaudeHoldFrontEnd[expr_] := iClaudeHoldFE[expr];
 
 If[! ValueQ[$iClaudeTickHeldSince], $iClaudeTickHeldSince = None];
 iClaudeTickHeldNote[held_] := Which[
@@ -24828,6 +24885,148 @@ iDocLooksTruncated[content_String] :=
   ];
 iDocLooksTruncated[_] := True;
 
+(* === API リファレンス (api.md / api_*.md) の書き込みゲート (2026-10-31) ===
+   SlideWorkflow api.md (140 KB) の再生成で、出力上限で途中切れした本文の後ろに
+   CLI の継続ターンの地の文 ("The document is already fully written. No further
+   action is needed ...") が付いた 78 KB の応答が成功扱いで書き込まれ、43 項目が消えた。
+   柵の開閉は揃い末尾も句点だったので、iIsValidDocContent / iDocLooksTruncated /
+   40% サイズゲートをすべて通過した。全経路 (逐次・並列・外部ワーカー docext・create・
+   api.md 自動更新) の共通書き込み口 iSafeWriteDoc で、API doc に限り次を検査する。
+   (1) 旧版の見出し (柵外の ##〜####) にあった公開シンボル (対応ソースに ::usage が
+       あるもの) が新しい見出しから消えた。::usage がソースから消えたシンボルは削除してよい。
+   (2) 本文が旧版より $iDocApiShrinkLimit を超えて縮んだ。正当に削除されたシンボルの
+       節の長さは旧版から差し引いて比べる。
+   (3) 末尾 (柵外の最後の $iDocApiTailLines 行) に LLM の地の文がある。 *)
+If[!NumericQ[$iDocApiShrinkLimit], $iDocApiShrinkLimit = 0.25];
+If[!IntegerQ[$iDocApiTailLines], $iDocApiTailLines = 8];
+
+(* API doc の末尾に出る地の文。API doc の末尾は項目の説明行なので、これらが出たら
+   本文ではなく会話の続き (出力上限に達した後の継続ターン等) *)
+$iDocApiChatterRegex = {
+  "(?i)no further (?:action|changes?|updates?|edits?|work)",
+  "(?i)already (?:been )?(?:fully |completely )?(?:written|complete|up[ -]to[ -]date|in place)",
+  "(?i)(?:the|this) (?:document|file|reference|api(?:_[\\p{L}\\p{N}_]+)?\\.md)(?: file)? (?:is|looks) (?:now |already )?(?:complete|finished|up[ -]to[ -]date|fully written)",
+  "(?i)(?:reading|checking|looking at|re-reading) the (?:current |existing )?(?:document|file|api(?:_[\\p{L}\\p{N}_]+)?\\.md)",
+  "(?:^|[.!?。」)]\\s*)(?:I have|I've|I'll|I will|I'm|Let me|Now I|Now let me)\\s",
+  "以上(?:です|となります|が(?:更新|修正|最新))",
+  "(?:ドキュメント|ファイル|api(?:_[\\p{L}\\p{N}_]+)?\\.md)(?:は|を)(?:既に|すでに)",
+  "(?:変更|対応|作業|修正|追記)は(?:不要|必要ありません|ありません)",
+  "ご確認ください",
+  "(?:更新|作成|書き込み|出力)(?:が|を)完了しました"};
+
+iDocApiDocQ[path_String] :=
+  With[{f = FileNameTake[path]}, f === "api.md" || iIsAuxApiName[FileBaseName[f]]];
+iDocApiDocQ[_] := False;
+
+(* 柵外の ##〜#### 見出し: {行番号, 行} のリスト *)
+iDocApiHeadings[lines_List] :=
+  Module[{flags = First @ iDocFenceScan[lines]},
+    Select[Transpose[{Range[Length[lines]], lines}],
+      flags[[First[#]]] &&
+        StringMatchQ[Last[#], RegularExpression["[ ]{0,3}#{2,4}[ \\t].*"]] &]];
+
+iDocSymbolTokens[s_String] := StringCases[s, RegularExpression["[\\p{L}$][\\p{L}\\p{N}$]*"]];
+
+(* 見出しの先頭トークンがシンボル名らしい (大文字か $ で始まる) ならそれ、でなければ None *)
+iDocApiLeadSymbol[head_String] :=
+  With[{t = iDocSymbolTokens[head]},
+    If[t =!= {} && StringMatchQ[First[t], RegularExpression["[$\\p{Lu}].*"]], First[t], None]];
+
+(* ソースで ::usage を代入しているシンボル名 (文脈修飾は外す)。行頭か ; の直後の代入
+   (claudecode.wl には「...";Foo::usage =」と前の文に続けた形が多い) だけを数え、
+   コメント内に退避した usage 行 (行頭がコメント開始記号のもの) は数えない *)
+iDocUsageSymbols[src_String] :=
+  DeleteDuplicates @ StringCases[src,
+    RegularExpression[
+      "(?m)(?:^|;)[ \\t]*(?:[\\p{L}$][\\p{L}\\p{N}$]*`)*([\\p{L}$][\\p{L}\\p{N}$]*)::usage[ \\t]*:?="] :> "$1"];
+iDocUsageSymbols[_] := {};
+
+(* API doc に対応するソース (api.md → <pkg>.wl、api_<aux>.md → <pkg>_<aux>.wl) の
+   ::usage シンボル。ソースが読めなければ $Failed *)
+iDocApiUsageSymbols[destPath_String, packageName_String] :=
+  Module[{aux = iExtractAuxNameFromApiDoc[FileNameTake[destPath]], sf, src},
+    sf = Quiet @ Check[
+      If[aux === None, iPackageSourceFile[packageName],
+        iFindAuxPackageSource[packageName, aux]], $Failed];
+    If[!StringQ[sf] || !FileExistsQ[sf], Return[$Failed]];
+    src = iDocReadUTF8[sf];
+    If[!StringQ[src] || src === "", Return[$Failed]];
+    iDocUsageSymbols[src]];
+
+(* 末尾 (柵外の最後の $iDocApiTailLines 個の非空行) のうち地の文に当たる行 *)
+iDocApiChatterLines[lines_List] :=
+  Module[{flags = First @ iDocFenceScan[lines], prose},
+    prose = Select[Pick[lines, flags], StringTrim[#] =!= "" &];
+    Select[Take[prose, -Min[$iDocApiTailLines, Length[prose]]],
+      Function[ln, AnyTrue[$iDocApiChatterRegex,
+        StringContainsQ[ln, RegularExpression[#]] &]]]];
+
+(* API doc の書き込み可否。合格なら ""、不合格なら理由 (" / " 区切り)。
+   旧版が無い (新規作成) ときは (3) だけを検査する。 *)
+iDocApiGateReason[destPath_String, cleaned_String, packageName_String] :=
+  Module[{newLines, newHeads, newTok, oldText, oldLines, oldHeads, oldTok, usage, usageOK,
+          protected, lost, chatter, lostR = {}, shrinkR = {}, chatterR = {},
+          oldLen, newLen, removedLen = 0, base},
+    If[!iDocApiDocQ[destPath], Return[""]];
+    newLines = iDocSplitLines[cleaned];
+    chatter = iDocApiChatterLines[newLines];
+    If[chatter =!= {},
+      chatterR = {"末尾に LLM の地の文 \"" <>
+        StringTake[StringTrim[Last[chatter]], UpTo[80]] <> "\""}];
+    oldText = If[FileExistsQ[destPath], iDocReadUTF8[destPath], ""];
+    If[StringQ[oldText] && StringLength[StringTrim[oldText]] > 200,
+      oldLines = iDocSplitLines[oldText];
+      oldHeads = iDocApiHeadings[oldLines];
+      newHeads = iDocApiHeadings[newLines];
+      newTok = DeleteDuplicates @ Flatten[iDocSymbolTokens /@ newHeads[[All, 2]]];
+      oldTok = DeleteDuplicates @ Flatten[iDocSymbolTokens /@ oldHeads[[All, 2]]];
+      usage = iDocApiUsageSymbols[destPath, packageName];
+      usageOK = ListQ[usage] && usage =!= {};
+      (* (1) ソースから ::usage を読めないと削除の正当性を確かめられないので、
+         旧見出しの先頭シンボルが全部残っていることを求める *)
+      protected = If[usageOK, usage,
+        DeleteCases[iDocApiLeadSymbol /@ oldHeads[[All, 2]], None]];
+      lost = Select[oldTok, MemberQ[protected, #] && !MemberQ[newTok, #] &];
+      If[lost =!= {},
+        lostR = {"見出しから公開シンボル " <> ToString[Length[lost]] <> " 件が消失 (" <>
+          If[usageOK, "ソースに ::usage あり", "ソースの ::usage を読めないため削除は不可"] <>
+          "): " <> StringRiffle[Take[lost, UpTo[8]], ", "] <>
+          If[Length[lost] > 8, " ほか", ""]}];
+      (* (2) ::usage が消え見出しからも消えたシンボルの節は旧版の長さから除く *)
+      If[usageOK && oldHeads =!= {},
+        removedLen = Total @ MapThread[
+          Function[{h, s, e},
+            With[{lead = iDocApiLeadSymbol[h]},
+              If[StringQ[lead] && !MemberQ[usage, lead] && !MemberQ[newTok, lead],
+                Total[StringLength /@ oldLines[[s ;; e]]] + (e - s + 1), 0]]],
+          {oldHeads[[All, 2]], oldHeads[[All, 1]],
+           Append[Rest[oldHeads[[All, 1]]] - 1, Length[oldLines]]}]];
+      oldLen = StringLength[StringTrim[StringRiffle[oldLines, "\n"]]];
+      newLen = StringLength[StringTrim[StringRiffle[newLines, "\n"]]];
+      base = oldLen - removedLen;
+      If[base > 200 && newLen < (1 - $iDocApiShrinkLimit) base,
+        shrinkR = {"API doc の縮小 " <> ToString[oldLen] <> "\[RightArrow]" <>
+          ToString[newLen] <> "文字 (" <> ToString[Round[100. newLen / base]] <> "%" <>
+          If[removedLen > 0,
+            ", 削除済みシンボルの節 " <> ToString[removedLen] <> " 文字を除いた旧版比", ""] <>
+          ", 下限 " <> ToString[Round[100 (1 - $iDocApiShrinkLimit)]] <> "%)"}]];
+    StringRiffle[Join[lostR, shrinkR, chatterR], " / "]];
+iDocApiGateReason[___] := "";
+
+(* 1 回の応答で出し切れない大きさの既存 API doc は LLM に投げない。投げても出力上限で
+   途中切れした本文と継続ターンの地の文が返るだけで、長時間待った末に上のゲートで
+   拒否される。該当すれば理由、それ以外は "" *)
+iDocApiTooLargeReason[docPath_String] :=
+  Module[{max = ClaudeCode`$ClaudeDocApiMaxBytes, bytes},
+    If[!iDocApiDocQ[docPath] || !NumericQ[max] || !FileExistsQ[docPath], Return[""]];
+    bytes = Quiet @ Check[FileByteCount[docPath], 0];
+    If[!IntegerQ[bytes] || bytes <= max, Return[""]];
+    FileNameTake[docPath] <> " は " <> ToString[bytes] <>
+      " bytes で、1 回の応答で出し切れる上限 ($ClaudeDocApiMaxBytes = " <> ToString[max] <>
+      ") を超えるため再生成しません (旧ファイルはそのまま)。補助モジュール <pkg>_<aux>.wl に" <>
+      "分けて api_<aux>.md に分割するか、変更点を手で追記してください"];
+iDocApiTooLargeReason[_] := "";
+
 (* === \:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f4\:65b0\:306e\:518d\:958b(resumption)\:7ba1\:7406 ===
    \:30bd\:30fc\:30b9\:5185\:5bb9 + \:6307\:793a + \:5bfe\:8c61\:30d5\:30a1\:30a4\:30eb\:96c6\:5408\:304b\:3089\:30b5\:30a4\:30af\:30eb\:9375\:3092\:4f5c\:308a\:3001\:6210\:529f\:3057\:305f
    \:30d5\:30a1\:30a4\:30eb\:3092\:8a18\:9332\:3002API \:30a8\:30e9\:30fc\:7b49\:3067\:4e2d\:65ad\:5f8c\:306b\:518d\:5b9f\:884c\:3057\:305f\:3068\:304d\:3001\:540c\:4e00\:30b5\:30a4\:30af\:30eb\:306a\:3089
@@ -25279,7 +25478,7 @@ iSafeWriteDoc[destPath_String, response_String] :=
    packageName \:3092\:4f7f\:3063\:3066 (1) \:30b5\:30a4\:30ba\:9000\:884c (2) \:30bf\:30a4\:30c8\:30eb\:6574\:5408\:6027 \:3092\:691c\:8a3c\:3059\:308b\:3002 *)
 iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
   Module[{cleaned, existingContent, existingLen, newLen, docFileName,
-          existingTitle, newTitle},
+          existingTitle, newTitle, apiReason},
     $iDocLastFailReason = "";   (* \:8a3a\:65ad\:7528: \:6210\:529f\:6642\:306f\:7a7a\:3001\:5931\:6557\:6642\:306b\:5177\:4f53\:7406\:7531\:3092\:8a18\:9332 *)
     (* \:57fa\:672c\:7684\:306a\:30b3\:30f3\:30c6\:30f3\:30c4\:691c\:8a3c *)
     If[!iIsValidDocContent[response],
@@ -25325,6 +25524,15 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
         ")\:3002\:66f8\:304d\:8fbc\:307f\:3092\:62d2\:5426\:3057\:307e\:3057\:305f\:3002"];
       Return[$Failed]
     ];
+    (* === ゲート5: API doc の項目消失・縮小・末尾の地の文 (2026-10-31) ===
+       retry 中も緩めない (API doc は「簡潔に」再生成して項目を落としてよい doc ではない) *)
+    If[iDocApiDocQ[destPath],
+      apiReason = iDocApiGateReason[destPath, cleaned, packageName];
+      If[apiReason =!= "",
+        $iDocLastFailReason = apiReason;
+        Print[iL["\:26a0 iSafeWriteDoc: API doc の検証に不合格 (", "\:26a0 iSafeWriteDoc: API doc validation failed ("] <>
+          docFileName <> "): " <> apiReason <> iL["。書き込みを拒否しました。", ". Write rejected."]];
+        Return[$Failed]]];
     (* === \:30ac\:30fc\:30c92: \:30bf\:30a4\:30c8\:30eb\:6574\:5408\:6027\:30c1\:30a7\:30c3\:30af (README.md \:306e\:307f) === *)
     (* README.md \:306e\:5148\:982d # \:30bf\:30a4\:30c8\:30eb\:304c\:30d1\:30c3\:30b1\:30fc\:30b8\:540d\:3068\:5b8c\:5168\:306b\:7570\:306a\:308b\:5834\:5408\:306f\:62d2\:5426 *)
     If[docFileName === "README.md",
@@ -27695,11 +27903,15 @@ iBuildDocPrompt[sourceCode_String, packageName_String, docsDir_String, docFile_S
     splitCache_Association:<||>] :=
   Module[{docPath, currentContent, fullPrompt, split, chunkedSource, narrowQ,
           isReadme, isApi, promptParts, useInstruction,
-          srcResolved, useSource, useName, effectiveCache},
+          srcResolved, useSource, useName, effectiveCache, tooLarge},
     docPath = FileNameJoin[{docsDir, docFile}];
     srcResolved = iResolveSourceForDoc[packageName, docFile, sourceCode];
     If[TrueQ[srcResolved["isAux"]] && srcResolved["sourceCode"] === None,
       Return[<|"status" -> "auxmissing", "auxName" -> srcResolved["auxName"], "docPath" -> docPath|>]];
+    (* 2026-10-31: 1 応答で出し切れない大きさの API doc は投げない (旧ファイルはそのまま) *)
+    tooLarge = iDocApiTooLargeReason[docPath];
+    If[tooLarge =!= "",
+      Return[<|"status" -> "toolarge", "reason" -> tooLarge, "docPath" -> docPath|>]];
     useSource = srcResolved["sourceCode"];
     useName = srcResolved["effectiveName"];
     effectiveCache = If[TrueQ[srcResolved["isAux"]], <||>, splitCache];
@@ -27888,7 +28100,7 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
   Module[{docFile, docPath, currentContent, fullPrompt, histDir,
           split, chunkedSource, narrowQ, savedModel, isReadme, isApi,
           promptParts, useInstruction, stepTok,
-          srcResolved, useSource, useName, effectiveCache},
+          srcResolved, useSource, useName, effectiveCache, tooLarge},
     (* 2026-06-10 (freeze fix): 同一パッケージのドキュメント更新チェーンの
        多重起動ガード。2 本の連鎖が同じ docs/ と履歴を同時更新すると
        ファイル破損に加え、共有 tick の負荷が倍増し FE フリーズを招く。 *)
@@ -27928,6 +28140,17 @@ iUpdateDocNext[sourceCode_String, packageName_String, nb_NotebookObject,
         packageName <> "_" <> srcResolved["auxName"] <>
         ".wl \:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002",
         FontColor -> RGBColor[0.8, 0.4, 0]]];
+      iUpdateDocNext[sourceCode, packageName, nb, docsDir, instruction, targetDocs,
+        idx + 1, diffText, srcFile, splitCache, mode, docMediaFiles, designContext];
+      Return[]];
+    (* 2026-10-31: 1 応答で出し切れない大きさの API doc は投げずにスキップ
+       (旧ファイルはそのまま・進捗は記録しない)。並列/外部ワーカー経路は iBuildDocPrompt *)
+    tooLarge = iDocApiTooLargeReason[docPath];
+    If[tooLarge =!= "",
+      $iDocLastFailReason = tooLarge;
+      nbPrint[nb, Style[
+        "\:26d4 [" <> ToString[idx] <> "/" <> ToString[Length[targetDocs]] <> "] " <> tooLarge <> "\:3002",
+        FontColor -> RGBColor[0.8, 0.2, 0.2]]];
       iUpdateDocNext[sourceCode, packageName, nb, docsDir, instruction, targetDocs,
         idx + 1, diffText, srcFile, splitCache, mode, docMediaFiles, designContext];
       Return[]];
@@ -28363,7 +28586,10 @@ iDocParallelPump[jobId_String] :=
         bp = iBuildDocPrompt[st["sourceCode"], st["package"], st["docsDir"], doc,
           st["instruction"], st["diffText"], st["mode"], st["designContext"], st["splitCache"]];
         If[Lookup[bp, "status", "ok"] =!= "ok",
-          nbPrint[st["nb"], Style["\:26a0 " <> doc <> " \:3092\:30b9\:30ad\:30c3\:30d7 (\:88dc\:52a9\:30bd\:30fc\:30b9\:672a\:691c\:51fa)", FontColor -> RGBColor[0.8, 0.4, 0]]];
+          If[bp["status"] === "toolarge",
+            $iDocLastFailReason = bp["reason"];
+            nbPrint[st["nb"], Style["\:26d4 " <> bp["reason"] <> "\:3002", FontColor -> RGBColor[0.8, 0.2, 0.2]]],
+            nbPrint[st["nb"], Style["\:26a0 " <> doc <> " \:3092\:30b9\:30ad\:30c3\:30d7 (\:88dc\:52a9\:30bd\:30fc\:30b9\:672a\:691c\:51fa)", FontColor -> RGBColor[0.8, 0.4, 0]]]];
           st["done"] = Append[st["done"], doc]; $iDocParallelJobs[jobId] = st; Continue[]];
         (* \:4e16\:4ee3\:756a\:53f7: \:518d\:6295\:5165\:6bce\:306b\:30a4\:30f3\:30af\:30ea\:30e1\:30f3\:30c8\:3002\:65e7\:4e16\:4ee3\:306e\:4e8c\:91cd\:767a\:706b callback \:306f\:7121\:8996\:3055\:308c\:308b\:3002 *)
         gNew = Lookup[st["gen"], doc, 0] + 1;
@@ -28946,7 +29172,10 @@ iDocWorkerRunCore[jobDir_String, job_Association] :=
             diffText, mode, designContext, splitCache], _, $Failed &], $Failed];
         If[!AssociationQ[bp] || Lookup[bp, "status", "ok"] =!= "ok",
           doneDocs = Append[doneDocs, doc];
-          emit["⚠ " <> doc <> " をスキップ (補助ソース未検出/プロンプト構築失敗)"];
+          If[AssociationQ[bp] && bp["status"] === "toolarge",
+            $iDocLastFailReason = bp["reason"];
+            emit["⛔ " <> bp["reason"] <> "。"],
+            emit["⚠ " <> doc <> " をスキップ (補助ソース未検出/プロンプト構築失敗)"]];
           Return[False, Module]];
         prompt = bp["prompt"];
         (* 再試行時は逐次経路と同じ RETRY NOTICE を付与 (切り詰め再発防止) *)
@@ -29420,13 +29649,19 @@ iClaudeDocExtFinish[jid_String, info_Association, d_Association] :=
    ============================================================ *)
 
 iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
-  Module[{docsDir, apiFile, srcFile, sourceCode, prompt},
+  Module[{docsDir, apiFile, srcFile, sourceCode, prompt, tooLarge},
     docsDir = iPackageDocsDir[packageName];
     If[!StringQ[docsDir], Return[]];
     (* docs \:30c7\:30a3\:30ec\:30af\:30c8\:30ea\:304c\:306a\:3051\:308c\:3070\:4f5c\:6210 *)
     If[!DirectoryQ[docsDir],
       Quiet @ CreateDirectory[docsDir, CreateIntermediateDirectories -> True]];
     apiFile = FileNameJoin[{docsDir, "api.md"}];
+    (* 2026-10-31: 1 応答で出し切れない大きさなら投げない (旧ファイルはそのまま) *)
+    tooLarge = iDocApiTooLargeReason[apiFile];
+    If[tooLarge =!= "",
+      $iDocLastFailReason = tooLarge;
+      nbPrint[nb, Style["\:26d4 " <> tooLarge <> "\:3002", FontColor -> RGBColor[0.8, 0.2, 0.2]]];
+      Return[]];
     srcFile = iPackageSourceFile[packageName];
     If[!FileExistsQ[srcFile], Return[]];
     sourceCode = Quiet @ Check[Import[srcFile, "Text"], ""];
@@ -29465,7 +29700,10 @@ iAutoUpdateApiMd[nb_NotebookObject, packageName_String] :=
             writeResult = iSafeWriteDoc[af, response, pn];
             If[writeResult =!= $Failed,
               nbPrint[nb2, "  \[Checkmark] " <> pn <> " \:306e api.md \:3092\:66f4\:65b0\:3057\:307e\:3057\:305f"],
-              nbPrint[nb2, "  \:2717 api.md \:306e\:81ea\:52d5\:66f4\:65b0\:306b\:5931\:6557 (\:7121\:52b9\:306a\:5fdc\:7b54/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408/\:30b5\:30a4\:30ba\:9000\:884c): " <>
+              nbPrint[nb2, "  \:2717 api.md \:306e\:81ea\:52d5\:66f4\:65b0\:306b\:5931\:6557 (" <>
+                If[StringQ[$iDocLastFailReason] && $iDocLastFailReason =!= "",
+                  $iDocLastFailReason,
+                  "\:7121\:52b9\:306a\:5fdc\:7b54/\:30bf\:30a4\:30c8\:30eb\:4e0d\:6574\:5408/\:30b5\:30a4\:30ba\:9000\:884c"] <> "): " <>
                 StringTake[ToString[response], UpTo[100]]]
             ]]
         ]
@@ -35234,8 +35472,12 @@ iSeparationTargetFiles[_] := {};
 
 (* \:5206\:96e2\:30c1\:30a7\:30c3\:30af\:5b9f\:884c: NBAccess`NBAuditPackageSource \:3067\:691c\:67fb\:3057\:3066\:7d50\:679c\:3092\:8868\:793a\:3057\:3001
    {<|"file" -> path, "violations" -> {<|"line", "code", "violation" (\:898f\:5247 ID), "description", "severity"|>..}|>..}
-   \:3092\:8fd4\:3059 (ClaudeFixSeparation \:306e\:30ad\:30e3\:30c3\:30b7\:30e5\:3068\:4e92\:63db)\:3002waiver \:306e\:4ed8\:3044\:305f\:691c\:51fa\:306f\:542b\:3081\:306a\:3044\:3002LLM \:306f\:4f7f\:308f\:306a\:3044\:3002 *)
+   \:3092\:8fd4\:3059 (ClaudeFixSeparation \:306e\:30ad\:30e3\:30c3\:30b7\:30e5\:3068\:4e92\:63db)\:3002waiver \:306e\:4ed8\:3044\:305f\:691c\:51fa\:306f\:542b\:3081\:306a\:3044\:3002LLM \:306f\:4f7f\:308f\:306a\:3044\:3002
+   2026-11-01: 本体は iClaudeCheckSeparationCore。公開関数は実行記録 (iSepRunLogged) で包むだけ。 *)
 ClaudeCheckSeparation[target:(All | _String | {__String}), opts:OptionsPattern[{Fallback -> False}]] :=
+  iSepRunLogged["Check", target, iClaudeCheckSeparationCore[target, opts]];
+
+iClaudeCheckSeparationCore[target_, opts:OptionsPattern[{Fallback -> False}]] :=
   Module[{files, res, result, failed, label, nb = Quiet[InputNotebook[]]},
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
     iPrecisionConfidentialCheck[nb];
@@ -35243,13 +35485,16 @@ ClaudeCheckSeparation[target:(All | _String | {__String}), opts:OptionsPattern[{
     label = If[StringQ[target], target, ToString[target, InputForm]];
     If[files === {},
       Print["\:30a8\:30e9\:30fc: \:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> label];
+      iSepRunNote["Error", "NoFiles"];
       Return[$Failed]];
     iWriteSectionHeaderBeforeEvalCell[nb,
       "\[FilledRightTriangle] ClaudeCheckSeparation: " <> label <>
       " (" <> DateString[Now, {"Year", "/", "Month", "/", "Day", " ", "Hour24", ":", "Minute"}] <> ")"];
+    iSepRunPhase["audit"];
     res = NBAccess`NBAuditPackageSource[files];
     If[!AssociationQ[res],
       Print["\:30a8\:30e9\:30fc: \:691c\:67fb\:306b\:5931\:6557\:3057\:307e\:3057\:305f: " <> ToString[res]];
+      iSepRunNote["Error", "AuditFailed: " <> StringTake[ToString[res, InputForm], UpTo[200]]];
       Return[$Failed]];
     result = Map[Function[f, <|"file" -> f,
         "violations" -> Map[<|"line" -> #Line, "code" -> #Code, "violation" -> #RuleID,
@@ -35258,6 +35503,7 @@ ClaudeCheckSeparation[target:(All | _String | {__String}), opts:OptionsPattern[{
       files];
     If[StringQ[target], $iSeparationCheckCache[target] = result];
     failed = res["Coverage"]["Failed"];
+    iSepRunNote["CoverageFailed", Length[failed]];
     Do[
       Module[{f = entry["file"], vs = entry["violations"], nErr},
         nErr = Count[vs, v_ /; v["severity"] === "Error"];
@@ -35280,8 +35526,15 @@ ClaudeCheckSeparation[target:(All | _String | {__String}), opts:OptionsPattern[{
     result
   ];
 
-(* \:5206\:96e2\:9055\:53cd\:306e\:4fee\:6b63 *)
+(* \:5206\:96e2\:9055\:53cd\:306e\:4fee\:6b63
+   2026-11-01: 本体は iClaudeFixSeparationCore。公開関数は実行記録 (iSepRunLogged) で包む。
+   ファイル修正のバックアップは $packageDirectory 内なら bak/ へ置き (旧: 隣に <名前>_orig<時刻>.wl。
+   All の検査対象に紛れ込んでいた)、書き込みは一時ファイル経由、書く前に EndPackage の有無と
+   構文解析できない範囲が増えていないかを確かめる (iSepFixWriteGate)。 *)
 ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
+  iSepRunLogged["Fix", target, iClaudeFixSeparationCore[target, opts]];
+
+iClaudeFixSeparationCore[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
   Module[{resolved, files, pkgName, cached, ext, timestamp,
           nb = Quiet[InputNotebook[]]},
     $currentUseFallback = TrueQ[OptionValue[Fallback]];
@@ -35289,6 +35542,7 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
     {files, pkgName} = iResolveSeparationTarget[target];
     If[Length[files] === 0,
       Print["\:30a8\:30e9\:30fc: \:30d5\:30a1\:30a4\:30eb\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093: " <> target];
+      iSepRunNote["Outcome", "NotFound"];
       Return[$Failed]];
     (* \:30bb\:30af\:30b7\:30e7\:30f3\:30d8\:30c3\:30c0\:30fc\:3092\:5165\:529b\:30bb\:30eb\:306e\:76f4\:524d\:306b\:633f\:5165 *)
     iWriteSectionHeaderBeforeEvalCell[nb,
@@ -35298,21 +35552,29 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
     cached = Lookup[$iSeparationCheckCache, target, None];
     If[cached === None,
       Print["\:5206\:96e2\:691c\:67fb\:3092\:5148\:306b\:5b9f\:884c\:3057\:307e\:3059..."];
+      iSepRunPhase["check"];
       cached = ClaudeCheckSeparation[target, Fallback -> TrueQ[OptionValue[Fallback]]];
-      If[cached === $Failed, Return[$Failed]]];
+      If[cached === $Failed, iSepRunNote["Outcome", "CheckFailed"]; Return[$Failed]]];
     (* \:9055\:53cd\:304c\:3042\:308b\:304b\:78ba\:8a8d *)
+    iSepRunNote["ViolationsBefore", Total[Length[#["violations"]] & /@ cached]];
     If[!AnyTrue[cached, Length[#["violations"]] > 0 &],
       Print["\:9055\:53cd\:306f\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3067\:3057\:305f\:3002\:4fee\:6b63\:306f\:4e0d\:8981\:3067\:3059\:3002"];
+      iSepRunNote["Outcome", "NoViolations"];
       Return[]];
     (* \:30d5\:30a1\:30a4\:30eb\:30d1\:30b9\:306e\:5834\:5408: \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:4f5c\:6210\:3057\:3066\:76f4\:63a5\:4fee\:6b63 *)
     ext = FileExtension[target];
     If[MemberQ[{"wl", "m", "nb"}, ext] && FileExistsQ[target],
       Module[{backupPath, violationDesc},
-        timestamp = DateString[Now, {"Year","Month","Day","Hour24","Minute","Second"}];
-        backupPath = StringReplace[target,
-          "." <> ext -> "_orig" <> timestamp <> "." <> ext];
-        CopyFile[target, backupPath];
+        iSepRunNote["Mode", "File"];
+        timestamp = DateString[Now, {"Year","Month","Day","-","Hour24","Minute","Second"}];
+        backupPath = iSepBackupPath[target, timestamp, "sepfix"];
+        If[Quiet @ Check[CopyFile[target, backupPath], $Failed] === $Failed,
+          Print["\:30a8\:30e9\:30fc: \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:3092\:4f5c\:308c\:306a\:304b\:3063\:305f\:306e\:3067\:4fee\:6b63\:3057\:307e\:305b\:3093: " <> backupPath];
+          iSepRunNote["Outcome", "BackupFailed"];
+          Return[$Failed, Module]];
         Print["\:30d0\:30c3\:30af\:30a2\:30c3\:30d7: " <> backupPath];
+        iSepRunNoteAppend["Backups", <|"File" -> target, "Backup" -> backupPath,
+          "HashBefore" -> iSepFileHash[target]|>];
         violationDesc = StringJoin[
           ("L" <> ToString[Lookup[#, "line", "?"]] <> ": " <>
            Lookup[#, "description", ""] <> "\n") & /@
@@ -35340,7 +35602,9 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
             "VIOLATIONS:\n" <> violationDesc <> "\n\n" <>
             "Output the COMPLETE corrected source file. Do NOT wrap in code fences.\n\n" <>
             "=== SOURCE ===\n" <> src;
+          iSepRunPhase["llm"];
           fixResult = iSeparationQuery[fixPrompt];
+          iSepRunPhase["write"];
           If[StringQ[fixResult] && !StringStartsQ[fixResult, "Error:"],
             Module[{clean, isFullFile, finalCode},
               clean = StringReplace[fixResult, {
@@ -35378,14 +35642,38 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
                   ]
                 ]
               ];
+              (* 2026-11-01: 書く前の検査 (元と同じ内容・途中で切れた応答・構文の壊れた応答を書かない) *)
+              If[finalCode =!= None && iSepSameSourceQ[src, finalCode],
+                Print["修正案は元のファイルと同じ内容でした。"];
+                iSepRunNote["Outcome", "Skipped"];
+                iSepRunNote["Reason", "修正案が元のファイルと同じ内容"];
+                finalCode = None];
               If[finalCode =!= None,
-                Export[target, finalCode, "Text", CharacterEncoding -> "UTF-8"];
-                Print[Style["\:2705 " <> FileNameTake[target] <> " \:3092\:4fee\:6b63\:3057\:307e\:3057\:305f", Bold]];
+                With[{gate = iSepFixWriteGate[src, finalCode, target]},
+                  If[!TrueQ[gate["OK"]],
+                    Print[Style["⚠ 修正案を書き込みませんでした: " <> gate["Reason"],
+                      FontColor -> RGBColor[0.8, 0, 0]]];
+                    iSepRunNote["Outcome", "Rejected"];
+                    iSepRunNote["Reason", gate["Reason"]];
+                    finalCode = None,
+                    If[IntegerQ[Lookup[gate, "ViolationsAfter", None]],
+                      iSepRunNote["ViolationsAfter", gate["ViolationsAfter"]]]]]];
+              If[finalCode =!= None,
+                If[iSepAtomicWriteText[target, finalCode],
+                  Print[Style["\:2705 " <> FileNameTake[target] <> " \:3092\:4fee\:6b63\:3057\:307e\:3057\:305f", Bold]];
+                  iSepRunNote["Outcome", "Written"];
+                  iSepRunNoteAppend["Changed", target];
+                  iSepRunSetBackupHashAfter[target, iSepFileHash[target]],
+                  Print[Style["⚠ " <> FileNameTake[target] <> " に書き込めませんでした。", FontColor -> RGBColor[0.8, 0, 0]]];
+                  iSepRunNote["Outcome", "WriteFailed"]];
                 $iSeparationCheckCache = KeyDrop[$iSeparationCheckCache, target],
-                Print["\:30b9\:30ad\:30c3\:30d7: " <> FileNameTake[target] <> " \:306f\:5909\:66f4\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"]
+                Print["\:30b9\:30ad\:30c3\:30d7: " <> FileNameTake[target] <> " \:306f\:5909\:66f4\:3055\:308c\:307e\:305b\:3093\:3067\:3057\:305f"];
+                If[iSepRunOutcome[] === None, iSepRunNote["Outcome", "Skipped"]]
               ]
             ],
-            Print["\:30a8\:30e9\:30fc: \:4fee\:6b63\:306b\:5931\:6557: " <> StringTake[ToString[fixResult], UpTo[200]]]
+            Print["\:30a8\:30e9\:30fc: \:4fee\:6b63\:306b\:5931\:6557: " <> StringTake[ToString[fixResult], UpTo[200]]];
+            iSepRunNote["Outcome", "LLMFailed"];
+            iSepRunNote["Reason", StringTake[ToString[fixResult], UpTo[300]]]
           ]
         ]
       ];
@@ -35413,11 +35701,1127 @@ ClaudeFixSeparation[target_String, opts:OptionsPattern[{Fallback -> False}]] :=
           "Do NOT change any AccessLevel or PrivacyLevel value.\n\n" <>
           "\:9055\:53cd\:4e00\:89a7:\n" <> violationDesc,
           Fallback -> TrueQ[OptionValue[Fallback]]];
+        (* ClaudeUpdatePackage は非同期に進むので、ここでは委譲したことだけを記録する *)
+        iSepRunNote["Mode", "Package"];
+        iSepRunNote["Outcome", "Delegated"];
         $iSeparationCheckCache = KeyDrop[$iSeparationCheckCache, target]
       ];
       Return[]];
-    Print["\:30a8\:30e9\:30fc: \:4fee\:6b63\:5bfe\:8c61\:3092\:7279\:5b9a\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f: " <> target]
+    Print["\:30a8\:30e9\:30fc: \:4fee\:6b63\:5bfe\:8c61\:3092\:7279\:5b9a\:3067\:304d\:307e\:305b\:3093\:3067\:3057\:305f: " <> target];
+    iSepRunNote["Outcome", "NotFound"]
   ];
+
+(* ============================================================
+   分離検査の実行記録と実行管理 (2026-11-01)
+   ClaudeCheckSeparation / ClaudeFixSeparation の 1 実行を 1 フォルダに記録する:
+     $UserBaseDirectory/ClaudeRuntime/separationruns/<RunId>/
+       run.json     開始情報 (種類・対象・ファイル・実行場所・呼び出し元・PID)
+       launcher.json 外部実行のときの wolframscript の PID (FE 側が書く)
+       status.json  途中経過 (Phase) とバックアップ (修正が書き換える前に残す)
+       done.json    結果の要約 (State / Outcome / 件数 / 所要)
+       result.json  検査結果 (ClaudeCheckSeparation の戻り値)
+       restore.json 巻き戻しの記録
+   マシンローカルで、各ファイルの書き手は実行したプロセスだけ (外部実行は FE が
+   run.json / launcher.json / job.json を書いて起動し、以後はワーカーが書く)。
+   終了時に SIEM spool へ "SeparationRun" を送る (iClaudeDiagEmit)。
+   外部実行は docext と同じ形: 席ゲート (iClaudeSeatTryAcquire) + supervisor spawn +
+   done.json を共有 polling tick で待つ。FE には常駐 Dynamic を足さない
+   (一覧 View は [更新] ボタンで描き直す: [[claudeprocesslist-manual-refresh]])。
+   ============================================================ *)
+
+If[!AssociationQ[$iSepRunsActive], $iSepRunsActive = <||>];
+If[!AssociationQ[$iSepJobs], $iSepJobs = <||>];
+If[!AssociationQ[$iSepRunContext], $iSepRunContext = <||>];
+If[!ValueQ[$iSepRunCur], $iSepRunCur = None];
+If[!ValueQ[$iSepLastRunId], $iSepLastRunId = None];
+If[!NumericQ[$iSepJobLastPoll], $iSepJobLastPoll = 0];
+If[!NumericQ[$iSepRunLastPrune], $iSepRunLastPrune = 0];
+If[!AssociationQ[$iSepProbeCache], $iSepProbeCache = <||>];
+If[!ValueQ[$iSepRunsWindow], $iSepRunsWindow = None];
+$iSepRunDeadlineSeconds = 7200;   (* 外部実行の上限 (supervisor が止める) *)
+$iSepRunKeep = 300;               (* 残す実行記録の数 *)
+$iSepRunKeepDays = 180;           (* 残す日数 *)
+
+(* SIEM spool への送出。テストは False にする (2026-11-01: テストの実行が実機の診断ログに
+   SeparationRun として入った)。外部ワーカーへは job.json の "DiagEmit" で引き継ぐ *)
+If[!BooleanQ[$iSepRunDiagEmit], $iSepRunDiagEmit = True];
+iSepRunEmit[class_String, payload_Association, sev_String] :=
+  If[TrueQ[$iSepRunDiagEmit], iClaudeDiagEmit[class, payload, sev]];
+
+(* $iSepRunRootOverride: テストと外部ワーカー用 (ワーカーは渡されたフォルダの親を使う) *)
+If[!ValueQ[$iSepRunRootOverride], $iSepRunRootOverride = None];
+iSepRunRoot[] :=
+  Module[{root = If[StringQ[$iSepRunRootOverride], $iSepRunRootOverride,
+      FileNameJoin[{$UserBaseDirectory, "ClaudeRuntime", "separationruns"}]]},
+    If[!DirectoryQ[root], Quiet @ CreateDirectory[root, CreateIntermediateDirectories -> True]];
+    root];
+iSepRunDir[id_String] := FileNameJoin[{iSepRunRoot[], id}];
+iSepRunFile[id_String, name_String] := FileNameJoin[{iSepRunDir[id], name}];
+
+(* 名前順 = 時刻順になる ID (ミリ秒まで。同じミリ秒ならこのカーネル内の連番で並ぶ) *)
+If[!IntegerQ[$iSepRunSeq], $iSepRunSeq = 0];
+iSepRunNewId[] := "sep-" <>
+  DateString[Now, {"Year", "Month", "Day", "-", "Hour24", "Minute", "Second", "Millisecond"}] <> "-" <>
+  IntegerString[Mod[++$iSepRunSeq, 256], 16, 2] <>
+  IntegerString[RandomInteger[{16^^1000, 16^^FFFF}], 16];
+
+iSepRunJsonWrite[path_String, a_Association] := iDocExtWriteJson[path, iClaudeDiagJSONSafe[a]];
+iSepRunJsonRead[path_String] := With[{r = iDocExtReadJson[path]}, If[AssociationQ[r], r, None]];
+
+iSepFileHash[f_String] := If[FileExistsQ[f],
+  Quiet @ Check[FileHash[f, "SHA256", All, "HexString"], None], None];
+iSepFileHash[_] := None;
+
+iSepTargetLabel[All] := "All";
+iSepTargetLabel[t_String] :=
+  If[MemberQ[{"wl", "m", "nb"}, ToLowerCase[FileExtension[t]]], FileNameTake[t], t];
+iSepTargetLabel[t_List] := StringRiffle[iSepTargetLabel /@ t, ", "];
+iSepTargetLabel[t_] := ToString[t, InputForm];
+iSepTargetSpec[All] := "All";
+iSepTargetSpec[t_] := t;
+iSepTargetFromSpec["All"] := All;
+iSepTargetFromSpec[t_] := t;
+
+iSepRunFilesFor["Check", t_] := Replace[Quiet @ iSeparationTargetFiles[t], Except[_List] -> {}];
+iSepRunFilesFor["Fix", t_String] :=
+  If[MemberQ[{"wl", "m", "nb"}, ToLowerCase[FileExtension[t]]],
+    If[FileExistsQ[t], {t}, {}], iSepRunFilesFor["Check", t]];
+iSepRunFilesFor[_, _] := {};
+
+iSepRunModelLabel[] := ToString[If[StringQ[$ClaudeTestModel] && $ClaudeTestModel =!= "",
+  $ClaudeTestModel, $ClaudeModel]];
+
+(* バックアップの置き場所: $packageDirectory 内のファイルは bak/<名前> - <時刻> <tag>.<拡張子>
+   (空白を含む名前なので All の検査対象にならない)。それ以外は従来どおり隣に置く
+   (修正前は <名前>_orig<時刻>、ほかは <名前>_<tag><時刻>)。既にあれば連番を足す。 *)
+iSepBackupPath[file_String, ts_String, tag_String] :=
+  Module[{pkgDir = Global`$packageDirectory, bak, ext = FileExtension[file],
+          base = FileBaseName[file], mk, k = 1, p},
+    bak = If[StringQ[pkgDir] && pkgDir =!= "", FileNameJoin[{pkgDir, "bak"}], None];
+    mk = If[StringQ[bak] && DirectoryQ[bak] &&
+        StringStartsQ[ExpandFileName[file], ExpandFileName[pkgDir], IgnoreCase -> True],
+      Function[sfx, FileNameJoin[{bak, base <> " - " <> ts <> " " <> tag <> sfx <> "." <> ext}]],
+      Function[sfx, FileNameJoin[{DirectoryName[file], base <> "_" <>
+        If[tag === "sepfix", "orig", StringReplace[tag, "-" -> "_"]] <> StringDelete[ts, "-"] <> sfx <>
+        "." <> ext}]]];
+    p = mk[""];
+    While[FileExistsQ[p] && k < 100, k++; p = mk["-" <> ToString[k]]];
+    p];
+
+(* 一時ファイルに書いてから置き換える (書き込み途中で止められてもファイルを半端にしない) *)
+iSepAtomicWriteText[path_String, text_String] :=
+  Module[{tmp = path <> ".sepfix.tmp"},
+    If[Quiet @ Check[Export[tmp, text, "Text", CharacterEncoding -> "UTF-8"], $Failed] === $Failed,
+      Quiet @ DeleteFile[tmp]; Return[False, Module]];
+    If[Quiet @ Check[CopyFile[tmp, path, OverwriteTarget -> True], $Failed] === $Failed,
+      Quiet @ DeleteFile[tmp]; Return[False, Module]];
+    Quiet @ DeleteFile[tmp];
+    True];
+
+(* LLM の書き直しを書き込む前の検査。.wl / .m だけ (.nb は従来どおり)。
+   元にある EndPackage[] が消えていれば途中で切れた応答とみなし、構文解析できない範囲が
+   元より増えていれば構文の壊れた応答とみなして書かない。 *)
+iSepAuditCount[a_Association] :=
+  Count[Lookup[a, "Findings", {}], f_ /; Lookup[f, "Waived", False] === False];
+iSepAuditCount[_] := None;
+iSepAuditParseFailures[a_Association] :=
+  Length[Replace[Lookup[Replace[Lookup[a, "Coverage", <||>], Except[_Association] -> <||>],
+    "Failed", {}], Except[_List] -> {}]];
+iSepAuditParseFailures[_] := None;
+
+iSepSameSourceQ[a_String, b_String] :=
+  StringTrim[StringReplace[a, "\r\n" -> "\n"]] === StringTrim[StringReplace[b, "\r\n" -> "\n"]];
+
+iSepFixWriteGate[src_String, code_String, target_String] :=
+  Module[{name = FileNameTake[target], a0, a1, f0, f1},
+    If[!MemberQ[{"wl", "m"}, ToLowerCase[FileExtension[target]]],
+      Return[<|"OK" -> True|>, Module]];
+    If[StringContainsQ[src, "EndPackage["] && !StringContainsQ[code, "EndPackage["],
+      Return[<|"OK" -> False,
+        "Reason" -> "応答に EndPackage[] がありません (途中で切れた可能性があります)。"|>, Module]];
+    If[Length[DownValues[NBAccess`NBAuditPackageSourceText]] === 0,
+      Return[<|"OK" -> True, "Checked" -> False|>, Module]];
+    a0 = Quiet @ NBAccess`NBAuditPackageSourceText[src, name];
+    a1 = Quiet @ NBAccess`NBAuditPackageSourceText[code, name];
+    f0 = Replace[iSepAuditParseFailures[a0], None -> 0];
+    f1 = iSepAuditParseFailures[a1];
+    If[!IntegerQ[f1],
+      Return[<|"OK" -> False, "Reason" -> "修正後のコードを検査できませんでした。"|>, Module]];
+    If[f1 > f0,
+      Return[<|"OK" -> False, "Reason" -> "修正後のコードに構文解析できない範囲があります (" <>
+        ToString[f1] <> " 箇所、修正前 " <> ToString[f0] <> " 箇所)。"|>, Module]];
+    <|"OK" -> True, "ViolationsBefore" -> iSepAuditCount[a0], "ViolationsAfter" -> iSepAuditCount[a1]|>];
+
+(* ── 実行中の記録 ($iSepRunCur は iSepRunLogged が Block で持つ) ──
+   書くたびに status.json へ保存する (止められても途中経過とバックアップが残る)。 *)
+iSepRunPersistNotes[] :=
+  Quiet @ Check[
+    With[{id = Lookup[$iSepRunCur, "RunId", None]},
+      If[StringQ[id],
+        iSepRunJsonWrite[iSepRunFile[id, "status.json"],
+          Join[KeyDrop[$iSepRunCur, "RunId"],
+            <|"Heartbeat" -> AbsoluteTime[], "Pid" -> $ProcessID|>]]]],
+    Null];
+iSepRunNote[key_String, val_] :=
+  If[AssociationQ[$iSepRunCur], $iSepRunCur[key] = val; iSepRunPersistNotes[]];
+iSepRunNoteAppend[key_String, val_] :=
+  If[AssociationQ[$iSepRunCur],
+    $iSepRunCur[key] = Append[Replace[Lookup[$iSepRunCur, key, {}], Except[_List] -> {}], val];
+    iSepRunPersistNotes[]];
+iSepRunPhase[p_String] := iSepRunNote["Phase", p];
+iSepRunOutcome[] := If[AssociationQ[$iSepRunCur], Lookup[$iSepRunCur, "Outcome", None], None];
+iSepRunSetBackupHashAfter[file_String, h_] :=
+  If[AssociationQ[$iSepRunCur],
+    $iSepRunCur["Backups"] = Replace[Replace[Lookup[$iSepRunCur, "Backups", {}], Except[_List] -> {}],
+      b_Association /; Lookup[b, "File", None] === file :> Append[b, "HashAfter" -> h], {1}];
+    iSepRunPersistNotes[]];
+
+(* ── 開始・終了 ── *)
+iSepRunBegin[kind_String, target_, files_List] :=
+  Module[{ctx = If[AssociationQ[$iSepRunContext], $iSepRunContext, <||>], id, dir, pre, old,
+          parent, run},
+    parent = Lookup[ctx, "ParentRunId", None];
+    pre = TrueQ[Lookup[ctx, "Preallocated", False]] && StringQ[Lookup[ctx, "RunId", None]];
+    id = If[pre, ctx["RunId"], iSepRunNewId[]];
+    dir = iSepRunDir[id];
+    If[!DirectoryQ[dir], Quiet @ CreateDirectory[dir, CreateIntermediateDirectories -> True]];
+    old = If[pre, Replace[iSepRunJsonRead[FileNameJoin[{dir, "run.json"}]], None -> <||>], <||>];
+    run = Join[old, <|
+      "RunId" -> id, "Kind" -> kind, "Target" -> iSepTargetLabel[target],
+      "TargetSpec" -> iSepTargetSpec[target], "Files" -> files, "FileCount" -> Length[files],
+      "Mode" -> Lookup[ctx, "Mode", "Foreground"],
+      "Caller" -> Lookup[ctx, "Caller", If[StringQ[parent], "Run:" <> parent, "Direct"]],
+      "ParentRunId" -> If[StringQ[parent], parent, Null],
+      "Machine" -> iClaudeDiagMachineTag[], "Pid" -> $ProcessID,
+      "StartedAt" -> AbsoluteTime[], "StartedAtUnix" -> UnixTime[],
+      "StartedAtUTC" -> iClaudeDiagUTCNowISO[]|>,
+      If[kind === "Fix", <|"Model" -> iSepRunModelLabel[]|>, <||>],
+      If[pre, <|"WorkerPid" -> $ProcessID|>, <||>]];
+    iSepRunJsonWrite[FileNameJoin[{dir, "run.json"}], run];
+    $iSepRunsActive[id] = AbsoluteTime[];
+    If[!StringQ[parent], $iSepLastRunId = id];
+    If[!pre, Quiet @ iSepRunPrune[]];
+    id];
+
+iSepRunCheckSummary[r_List, notes_Association] :=
+  Module[{vs, sev, perFile},
+    vs = Flatten[Replace[Lookup[r, "violations", {}], Except[_List] -> {}, {1}]];
+    sev = Counts[Lookup[vs, "severity", Nothing]];
+    perFile = Select[Map[
+      <|"File" -> FileNameTake[#["file"]], "Path" -> #["file"],
+        "Violations" -> Length[#["violations"]],
+        "Errors" -> Count[#["violations"], v_ /; Lookup[v, "severity", ""] === "Error"]|> &, r],
+      #Violations > 0 &];
+    <|"Files" -> Length[r], "Violations" -> Length[vs],
+      "Errors" -> Lookup[sev, "Error", 0], "Reviews" -> Lookup[sev, "Review", 0],
+      "BySeverity" -> sev, "ByRule" -> ReverseSort[Counts[Lookup[vs, "violation", Nothing]]],
+      "CoverageFailed" -> Lookup[notes, "CoverageFailed", 0],
+      "PerFile" -> Take[ReverseSortBy[perFile, #Violations &], UpTo[200]]|>];
+iSepRunCheckSummary[___] := <||>;
+
+iSepRunStateOf[kind_String, r_, outcome_, aborted_, thrown_] := Which[
+  TrueQ[aborted], "Aborted",
+  TrueQ[thrown], "Failed",
+  kind === "Check", If[ListQ[r], "Done", "Failed"],
+  outcome === "Delegated", "Delegated",
+  MemberQ[{"Written", "NoViolations", "Skipped", "Rejected"}, outcome], "Done",
+  True, "Failed"];
+
+iSepRunSeverity[state_String] := Switch[state,
+  "Done" | "Delegated", "info", "Aborted" | "Cancelled" | "Abandoned", "warn", _, "error"];
+
+iSepRunFinish[id_String, kind_String, target_, r_, notes_Association, t0_, aborted_, thrown_] :=
+  Module[{outcome = Lookup[notes, "Outcome", None], state, summary, done, dur, mode},
+    dur = Round[AbsoluteTime[] - t0, 0.1];
+    state = iSepRunStateOf[kind, r, outcome, aborted, thrown];
+    summary = If[kind === "Check" && ListQ[r], iSepRunCheckSummary[r, notes], <||>];
+    mode = Lookup[Replace[iSepRunJsonRead[iSepRunFile[id, "run.json"]], None -> <||>], "Mode", "Foreground"];
+    done = <|"State" -> state, "Outcome" -> Replace[outcome, None -> Null],
+      "EndedAt" -> AbsoluteTime[], "EndedAtUTC" -> iClaudeDiagUTCNowISO[],
+      "DurationSeconds" -> dur, "Summary" -> summary,
+      "Fix" -> If[kind === "Fix",
+        KeyTake[notes, {"Mode", "Backups", "Changed", "Reason", "ViolationsBefore", "ViolationsAfter"}], <||>],
+      "Error" -> Lookup[notes, "Error", If[TrueQ[thrown], "Thrown", Null]]|>;
+    If[kind === "Check" && ListQ[r],
+      Quiet @ iSepRunJsonWrite[iSepRunFile[id, "result.json"], <|"Result" -> r|>]];
+    iSepRunJsonWrite[iSepRunFile[id, "done.json"], done];
+    $iSepRunsActive = KeyDrop[$iSepRunsActive, id];
+    $iSepProbeCache = <||>;
+    iSepRunEmit["SeparationRun",
+      <|"RunId" -> id, "Kind" -> kind, "Target" -> iSepTargetLabel[target], "Mode" -> mode,
+        "State" -> state, "Outcome" -> Replace[outcome, None -> Null], "DurationSeconds" -> dur,
+        "Files" -> Lookup[summary, "Files", Null], "Violations" -> Lookup[summary, "Violations", Null],
+        "Errors" -> Lookup[summary, "Errors", Null]|>,
+      iSepRunSeverity[state]];
+    done];
+
+(* 公開関数の包み: 開始を記録して本体を評価し、Abort / Throw でも終了を記録してから伝える。
+   入れ子 (修正の中の検査) は親の RunId を持つ別の実行として記録する。 *)
+SetAttributes[iSepRunLogged, HoldRest];
+iSepRunLogged[kind_String, target_, body_] :=
+  Module[{id, t0 = AbsoluteTime[], r, notes = <||>, aborted = False, thrown = False, mode},
+    id = iSepRunBegin[kind, target, Quiet @ Check[iSepRunFilesFor[kind, target], {}]];
+    mode = Lookup[If[AssociationQ[$iSepRunContext], $iSepRunContext, <||>], "Mode", "Foreground"];
+    Block[{$iSepRunCur = <|"RunId" -> id, "Phase" -> "running"|>,
+           $iSepRunContext = <|"ParentRunId" -> id, "Mode" -> mode|>},
+      iSepRunPersistNotes[];
+      r = Catch[CheckAbort[body, aborted = True; $Failed], _, (thrown = True; {##}) &];
+      notes = $iSepRunCur];
+    Quiet @ Check[
+      iSepRunFinish[id, kind, target, If[thrown, $Failed, r], notes, t0, aborted, thrown], Null];
+    Which[aborted, Abort[], thrown, Throw @@ r, True, r]];
+
+(* ── 読み出しと状態 ── *)
+(* PID のプロセス名と起動時刻 (Unix 秒)。PowerShell 1 回。無ければ None *)
+iSepProcInfo[pid_Integer] :=
+  Module[{out, s, parts},
+    out = Quiet @ TimeConstrained[RunProcess[{"powershell", "-NoProfile", "-NonInteractive",
+      "-Command",
+      "try { $p = Get-Process -Id " <> ToString[pid] <> " -ErrorAction Stop; " <>
+      "$p.ProcessName + '|' + [DateTimeOffset]::new($p.StartTime).ToUnixTimeSeconds() } catch { 'NONE' }"}],
+      8, $Failed];
+    s = If[AssociationQ[out], StringTrim @ Lookup[out, "StandardOutput", ""], ""];
+    parts = StringSplit[s, "|"];
+    If[Length[parts] === 2 && StringMatchQ[parts[[2]], DigitCharacter ..],
+      <|"Name" -> ToLowerCase[parts[[1]]], "StartUnix" -> ToExpression[parts[[2]]]|>, None]];
+iSepProcInfo[_] := None;
+
+iSepKernelProcNameQ[n_String] :=
+  MemberQ[{"wolframkernel", "wolframscript", "wolfram", "mathkernel"}, n];
+iSepKernelProcNameQ[_] := False;
+
+(* pid が今も「その実行の」プロセスか。when -> {"After", t}: t の前後 10 分以内に起動したもの
+   (外部実行のワーカー)、{"Before", t}: t より前に起動したもの (前面実行のカーネル)。PID 再利用ガード。 *)
+iSepPidAliveQ[pid_Integer, when_] :=
+  Module[{pi = iSepProcInfo[pid]},
+    AssociationQ[pi] && iSepKernelProcNameQ[pi["Name"]] &&
+      Switch[when,
+        {"After", _?NumericQ}, Abs[pi["StartUnix"] - when[[2]]] < 600,
+        {"Before", _?NumericQ}, pi["StartUnix"] <= when[[2]] + 5,
+        _, True]];
+iSepPidAliveQ[___] := False;
+
+iSepRunLauncher[id_String] := Replace[iSepRunJsonRead[iSepRunFile[id, "launcher.json"]], None -> <||>];
+
+(* cheap -> True はプロセスを照会せず経過時間だけで判定する (SystemDoctor probe 用)。
+   外部実行は上限 + 5 分、前面実行は 6 時間を過ぎたら照会せずに Abandoned とする。 *)
+iSepRunDerive[run_Association, done_, cheap_] :=
+  Module[{id = Lookup[run, "RunId", ""], mode = Lookup[run, "Mode", "Foreground"], age, t, lau, tu},
+    t = Replace[Lookup[run, "StartedAt", 0], Except[_?NumericQ] -> 0];
+    age = AbsoluteTime[] - t;
+    tu = Lookup[run, "StartedAtUnix", 0];
+    Which[
+      AssociationQ[done], Lookup[done, "State", "Done"],
+      Lookup[run, "Pid", None] === $ProcessID && KeyExistsQ[$iSepRunsActive, id], "Running",
+      mode === "Background",
+        Which[
+          KeyExistsQ[$iSepJobs, id], "Running",
+          age > $iSepRunDeadlineSeconds + 300, "Abandoned",
+          TrueQ[cheap], "Running",
+          True,
+            lau = iSepRunLauncher[id];
+            (* LauncherPid = wolframscript、WorkerPid = ワーカーのカーネル、
+               Pid = 入れ子の実行 (修正の中の検査) を走らせているワーカー *)
+            If[iSepPidAliveQ[Lookup[lau, "LauncherPid", None], {"After", Lookup[lau, "QueuedAtUnix", tu]}] ||
+               iSepPidAliveQ[Lookup[run, "WorkerPid", None], {"After", tu}] ||
+               (!KeyExistsQ[run, "WorkerPid"] && Lookup[run, "Pid", None] =!= Lookup[lau, "FEPid", None] &&
+                 iSepPidAliveQ[Lookup[run, "Pid", None], {"After", tu}]),
+              "Running", "Abandoned"]],
+      Lookup[run, "Pid", None] === $ProcessID, "Abandoned",
+      age > 6*3600, "Abandoned",
+      TrueQ[cheap], "Running",
+      True,
+        If[iSepPidAliveQ[Lookup[run, "Pid", None], {"Before", tu}], "Running", "Abandoned"]]];
+
+iSepRunReadDir[dir_String, cheap_] :=
+  Module[{run, done, status},
+    run = iSepRunJsonRead[FileNameJoin[{dir, "run.json"}]];
+    If[!AssociationQ[run], Return[None, Module]];
+    done = iSepRunJsonRead[FileNameJoin[{dir, "done.json"}]];
+    status = iSepRunJsonRead[FileNameJoin[{dir, "status.json"}]];
+    <|"Run" -> run, "Done" -> done, "Status" -> status, "Dir" -> dir,
+      "State" -> iSepRunDerive[run, done, cheap]|>];
+
+iSepRunDirs[] := Reverse[Sort[Select[
+  Quiet @ Check[FileNames["sep-*", iSepRunRoot[]], {}], DirectoryQ]]];
+
+iSepRunRecords[n_Integer, cheap_, kind_:All] :=
+  Module[{out = {}, rec},
+    Do[
+      If[Length[out] >= n, Break[]];
+      rec = iSepRunReadDir[d, cheap];
+      If[AssociationQ[rec] && (kind === All || Lookup[rec["Run"], "Kind", ""] === kind),
+        AppendTo[out, rec]],
+      {d, iSepRunDirs[]}];
+    out];
+
+iSepRunRow[rec_Association] :=
+  Module[{run = rec["Run"], done = rec["Done"], st = rec["Status"], sm, t},
+    sm = If[AssociationQ[done], Replace[Lookup[done, "Summary", <||>], Except[_Association] -> <||>], <||>];
+    t = Lookup[run, "StartedAt", None];
+    <|"RunId" -> Lookup[run, "RunId", "?"], "Kind" -> Lookup[run, "Kind", "?"],
+      "Target" -> Lookup[run, "Target", "?"], "Mode" -> Lookup[run, "Mode", "?"],
+      "Caller" -> Lookup[run, "Caller", "?"], "State" -> rec["State"],
+      "Outcome" -> If[AssociationQ[done], Replace[Lookup[done, "Outcome", Null], Null -> None], None],
+      "StartedAt" -> If[NumericQ[t], FromAbsoluteTime[t], Missing["Unknown"]],
+      "DurationSeconds" -> If[AssociationQ[done], Lookup[done, "DurationSeconds", Missing[]],
+        If[NumericQ[t], Round[AbsoluteTime[] - t], Missing[]]],
+      "Files" -> Lookup[run, "FileCount", Missing[]],
+      "Violations" -> Lookup[sm, "Violations", Missing[]],
+      "Errors" -> Lookup[sm, "Errors", Missing[]],
+      "Phase" -> If[AssociationQ[st], Lookup[st, "Phase", None], None],
+      "ParentRunId" -> Replace[Lookup[run, "ParentRunId", Null], Null -> None]|>];
+
+Options[ClaudeSeparationRuns] = {"Kind" -> All, "Cheap" -> False};
+ClaudeSeparationRuns[n_Integer:50, opts:OptionsPattern[]] :=
+  iSepRunRow /@ iSepRunRecords[Max[0, n], TrueQ[OptionValue["Cheap"]], OptionValue["Kind"]];
+
+ClaudeSeparationRunInfo[id_String] :=
+  Module[{dir = iSepRunDir[id], rec, res, rst},
+    If[!DirectoryQ[dir],
+      Return[Failure["NotFound", <|"MessageTemplate" -> "実行記録がありません: `1`",
+        "MessageParameters" -> {id}, "RunId" -> id|>], Module]];
+    rec = iSepRunReadDir[dir, False];
+    If[!AssociationQ[rec],
+      Return[Failure["Corrupt", <|"MessageTemplate" -> "実行記録を読めません: `1`",
+        "MessageParameters" -> {id}, "RunId" -> id|>], Module]];
+    res = iSepRunJsonRead[FileNameJoin[{dir, "result.json"}]];
+    rst = iSepRunJsonRead[FileNameJoin[{dir, "restore.json"}]];
+    Join[rec, <|
+      "Launcher" -> iSepRunLauncher[id],
+      "Result" -> If[AssociationQ[res], Lookup[res, "Result", Missing["None"]], Missing["None"]],
+      "Restore" -> If[AssociationQ[rst], rst, Missing["None"]]|>]];
+
+(* 古い記録の掃除 (1 時間に 1 回)。終了記録のあるものだけ消す *)
+iSepRunPrune[] :=
+  Module[{now = AbsoluteTime[], dirs, old},
+    If[now - $iSepRunLastPrune < 3600, Return[Null, Module]];
+    $iSepRunLastPrune = now;
+    dirs = Sort[Select[Quiet @ Check[FileNames["sep-*", iSepRunRoot[]], {}], DirectoryQ]];
+    old = Select[dirs,
+      now - Quiet @ Check[AbsoluteTime[FileDate[#, "Modification"]], now] > $iSepRunKeepDays*86400 &];
+    If[Length[dirs] > $iSepRunKeep, old = Union[old, Take[dirs, Length[dirs] - $iSepRunKeep]]];
+    Scan[If[FileExistsQ[FileNameJoin[{#, "done.json"}]],
+        Quiet @ DeleteDirectory[#, DeleteContents -> True]] &, old];
+    Null];
+
+(* ── 開始 ── *)
+iSepRunConflict[kind_String, target_, files_List] :=
+  Module[{lbl = iSepTargetLabel[target], live},
+    live = Select[iSepRunRecords[60, False], #State === "Running" &];
+    SelectFirst[live,
+      (Lookup[#Run, "Kind", ""] === kind && Lookup[#Run, "Target", ""] === lbl) ||
+      (kind === "Fix" && Lookup[#Run, "Kind", ""] === "Fix" &&
+        IntersectingQ[files, Replace[Lookup[#Run, "Files", {}], Except[_List] -> {}]]) &,
+      None]];
+
+iSepRunCall["Check", t_, fb_] := ClaudeCheckSeparation[t, Fallback -> fb];
+iSepRunCall["Fix", t_, fb_] := ClaudeFixSeparation[t, Fallback -> fb];
+
+(* このカーネルで実行。ノートブックが無い (パレット等) ときは Print と見出しを出さない *)
+iSepRunForeground[kind_String, target_, caller_, nb_, fb_] :=
+  Block[{$iSepRunContext = <|"Mode" -> "Foreground", "Caller" -> caller|>, $iSepLastRunId = None},
+    If[MatchQ[nb, _NotebookObject],
+      iSepRunCall[kind, target, fb],
+      Block[{Print, iWriteSectionHeaderBeforeEvalCell}, iSepRunCall[kind, target, fb]]];
+    If[StringQ[$iSepLastRunId], $iSepLastRunId,
+      Failure["RunNotRecorded", <|"MessageTemplate" -> "実行を記録できませんでした。"|>]]];
+
+(* 外部ワーカーの run.wls。ASCII だけ (詳細は job.json)。読み込み失敗でも done.json は必ず残す *)
+iSepJobScript[dir_String] :=
+  Module[{pkgDir, d, fwd},
+    fwd[p_] := StringReplace[p, "\\" -> "/"];
+    pkgDir = fwd @ Quiet @ Check[Global`$packageDirectory, Directory[]];
+    d = fwd[dir];
+    StringJoin[
+      "Block[{$CharacterEncoding=\"UTF-8\"}, SetDirectory[\"", pkgDir, "\"];\n",
+      "Quiet@Check[ClaudeCode`Private`$iSepLogStrm = OpenWrite[\"", d,
+        "/worker_log.txt\"]; AppendTo[$Output, ClaudeCode`Private`$iSepLogStrm]; ",
+        "AppendTo[$Messages, ClaudeCode`Private`$iSepLogStrm], Null];\n",
+      "Global`$packageDirectory = \"", pkgDir, "\";\n",
+      "Quiet@Check[Get[\"NBAccess.wl\"],Null];\n",
+      "Quiet@Check[Get[\"claudecode.wl\"],Null];\n",
+      "Quiet@Check[ClaudeCode`Private`iSepWorkerRun[\"", d, "\"],Null];\n",
+      "If[!FileExistsQ[\"", d, "/done.json\"],\n",
+      "  Quiet@Check[Export[\"", d, "/done.json\",<|\"State\"->\"Failed\",",
+        "\"Outcome\"->\"WorkerCrashOrLoadFailure\",\"Error\"->\"WorkerCrashOrLoadFailure\"|>,\"RawJSON\"],Null]];\n",
+      "];\n"]];
+
+(* ワーカー本体 (子 wolframscript 内)。FE が書いた run.json の RunId のまま記録する *)
+iSepWorkerRun[dir_String] :=
+  Module[{job, kind, target, fb, id = FileNameTake[dir], m, l},
+    $iSepRunRootOverride = DirectoryName[dir];
+    job = iSepRunJsonRead[FileNameJoin[{dir, "job.json"}]];
+    If[!AssociationQ[job],
+      iSepRunJsonWrite[FileNameJoin[{dir, "done.json"}],
+        <|"State" -> "Failed", "Outcome" -> "BadJobSpec", "Error" -> "BadJobSpec",
+          "EndedAt" -> AbsoluteTime[]|>];
+      Return[$Failed, Module]];
+    kind = Lookup[job, "Kind", ""];
+    target = iSepTargetFromSpec[Lookup[job, "TargetSpec", ""]];
+    fb = TrueQ[Lookup[job, "Fallback", False]];
+    m = Lookup[job, "Model", Null]; If[m =!= Null, $ClaudeModel = m];
+    m = Lookup[job, "TestModel", Null]; If[m =!= Null, $ClaudeTestModel = m];
+    l = Lookup[job, "Language", None];
+    If[StringQ[l] && StringMatchQ[l, LetterCharacter ..], $Language = l];
+    If[Lookup[job, "DiagEmit", True] === False, $iSepRunDiagEmit = False];
+    Block[{$iSepRunContext = <|"RunId" -> id, "Preallocated" -> True, "Mode" -> "Background",
+             "Caller" -> Lookup[job, "Caller", "Direct"]|>},
+      Quiet @ CheckAbort[
+        Switch[kind,
+          "Check", ClaudeCheckSeparation[target, Fallback -> fb],
+          "Fix", ClaudeFixSeparation[target, Fallback -> fb],
+          _, iSepRunJsonWrite[FileNameJoin[{dir, "done.json"}],
+            <|"State" -> "Failed", "Outcome" -> "BadKind", "Error" -> "BadKind",
+              "EndedAt" -> AbsoluteTime[]|>]],
+        Null]]];
+
+iSepJobLaunch[kind_String, target_, files_List, caller_, nb_, fb_] :=
+  Module[{id = iSepRunNewId[], dir, job, run, script, exe, seat, proc, lpid, strm, fail},
+    dir = iSepRunDir[id];
+    Quiet @ CreateDirectory[dir, CreateIntermediateDirectories -> True];
+    fail[code_String, msg_String] := (
+      iSepRunJsonWrite[FileNameJoin[{dir, "done.json"}],
+        <|"State" -> "NotStarted", "Outcome" -> code, "Error" -> code,
+          "EndedAt" -> AbsoluteTime[], "EndedAtUTC" -> iClaudeDiagUTCNowISO[], "DurationSeconds" -> 0|>];
+      Failure[code, <|"MessageTemplate" -> msg, "RunId" -> id|>]);
+    run = <|"RunId" -> id, "Kind" -> kind, "Target" -> iSepTargetLabel[target],
+      "TargetSpec" -> iSepTargetSpec[target], "Files" -> files, "FileCount" -> Length[files],
+      "Mode" -> "Background", "Caller" -> caller, "ParentRunId" -> Null,
+      "Machine" -> iClaudeDiagMachineTag[], "Pid" -> $ProcessID,
+      "StartedAt" -> AbsoluteTime[], "StartedAtUnix" -> UnixTime[],
+      "StartedAtUTC" -> iClaudeDiagUTCNowISO[]|>;
+    job = <|"Kind" -> kind, "TargetSpec" -> iSepTargetSpec[target], "Caller" -> caller,
+      "Fallback" -> TrueQ[fb], "Model" -> iDocExtEncodeModel[$ClaudeModel],
+      "TestModel" -> iDocExtEncodeModel[$ClaudeTestModel], "Language" -> $Language,
+      "DiagEmit" -> TrueQ[$iSepRunDiagEmit]|>;
+    If[!TrueQ[iSepRunJsonWrite[FileNameJoin[{dir, "run.json"}], run]] ||
+       !TrueQ[iSepRunJsonWrite[FileNameJoin[{dir, "job.json"}], job]],
+      Return[fail["JobWriteFailed", "実行記録を書けませんでした。"], Module]];
+    script = FileNameJoin[{dir, "run.wls"}];
+    Quiet @ Check[
+      strm = OpenWrite[script, BinaryFormat -> True];
+      BinaryWrite[strm, StringToByteArray[iSepJobScript[dir], "UTF-8"]];
+      Close[strm], Null];
+    If[!FileExistsQ[script], Return[fail["JobWriteFailed", "ワーカースクリプトを書けませんでした。"], Module]];
+    exe = iClaudeResolveWolframScript[];
+    seat = iClaudeSeatTryAcquire["SeparationRun", "Priority" -> 80,
+      "TTLSeconds" -> $iSepRunDeadlineSeconds, "JobId" -> id];
+    If[FailureQ[seat],
+      Return[fail["NoSeat", "ライセンス席が空いていないため外部プロセスを起動できません。"], Module]];
+    iSepRunJsonWrite[FileNameJoin[{dir, "launcher.json"}],
+      <|"QueuedAt" -> AbsoluteTime[], "QueuedAtUnix" -> UnixTime[], "FEPid" -> $ProcessID,
+        "SeatToken" -> Lookup[seat, "Token", Null]|>];
+    proc = iClaudeSupervisedStart[{exe, "-file", script}, "SeparationRun",
+      "JobId" -> id, "DoneMarker" -> FileNameJoin[{dir, "done.json"}],
+      "SeatToken" -> Lookup[seat, "Token", None], "DeadlineSeconds" -> $iSepRunDeadlineSeconds];
+    If[proc === $Failed,
+      iClaudeSeatRelease[seat];
+      iSepRunEmit["SpawnFailed", <|"Purpose" -> "SeparationRun", "Exe" -> ToString[exe],
+        "JobId" -> id|>, "error"];
+      Return[fail["SpawnFailed", "外部プロセス (wolframscript) を起動できませんでした。"], Module]];
+    lpid = Quiet @ Check[ProcessInformation[proc, "PID"], Null];
+    iSepRunJsonWrite[FileNameJoin[{dir, "launcher.json"}],
+      Join[iSepRunLauncher[id], <|"LauncherPid" -> lpid|>]];
+    $iSepJobs[id] = <|"Proc" -> proc, "SeatToken" -> Lookup[seat, "Token", None],
+      "Notebook" -> nb, "Started" -> AbsoluteTime[], "Kind" -> kind,
+      "Target" -> iSepTargetLabel[target], "FinishedAt" -> None|>;
+    If[Length[DownValues[ClaudeRegisterPollingTick]] > 0,
+      Quiet @ Check[ClaudeRegisterPollingTick["sepjob-poll", Function[Null, iSepJobPollTick[]],
+        "Caller" -> "SeparationRun", "Phase" -> "external"], Null]];
+    If[MatchQ[nb, _NotebookObject],
+      Quiet @ Check[nbPrint[nb, Style[iSepKindLabel[kind] <> " " <> iSepTargetLabel[target] <>
+        " を外部プロセスで開始しました (" <> id <> ")。終わったらここに知らせます。", GrayLevel[0.35]]], Null]];
+    id];
+
+iSepKindLabel["Check"] = "分離検査";
+iSepKindLabel["Fix"] = "分離違反の修正";
+iSepKindLabel[k_] := ToString[k];
+
+$iSepOutcomeLabels = <|"Written" -> "書き換えました", "NoViolations" -> "違反はありませんでした",
+  "Skipped" -> "変更しませんでした", "Rejected" -> "修正案を検査で不採用にしました",
+  "Delegated" -> "ClaudeUpdatePackage に任せました", "LLMFailed" -> "LLM の応答を得られませんでした",
+  "CheckFailed" -> "検査に失敗しました", "NotFound" -> "対象が見つかりません",
+  "BackupFailed" -> "バックアップを作れませんでした", "WriteFailed" -> "書き込めませんでした",
+  "WorkerDied" -> "ワーカーが終了記録を残さずに終わりました", "Cancelled" -> "中止しました",
+  "NoSeat" -> "ライセンス席がありませんでした", "SpawnFailed" -> "外部プロセスを起動できませんでした",
+  "Abandoned" -> "実行プロセスが消えていました",
+  "WorkerCrashOrLoadFailure" -> "ワーカーが読み込みに失敗したか異常終了しました"|>;
+iSepOutcomeLabel[o_String] := Lookup[$iSepOutcomeLabels, o, o];
+iSepOutcomeLabel[_] := "";
+
+iSepRunNotice[kind_String, target_String, id_String, d_Association] :=
+  Module[{st = Lookup[d, "State", "?"], sm = Replace[Lookup[d, "Summary", <||>], Except[_Association] -> <||>],
+          oc = Lookup[d, "Outcome", Null]},
+    If[MemberQ[{"Done", "Delegated"}, st],
+      "✅ " <> iSepKindLabel[kind] <> " " <> target <> ": " <>
+        If[kind === "Check",
+          "違反 " <> ToString[Lookup[sm, "Violations", "?"]] <> " 件 (Error " <>
+            ToString[Lookup[sm, "Errors", "?"]] <> ")",
+          iSepOutcomeLabel[oc]] <>
+        "。実行 " <> id <> " — ClaudeSeparationRunsView[] で確認できます。",
+      "⛔ " <> iSepKindLabel[kind] <> " " <> target <> " が " <> st <> " で終わりました" <>
+        If[StringQ[oc], " (" <> iSepOutcomeLabel[oc] <> ")", ""] <> "。実行 " <> id <> "。"]];
+
+(* FE 側の poll tick (共有 polling tick に乗る)。done.json を読むだけ *)
+iSepJobPollTick[] :=
+  Quiet @ Check[
+    Module[{now = AbsoluteTime[]},
+      If[!AssociationQ[$iSepJobs] || Length[$iSepJobs] === 0,
+        If[Length[DownValues[ClaudeUnregisterPollingTick]] > 0,
+          Quiet @ ClaudeUnregisterPollingTick["sepjob-poll"]];
+        Return[Null, Module]];
+      If[now - $iSepJobLastPoll < 5, Return[Null, Module]];
+      $iSepJobLastPoll = now;
+      KeyValueMap[iSepJobPollOne, $iSepJobs]],
+    Null];
+
+iSepJobPollOne[id_String, info_Association] :=
+  Module[{donePath = iSepRunFile[id, "done.json"], st, fa},
+    If[FileExistsQ[donePath],
+      iSepJobFinish[id, info, iSepRunJsonRead[donePath]];
+      Return[Null, Module]];
+    st = Quiet @ Check[ToString[ProcessStatus[Lookup[info, "Proc", Null]]], "Running"];
+    If[st =!= "Finished", Return[Null, Module]];
+    (* done.json の書き出し猶予 10 秒。それでも無ければワーカーが死んだとみなす *)
+    fa = Lookup[info, "FinishedAt", None];
+    Which[
+      !NumericQ[fa], $iSepJobs[id] = Append[info, "FinishedAt" -> AbsoluteTime[]],
+      AbsoluteTime[] - fa > 10,
+        iSepRunCloseUnfinished[id, "Failed", "WorkerDied"];
+        iSepJobFinish[id, info, iSepRunJsonRead[donePath]]]];
+
+iSepJobFinish[id_String, info_Association, done_] :=
+  Module[{nb = Lookup[info, "Notebook", None], d = Replace[done, Except[_Association] -> <||>]},
+    iClaudeSeatRelease[Lookup[info, "SeatToken", None]];
+    $iSepJobs = KeyDrop[$iSepJobs, id];
+    $iSepProbeCache = <||>;
+    If[MatchQ[nb, _NotebookObject],
+      Quiet @ Check[nbPrint[nb, Style[
+        iSepRunNotice[Lookup[info, "Kind", "?"], Lookup[info, "Target", "?"], id, d],
+        If[MemberQ[{"Done", "Delegated"}, Lookup[d, "State", ""]], GrayLevel[0.25],
+          RGBColor[0.8, 0.2, 0.2]]]], Null]];
+    Null];
+
+(* 終了記録の無い実行を閉じる (中止・ワーカー死亡・放置)。途中経過のバックアップは引き継ぐ *)
+iSepRunCloseUnfinished[id_String, state_String, outcome_String] :=
+  Module[{run = Replace[iSepRunJsonRead[iSepRunFile[id, "run.json"]], None -> <||>],
+          st = Replace[iSepRunJsonRead[iSepRunFile[id, "status.json"]], None -> <||>], t, done},
+    t = Replace[Lookup[run, "StartedAt", AbsoluteTime[]], Except[_?NumericQ] -> AbsoluteTime[]];
+    done = <|"State" -> state, "Outcome" -> outcome, "EndedAt" -> AbsoluteTime[],
+      "EndedAtUTC" -> iClaudeDiagUTCNowISO[], "DurationSeconds" -> Round[AbsoluteTime[] - t, 0.1],
+      "Summary" -> <||>,
+      "Fix" -> If[Lookup[run, "Kind", ""] === "Fix",
+        KeyTake[st, {"Mode", "Backups", "Changed", "Reason", "ViolationsBefore", "ViolationsAfter"}], <||>],
+      "Error" -> outcome, "ClosedBy" -> $ProcessID, "LastPhase" -> Lookup[st, "Phase", Null]|>;
+    iSepRunJsonWrite[iSepRunFile[id, "done.json"], done];
+    $iSepProbeCache = <||>;
+    iSepRunEmit["SeparationRun",
+      <|"RunId" -> id, "Kind" -> Lookup[run, "Kind", "?"], "Target" -> Lookup[run, "Target", "?"],
+        "Mode" -> Lookup[run, "Mode", "?"], "State" -> state, "Outcome" -> outcome,
+        "DurationSeconds" -> done["DurationSeconds"]|>, iSepRunSeverity[state]];
+    done];
+
+Options[ClaudeSeparationRunStart] = {"Mode" -> Automatic, "Caller" -> "Direct",
+  "Notebook" -> Automatic, Fallback -> False};
+
+(* 対象をダイアログで選ばせる形。失敗はダイアログで知らせる *)
+ClaudeSeparationRunStart[kind:("Check" | "Fix"), opts:OptionsPattern[]] :=
+  Module[{r = iSepRunsStartInteractive[kind, Automatic, opts]},
+    If[FailureQ[r], Quiet @ MessageDialog[r["Message"]]];
+    r];
+
+ClaudeSeparationRunStart[kind:("Check" | "Fix"), target:Except[_Rule | _RuleDelayed],
+    opts:OptionsPattern[]] :=
+  Module[{files, conflict, mode, modeOpt = OptionValue["Mode"], caller = OptionValue["Caller"],
+          nb, fb = TrueQ[OptionValue[Fallback]], pkgMode, r},
+    If[(kind === "Fix" && !StringQ[target]) ||
+       (kind === "Check" && !MatchQ[target, All | _String | {__String}]),
+      Return[Failure["BadTarget", <|"MessageTemplate" -> "対象の形が正しくありません: `1`",
+        "MessageParameters" -> {ToString[target, InputForm]}|>], Module]];
+    files = iSepRunFilesFor[kind, target];
+    If[files === {},
+      Return[Failure["NoFiles", <|"MessageTemplate" -> "対象のファイルが見つかりません: `1`",
+        "MessageParameters" -> {iSepTargetLabel[target]}|>], Module]];
+    conflict = iSepRunConflict[kind, target, files];
+    If[AssociationQ[conflict],
+      Return[Failure["AlreadyRunning", <|"MessageTemplate" -> "同じ対象の実行が進行中です (`1`)。",
+        "MessageParameters" -> {conflict["Run"]["RunId"]}, "RunId" -> conflict["Run"]["RunId"]|>],
+        Module]];
+    nb = Replace[OptionValue["Notebook"],
+      Automatic :> With[{e = Quiet @ Check[EvaluationNotebook[], None]},
+        If[MatchQ[e, _NotebookObject], e, None]]];
+    pkgMode = kind === "Fix" && !MemberQ[{"wl", "m", "nb"}, ToLowerCase[FileExtension[target]]];
+    mode = Switch[modeOpt,
+      "Foreground" | "Background", modeOpt,
+      _, If[pkgMode || (kind === "Check" && target =!= All), "Foreground", "Background"]];
+    If[pkgMode && mode === "Background",
+      Return[Failure["BackgroundUnsupported", <|"MessageTemplate" ->
+        "パッケージ名での修正 (ClaudeUpdatePackage へ委譲) は外部プロセスで実行できません。ファイルを指定するか \"Mode\" -> \"Foreground\" にしてください。"|>],
+        Module]];
+    If[mode === "Background",
+      r = iSepJobLaunch[kind, target, files, caller, nb, fb];
+      (* 席が無いとき: 自動選択の検査だけはこのカーネルで続ける *)
+      If[!(FailureQ[r] && r[[1]] === "NoSeat" && modeOpt === Automatic && kind === "Check"),
+        Return[r, Module]]];
+    iSepRunForeground[kind, target, caller, nb, fb]];
+
+(* ── 中止と巻き戻し ── *)
+iSepKillTree[pid_Integer, when_] :=
+  If[pid =!= $ProcessID && iSepPidAliveQ[pid, when],
+    Quiet @ TimeConstrained[RunProcess[{"taskkill", "/PID", ToString[pid], "/T", "/F"}], 15, Null];
+    pid, Nothing];
+iSepKillTree[___] := Nothing;
+
+ClaudeSeparationRunCancel[id_String] :=
+  Module[{dir = iSepRunDir[id], rec, run, job, lau, killed},
+    If[!DirectoryQ[dir],
+      Return[Failure["NotFound", <|"MessageTemplate" -> "実行記録がありません: `1`",
+        "MessageParameters" -> {id}|>], Module]];
+    rec = iSepRunReadDir[dir, False];
+    If[!AssociationQ[rec], Return[Failure["Corrupt", <|"MessageTemplate" -> "実行記録を読めません。"|>], Module]];
+    run = rec["Run"];
+    If[AssociationQ[rec["Done"]],
+      Return[Failure["NotRunning", <|"MessageTemplate" -> "この実行は終わっています (`1`)。",
+        "MessageParameters" -> {rec["State"]}, "State" -> rec["State"]|>], Module]];
+    Which[
+      Lookup[run, "Mode", ""] === "Background",
+        job = Lookup[$iSepJobs, id, None];
+        lau = iSepRunLauncher[id];
+        killed = {
+          iSepKillTree[Lookup[lau, "LauncherPid", None], {"After", Lookup[lau, "QueuedAtUnix", 0]}],
+          iSepKillTree[Lookup[run, "WorkerPid", None], {"After", Lookup[run, "StartedAtUnix", 0]}]};
+        If[AssociationQ[job], Quiet @ KillProcess[job["Proc"]]];
+        iSepRunCloseUnfinished[id, "Cancelled", "Cancelled"];
+        If[AssociationQ[job],
+          iSepJobFinish[id, Append[job, "Notebook" -> None], iSepRunJsonRead[iSepRunFile[id, "done.json"]]],
+          iClaudeSeatRelease[Lookup[lau, "SeatToken", None]]];
+        <|"Status" -> "Cancelled", "RunId" -> id, "KilledPids" -> killed|>,
+      rec["State"] === "Running",
+        Failure["ForegroundElsewhere", <|"MessageTemplate" ->
+          "別のカーネル (PID `1`) のノートブックで実行中です。そのノートブックで評価を中断してください。",
+          "MessageParameters" -> {Lookup[run, "Pid", "?"]}|>],
+      True,
+        iSepRunCloseUnfinished[id, "Abandoned", "Abandoned"];
+        <|"Status" -> "Closed", "RunId" -> id|>]];
+
+iSepRunBackups[rec_Association] :=
+  Module[{d = rec["Done"], s = rec["Status"], b},
+    b = If[AssociationQ[d], Lookup[Replace[Lookup[d, "Fix", <||>], Except[_Association] -> <||>], "Backups", {}], {}];
+    If[!ListQ[b] || b === {}, b = If[AssociationQ[s], Lookup[s, "Backups", {}], {}]];
+    Select[Replace[b, Except[_List] -> {}], AssociationQ]];
+
+Options[ClaudeSeparationRunRestore] = {"Force" -> False};
+ClaudeSeparationRunRestore[id_String, opts:OptionsPattern[]] :=
+  Module[{dir = iSepRunDir[id], rec, run, items, bad, force = TrueQ[OptionValue["Force"]], ts, res},
+    If[!DirectoryQ[dir],
+      Return[Failure["NotFound", <|"MessageTemplate" -> "実行記録がありません: `1`",
+        "MessageParameters" -> {id}|>], Module]];
+    rec = iSepRunReadDir[dir, False];
+    run = rec["Run"];
+    If[Lookup[run, "Kind", ""] =!= "Fix",
+      Return[Failure["NotAFix", <|"MessageTemplate" -> "修正の実行ではありません。"|>], Module]];
+    If[rec["State"] === "Running",
+      Return[Failure["StillRunning", <|"MessageTemplate" -> "実行中です。先に中止してください。"|>], Module]];
+    If[AssociationQ[iSepRunJsonRead[FileNameJoin[{dir, "restore.json"}]]] && !force,
+      Return[Failure["AlreadyRestored", <|"MessageTemplate" ->
+        "この実行は巻き戻し済みです (やり直すには \"Force\" -> True)。"|>], Module]];
+    items = Map[Function[b,
+        Module[{f = Lookup[b, "File", ""], bk = Lookup[b, "Backup", ""], cur},
+          cur = iSepFileHash[f];
+          <|"File" -> f, "Backup" -> bk, "Status" -> Which[
+            !StringQ[bk] || !FileExistsQ[bk], "BackupMissing",
+            StringQ[Lookup[b, "HashBefore", None]] && cur === b["HashBefore"], "Unchanged",
+            StringQ[Lookup[b, "HashAfter", None]] && cur === b["HashAfter"], "Restorable",
+            True, "Modified"]|>]],
+      iSepRunBackups[rec]];
+    If[items === {},
+      Return[Failure["NoBackup", <|"MessageTemplate" ->
+        "この実行にはバックアップの記録がありません (パッケージ名での修正は ClaudeUpdatePackage の履歴を使ってください)。"|>],
+        Module]];
+    bad = Select[items, #Status === "BackupMissing" &];
+    If[bad =!= {},
+      Return[Failure["BackupMissing", <|"MessageTemplate" -> "バックアップが見つかりません: `1`",
+        "MessageParameters" -> {StringRiffle[Lookup[bad, "Backup"], ", "]}|>], Module]];
+    bad = Select[items, #Status === "Modified" &];
+    If[bad =!= {} && !force,
+      Return[Failure["ModifiedSinceFix", <|"MessageTemplate" ->
+        "修正のあとでファイルが変更されています: `1`。それでも戻すには \"Force\" -> True。",
+        "MessageParameters" -> {StringRiffle[FileNameTake /@ Lookup[bad, "File"], ", "]},
+        "Files" -> Lookup[bad, "File"]|>], Module]];
+    ts = DateString[Now, {"Year", "Month", "Day", "-", "Hour24", "Minute", "Second"}];
+    res = Map[Function[it,
+        If[it["Status"] === "Unchanged", Append[it, "Result" -> "Skipped"],
+          Module[{pre = iSepBackupPath[it["File"], ts, "sepfix-prerestore"]},
+            Quiet @ Check[CopyFile[it["File"], pre, OverwriteTarget -> True], Null];
+            Join[it, <|"PreRestore" -> pre, "Result" ->
+              If[Quiet @ Check[CopyFile[it["Backup"], it["File"], OverwriteTarget -> True], $Failed] === $Failed,
+                "Failed", "Restored"]|>]]]],
+      items];
+    iSepRunJsonWrite[FileNameJoin[{dir, "restore.json"}],
+      <|"RestoredAt" -> AbsoluteTime[], "RestoredAtUTC" -> iClaudeDiagUTCNowISO[],
+        "Pid" -> $ProcessID, "Force" -> force, "Items" -> res|>];
+    $iSeparationCheckCache = <||>;
+    iSepRunEmit["SeparationRunRestored",
+      <|"RunId" -> id, "Files" -> FileNameTake /@ Lookup[res, "File"], "Results" -> Lookup[res, "Result"]|>,
+      "info"];
+    <|"Status" -> If[AllTrue[res, #Result =!= "Failed" &], "Restored", "Partial"],
+      "RunId" -> id, "Items" -> res|>];
+
+(* ── SystemDoctor probe (記録ファイルだけを読む) ── *)
+ClaudeSeparationHealthProbe[] :=
+  Quiet @ Check[
+    Module[{now = AbsoluteTime[], c = $iSepProbeCache, recs, recent, abandoned, failed, running,
+            lastCheck, h, rc, msg, r, ids},
+      If[AssociationQ[c] && NumericQ[Lookup[c, "At", None]] && now - c["At"] < 60,
+        Return[c["Value"], Module]];
+      recs = iSepRunRecords[100, True];
+      recent = Select[recs, now - Replace[Lookup[#Run, "StartedAt", 0], Except[_?NumericQ] -> 0] < 14*86400 &];
+      (* 閉じた記録 (done.json あり) は数えない *)
+      abandoned = Select[recent, #State === "Abandoned" && !AssociationQ[#Done] &];
+      failed = Select[recent, #State === "Failed" &&
+        now - Replace[Lookup[#Run, "StartedAt", 0], Except[_?NumericQ] -> 0] < 86400 &];
+      running = Select[recent, #State === "Running" &];
+      lastCheck = SelectFirst[recs, Lookup[#Run, "Kind", ""] === "Check" &&
+        AssociationQ[#Done] && Lookup[#Done, "State", ""] === "Done" &, None];
+      ids[l_] := Lookup[#Run, "RunId", "?"] & /@ l;
+      {h, rc, msg} = Which[
+        abandoned =!= {}, {"Degraded", "SeparationRunAbandoned",
+          "終了記録の無い分離検査・修正の実行が " <> ToString[Length[abandoned]] <>
+          " 件あります (カーネルの終了などで途切れた可能性)。ClaudeSeparationRunsView[] で確認して閉じてください。"},
+        failed =!= {}, {"Degraded", "SeparationRunFailed",
+          "24 時間以内に失敗した分離検査・修正の実行が " <> ToString[Length[failed]] <> " 件あります。"},
+        True, {"OK", If[recs === {}, "NoRuns", "OK"], ""}];
+      r = <|"Health" -> h, "ReasonCode" -> rc, "Message" -> msg,
+        "Running" -> Length[running], "Abandoned" -> ids[abandoned], "FailedLast24h" -> ids[failed],
+        "LastCheck" -> If[lastCheck === None, None,
+          <|"RunId" -> lastCheck["Run"]["RunId"], "Target" -> Lookup[lastCheck["Run"], "Target", "?"],
+            "AtUTC" -> Lookup[lastCheck["Run"], "StartedAtUTC", "?"],
+            "Violations" -> Lookup[Lookup[lastCheck["Done"], "Summary", <||>], "Violations", Missing[]],
+            "Errors" -> Lookup[Lookup[lastCheck["Done"], "Summary", <||>], "Errors", Missing[]]|>]|>;
+      $iSepProbeCache = <|"At" -> now, "Value" -> r|>;
+      r],
+    <|"Health" -> "Degraded", "ReasonCode" -> "ProbeInternalError"|>];
+
+(* ── 対象の選択 (ダイアログ) ── *)
+(* $packageDirectory 直下の主パッケージ名 (<名前>_*.wl の補助モジュールと、空白を含む名前は除く) *)
+iSepMainPackages[] :=
+  Module[{pkgDir = Global`$packageDirectory, bases},
+    If[!StringQ[pkgDir] || !DirectoryQ[pkgDir], Return[{}, Module]];
+    bases = FileBaseName /@ Select[iDropConflictedCopies[FileNames["*.wl", pkgDir]],
+      !StringContainsQ[FileBaseName[#], WhitespaceCharacter] &];
+    Sort[Select[bases, Function[b, NoneTrue[bases, (b =!= # && StringStartsQ[b, # <> "_"]) &]]]]];
+
+iSepRunsPickFile[title_String] :=
+  Module[{pkgDir = Global`$packageDirectory, f},
+    f = Quiet @ SystemDialogInput["FileOpen",
+      {If[StringQ[pkgDir] && DirectoryQ[pkgDir], pkgDir, $HomeDirectory],
+       {"Wolfram Language" -> {"*.wl", "*.m"}}}, WindowTitle -> title];
+    If[StringQ[f] && FileExistsQ[f], f, $Canceled]];
+
+iSepRunsPickTarget["Check"] :=
+  Module[{pkgs = iSepMainPackages[], choice},
+    If[pkgs === {},
+      Quiet @ MessageDialog["$packageDirectory にパッケージが見つかりません。"];
+      Return[$Canceled, Module]];
+    choice = DialogInput[
+      DynamicModule[{p = If[MemberQ[pkgs, "claudecode"], "claudecode", First[pkgs]]},
+        Column[{
+          Style["分離検査の対象", Bold, 13],
+          Row[{"パッケージ: ", PopupMenu[Dynamic[p], pkgs]}],
+          Style["主ソースと補助モジュール (<名前>_*.wl) を検査します。LLM は使いません。", 10, GrayLevel[0.4]],
+          Row[{DefaultButton["検査", DialogReturn[p]], "  ",
+            Button["全体 (All)", DialogReturn[All]], "  ",
+            Button["ファイルを選ぶ…", DialogReturn[{"PickFile"}]], "  ",
+            CancelButton[]}]}, Spacings -> 1]],
+      WindowTitle -> "分離検査"];
+    Which[
+      choice === {"PickFile"}, iSepRunsPickFile["検査するファイル"],
+      choice === All || StringQ[choice], choice,
+      True, $Canceled]];
+
+iSepRunsPickTarget["Fix"] :=
+  Module[{f = iSepRunsPickFile["修正するファイル"], kb, ok},
+    If[!StringQ[f], Return[$Canceled, Module]];
+    kb = Round[FileByteCount[f]/1024.];
+    ok = ChoiceDialog[
+      Column[{
+        Style["分離違反の修正 — LLM がファイル全体を書き直します", Bold],
+        FileNameTake[f] <> " (" <> ToString[kb] <> " KB)",
+        "・先に検査し、違反があればファイル全体の修正版を LLM に作らせます (外部プロセス)。",
+        "・書き込む前に bak/ にバックアップを作ります。途中で切れた応答や構文の壊れた応答は書き込みません。",
+        "・実行記録の [元に戻す] でバックアップに戻せます。",
+        If[kb > 100,
+          Style["・大きなファイルは応答が途中で切れて書き込まれないことがあります。違反ごとの修正は " <>
+            "ClaudeSeparationView の [修正案] が向いています。", RGBColor[0.8, 0.35, 0.]], Nothing]},
+        Spacings -> 0.6],
+      {"実行" -> True, "やめる" -> False}, WindowTitle -> "分離違反の修正"];
+    If[TrueQ[ok], f, $Canceled]];
+iSepRunsPickTarget[_] := $Canceled;
+
+(* 対象を (必要なら) 選ばせて開始する。席が無ければこのカーネルで実行するか尋ねる。失敗は戻り値で返す *)
+iSepRunsStartInteractive[kind_String, target_, opts___] :=
+  Module[{t, r, modeOpt},
+    t = If[target === Automatic, iSepRunsPickTarget[kind], target];
+    If[t === $Canceled, Return[$Canceled, Module]];
+    r = ClaudeSeparationRunStart[kind, t, opts];
+    modeOpt = Lookup[Association[FilterRules[{opts}, "Mode"]], "Mode", Automatic];
+    If[FailureQ[r] && r[[1]] === "NoSeat" && modeOpt === Automatic &&
+       TrueQ[ChoiceDialog[
+         "ライセンス席が空いていないため外部プロセスで実行できません。\n" <>
+         "このカーネルで実行しますか (終わるまでカーネルが塞がります)。",
+         {"このカーネルで実行" -> True, "やめる" -> False}]],
+      r = ClaudeSeparationRunStart[kind, t, "Mode" -> "Foreground", opts]];
+    r];
+
+(* ── 実行記録の一覧 View ──
+   自動更新はしない。[更新] と各ボタンが DynamicModule ローカルの tick を進めて描き直す
+   ([[claudeprocesslist-manual-refresh]] と同じ形。UpdateInterval は付けない)。 *)
+iSepRunsFont[] := If[StringQ[$ClaudeStandardFont] && $ClaudeStandardFont =!= "",
+  $ClaudeStandardFont, "Yu Gothic UI"];
+
+iSepKindShort["Check"] = "検査";
+iSepKindShort["Fix"] = "修正";
+iSepKindShort[k_] := ToString[k];
+
+$iSepStateLabels = <|"Running" -> "実行中", "Done" -> "完了", "Failed" -> "失敗",
+  "Aborted" -> "中断", "Cancelled" -> "中止", "Delegated" -> "委譲", "NotStarted" -> "未開始",
+  "Abandoned" -> "途切れ"|>;
+iSepStateColor[s_] := Switch[s,
+  "Running", RGBColor[0.15, 0.4, 0.75], "Done", RGBColor[0.15, 0.55, 0.3],
+  "Delegated", RGBColor[0.1, 0.5, 0.55], "Aborted" | "Cancelled", RGBColor[0.8, 0.45, 0.],
+  "NotStarted", GrayLevel[0.5], _, RGBColor[0.8, 0.15, 0.15]];
+iSepStateBadge[s_, phase_] := Tooltip[
+  Framed[Style[Lookup[$iSepStateLabels, s, ToString[s]] <>
+      If[s === "Running" && StringQ[phase], " (" <> phase <> ")", ""], 10, White, Bold],
+    Background -> iSepStateColor[s], FrameStyle -> None, RoundingRadius -> 3,
+    FrameMargins -> {{4, 4}, {1, 1}}],
+  ToString[s]];
+
+iSepDurationLabel[d_?NumericQ] := Which[
+  d < 60, ToString[Round[d, 0.1]] <> " 秒",
+  d < 3600, ToString[Floor[d/60]] <> " 分 " <> ToString[Round[Mod[d, 60]]] <> " 秒",
+  True, ToString[Floor[d/3600]] <> " 時間 " <> ToString[Round[Mod[d, 3600]/60]] <> " 分"];
+iSepDurationLabel[_] := "";
+
+iSepRunsCountCell[row_Association, ff_] := Which[
+  row["Kind"] === "Check" && IntegerQ[row["Violations"]],
+    Row[{Style[ToString[row["Violations"]], Bold, FontFamily -> ff],
+      Style[" 件 (Error " <> ToString[row["Errors"]] <> ")", 10, FontFamily -> ff,
+        If[TrueQ[row["Errors"] > 0], RGBColor[0.8, 0.15, 0.15], GrayLevel[0.4]]]}],
+  StringQ[row["Outcome"]], Style[iSepOutcomeLabel[row["Outcome"]], 10, FontFamily -> ff],
+  True, ""];
+
+SetAttributes[iSepRunsGuard, HoldAll];
+iSepRunsGuard[busy_, msg_, startMsg_, body_] :=
+  If[TrueQ[busy],
+    msg = "前の処理が終わるまでお待ちください。",
+    busy = True; msg = startMsg; FinishDynamic[];
+    WithCleanup[iClaudeHoldFE[body], busy = False]];
+
+SetAttributes[iSepRunsStartAction, HoldRest];
+iSepRunsStartAction[kind_String, target_, msg_] :=
+  Module[{r = iSepRunsStartInteractive[kind, target, "Caller" -> "RunsView", "Notebook" -> None]},
+    msg = Which[
+      r === $Canceled, "",
+      FailureQ[r], "開始できませんでした: " <> r["Message"],
+      StringQ[r], iSepKindLabel[kind] <> " を開始しました (" <> r <> ")。外部実行は [更新] で進み具合を確かめてください。",
+      True, ""]];
+
+SetAttributes[iSepRunsCancelAction, HoldRest];
+iSepRunsCancelAction[id_String, msg_] :=
+  Module[{r = ClaudeSeparationRunCancel[id]},
+    msg = If[FailureQ[r], "止められませんでした: " <> r["Message"],
+      If[r["Status"] === "Cancelled", "中止しました (" <> id <> ")。", "記録を閉じました (" <> id <> ")。"]]];
+
+SetAttributes[iSepRunsRestoreAction, HoldRest];
+iSepRunsRestoreAction[id_String, msg_] :=
+  Module[{r},
+    If[!TrueQ[ChoiceDialog["実行 " <> id <> " が書き換えたファイルをバックアップに戻します。\n" <>
+         "今のファイルは bak/ に保存してから戻します。", {"戻す" -> True, "やめる" -> False}]],
+      msg = ""; Return[Null, Module]];
+    r = ClaudeSeparationRunRestore[id];
+    If[FailureQ[r] && r[[1]] === "ModifiedSinceFix" &&
+       TrueQ[ChoiceDialog[r["Message"] <> "\nそれでも戻しますか。", {"戻す" -> True, "やめる" -> False}]],
+      r = ClaudeSeparationRunRestore[id, "Force" -> True]];
+    msg = If[FailureQ[r], "戻せませんでした: " <> r["Message"],
+      "戻しました: " <> StringRiffle[(FileNameTake[#File] <> " " <> #Result) & /@ r["Items"], ", "] <>
+        "。読み込み済みのパッケージには、読み込み直すまで反映されません。"]];
+
+iSepRunsOpenResult[id_String, target_String] :=
+  Module[{res = iSepRunJsonRead[iSepRunFile[id, "result.json"]], chk},
+    chk = If[AssociationQ[res], Lookup[res, "Result", {}], {}];
+    Which[
+      !ListQ[chk] || chk === {}, "検査結果の記録がありません。",
+      Length[DownValues[ClaudePackageManager`ClaudeSeparationView]] === 0,
+        "ClaudePackageManager.wl が読み込まれていません (ClaudeSeparationView が使えません)。",
+      True,
+        Quiet @ Check[
+          CreateDocument[ExpressionCell[ClaudePackageManager`ClaudeSeparationView[chk], "Output"],
+            WindowTitle -> "検出一覧: " <> target];
+          "検出一覧を開きました (ファイルを読み直した今の検出です)。",
+          "検出一覧を開けませんでした。"]]];
+
+iSepRunsHasBackups[rec_Association] := Lookup[rec["Run"], "Kind", ""] === "Fix" && iSepRunBackups[rec] =!= {};
+
+SetAttributes[iSepRunsRowButtons, HoldRest];
+iSepRunsRowButtons[rec_Association, tick_, sel_, msg_, busy_, ff_] :=
+  With[{id = rec["Run"]["RunId"], st = rec["State"], kind = Lookup[rec["Run"], "Kind", ""],
+        mode = Lookup[rec["Run"], "Mode", ""], tgt = Lookup[rec["Run"], "Target", "?"],
+        restored = FileExistsQ[iSepRunFile[rec["Run"]["RunId"], "restore.json"]]},
+    {Button[Style["詳細", 10, FontFamily -> ff], sel = If[sel === id, None, id], Method -> "Queued"],
+     If[kind === "Check" && st === "Done",
+       Button[Style["表で開く", 10, FontFamily -> ff],
+         iSepRunsGuard[busy, msg, "検出一覧を開いています…", msg = iSepRunsOpenResult[id, tgt]],
+         Method -> "Queued"], Nothing],
+     If[st === "Running" && mode === "Background",
+       Button[Style["中止", 10, FontFamily -> ff],
+         iSepRunsGuard[busy, msg, "中止しています…", iSepRunsCancelAction[id, msg]; tick++],
+         Method -> "Queued"], Nothing],
+     If[st === "Abandoned" && !AssociationQ[rec["Done"]],
+       Button[Style["閉じる", 10, FontFamily -> ff],
+         iSepRunsGuard[busy, msg, "記録を閉じています…", iSepRunsCancelAction[id, msg]; tick++],
+         Method -> "Queued"], Nothing],
+     If[st =!= "Running" && !restored && iSepRunsHasBackups[rec],
+       Button[Style["元に戻す", 10, FontFamily -> ff],
+         iSepRunsGuard[busy, msg, "戻しています…", iSepRunsRestoreAction[id, msg]; tick++],
+         Method -> "Queued"], Nothing]}];
+
+SetAttributes[iSepRunsRowCells, HoldRest];
+iSepRunsRowCells[rec_Association, tick_, sel_, msg_, busy_, ff_] :=
+  With[{row = iSepRunRow[rec]},
+    {Style[If[DateObjectQ[row["StartedAt"]],
+        DateString[row["StartedAt"], {"Month", "/", "Day", " ", "Hour24", ":", "Minute"}], "?"],
+       FontFamily -> ff],
+     Style[iSepKindShort[row["Kind"]], FontFamily -> ff],
+     Tooltip[Style[StringTake[row["Target"], UpTo[30]], FontFamily -> ff],
+       row["Target"] <> If[StringQ[row["ParentRunId"]], "\n(親の実行 " <> row["ParentRunId"] <> ")", ""]],
+     Style[If[row["Mode"] === "Background", "外部", "前面"], FontFamily -> ff],
+     iSepStateBadge[row["State"], row["Phase"]],
+     iSepRunsCountCell[row, ff],
+     Style[iSepDurationLabel[row["DurationSeconds"]], FontFamily -> ff],
+     (* 末尾の "" は、ボタンが 1 つだけの行でそのボタンがセル幅いっぱいに伸びないように *)
+     Row[Append[iSepRunsRowButtons[rec, tick, sel, msg, busy, ff], ""], " "]}];
+
+iSepTailLines[path_String, n_Integer] :=
+  Module[{s = Quiet @ Check[Import[path, "Text"], ""]},
+    If[!StringQ[s] || s === "", {}, Take[StringSplit[s, "\n"], -Min[n, Length[StringSplit[s, "\n"]]]]]];
+
+iSepRunsDetail[rec_Association, ff_] :=
+  Module[{run = rec["Run"], done = rec["Done"], st = rec["Status"], id, sm, fx, rst, kv, logLines, backups},
+    id = run["RunId"];
+    sm = If[AssociationQ[done], Replace[Lookup[done, "Summary", <||>], Except[_Association] -> <||>], <||>];
+    fx = If[AssociationQ[done], Replace[Lookup[done, "Fix", <||>], Except[_Association] -> <||>], <||>];
+    rst = iSepRunJsonRead[FileNameJoin[{rec["Dir"], "restore.json"}]];
+    backups = iSepRunBackups[rec];
+    kv = {
+      {"種類", iSepKindLabel[Lookup[run, "Kind", "?"]]},
+      {"対象", Lookup[run, "Target", "?"]},
+      {"状態", Lookup[$iSepStateLabels, rec["State"], rec["State"]] <>
+        If[AssociationQ[done] && StringQ[Lookup[done, "Outcome", Null]],
+          " — " <> iSepOutcomeLabel[done["Outcome"]], ""]},
+      {"実行場所", If[Lookup[run, "Mode", ""] === "Background", "外部 wolframscript", "このカーネル"] <>
+        " (PID " <> ToString[Lookup[run, "Pid", "?"]] <> ")"},
+      {"呼び出し元", ToString[Lookup[run, "Caller", "?"]]},
+      If[StringQ[Lookup[run, "ParentRunId", Null]], {"親の実行", run["ParentRunId"]}, Nothing],
+      {"開始 (UTC)", ToString[Lookup[run, "StartedAtUTC", "?"]]},
+      {"ファイル数", ToString[Lookup[run, "FileCount", "?"]]},
+      If[StringQ[Lookup[run, "Model", Null]], {"モデル", run["Model"]}, Nothing],
+      If[AssociationQ[st] && StringQ[Lookup[st, "Phase", Null]] && rec["State"] === "Running",
+        {"段階", st["Phase"]}, Nothing],
+      If[AssociationQ[done] && StringQ[Lookup[done, "Error", Null]], {"エラー", done["Error"]}, Nothing],
+      If[StringQ[Lookup[fx, "Reason", Null]], {"理由", fx["Reason"]}, Nothing],
+      If[IntegerQ[Lookup[fx, "ViolationsBefore", None]],
+        {"違反 (修正前→後)", ToString[fx["ViolationsBefore"]] <> " → " <>
+          ToString[Lookup[fx, "ViolationsAfter", "?"]]}, Nothing],
+      {"記録", Button[Style[rec["Dir"], 9, FontFamily -> "Consolas"], SystemOpen[rec["Dir"]],
+        Appearance -> "Frameless", Method -> "Queued"]}};
+    logLines = If[Lookup[run, "Mode", ""] === "Background",
+      iSepTailLines[FileNameJoin[{rec["Dir"], "worker_log.txt"}], 12], {}];
+    Framed[Column[{
+      Style["実行 " <> id, Bold, 12, FontFamily -> ff],
+      Grid[Map[{Style[#[[1]], Bold, 10, FontFamily -> ff],
+          If[StringQ[#[[2]]], Style[#[[2]], 10, FontFamily -> ff], #[[2]]]} &, kv],
+        Alignment -> Left, Spacings -> {1.5, 0.3}],
+      If[Lookup[sm, "PerFile", {}] =!= {},
+        Column[{Style["ファイルごとの違反 (多い順)", Bold, 10, FontFamily -> ff],
+          Grid[Prepend[{#File, #Violations, #Errors} & /@ Take[sm["PerFile"], UpTo[15]],
+              Style[#, Bold, 10] & /@ {"ファイル", "違反", "Error"}],
+            Alignment -> {{Left, Right, Right}}, Spacings -> {1.5, 0.2},
+            ItemStyle -> {FontFamily -> ff, FontSize -> 10}]}], Nothing],
+      If[AssociationQ[Lookup[sm, "ByRule", None]] && sm["ByRule"] =!= <||>,
+        Style["規則ごと: " <> StringRiffle[KeyValueMap[#1 <> " " <> ToString[#2] &, sm["ByRule"]], ", "],
+          10, FontFamily -> ff], Nothing],
+      If[TrueQ[Lookup[sm, "CoverageFailed", 0] > 0],
+        Style["解析できなかった範囲: " <> ToString[sm["CoverageFailed"]] <> " 箇所 (その範囲は検査されていません)",
+          10, RGBColor[0.8, 0.15, 0.15], FontFamily -> ff], Nothing],
+      If[backups =!= {},
+        Column[{Style["バックアップ", Bold, 10, FontFamily -> ff],
+          Column[Style[FileNameTake[Lookup[#, "File", "?"]] <> "  ←  " <> ToString[Lookup[#, "Backup", "?"]],
+            9, FontFamily -> ff] & /@ backups]}], Nothing],
+      If[AssociationQ[rst],
+        Style["巻き戻し済み (" <> ToString[Lookup[rst, "RestoredAtUTC", "?"]] <> ")", 10,
+          RGBColor[0.1, 0.45, 0.55], FontFamily -> ff], Nothing],
+      If[logLines =!= {},
+        Column[{Style["ワーカーのログ (末尾)", Bold, 10, FontFamily -> ff],
+          Pane[Style[StringRiffle[logLines, "\n"], 9, FontFamily -> "Consolas"],
+            ImageSize -> {900, UpTo[200]}, Scrollbars -> Automatic]}], Nothing]
+    }, Spacings -> 0.7], FrameStyle -> GrayLevel[0.8], Background -> GrayLevel[0.98],
+      RoundingRadius -> 4, FrameMargins -> 8]];
+iSepRunsDetail[___] := Nothing;
+
+SetAttributes[iSepRunsBody, HoldAll];
+iSepRunsBody[tick_, sel_, msg_, busy_, mx_, ff_] :=
+  Module[{recs = iSepRunRecords[mx, False], header},
+    If[recs === {},
+      Return[Style["まだ実行記録がありません。", Italic, GrayLevel[0.5], FontFamily -> ff], Module]];
+    header = Style[#, Bold, 10, FontFamily -> ff] & /@
+      {"開始", "種類", "対象", "実行", "状態", "結果", "所要", ""};
+    Column[{
+      (* 列幅は固定 (自動だと日時・対象名が折り返し、右端のボタンが欠けた。2026-11-01 FE で確認) *)
+      Grid[Prepend[iSepRunsRowCells[#, tick, sel, msg, busy, ff] & /@ recs, header],
+        Alignment -> {Left, Center}, Spacings -> {1.2, 0.5},
+        ItemSize -> {{7, 3, 13, 3, 5, 10, 7, 15}},
+        Dividers -> {None, {2 -> GrayLevel[0.7]}},
+        Background -> {None, {{None, GrayLevel[0.97]}}}],
+      If[StringQ[sel], iSepRunsDetail[SelectFirst[recs, #Run["RunId"] === sel &, None], ff], Nothing]},
+      Spacings -> 1]];
+
+iSepRunsPanel[maxR_] :=
+  With[{ff = iSepRunsFont[], mx = If[IntegerQ[maxR] && maxR > 0, maxR, 40]},
+    DynamicModule[{tick = 0, sel = None, msg = "", busy = False},
+      Framed[Column[{
+        Row[{Style["分離検査・修正の実行記録", Bold, 14, FontFamily -> ff], "    ",
+          Button[Style["更新", FontFamily -> ff], (msg = ""; tick++), Method -> "Queued"], " ",
+          Button[Style["検査…", FontFamily -> ff],
+            iSepRunsGuard[busy, msg, "対象を選んでください…",
+              iSepRunsStartAction["Check", Automatic, msg]; tick++], Method -> "Queued"], " ",
+          Button[Style["全体検査", FontFamily -> ff],
+            iSepRunsGuard[busy, msg, "全体検査を始めています…",
+              iSepRunsStartAction["Check", All, msg]; tick++], Method -> "Queued"], " ",
+          Button[Style["修正…", FontFamily -> ff],
+            iSepRunsGuard[busy, msg, "修正するファイルを選んでください…",
+              iSepRunsStartAction["Fix", Automatic, msg]; tick++], Method -> "Queued"]}],
+        Style["ClaudeCheckSeparation / ClaudeFixSeparation の実行はすべてここに記録されます (このマシンのみ)。" <>
+          "外部実行は終わっても自動では描き直さないので [更新] を押してください。", 10, GrayLevel[0.45],
+          FontFamily -> ff],
+        Dynamic[If[msg === "", "", Style[msg, 11, RGBColor[0.1, 0.35, 0.6], FontFamily -> ff]],
+          TrackedSymbols :> {msg}],
+        Dynamic[tick; iSepRunsBody[tick, sel, msg, busy, mx, ff],
+          TrackedSymbols :> {tick, sel}, SynchronousUpdating -> False]
+      }, Spacings -> 0.8], FrameStyle -> GrayLevel[0.85], RoundingRadius -> 4, FrameMargins -> 10]]];
+
+iSepRunsOpenWindow[maxR_] := (
+  If[MatchQ[$iSepRunsWindow, _NotebookObject], Quiet @ NotebookClose[$iSepRunsWindow]];
+  $iSepRunsWindow = CreateDocument[ExpressionCell[iSepRunsPanel[maxR], "Output"],
+    WindowTitle -> "分離検査・修正の実行記録", WindowSize -> {1150, 760}];
+  $iSepRunsWindow);
+
+Options[ClaudeSeparationRunsView] = {"MaxRows" -> 40, "OpenWindow" -> False};
+ClaudeSeparationRunsView[opts:OptionsPattern[]] :=
+  If[TrueQ[OptionValue["OpenWindow"]],
+    iSepRunsOpenWindow[OptionValue["MaxRows"]],
+    iSepRunsPanel[OptionValue["MaxRows"]]];
 
 (* Phase Q-7 \:79fb\:7ba1: ClaudeUpdatePackage[packageName_String] (1 \:5f62\:5f0f\:3001ClaudeFixSeparation \:547c\:3073\:51fa\:3057)
    \:306f ClaudePackageManager.wl \:3078\:5b8c\:5168\:79fb\:7ba1 *)

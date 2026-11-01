@@ -77,6 +77,10 @@ LLMGraphDAG スナップショットの保存ディレクトリ。
 型: Integer, 初期値: 60000
 プロンプト中ソースの最大文字数。
 
+### $ClaudeDocApiMaxBytes
+型: Integer | Infinity, 初期値: 128000
+ClaudeUpdateDocumentation が API リファレンス (api.md / api_*.md、en/ を含む) を LLM の 1 回の応答で再生成してよい既存ファイルの上限バイト数。これを超える API doc は LLM に投げずにスキップし、旧ファイルをそのまま残す (出力上限で途中切れした応答が書き込まれるのを防ぐ)。補助モジュール <pkg>_<aux>.wl に分けて api_<aux>.md に分割するか、手で追記する。Infinity でこの検査を無効にする。あわせて、API doc の書き込み口では、旧版の見出しにあった公開シンボル (ソースに ::usage があるもの) が消えた応答・25% を超えて縮んだ応答・末尾に LLM の地の文が残った応答を書き込まない。
+
 ### $ClaudeDocUpdateStaleSeconds
 型: Number, 初期値: 1800
 ClaudeUpdateDocumentation の非同期ドキュメント更新チェーンのストール検出秒数。タイムスタンプ方式 ($iDocUpdateActive に各ステップの時刻を記録) でチェーンが異常終了しても、このタイムアウトを超えたロックは自動解放される。
@@ -908,11 +912,53 @@ Options: "Columns" -> Automatic ("Columns"->All で全フィールド表示)
 パッケージソースを NBAccess`NBAuditPackageSource (構文木) で検査し、NBAccess 分離 (SEP-)・認証情報 (CRED-)・プライバシーレベル (PRIV-)・アクセスレベル (ACC-) の規則違反を表示して返す。LLM は使わない。waiver (`(* :PolicyWaiver: RULE-ID 理由 *)`) の付いた検出は含めない。target: パッケージ名 (主ソース + 補助モジュール <pkg>_*.wl) | Paclet 名 (Kernel/*.wl) | .wl ファイルパス | そのリスト | All ($packageDirectory 直下の全 .wl)。SEP- 規則は $NBSeparationIgnoreList 登録パッケージ (NBAccess, NotebookExtensions) には適用しない。解析できなかった範囲は「検査できていない」と表示する。結果は ClaudeFixSeparation 用にキャッシュされる。表で確認・修正するには ClaudeSeparationView[target] (ClaudePackageManager.wl)、規則の一覧は NBAccess`NBAuditPackageSourceRules[]。
 → {<|"file" -> path, "violations" -> {<|"line", "code", "violation" (規則 ID), "description", "severity" ("Error"|"Review")|>...}|>...} | $Failed (ファイルなし・検査失敗)
 Options: Fallback -> False
+実行のたびに実行記録を 1 件残す (ClaudeSeparationRuns 参照)。中断 (Abort) も記録してから中断を伝える。
 
 ### ClaudeFixSeparation[target, opts]
-分離違反をファイル全文の LLM 書き直しで修正する旧来の関数。通常は ClaudeSeparationView の違反ごとの修正案を使う。ClaudeCheckSeparation の結果がキャッシュにあれば利用し、なければ先に検査する。target がファイルパスならバックアップを作って元ファイルを修正、パッケージ名なら ClaudeUpdatePackage を呼ぶ。
-→ True | $Failed
+分離違反をファイル全文の LLM 書き直しで修正する旧来の関数。通常は ClaudeSeparationView の違反ごとの修正案を使う。ClaudeCheckSeparation の結果がキャッシュにあれば利用し、なければ先に検査する。target がファイルパスならバックアップを作って元ファイルを修正、パッケージ名なら ClaudeUpdatePackage を呼ぶ (非同期に進むので記録は「委譲」)。
+ファイルを書き換える場合 (2026-11-01):
+- バックアップは $packageDirectory 内のファイルなら `bak/<名前> - <時刻> sepfix.<拡張子>` に置く (以前は隣に `<名前>_orig<時刻>.wl` を置き、All の検査対象に紛れ込んでいた)。それ以外のファイルは従来どおり隣に置く。
+- 書き込む前に、応答が元と同じ内容でないか、元にある EndPackage[] が消えていないか (途中で切れた応答)、構文解析できない範囲が元より増えていないかを確かめ、当てはまれば書き込まない。
+- 書き込みは一時ファイル経由。修正前後の違反数とバックアップ (修正前後のハッシュ付き) を実行記録に残し、ClaudeSeparationRunRestore で戻せる。
+→ Null | $Failed
 Options: Fallback -> False
+
+### ClaudeSeparationRunStart[kind, target, opts]
+分離検査 (kind "Check") または修正 ("Fix") を実行記録つきで始め、RunId を返す。"Mode" -> Automatic のとき、パッケージ 1 つやファイルの検査はこのカーネルで、全体検査 (All) とファイルの修正は外部 wolframscript ワーカーで実行する (ライセンス席が 1 つ要る。docext と同じ席ゲート + supervisor + done.json の形)。外部実行中もカーネルは塞がず、終わると "Notebook" のノートブックに知らせる。席が無いとき、検査はこのカーネルで続け、修正は Failure["NoSeat", ...] を返す。パッケージ名での修正 (ClaudeUpdatePackage へ委譲) はこのカーネルでだけ実行できる。同じ対象・同じ種類の実行、または同じファイルの修正が進行中なら Failure["AlreadyRunning", ...]。ClaudeSeparationRunStart[kind] は対象をダイアログで選ばせ (検査はパッケージ・All・ファイル、修正はファイル + 確認)、席が無いときはこのカーネルで実行するか尋ね、失敗はダイアログで知らせる。
+→ String (RunId) | Failure | $Canceled
+Options: "Mode" -> Automatic ("Foreground" | "Background"), "Caller" -> "Direct" (記録に残す呼び出し元), "Notebook" -> Automatic (知らせを書くノートブック。None で書かず、このカーネルでの実行でも Print と見出しを出さない), Fallback -> False
+例: ClaudeSeparationRunStart["Check", All], ClaudeSeparationRunStart["Fix", "C:\\path\\to\\file.wl"]
+
+### ClaudeSeparationRuns[n, opts]
+ClaudeCheckSeparation / ClaudeFixSeparation の実行記録を新しい順に最大 n 件 (既定 50) 返す。直接呼んだ実行も、外部ワーカーの実行も、修正の中で走った検査 (親の RunId 付き) も含む。記録はマシンごとに `$UserBaseDirectory/ClaudeRuntime/separationruns/<RunId>/` (run.json 開始情報、status.json 途中経過とバックアップ、done.json 結果、result.json 検査結果、restore.json 巻き戻し) に残り、各ファイルの書き手は実行したプロセスだけ。古い記録は 180 日・300 件を超えた分を終了済みのものから消す。終了時に SIEM spool へ "SeparationRun" を送る (SystemDoctor の診断ログに取り込まれる)。
+各行: "RunId", "Kind" ("Check"|"Fix"), "Target", "Mode" ("Foreground"|"Background"), "Caller", "State", "Outcome", "StartedAt" (DateObject), "DurationSeconds", "Files", "Violations", "Errors", "Phase", "ParentRunId"
+State: "Running" | "Done" | "Failed" | "Aborted" | "Cancelled" | "Delegated" | "NotStarted" | "Abandoned" (終了記録が無いまま実行プロセスが消えたもの。プロセス名と起動時刻で PID の再利用を見分ける)
+Outcome (修正): "Written" | "NoViolations" | "Skipped" | "Rejected" | "Delegated" | "LLMFailed" | "CheckFailed" | "NotFound" | "BackupFailed" | "WriteFailed" | "WorkerDied" | "Cancelled" | "NoSeat" | "SpawnFailed" | "Abandoned"
+→ {Association...}
+Options: "Kind" -> All, "Cheap" -> False (True でプロセスを照会せず経過時間だけで状態を判定)
+例: Dataset[ClaudeSeparationRuns[20]]
+
+### ClaudeSeparationRunInfo[runId]
+1 実行の記録をすべて返す。
+→ <|"Run", "Status", "Done", "State", "Dir", "Launcher", "Result" (検査結果。ClaudeCheckSeparation の戻り値と同じ形), "Restore"|> | Failure["NotFound", ...]
+
+### ClaudeSeparationRunCancel[runId]
+外部で実行中の分離検査・修正を止め (wolframscript とその子プロセスを taskkill /T で終了。プロセス名と起動時刻が記録と合うものだけ)、記録を "Cancelled" で閉じてライセンス席を返す。実行プロセスが消えた "Abandoned" の記録は、これで閉じる (SystemDoctor の警告が消える)。別のカーネルのノートブックで実行中のものは止められない (そのノートブックで評価を中断する)。
+→ <|"Status" -> "Cancelled" | "Closed", "RunId", ...|> | Failure
+
+### ClaudeSeparationRunRestore[runId, opts]
+ファイルを対象にした ClaudeFixSeparation の実行が書き換えたファイルを、実行前のバックアップに戻す。戻す前に今のファイルを bak/ (パッケージ外なら隣) へ保存する。修正後にファイルが変わっていれば戻さない。巻き戻しは restore.json に記録し、2 回目は断る。パッケージ名での修正は対象外 (ClaudeUpdatePackage の履歴を使う)。
+→ <|"Status" -> "Restored" | "Partial", "RunId", "Items" -> {<|"File", "Backup", "Status", "PreRestore", "Result"|>...}|> | Failure["ModifiedSinceFix" | "NoBackup" | "BackupMissing" | "AlreadyRestored" | "StillRunning" | "NotAFix", ...]
+Options: "Force" -> False (True で変更済みでも戻す・巻き戻し済みでもやり直す)
+
+### ClaudeSeparationRunsView[opts]
+実行記録の一覧を表で表示する。行ごとに [詳細] (記録の中身・ファイルごとの違反・規則ごとの件数・バックアップ・ワーカーのログ末尾・記録フォルダを開くボタン)、[表で開く] (検査結果を ClaudeSeparationView で。ファイルは読み直す)、[中止]、[閉じる] (Abandoned)、[元に戻す] を出し、上部の [検査…] [全体検査] [修正…] で新しい実行を始める。自動更新はしない ([更新] で描き直す。常駐 Dynamic で FE を塞がないため)。
+→ DynamicModule | NotebookObject ("OpenWindow" -> True)
+Options: "MaxRows" -> 40, "OpenWindow" -> False (True で別ウインドウに開く。前に開いたウインドウは閉じる)
+
+### ClaudeSeparationHealthProbe[]
+SystemDoctor の probe (SourceVault_diagnostics が "Separation" として登録する)。記録ファイルだけを読み、プロセスは照会しない。閉じられていない Abandoned の実行があれば Health "Degraded" / "SeparationRunAbandoned"、24 時間以内に失敗した実行があれば "Degraded" / "SeparationRunFailed"、それ以外は "OK" ("NoRuns" / "OK")。結果は 60 秒キャッシュする。
+→ <|"Health", "ReasonCode", "Message", "Running", "Abandoned" (RunId のリスト), "FailedLast24h", "LastCheck" -> <|"RunId", "Target", "AtUTC", "Violations", "Errors"|> | None|>
 
 ### ClaudeCommand["/command"]
 Claude Code CLI のスラッシュコマンド (/help, /permissions, /model, /config, /version, /doctor, /login, /logout, /status 等) を実行する。未知のコマンドは CLI にそのまま渡す。
@@ -1349,6 +1395,10 @@ Claude Code コントロールパレットを表示する。Provider 選択 (循
 ### ClaudeUnregisterPaletteServiceControl[id]
 パレットサービスコントロールを id で削除する。
 → Null
+
+### ClaudeHoldFrontEnd[expr]
+expr を評価する間、claudecode の共有 polling tick がフロントエンドに触れないようにする (claudecode パレットのボタンと同じ保護)。他パッケージのパレットのボタン処理 (Method -> "Queued") で、ダイアログやウインドウを開くなどフロントエンドとやり取りする処理を包む。Abort でも解除される。属性 HoldAll。
+→ expr の値
 
 ## CLI MCP サーバー
 

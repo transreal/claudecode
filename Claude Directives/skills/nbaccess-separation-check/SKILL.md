@@ -14,6 +14,7 @@ description: Use when checking or fixing package-source policy violations in Wol
 | ユーザーに結果を見せる・直す | **`ClaudeSeparationView[target]`** (表 + [前後] [修正案] [問題なし])。target はパッケージ名・`.wl` パス・そのリスト・`All` |
 | 結果をデータで受け取る | `ClaudeSeparationFindings[target]` (1 件 1 連想、View と同じ行) |
 | コンソールに一覧を出す | `ClaudeCheckSeparation[target]` |
+| 実行記録を見る・外部で走らせる・止める・修正を戻す | `ClaudeSeparationRunsView[]` / `ClaudeSeparationRunStart[kind, target]` / `ClaudeSeparationRuns[]` / `ClaudeSeparationRunCancel[runId]` / `ClaudeSeparationRunRestore[runId]`。パレットは `ShowSystemDoctorPalette[]` (SourceVault) の「分離検査」 |
 | 検査エンジン本体 | `NBAccess`NBAuditPackageSource[files]` / `NBAccess`NBAuditPackageSourceText[code, name]` / `NBAccess`NBAuditPackageSourceRules[]` |
 | 1 件について LLM の意見を聞く (任意) | View の詳細欄の [LLM に判定を聞く] / `ClaudeSeparationTriage[row]` |
 | コミット時の警告 | `PackageCommit` / `PackageCommitPlan` / `GitHubRefreshAndCommit` が自動で行う (戻り値の `"PolicyLint"`) |
@@ -99,8 +100,16 @@ r["Inventory"]  (* <|AccessSites, DeclassifySites, EgressSites|> 棚卸し *)
 ## ClaudeCheckSeparation / ClaudeFixSeparation
 
 - `ClaudeCheckSeparation[target]` は `NBAuditPackageSource` の結果をコンソールに表示し、`{<|"file", "violations" -> {<|"line", "code", "violation" (規則 ID), "description", "severity"|>..}|>..}` を返す。waiver の付いた検出は含めない。文字列の target なら `$iSeparationCheckCache` に保存する。
-- `ClaudeFixSeparation[target]` は旧来の「LLM にファイル全文を書き直させる」修正。大きなファイルでは失敗しやすい。**通常は View の [修正案] を使う**。
+- `ClaudeFixSeparation[target]` は旧来の「LLM にファイル全文を書き直させる」修正。大きなファイルでは失敗しやすい。**通常は View の [修正案] を使う**。ファイルを書き換えるとき (2026-11-01): バックアップは `$packageDirectory` 内なら `bak/<名前> - <時刻> sepfix.wl`、書き込みは一時ファイル経由、元と同じ内容・EndPackage[] が消えた応答・構文解析できない範囲が増えた応答は書き込まない (Outcome "Skipped" / "Rejected")。
 - `ClaudeUpdatePackage["pkg"]` (引数 1 つ) は検査して結果を返すだけで、修正はしない。
+
+### 実行記録と実行管理 (2026-11-01、claudecode.wl)
+
+- 両関数の呼び出しはすべて 1 実行 1 フォルダで記録される: `$UserBaseDirectory/ClaudeRuntime/separationruns/<RunId>/` (run.json / status.json / done.json / result.json / restore.json、マシンごと)。修正の中で走った検査は親の RunId 付き。終了時に SIEM spool へ "SeparationRun" を送る。
+- 時間のかかる実行 (全体検査・ファイルの修正) は `ClaudeSeparationRunStart` で外部 wolframscript に回す (ライセンス席 1 つ。docext と同じ席ゲート + supervisor + done.json)。カーネルを塞がず、終わるとノートブックに知らせる。席が無ければ検査はこのカーネルで続け、修正は `Failure["NoSeat"]` (ダイアログ版はこのカーネルで実行するか尋ねる)。
+- 状態が "Abandoned" (終了記録が無いのに実行プロセスが消えた) の記録は `ClaudeSeparationRunCancel` で閉じる。閉じるまで SystemDoctor の "Separation" probe が Degraded を出す。PID は プロセス名と起動時刻で照合し、再利用された PID を止めない。
+- 修正を戻すのは `ClaudeSeparationRunRestore[runId]`。修正後にファイルが変わっていれば断る (`"Force" -> True` で戻す)。戻す前の今のファイルも bak/ に残す。
+- 一覧 View・SystemDoctor パレットは常駐の自動更新をしない ([更新] で描き直す)。パレット・View のボタン処理は `ClaudeHoldFrontEnd` で包み、共有 tick が FE に触れないようにする。
 
 ## $NBSeparationIgnoreList
 
@@ -111,6 +120,8 @@ NBAccess.wl で定義。既定 `{"NBAccess", "NotebookExtensions"}`。ここに�
 - `test codes/NBAccess_policylint_test.wl` — エンジンの規則・waiver・棚卸し・解析省略・fail-closed
 - `test codes/ClaudePackageManager_separationview_test.wl` — View・修正案と LLM 仕分け (LLM はスタブ)・適用・確認済み記録・ClaudeCheckSeparation
 - `test codes/github_policylint_commit_test.wl` — コミット時の警告 (前回との比較・未検査の警告) と、実パッケージでの `PackageCommit` DryRun (読み取りのみ)
+- `test codes/claudecode_separation_runs_test.wls` — 実行記録 (完了・失敗・中断・Throw)、修正 (LLM はスタブ) の書き込み・不採用・巻き戻し、途切れた実行の判定と probe、開始時の重複拒否、外部ワーカーでの検査と中止 (席が無ければ省略。`nobg` 引数で省略)
+- `test codes/SourceVault_systemdoctor_ui_test.wls` — SystemDoctor の "Separation" probe、レポート・診断ログ・パレット・実行一覧の組み立て (headless でボックス化し、メッセージが出ないこと)
 - `test codes/NBAccess_policylint_phase4_test.wl` — PRIV-NB-READ が Error であること、仕分けた 18 か所に理由付き waiver があること、置き換えた読み取り (Todo TaggingRules は旧 NotebookImport 版と同じ結果)、SlideWorkflow の Private 宣言、Resonite の `.nb` 判定
 
 どれも `wolframscript -file` で実行し、一時フォルダの fixture とテスト用のキャッシュファイルだけに書き込む。
