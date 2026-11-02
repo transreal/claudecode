@@ -27473,14 +27473,34 @@ ClaudeUpdateDocumentation[packageName_String, opts:OptionsPattern[]] := (
       designContext = iComputeNewDesignContent[packageName],
       (* 既定: 直近の _documentupdate バックアップを基準にする *)
       prevBackup = iFindLatestDocBackup[packageName];
-      If[!StringQ[prevBackup] || !DirectoryQ[prevBackup],
-        nbPrint[nb, "\:30a8\:30e9\:30fc: \:524d\:56de\:306e _documentupdate \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002\n" <>
-          "\:5148\:306b ClaudeCreateDocumentation[\"" <> packageName <>
-          "\"] \:3092\:5b9f\:884c\:3057\:3066\:304f\:3060\:3055\:3044\:3002\n" <>
-          "(Github \:30b3\:30df\:30c3\:30c8\:7248\:57fa\:6e96\:3067\:66f4\:65b0\:3059\:308b\:306b\:306f Baseline -> \"Github\" \:3092\:6307\:5b9a)"];
-        Return[$Failed]];
-      prevSrcFile = FileNameJoin[{prevBackup, FileNameTake[srcFile]}];
-      diffText = iComputeSourceDiff[prevSrcFile, srcFile]];
+      If[StringQ[prevBackup] && DirectoryQ[prevBackup],
+        prevSrcFile = FileNameJoin[{prevBackup, FileNameTake[srcFile]}];
+        diffText = iComputeSourceDiff[prevSrcFile, srcFile],
+        (* 2026-11-01: docs が ClaudeCreateDocumentation の正常完了以外 (手書き・別経路) で
+           作られ _documentupdate 履歴が一度も無いパッケージ (LeanAssist, ResoLoop) では
+           TargetFiles 明示でも $Failed になり更新できなかった。GithubRepositories に
+           コミット版があればそれを基準に切り替え、無ければ TargetFiles 明示時に限り
+           全ソース参照で進める (2 引数版と同じ扱い)。完了時のバックアップで以後は通常の
+           前回バックアップ基準になる。 *)
+        repoSrc = iGithubRepoSourceFile[packageName];
+        Which[
+          StringQ[repoSrc] && FileExistsQ[repoSrc],
+            baseline = "Github";
+            nbPrint[nb, Style["前回の _documentupdate バックアップが無いため、" <>
+              "GithubRepositories コミット版を基準にします (" <> repoSrc <> ")",
+              FontColor -> RGBColor[0.8, 0.4, 0]]];
+            diffText = iComputeSourceDiff[repoSrc, srcFile];
+            designContext = iComputeNewDesignContent[packageName],
+          OptionValue[TargetFiles] =!= Automatic,
+            nbPrint[nb, Style["前回の _documentupdate バックアップも GithubRepositories の" <>
+              "コミット版も無いため、全ソースを参照して指定ファイルを更新します。",
+              FontColor -> RGBColor[0.8, 0.4, 0]]];
+            diffText = "(\:524d\:56de\:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:306a\:3057 \[LongDash] \:5168\:30bd\:30fc\:30b9\:3092\:53c2\:7167)",
+          True,
+            nbPrint[nb, "\:30a8\:30e9\:30fc: \:524d\:56de\:306e _documentupdate \:30d0\:30c3\:30af\:30a2\:30c3\:30d7\:304c\:898b\:3064\:304b\:308a\:307e\:305b\:3093\:3002\n" <>
+              "\:5148\:306b ClaudeCreateDocumentation[\"" <> packageName <>
+              "\"] \:3092\:5b9f\:884c\:3059\:308b\:304b\:3001TargetFiles \:3067\:66f4\:65b0\:3059\:308b\:30d5\:30a1\:30a4\:30eb\:3092\:660e\:793a\:3057\:3066\:304f\:3060\:3055\:3044\:3002"];
+            Return[$Failed]]]];
     (* 2026-09-06: 補助モジュール <pkg>_<aux>.wl の差分も取り込む (前回バックアップ /
        GithubRepositories 基準)。補助だけが変わった場合も「変更あり」として進み、
        LLM へ渡す差分にも補助モジュールの変更を含める。 *)
@@ -35904,9 +35924,12 @@ iSepRunBegin[kind_String, target_, files_List] :=
     id];
 
 iSepRunCheckSummary[r_List, notes_Association] :=
-  Module[{vs, sev, perFile},
+  Module[{vs, sev, byRule, perFile},
     vs = Flatten[Replace[Lookup[r, "violations", {}], Except[_List] -> {}, {1}]];
-    sev = Counts[Lookup[vs, "severity", Nothing]];
+    (* Lookup[{}, key, d] returns d, not {}: with no violation Counts[Nothing] stayed unevaluated and
+       "Errors" was recorded as an unevaluated Lookup (2026-11-01, a clean package) *)
+    {sev, byRule} = If[vs === {}, {<||>, <||>},
+      {Counts[Lookup[vs, "severity", Nothing]], ReverseSort[Counts[Lookup[vs, "violation", Nothing]]]}];
     perFile = Select[Map[
       <|"File" -> FileNameTake[#["file"]], "Path" -> #["file"],
         "Violations" -> Length[#["violations"]],
@@ -35914,7 +35937,7 @@ iSepRunCheckSummary[r_List, notes_Association] :=
       #Violations > 0 &];
     <|"Files" -> Length[r], "Violations" -> Length[vs],
       "Errors" -> Lookup[sev, "Error", 0], "Reviews" -> Lookup[sev, "Review", 0],
-      "BySeverity" -> sev, "ByRule" -> ReverseSort[Counts[Lookup[vs, "violation", Nothing]]],
+      "BySeverity" -> sev, "ByRule" -> byRule,
       "CoverageFailed" -> Lookup[notes, "CoverageFailed", 0],
       "PerFile" -> Take[ReverseSortBy[perFile, #Violations &], UpTo[200]]|>];
 iSepRunCheckSummary[___] := <||>;
@@ -36533,7 +36556,7 @@ iSepRunsPickTarget["Check"] :=
           Row[{DefaultButton["検査", DialogReturn[p]], "  ",
             Button["全体 (All)", DialogReturn[All]], "  ",
             Button["ファイルを選ぶ…", DialogReturn[{"PickFile"}]], "  ",
-            CancelButton[]}]}, Spacings -> 1]],
+            CancelButton["やめる", DialogReturn[$Canceled]]}]}, Spacings -> 1]],
       WindowTitle -> "分離検査"];
     Which[
       choice === {"PickFile"}, iSepRunsPickFile["検査するファイル"],
