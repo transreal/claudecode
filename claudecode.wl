@@ -1192,6 +1192,19 @@ iPaletteSyncPrivateModel[] := (
   (* 2026-08-16: モデルが変わったら Effort をそのモデルのキーへ入れ直す *)
   iPaletteSyncLMStudioEffort[]);
 
+(* 逆向き (2026-11-05): 実際に使われる $ClaudePrivateModel をパレットの表示へ写す。
+   $iPalettePrivateModelName の初期値は claudecode.wl の読み込み時に決まるので、
+   localInit.wl / NBSyncClaudeModelVars が後から設定した値を知らず、新規ノートでは
+   実際は LM Studio へ送るのに「M: 未設定」と表示していた。保存値の無いノートだけが
+   対象 (iLoadPaletteSettings)。候補に無い provider は表示を変えない。 *)
+iPaletteAdoptPrivateModel[] :=
+  If[ListQ[$ClaudePrivateModel] && Length[$ClaudePrivateModel] >= 2 &&
+     StringQ[$ClaudePrivateModel[[1]]] && StringQ[$ClaudePrivateModel[[2]]] &&
+     $ClaudePrivateModel[[2]] =!= "" &&
+     MemberQ[iPaletteEnabledPrivateProviders[], ToLowerCase[$ClaudePrivateModel[[1]]]],
+    $iPalettePrivateProvider = ToLowerCase[$ClaudePrivateModel[[1]]];
+    $iPalettePrivateModelName = $ClaudePrivateModel[[2]];];
+
 (* ---- Effort トグル (2026-08-16) ----
    標準モデルと秘密モデルで独立した Effort を持つ。
    Claude Code CLI では --effort に、LM Studio では reasoning に写る。
@@ -1339,7 +1352,9 @@ iLoadPaletteSettings[nb_NotebookObject] := Module[{v, vP, vM, migrated, fallback
     "palettePrivateModelName"}]];
   If[StringQ[v] && v =!= "",
     $iPalettePrivateModelName = v;
-    iPaletteSyncPrivateModel[]];
+    iPaletteSyncPrivateModel[],
+    (* 保存値なし: 表示を実際の送信先に合わせる (2026-11-05) *)
+    iPaletteAdoptPrivateModel[]];
   (* $ClaudeModel \:3092 tuple \:3068\:3057\:3066\:540c\:671f *)
   iPaletteSyncClaudeModel[];
   (* 2026-08-16: Effort を LM Studio のモデル別 reasoning 表へ反映 *)
@@ -2234,8 +2249,10 @@ $ClaudeLlamaCppBaseURL::usage =
   "\n" <>
   "LAN 上の別機で動かす場合、既定値をここで書き換えないこと (パッケージは GitHub に\n" <>
   "公開されるので localhost 固定が正)。マシン固有の IP は起動ファイル (localInit.wl)\n" <>
-  "側で上書きする。サブネットに依存する場合は接続先を条件分岐させる:\n" <>
-  "  $ClaudeLlamaCppBaseURL = If[\n" <>
+  "側で上書きする。サブネットに依存する場合は接続先を条件分岐させる。= ではなく := で書くこと\n" <>
+  "(= だと起動時の判定で固定され、ネットワークに繋がる前に起動したカーネルでは localhost の\n" <>
+  "ままになり、パレットの候補からも消える。:= なら読むたびに判定する):\n" <>
+  "  $ClaudeLlamaCppBaseURL := If[\n" <>
   "    AnyTrue[$MachineAddresses, StringStartsQ[#, \"192.168.1.\"] &],\n" <>
   "    \"http://192.168.1.10:8080\", \"http://127.0.0.1:8080\"];\n" <>
   "model tuple の第 3 要素でも上書きできる (lmstudio と同じ規則。こちらが優先):\n" <>
@@ -2285,6 +2302,21 @@ ClaudeSetLocalLLMProvider::usage =
   "パレットの P: / 秘密 P: が自機を指す指定外 provider になっていれば指定 provider へ寄せる。\n" <>
   "戻り値は実効 provider (ClaudeLocalLLMProvider[])。不正な値は $Failed (設定は変えない)。\n" <>
   "恒久設定は $ClaudeMachineLocalLLMProvider (localInit.wl) に書く。";
+
+ClaudeResolvedModelSpec::usage =
+  "ClaudeResolvedModelSpec[model] は Model オプションの値を、実際に送信する先の model spec へ解決して返す\n" <>
+  "(2026-11-05)。Automatic は $ClaudeModel に解決し、URL を持たないローカル provider の\n" <>
+  "{provider, model} には接続先 URL を補う。NBAccess`NBModelCanHandleAccessLevel の距離判定 (rule 107) は\n" <>
+  "URL が無いと働かないので、送信前のアクセス確認にはこの戻り値を渡すこと。送信はしない。";
+
+ClaudeLocalLLMAccessCheck::usage =
+  "ClaudeLocalLLMAccessCheck[model, pl] は PrivacyLevel pl のデータを model の送信先へ送ってよいかを\n" <>
+  "rule 107 の距離の上限だけで判定する (2026-11-06)。送信先が LAN 上のローカル LLM (lmstudio / llamacpp /\n" <>
+  "freetoken) のときだけ NBAccess`NBLocalLLMEffectiveMaxAccessLevel と比べ、Subnet を信用していない同じ LAN の\n" <>
+  "別機 (上限 0.25) や別サブネットのサーバ宛てで pl が上限を超えれば Failure[\"AccessLevelExceeded\", ...] を返す\n" <>
+  "(\"Text\" に表示用の文、\"Limit\" / \"Proximity\" / \"URL\" 付き)。それ以外 (localhost・クラウド・URL の無い spec) は True。\n" <>
+  "model は ClaudeResolvedModelSpec で解決する ({provider, model, \"\"} は URL 無しとして扱う)。pl が数値でなければ 1.0。\n" <>
+  "PL を受け取らない送信経路 (ClaudeQueryBg や URL を取り出して直接 HTTP で送る経路) は、呼び出し側が送信前にこれを呼ぶ。";
 
 $ClaudeEvalToolIntegrations::usage =
   "$ClaudeEvalToolIntegrations \[LongDash] ContextPlan の ToolDefinitions ゲート\n" <>
@@ -13604,9 +13636,11 @@ iFreeTokenDefaultBaseURL[] :=
    起動ファイル (localInit.wl) で $ClaudeLlamaCppBaseURL を上書きするか、
    model tuple の第 3 要素で指定する ($ClaudeLlamaCppBaseURL::usage 参照)。 *)
 iLlamaCppDefaultBaseURL[] :=
-  If[StringQ[$ClaudeLlamaCppBaseURL] && StringTrim[$ClaudeLlamaCppBaseURL] =!= "",
-    StringTrim[$ClaudeLlamaCppBaseURL],
-    "http://127.0.0.1:8080"];
+  (* 2026-11-05: 1 回だけ読む。起動ファイルが := でサブネット判定を書く場合、
+     読むたびに $MachineAddresses の照会 (実測 18ms) が走るため。 *)
+  With[{u = $ClaudeLlamaCppBaseURL},
+    If[StringQ[u] && StringTrim[u] =!= "", StringTrim[u],
+      "http://127.0.0.1:8080"]];
 
 (* ローカル OpenAI 互換 provider の判定と URL 解決。lmstudio 分岐を
    freetoken / llamacpp にも開くときは個別比較ではなくこの 2 つを使う。 *)
@@ -14113,6 +14147,51 @@ iSpecWithResolvedURL[spec_] :=
      iLocalOAIProviderQ[spec[[1]]],
     Append[spec, iLocalOAIResolvePaletteURL[ToLowerCase[spec[[1]]]]],
     spec];
+
+(* 公開口 (2026-11-05): 他パッケージの送信前アクセス確認用。Automatic の解決と
+   URL の補完を両方行う。 *)
+ClaudeResolvedModelSpec[model_:Automatic] :=
+  iSpecWithResolvedURL[iResolveDefaultModelSpec[model]];
+
+(* rule 107 (2026-11-06): LAN 上のローカル LLM へ PL のデータを送ってよいか。
+   見るのは距離で決まる上限 (NBLocalLLMEffectiveMaxAccessLevel) だけで、クラウドの可否は
+   別の関所 (NBModelCanHandleAccessLevel / 課金 API 許可) が受け持つ。PL を受け取らない
+   送信経路の呼び出し側が送信前に呼ぶ。送信はしない。 *)
+iLocalLLMAccessMessage[subnetQ_] :=
+  If[TrueQ[subnetQ],
+    iL["PrivacyLevel `1` のデータを `2` へ送れません。接続先は同じ LAN 上の別機で、Subnet が「信用しない」のため上限は `3` です。パレットの Subnet を「信用する」に切り替えるか、自機のモデルに切り替えてください。",
+      "Cannot send PrivacyLevel `1` data to `2`: it is another host on this LAN and subnet trust is off, so the limit is `3`. Turn on the palette's Subnet toggle, or switch to a model on this machine."],
+    iL["PrivacyLevel `1` のデータを `2` へ送れません (上限 `3`)。このレベルを扱えるモデルを選んでください。",
+      "Cannot send PrivacyLevel `1` data to `2` (limit `3`). Choose a model that can handle this level."]];
+
+(* 表示用: 1. ではなく 1.0 *)
+iLocalLLMLevelText[x_?NumericQ] := StringReplace[ToString[N[x]], RegularExpression["\\.$"] -> ".0"];
+iLocalLLMLevelText[x_] := ToString[x];
+
+ClaudeLocalLLMAccessCheck[model_, pl_] :=
+  Module[{p, m, spec, prov, url, limit, prox, subnetQ, tmpl, params},
+    p = If[NumericQ[pl], N[pl], 1.0];
+    (* {provider, model, ""} は URL 無し: 実際の送信先を補わせる *)
+    m = If[ListQ[model] && Length[model] >= 3 && StringQ[model[[3]]] &&
+           StringTrim[model[[3]]] === "", Take[model, 2], model];
+    spec = ClaudeResolvedModelSpec[m];
+    If[! (ListQ[spec] && Length[spec] >= 3 && StringQ[spec[[1]]] &&
+          iLocalOAIProviderQ[spec[[1]]] && StringQ[spec[[3]]] &&
+          StringTrim[spec[[3]]] =!= ""),
+      Return[True, Module]];
+    prov = ToLowerCase[spec[[1]]];
+    url = StringTrim[spec[[3]]];
+    limit = NBAccess`NBLocalLLMEffectiveMaxAccessLevel[prov, url];
+    If[! NumericQ[limit], limit = 0.];
+    If[p <= limit, Return[True, Module]];
+    prox = NBAccess`NBLocalLLMURLProximity[url];
+    subnetQ = prox === "SameSubnet" && ! TrueQ[NBAccess`NBSubnetTrustActive[]];
+    tmpl = iLocalLLMAccessMessage[subnetQ];
+    params = {p, prov <> " (" <> url <> ")", limit};
+    Failure["AccessLevelExceeded", <|"MessageTemplate" -> tmpl, "MessageParameters" -> params,
+      "Text" -> StringTemplate[tmpl][iLocalLLMLevelText[p], params[[2]], iLocalLLMLevelText[limit]],
+      "PrivacyLevel" -> p, "Provider" -> prov, "URL" -> url, "Limit" -> limit,
+      "Proximity" -> prox|>]];
 
 (* model server root: strip any chat / models path + trailing slash *)
 iLMStudioServerRoot[baseURL_String] :=
@@ -17211,6 +17290,12 @@ ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
       ]];
     (* \:30eb\:30fc\:30c6\:30a3\:30f3\:30b0\:5f8c\:306b\:65e2\:5b9a\:30e2\:30c7\:30eb\:3078\:89e3\:6c7a (Automatic \:306e\:307e\:307e\:306a\:3089 $ClaudeModel) *)
     modelSpec = iResolveDefaultModelSpec[modelSpec];
+    (* rule 107 (2026-11-06): LAN 上のローカル LLM へ送るときは距離で決まる上限と PL を比べる
+       (Subnet を信用していない同じ LAN の別機は 0.25)。下の総合判定は PL > 0.5 のときしか
+       働かず、ちょうど 0.5 や 0.25 を超える低い PL を通していた。PL を渡さない呼び出しは
+       0 なので従来どおり。 *)
+    With[{acc = ClaudeLocalLLMAccessCheck[modelSpec, privLevel]},
+      If[FailureQ[acc], Return["Error: " <> acc["Text"], Module]]];
     (* fail-closed \:30d0\:30c3\:30af\:30b9\:30c8\:30c3\:30d7: \:30eb\:30fc\:30c6\:30a3\:30f3\:30b0\:7d4c\:8def\:306b\:95a2\:308f\:3089\:305a\:3001PL > 0.5 \:3067
        \:6700\:7d42\:7684\:306a modelSpec \:304c\:305d\:306e\:30ec\:30d9\:30eb\:3092\:6271\:3048\:306a\:3051\:308c\:3070\:9001\:4fe1\:3057\:306a\:3044\:3002
        (TaskClass \:30c6\:30a3\:30a2\:89e3\:6c7a\:304c\:30af\:30e9\:30a6\:30c9 backend \:3092\:9078\:3093\:3060\:5834\:5408\:3082\:3053\:3053\:3067\:6b62\:307e\:308b) *)
@@ -34380,6 +34465,76 @@ iInsertChatCell[] :=
     NotebookWrite[nb, Cell["", "ClaudeInput"], All];
     SelectionMove[nb, All, CellContents];
     nb];
+
+(* ClaudeInput cell text -> prompt (2026-11-05). The stylesheet's evaluation function
+   calls iChatCellText and then ClaudeEval, so later fixes need no stylesheet change.
+
+   What the FE hands a CellEvaluationFunction (measured, FE 15.0: cells made by
+   NotebookPut, by insertion at the caret and reopened from a saved file all agree):
+   always a String, also for styled cells and inline formulas, with non-ASCII written
+   as \[DownArrow], \:3042, \|01f600, \.07. A backslash the cell holds is not doubled,
+   so C:\temp and \\srv arrive as they are. That makes the string ambiguous: a cell
+   holding C:\ + real kana and a cell literally holding C:\\:3042 arrive the same.
+   NotebookRead tells them apart, so the evaluated cell is read directly. The string is
+   the fallback, for inline formulas (which only the FE can linearise) and when there is
+   no evaluation cell; it decodes every escape, because a path with Japanese in it is
+   the common case. Collapsing \\ to \, as the old function did, broke both UNC paths
+   and those Japanese paths.
+   Control characters, bidi overrides, surrogates, non-characters and private use
+   (\[Rule] and the like) stay written, so none of them reaches a JSON body or a CLI. *)
+iChatCellUnsafeCodeQ[c_Integer] :=
+  (c < 32 && c =!= 9 && c =!= 10) ||
+  127 <= c <= 159 ||
+  16^^202A <= c <= 16^^202E || 16^^2066 <= c <= 16^^2069 ||
+  16^^D800 <= c <= 16^^F8FF ||
+  16^^FDD0 <= c <= 16^^FDEF ||
+  BitAnd[c, 16^^FFFE] === 16^^FFFE ||
+  c >= 16^^F0000;
+
+(* The regex limits the inside to alphanumerics, so ToExpression can only read a string
+   literal here. Unknown names and unsafe results stay as written. *)
+iChatCellEscapeToChar[esc_String] :=
+  Module[{c = Quiet @ Check[ToExpression["\"" <> esc <> "\""], $Failed]},
+    If[StringQ[c] && StringLength[c] === 1 &&
+        ! iChatCellUnsafeCodeQ[First @ ToCharacterCode[c]], c, esc]];
+
+iChatCellUnescape[s_String] :=
+  StringReplace[s,
+    RegularExpression["\\\\(?:\\[[A-Za-z0-9]+\\]|:[0-9a-fA-F]{4}|\\|[0-9a-fA-F]{6}|\\.[0-9a-fA-F]{2})"] :>
+      iChatCellEscapeToChar["$0"]];
+
+(* Text of a NotebookRead cell, or $Failed when it holds boxes. *)
+iChatCellRawText[s_String] := s;
+iChatCellRawText[l_List] :=
+  With[{parts = iChatCellRawText /@ l},
+    If[AllTrue[parts, StringQ], StringJoin[parts], $Failed]];
+iChatCellRawText[TextData[x_]] := iChatCellRawText[x];
+iChatCellRawText[(StyleBox | ButtonBox)[x_, ___]] := iChatCellRawText[x];
+iChatCellRawText[Cell[x : (_String | _TextData), ___]] := iChatCellRawText[x];
+iChatCellRawText[_] := $Failed;
+
+iChatCellEvaluatedText[] :=
+  Module[{c = Quiet @ EvaluationCell[]},
+    If[Head[c] === CellObject, iChatCellRawText[Quiet @ NotebookRead[c]], $Failed]];
+
+iChatCellSafeText[s_String] :=
+  Module[{t, bad},
+    t = StringReplace[s, {"\r\n" -> "\n", "\r" -> "\n",
+      "\[LineSeparator]" -> "\n", "\[ParagraphSeparator]" -> "\n"}];
+    bad = Select[DeleteDuplicates @ ToCharacterCode[t], iChatCellUnsafeCodeQ];
+    If[bad === {}, t,
+      StringReplace[t, Map[
+        FromCharacterCode[#] -> StringTake[
+          ToString[FromCharacterCode[#], InputForm, CharacterEncoding -> "PrintableASCII"],
+          {2, -2}] &, bad]]]];
+
+iChatCellText[content_] :=
+  Module[{raw = iChatCellEvaluatedText[], s},
+    If[StringQ[raw], Return[iChatCellSafeText[raw], Module]];
+    s = If[StringQ[content], content,
+      Quiet @ Check[
+        First @ FrontEndExecute[FrontEnd`ExportPacket[Cell[content, "Text"], "PlainText"]], $Failed]];
+    If[StringQ[s], iChatCellSafeText[iChatCellUnescape[s]], $Failed]];
 
 iInsertContinueEvalTemplate[] :=
   With[{nb = InputNotebook[]},

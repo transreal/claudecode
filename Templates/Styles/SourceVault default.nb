@@ -3,17 +3,17 @@
 (*** Wolfram Notebook File ***)
 (* http://www.wolfram.com/nb *)
 
-(* CreatedBy='Wolfram 14.3' *)
+(* CreatedBy='Wolfram 15.0' *)
 
 (*CacheID: 234*)
 (* Internal cache information:
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[       154,          7]
-NotebookDataLength[     74696,       1604]
-NotebookOptionsPosition[     68701,       1526]
-NotebookOutlinePosition[     69382,       1549]
-CellTagsIndexPosition[     69339,       1546]
+NotebookDataLength[     74244,       1595]
+NotebookOptionsPosition[     68248,       1517]
+NotebookOutlinePosition[     68929,       1540]
+CellTagsIndexPosition[     68886,       1537]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
@@ -1473,42 +1473,33 @@ Cell[StyleData["ClaudeInput", StyleDefinitions -> StyleData["Text"]],
  CellMargins->{{66, 50}, {5, 8}},
  Evaluatable->True,
  CellGroupingRules->"InputGrouping",
- CellEvaluationFunction->Function[{$CellContext`content, $CellContext`fmt}, 
-   Module[{$CellContext`tasktext}, $CellContext`tasktext = If[
-       StringQ[$CellContext`content], $CellContext`content, 
-       Quiet[
-        Check[
-         First[
-          FrontEndExecute[
-           FrontEnd`ExportPacket[
-            Cell[$CellContext`content, "Text"], "PlainText"]]], $Failed]]]; If[
-      StringQ[$CellContext`tasktext], $CellContext`tasktext = 
-      StringReplace[$CellContext`tasktext, {
-        "\\\\" -> "\\", StringExpression["\\|", 
-           Pattern[$CellContext`hex6, 
-            RegularExpression["[0-9a-fA-F]{6}"]]] :> FromCharacterCode[
-           FromDigits[$CellContext`hex6, 16]], StringExpression["\\:", 
-           Pattern[$CellContext`hex4, 
-            RegularExpression["[0-9a-fA-F]{4}"]]] :> FromCharacterCode[
-           FromDigits[$CellContext`hex4, 16]]}]]; If[
-      And[
-       StringQ[$CellContext`tasktext], StringTrim[$CellContext`tasktext] =!= 
-       ""], If[
-        Not[
-         MemberQ[$Packages, "ClaudeCode`"]], 
-        Quiet[
-         Check[
-          Needs["ClaudeCode`"], Null]]]; If[
-        MemberQ[$Packages, "ClaudeCode`"], 
-        ClaudeCode`ClaudeEval[$CellContext`tasktext], 
-        Print[
-         Style[
-         "ClaudeCode` \:30d1\:30c3\:30b1\:30fc\:30b8\:304c\:672a\:30ed\:30fc\
+ CellEvaluationFunction->Function[{$CellContext`content, $CellContext`fmt}, If[
+     Not[
+      MemberQ[$Packages, "ClaudeCode`"]], 
+     Quiet[
+      Check[
+       Needs["ClaudeCode`"], Null]]]; If[
+     MemberQ[$Packages, "ClaudeCode`"], 
+     With[{$CellContext`tasktext = 
+       ClaudeCode`Private`iChatCellText[$CellContext`content]}, 
+      If[
+       StringQ[$CellContext`tasktext], 
+       If[StringTrim[$CellContext`tasktext] =!= "", 
+        ClaudeCode`ClaudeEval[$CellContext`tasktext]], 
+       Print[
+        Style[
+        "\:30bb\:30eb\:306e\:6587\:5b57\:3092\:53d6\:308a\:51fa\:305b\:307e\
+\:305b\:3093\:3002claudecode.wl \:3092\:8aad\:307f\:76f4\:3057\:3066\:304b\
+\:3089\:518d\:8a55\:4fa1\:3057\:3066\:304f\:3060\:3055\:3044\:3002", 
+         RGBColor[0.8, 0.2, 0.2]]]]], 
+     Print[
+      Style[
+      "ClaudeCode` \:30d1\:30c3\:30b1\:30fc\:30b8\:304c\:672a\:30ed\:30fc\
 \:30c9\:306e\:305f\:3081 ClaudeEval \
 \:3092\:5b9f\:884c\:3067\:304d\:307e\:305b\:3093\:3002claudecode.wl \:3092\
 \:30ed\:30fc\:30c9\:3057\:3066\:304b\:3089\:518d\:8a55\:4fa1\:3057\:3066\:304f\
 \:3060\:3055\:3044\:3002", 
-          RGBColor[0.8, 0.2, 0.2]]]]]]],
+       RGBColor[0.8, 0.2, 0.2]]]]],
  CellFrameMargins->{{12, 8}, {8, 8}},
  CellFrameStyle->{{
     RGBColor[0.3, 0.43, 0.7], 
@@ -1518,7 +1509,7 @@ Cell[StyleData["ClaudeInput", StyleDefinitions -> StyleData["Text"]],
  MenuSortingValue->10000,
  MenuCommandKey:>"q",
  Background->RGBColor[
-  0.962, 0.974, 0.992],ExpressionUUID->"cca8a7cd-c76e-4586-a8e9-455c17f42fb0"],
+  0.962, 0.974, 0.992],ExpressionUUID->"5050d2da-25fa-864a-b592-86c669db58f0"],
 
 Cell[StyleData["NotebookStatus", StyleDefinitions -> StyleData["Input"]],
  MenuSortingValue->
@@ -1527,13 +1518,13 @@ Cell[StyleData["NotebookStatus", StyleDefinitions -> StyleData["Input"]],
 WindowSize->{773, 814},
 WindowMargins->{{Automatic, 167.5}, {Automatic, 109}},
 WindowStatusArea->"",
-FrontEndVersion->"14.3 for Microsoft Windows (64-bit) (2025\:5e747\:67088\
+FrontEndVersion->"15.0 for Microsoft Windows (64-bit) (2026\:5e747\:67082\
 \:65e5)",
 StyleDefinitions->Notebook[{
    Cell[
     StyleData[StyleDefinitions -> "PrivateStylesheetFormatting.nb"]]}, 
   Visible -> False, FrontEndVersion -> 
-  "14.3 for Microsoft Windows (64-bit) (2025\:5e747\:67088\:65e5)", 
+  "15.0 for Microsoft Windows (64-bit) (2026\:5e747\:67082\:65e5)", 
   StyleDefinitions -> "PrivateStylesheetFormatting.nb"],
 ExpressionUUID->"d8787d64-c40e-461c-8c27-7ba9a8177abe"
 ]
@@ -1548,12 +1539,12 @@ CellTagsIndex->{}
 *)
 (*NotebookFileOutline
 Notebook[{
-Cell[554, 20, 104, 0, 70, 49, 0, "StyleData", "StyleDefinitions", "",ExpressionUUID->"c1390a9f-0f2e-4c04-8b86-304eb592c993"],
-Cell[661, 22, 75, 0, 70, 20, 0, "StyleData", "All", "All",ExpressionUUID->"aada7546-59db-49b0-9409-e23e39277282"],
-Cell[739, 24, 270, 7, 70, 24, 0, "StyleData", "Title", "All",ExpressionUUID->"0c7479df-7594-4e2e-8afa-ea5967a72bdd"],
-Cell[1012, 33, 273, 7, 70, 27, 0, "StyleData", "Subtitle", "All",ExpressionUUID->"300d0f5f-a21d-47fe-b315-04de0f68db0d"],
-Cell[1288, 42, 272, 7, 70, 26, 0, "StyleData", "Chapter", "All",ExpressionUUID->"ed3768d1-c626-4ffc-93bb-e42ed3e6e857"],
-Cell[1563, 51, 272, 7, 70, 26, 0, "StyleData", "Section", "All",ExpressionUUID->"2c7ecc13-b56c-4548-8844-f580b360f4bc"],
+Cell[554, 20, 104, 0, 30, 49, 0, "StyleData", "StyleDefinitions", "",ExpressionUUID->"c1390a9f-0f2e-4c04-8b86-304eb592c993"],
+Cell[661, 22, 75, 0, 40, 20, 0, "StyleData", "All", "All",ExpressionUUID->"aada7546-59db-49b0-9409-e23e39277282"],
+Cell[739, 24, 270, 7, 119, 24, 0, "StyleData", "Title", "All",ExpressionUUID->"0c7479df-7594-4e2e-8afa-ea5967a72bdd"],
+Cell[1012, 33, 273, 7, 73, 27, 0, "StyleData", "Subtitle", "All",ExpressionUUID->"300d0f5f-a21d-47fe-b315-04de0f68db0d"],
+Cell[1288, 42, 272, 7, 89, 26, 0, "StyleData", "Chapter", "All",ExpressionUUID->"ed3768d1-c626-4ffc-93bb-e42ed3e6e857"],
+Cell[1563, 51, 272, 7, 73, 26, 0, "StyleData", "Section", "All",ExpressionUUID->"2c7ecc13-b56c-4548-8844-f580b360f4bc"],
 Cell[1838, 60, 275, 7, 70, 29, 0, "StyleData", "Subsection", "All",ExpressionUUID->"a38db8db-fbe3-4ec5-847d-896c744f358e"],
 Cell[2116, 69, 84, 0, 70, 29, 0, "StyleData", "Subsection", "All",ExpressionUUID->"00a018fd-2d87-43b1-bcb7-363a8d9446aa"],
 Cell[2203, 71, 277, 7, 70, 32, 0, "StyleData", "Subsubsection", "All",ExpressionUUID->"c09e7121-a94f-4811-9938-5f414abd3382"],
@@ -1583,31 +1574,32 @@ Cell[7574, 247, 9678, 198, 70, 29, 0, "StyleData", "TodoItem_1", "All",Expressio
  CounterIncrements->"TodoItem_1",
  CounterAssignments->{{"TodoItem_2", 0}},
  MenuCommandKey:>"a"],
-Cell[17255, 447, 9659, 197, 70, 29, 0, "StyleData", "TodoItem_2", "All",ExpressionUUID->"e0673c06-e891-43b3-bd3a-a7c822caddd0",
+Cell[17255, 447, 9659, 197, 43, 29, 0, "StyleData", "TodoItem_2", "All",ExpressionUUID->"e0673c06-e891-43b3-bd3a-a7c822caddd0",
  CounterIncrements->"TodoItem_2",
  CounterAssignments->{{"TodoItem_3", 0}}],
-Cell[26917, 646, 9668, 197, 70, 29, 0, "StyleData", "TodoItem_3", "All",ExpressionUUID->"aa9aa3c7-138e-4c6a-b49c-065eca2634ef",
+Cell[26917, 646, 9668, 197, 41, 29, 0, "StyleData", "TodoItem_3", "All",ExpressionUUID->"aa9aa3c7-138e-4c6a-b49c-065eca2634ef",
  CounterIncrements->"TodoItem_3",
  CounterAssignments->{{"TodoItem_4", 0}}],
-Cell[36588, 845, 9667, 197, 70, 29, 0, "StyleData", "TodoItem_4", "All",ExpressionUUID->"8978e097-e4c3-4c93-acdb-3bbb0bfb89b5",
+Cell[36588, 845, 9667, 197, 40, 29, 0, "StyleData", "TodoItem_4", "All",ExpressionUUID->"8978e097-e4c3-4c93-acdb-3bbb0bfb89b5",
  CounterIncrements->"TodoItem_4",
  CounterAssignments->{{"TodoItem_5", 0}}],
-Cell[46258, 1044, 9659, 197, 70, 29, 0, "StyleData", "TodoItem_5", "All",ExpressionUUID->"af1f1400-a2a4-4c5b-a475-1435db08fdf9",
+Cell[46258, 1044, 9659, 197, 39, 29, 0, "StyleData", "TodoItem_5", "All",ExpressionUUID->"af1f1400-a2a4-4c5b-a475-1435db08fdf9",
  CounterIncrements->"TodoItem_5",
  CounterAssignments->{{"TodoItem_6", 0}}],
-Cell[55920, 1243, 9656, 197, 70, 29, 0, "StyleData", "TodoItem_6", "All",ExpressionUUID->"b1cb83ef-9b53-462e-8fc9-2d1a3ac1b9d6",
+Cell[55920, 1243, 9656, 197, 38, 29, 0, "StyleData", "TodoItem_6", "All",ExpressionUUID->"b1cb83ef-9b53-462e-8fc9-2d1a3ac1b9d6",
  CounterIncrements->"TodoItem_6",
  CounterAssignments->{{"TodoItem_7", 0}}],
-Cell[65579, 1442, 307, 9, 70, 28, 0, "StyleData", "ChatInput", "All",ExpressionUUID->"5ffd05e7-2b9f-9e4a-961e-37ed1c90c870"],
-Cell[65889, 1453, 334, 10, 70, 29, 0, "StyleData", "ChatOutput", "All",ExpressionUUID->"f3449ad5-ebf7-3746-8578-b65b47dfd85f",
+Cell[65579, 1442, 307, 9, 62, 28, 0, "StyleData", "ChatInput", "All",ExpressionUUID->"5ffd05e7-2b9f-9e4a-961e-37ed1c90c870"],
+Cell[65889, 1453, 334, 10, 74, 29, 0, "StyleData", "ChatOutput", "All",ExpressionUUID->"f3449ad5-ebf7-3746-8578-b65b47dfd85f",
  MenuSortingValue->10000],
-Cell[66226, 1465, 2311, 55, 70, 69, 0, "StyleData", "ClaudeInput", "All",ExpressionUUID->"cca8a7cd-c76e-4586-a8e9-455c17f42fb0",
+Cell[66226, 1465, 1858, 46, 68, 69, 0, "StyleData", "ClaudeInput", "All",ExpressionUUID->"5050d2da-25fa-864a-b592-86c669db58f0",
  MenuSortingValue->10000,
  MenuCommandKey:>"q"],
-Cell[68540, 1522, 157, 2, 70, 73, 0, "StyleData", "NotebookStatus", "All",ExpressionUUID->"503f8535-2637-ab40-85a5-4a50d8366094",
+Cell[68087, 1513, 157, 2, 47, 73, 0, "StyleData", "NotebookStatus", "All",ExpressionUUID->"503f8535-2637-ab40-85a5-4a50d8366094",
  MenuSortingValue->10000]
 }
 ]
 *)
 
 (* End of internal cache information *)
+

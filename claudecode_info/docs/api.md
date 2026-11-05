@@ -185,6 +185,10 @@ Claude CLI ハーネス (.claude/) の生成方式。"Direct" (既定) は従来
 型: Boolean, 初期値: True
 新着メール取得 (SourceVaultMailFetchNew) を別プロセス (wolframscript) で非同期実行し FrontEnd を塞がないかどうか。False で従来の同期 fetch に戻す。
 
+### $ClaudeDiagProducer
+型: String, 初期値: "claudecode"
+SIEM spool (diag-spool) のファイル名 <producer>-<pid>-<yyyymmdd>.jsonl に使う producer 名。
+
 ### $ClaudePriorityModeUntil
 型: AbsoluteTime
 高優先度モードの終了絶対時刻。ClaudeBeginHighPriority が設定する。現在時刻がこれより前なら "Suppressible"->True 登録の polling tick はスキップされる。
@@ -376,6 +380,12 @@ llama.cpp llama-server の既定 base URL。OpenAI 互換 /v1/chat/completions �
 
 ### ClaudeSetLocalLLMProvider[prov] → String | All | $Failed
 自機のローカル LLM エンジン指定をこのカーネルで切り替える ("lmstudio" | "llamacpp" | "freetoken" | All | Automatic)。preflight キャッシュを捨て、パレットの P: / 秘密 P: が自機を指す指定外 provider になっていれば指定 provider へ寄せる。戻り値は実効 provider (ClaudeLocalLLMProvider[])。不正な値は $Failed (設定は変えない)。恒久設定は $ClaudeMachineLocalLLMProvider (localInit.wl) に書く。
+
+### ClaudeResolvedModelSpec[model] → List | Automatic | String
+Model オプションの値を、実際に送信する先の model spec へ解決して返す。Automatic は $ClaudeModel に解決し、URL を持たないローカル provider の {provider, model} には接続先 URL を補う。NBAccess`NBModelCanHandleAccessLevel の距離判定 (rule 107) は URL が無いと働かないので、送信前のアクセス確認にはこの戻り値を渡す。送信はしない。
+
+### ClaudeLocalLLMAccessCheck[model, pl] → True | Failure
+PrivacyLevel pl のデータを model の送信先へ送ってよいかを、rule 107 の距離の上限だけで判定する。送信先が LAN 上のローカル LLM (lmstudio / llamacpp / freetoken) のときだけ NBAccess`NBLocalLLMEffectiveMaxAccessLevel と比べ、Subnet を信用していない同じ LAN の別機 (上限 0.25) や別サブネットのサーバ宛てで pl が上限を超えれば Failure["AccessLevelExceeded", ...] を返す ("Text" に表示用の文、"Limit" / "Proximity" / "URL" 付き)。localhost・クラウド・URL の無い spec は True。model は ClaudeResolvedModelSpec で解決し、pl が数値でなければ 1.0。ClaudeQuerySync は PrivacyLevel を受け取るとこれで確かめる。PL を受け取らない送信経路 (ClaudeQueryBg や URL を取り出して直接 HTTP で送る経路) は、呼び出し側が送信前にこれを呼ぶ。
 
 ## LLM ルーティング・使用量管理
 TaskClass ベースのバックエンド自動選択、日次課金上限、使用量集計を扱うサブシステム (hardening 04)。

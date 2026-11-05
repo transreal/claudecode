@@ -24,6 +24,8 @@ paths:
 - サブネットは第 3 オクテットまで（/24 相当）の一致で見る。**ホスト名や IPv6 は判定できないので `"Unknown"` = Remote 扱い**（安全側）。
 - クラウド provider には適用しない（別途 0.49/0.25 の上限があるため）。
 - 上限値は `$NBRemoteLocalLLMAccessCeiling`（既定 0.25）。
+- **効くのは確認を通す経路だけである。** `ClaudeQuerySync` は `PrivacyLevel` を渡したときに確かめるが、`ClaudeQueryBg` と URL を取り出して直接 HTTP で送る経路は PL を受け取らないので自分では確かめない。そうした経路の呼び出し側は、送信前に `ClaudeCode`ClaudeLocalLLMAccessCheck[model, pl]`（距離の上限だけを見る。localhost・クラウドは True）を呼び、`Failure["AccessLevelExceeded"]` なら送らない。PL が分からない機密用の経路は pl = 1.0 とする。2026-11-06 時点で入っている経路: 翻訳ノート（`SourceVaultMakePaperNotebook`）、要約ハブ（`iCallSummaryLLM`）、メール推論、Eagle の Local、mining（同期・非同期）、ResoniteRealtime の非ノート経路、ClaudePackageManager の handler LLM、ClaudeOrchestrator の queryFn、PDFIndex の秘密部分。旧 `maildb_legacy.wl` は未対応。
+- 送信経路を新しく足すときは、この確認を一緒に入れる。URL の無い spec は `ClaudeResolvedModelSpec` が実際の送信先を補ってから判定する（補わないと距離判定が働かない）。
 
 ### 同一サブネットも既定では信用しない
 

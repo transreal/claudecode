@@ -69,21 +69,15 @@ grep -n 'StringToByteArray\[[^,]*, *"UTF-8"\]' *.wl
 #   WriteRawJSONString 由来 / 通常文字列 → UTF-8 のままで正しい
 ```
 
-## CellEvaluationFunction が受け取る Text セル本文のエスケープ (最重要・実証済み 2026-06-12)
+## CellEvaluationFunction が受け取る Text セル本文のエスケープ (最重要・2026-11-05 の実測で訂正)
 
-FE は Text 系スタイルの evaluatable セル (例: スタイルシートの ClaudeInput) を評価するとき、`CellEvaluationFunction` の第 1 引数を **.nb ファイル形式でシリアライズして**渡す。日本語は実文字でなく**リテラル `\:XXXX`**（非 BMP は `\|XXXXXX`、バックスラッシュは `\\` に倍化）のまま届く。
+FE は Text 系スタイルの evaluatable セル (例: スタイルシートの ClaudeInput) を評価するとき、`CellEvaluationFunction` の第 1 引数を**文字列で**渡す。書式付きセルもインライン数式入りのセルも文字列で、非 ASCII は実文字でなく**エスケープ表記**で届く: あ は `\:3042`、↓ は `\[DownArrow]`、× は `\[Times]`、絵文字は `\|01f600`、制御文字は `\.07`。
 
-- 同じセルを NBAccess の `ExportPacket "InputText"` で読むと実文字が返る。混入点はセル評価経路だけ。
-- これを無変換で `ClaudeEval[task]` 等に渡すと、保存プロンプト (prompt-route-registry.json の Matcher.Examples)・PromptHash・LLM プロンプトの全てに `\:XXXX` が伝播する（2026-06-12 に実害、registry 9 件を修復済み）。
-- 対策: CellEvaluationFunction 内で**カーネル側デコード**を行う（`Templates/Styles/SourceVault default.nb` の ClaudeInput スタイルに実装済み。順序が重要: `\\` collapse を先に適用すると `\\:1234` のようなユーザー入力のリテラルを誤デコードしない）:
-
-```mathematica
-tasktext = StringReplace[tasktext, {
-  "\\\\" -> "\\",
-  "\\|" ~~ h : RegularExpression["[0-9a-fA-F]{6}"] :>
-    FromCharacterCode[FromDigits[h, 16]],
-  "\\:" ~~ h : RegularExpression["[0-9a-fA-F]{4}"] :>
-    FromCharacterCode[FromDigits[h, 16]]}]
-```
+- **バックスラッシュは倍化されない。** `C:\temp` も `\\srv` もそのまま届く (NotebookPut のセル・カーソル位置への挿入・保存して開き直したセルで確認)。
+- **この文字列は曖昧。** セルの `C:\` + あ と、文字どおりの `C:\\:3042` が同じ綴りで届く。`\\` を `\` に縮める復号は `\\srv` を `\srv` に、`C:\日本語` を `C:\:65e5...` に壊す。
+- これを無変換で `ClaudeEval[task]` 等に渡すと、保存プロンプト (prompt-route-registry.json の Matcher.Examples)・PromptHash・LLM プロンプトの全てにエスケープ表記が伝播する（2026-06-12 に実害、registry 9 件を修復済み）。
+- 対策: 評価関数の中で **`NotebookRead[EvaluationCell[]]` でセルを直接読む** (実文字が返り、曖昧さがない)。インライン数式など直接読めないセルだけ、文字列の全エスケープを復号して使う。実装は `claudecode.wl` の `iChatCellText`。スタイルシートの評価関数は読み取りを持たず、これを呼んでから `ClaudeEval` に渡す。
+- `ExportPacket` の `"PlainText"` と `"InputText"` も文字を書き換える (↓ → `\[DownArrow]`、全角空白 → `\:3000`、× → `*`、≥ → `>=`)。セルの文字は式から直接読み、組版ボックスの部分だけ書き出させる。ノートブックの文章を取るときは `NBAccess`NBCellGetText` を使う (文字列の部分は実文字のまま)。`NBCellReadInputText` はコード解析用で InputText 形式を返す。
+- スタイルシートの `.nb` はテキストエディタで書き換えない (バイト位置のキャッシュがずれる)。FE で開いて `NotebookWrite` し `NotebookSave` する。`Visible -> False` で開いたまま保存すると、その指定がファイルに残るので、保存の前に `SetOptions[nb, Visible -> Inherited]` する。
 
 - 検証ハーネスの罠 (#28 関連): `ImportString[unicode文字列, "RawJSON"]` は文字コード > 255 で "Out of range Unicode code point" を出して失敗する。JSON 読み取りの検証・実装は `Developer`ReadRawJSONString[content]` を第一選択にする（SourceVault.wl `iLoadRegistryEntries` と同じ 3 段フォールバック）。
