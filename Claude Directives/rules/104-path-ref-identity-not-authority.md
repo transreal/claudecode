@@ -24,7 +24,7 @@ paths:
 ## 背景
 
 Dropbox / OneDrive 上の同一ファイルは、PC ごとに絶対パスが異なる
-(`F:\Dropbox\On Work\...` と `C:\Users\imai_\Dropbox\On Work\...` など)。
+(`D:\Dropbox\On Work\...` と `C:\Users\<user>\Dropbox\On Work\...` など)。
 SourceVault はこの差を吸収するため、絶対パスを `{"$onWork", "sub", "file.nb"}`
 のようなシンボリックパスへ正規化し、`$SourceVaultCloudRootAliases` で旧 PC ルートも
 同じシンボル名へ寄せる。これは同一性 (identity) の問題に対する正しい解である。
@@ -42,7 +42,7 @@ match すること自体は、現 PC でそのファイルを読んでよい・�
 
 | 層 | 目的 | 例 | 権限判定に使うか |
 |---|---|---|---|
-| PhysicalPath | 現 PC で実際に開く実体パス | `F:\Dropbox\On Work\a.nb` | 使う。ただし現 PC で解決・実在確認済みの場合のみ |
+| PhysicalPath | 現 PC で実際に開く実体パス | `D:\Dropbox\On Work\a.nb` | 使う。ただし現 PC で解決・実在確認済みの場合のみ |
 | SymbolicPath / PathRef | 複数 PC 間で同じ論理ファイルを指す | `{"$onWork", "a.nb"}` | 単独では使わない (identity 専用) |
 | SourceIdentity | ファイル内容・notebook 自体の同一性 | `SourceUUID` / `ContentHash` | アクセス可否ではなく同一性・再リンクに使う |
 

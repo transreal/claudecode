@@ -141,10 +141,10 @@ Notebook の SourceVault Header を抽出。**3 経路 fallback** で探索:
 ```mathematica
 NBReadHeader[path]
 (* → <|"Status" -> "OK",
-       "Keywords" -> {"みんなのケア情報学会", "オンライン語り交流会"},
+       "Keywords" -> {"研究会A", "交流会"},
        "Status" -> "Todo",
-       "Deadline" -> DateObject[{2026, 5, 13}, "Day"],
-       "NextReview" -> DateObject[{2026, 5, 13}, "Day"],
+       "Deadline" -> DateObject[{2026, 1, 15}, "Day"],
+       "NextReview" -> DateObject[{2026, 1, 15}, "Day"],
        "Owner" -> Missing["NotPresent"],
        "PathHint" -> Missing["NotPresent"],
        "RawHeader" -> <|...|>,
@@ -394,12 +394,12 @@ SourceVaultMarkTodo[path, target, newStatus, opts___] :=
 ## テスト notebook (実証用)
 
 ```
-C:\Users\imai_\Dropbox\On Work\20260516-第14回オンライン語り交流会\20260516-第14回オンライン語り交流会.nb
+<On Work>\<yyyymmdd>-<イベント名>\<yyyymmdd>-<イベント名>.nb
 ```
 
-- nbRef: `"nb-src-5d9fd9f24923df19"`
+- nbRef: `"nb-src-<16 桁 hex>"` (SourceVault に登録済みの実ノート)
 - 構造: Title cell + Subsection cell + TodoItem_1 cell (3 leaf cell)
-- 直近 SnapshotId: `"snap-sha256-13df6f0aabf70f48b9f2a8e59dc3e9f4351c2d426c5fce6239570f2a9355f1c9"`
+- 直近 SnapshotId: `"snap-sha256-<64 桁 hex>"`
 
 result22.nb 〜 result34.nb の 13 ラウンドの往復で:
 - NBReadTodos: Count: 1, CellPath: {2, 1}

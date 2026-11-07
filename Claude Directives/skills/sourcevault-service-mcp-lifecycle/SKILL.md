@@ -29,8 +29,8 @@ MCP は **2 段構成**で、`SourceVaultStartMCP` がまとめて制御する:
   Dropbox 共有 vault を複数 PC で使っても競合しないための分離（locks のみ
   `runtime/locks` で共有）。**症状は各マシンで独立に再発する**（同じ shared code バグでも
   状態ファイルがマシン別なので、1 台直しても別の台で再発する）。詳細 `sourcevault-runtime-per-machine` メモ。
-- `<PrivateVault>` は `SourceVault`$SourceVaultRoots["PrivateVault"]` で解決（Imai 環境では
-  Dropbox 配下の `udb/sourcevault`）。ハードコードせず常にこの式で取得する。
+- `<PrivateVault>` は `SourceVault`$SourceVaultRoots["PrivateVault"]` で解決する（環境ごとに
+  異なる）。ハードコードせず常にこの式で取得する。
 
 ## 症状カタログ
 
@@ -82,7 +82,7 @@ status.json の State 文字列を単独で信用しないこと。
 ### 1. ランタイムの状態ファイルを直接読む（WL ロード不要・最速）
 
 ```bash
-# <PrivateVault> = SourceVault`$SourceVaultRoots["PrivateVault"]  例: F:\Dropbox\udb\sourcevault
+# <PrivateVault> = SourceVault`$SourceVaultRoots["PrivateVault"]  (実パスはカーネルで評価して得る)
 # <MachineTag>   = $MachineName を英数字以外 - 化したもの（Windows は大小無視）
 M="<PrivateVault>/runtime/<MachineTag>"
 cat "$M/services/sourcevault/status.json"      # State / PID

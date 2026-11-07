@@ -166,9 +166,10 @@ $ClaudeLlamaCppBaseURL = "http://127.0.0.1:8080"
 $ClaudeLocalLLMProvider = Automatic
 
 (* マシン名 → そのマシン自身で動かすローカル LLM エンジンの対応表 (2026-09-08、localInit.wl 推奨)。
-   キーは $MachineName (大文字小文字は無視)。表に無いマシンは既定 "lmstudio"。 *)
+   キーは $MachineName (大文字小文字は無視)。表に無いマシンは既定 "lmstudio"。
+   "pc-a" / "pc-b" は各マシンの $MachineName に置き換える *)
 ClaudeCode`$ClaudeMachineLocalLLMProvider = <|
-  "strixhalo128" -> "lmstudio", "raptorlake" -> "llamacpp"|>
+  "pc-a" -> "lmstudio", "pc-b" -> "llamacpp"|>
 
 (* /api/v1/chat のようなサーバー側ツールループ用エンドポイントを持たないローカル
    OpenAI 互換プロバイダ (freetoken・llamacpp) 向けの、クライアント側非同期ツールループの制御。
@@ -495,9 +496,10 @@ ClaudeCode`$ClaudePaletteProviders = All;
 - `$ClaudeMachineLocalLLMProvider`(既定 `<||>`): マシン名 → provider の対応表。キーは `$MachineName`(大文字小文字は無視)。`localInit.wl` の `Needs["ClaudeCode\`"]` より前に置くことを想定しています。
 
   ```mathematica
-  (* localInit.wl の例: 2 台のマシンでそれぞれ異なるローカルエンジンを動かす *)
+  (* localInit.wl の例: 2 台のマシンでそれぞれ異なるローカルエンジンを動かす
+     ("pc-a" / "pc-b" は各マシンの $MachineName に置き換える) *)
   ClaudeCode`$ClaudeMachineLocalLLMProvider = <|
-    "strixhalo128" -> "lmstudio", "raptorlake" -> "llamacpp"|>;
+    "pc-a" -> "lmstudio", "pc-b" -> "llamacpp"|>;
   ```
 
 - 排他の対象は**あくまで「自機の localhost を指す接続」だけ**です。接続先ホストは URL のホスト部(`localhost` / `127.*` / `::1` / `$MachineAddresses` / `$MachineName`)で判定されます。指定外のローカル provider であっても、接続先が LAN 上の別マシン(例: `192.168.x.x` の `llama-server`)であれば従来どおり利用できます(可否は URL と NBAccess の信頼判定に従う、詳細は「サブネット信用トグル」を参照)。`claudecode` / `chatgptcodex` / `anthropic` / `openai` / `zai` / `kimi` のようなクラウド provider は対象外です。
@@ -518,7 +520,7 @@ ClaudeSetLocalLLMProvider["llamacpp"]
 (* → 実効 provider、不正な値は $Failed (設定は変えない) *)
 
 (* 恒久設定はマシン別対応表に書く (localInit.wl) *)
-ClaudeCode`$ClaudeMachineLocalLLMProvider["strixhalo128"] = "lmstudio";
+ClaudeCode`$ClaudeMachineLocalLLMProvider["pc-a"] = "lmstudio";
 ```
 
 `ClaudeSetLocalLLMProvider[prov]` はカーネルセッション限りの切替であり、次回カーネル起動時には `$ClaudeMachineLocalLLMProvider` の対応表(または既定 `"lmstudio"`)に戻ります。恒久的に切り替えたい場合は対応表を編集してください。
@@ -563,7 +565,7 @@ ClaudeCode`$ClaudeMachineLocalLLMProvider["strixhalo128"] = "lmstudio";
 
   ```mathematica
   (* LAN 内の別機で動作する llama-server に接続する例 *)
-  $ClaudePrivateModel = {"llamacpp", "qwen3.8-flash-next", "http://192.168.1.10:8080"};
+  $ClaudePrivateModel = {"llamacpp", "qwen3.8-flash-next", "http://192.168.x.x:8080"};
   ```
 
 - **認証が必須です**(認証任意の freetoken とは異なる点です)。llama-server は通常 `--api-key-file` オプション付きで起動されており、API キーが無いと `/health` 以外のすべてのエンドポイントが 401 を返します。API キーは NBAccess の SystemCredential 管理機能に登録します。

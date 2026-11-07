@@ -315,6 +315,37 @@ ClaudeDirectiveCompareCanonicalAndClaudeHarness::usage =
 ClaudeDirectiveMigrationReport::usage =
   "ClaudeDirectiveMigrationReport[directiveRoot, claudeDir] is the migration gate: it reports whether the legacy .claude/ harness is equivalent to the canonical Claude Directives repository. Returns <|\"CanonicalRoot\", \"LegacyClaudeDir\", \"CanonicalHash\", \"LegacyHarnessHash\", \"Status\", \"FilesOnlyInCanonical\", \"FilesOnlyInLegacy\", \"FilesChanged\", \"LegacyHarnessOnlyFiles\", \"RecommendedAction\"|>. Status is \"Equivalent\" | \"Diverged\" | \"LegacyOnly\" | \"CanonicalOnly\". Hashes are computed over normalised {LogicalPath, ContentHash} pairs of CLAUDE.md / rules / skills only; harness-only files do not affect Status. Switching Claude CLI to Generated mode requires Status \"Equivalent\" or manual approval.";
 
+(* ===================================================================
+   Directive privacy (2026-11-07)
+   Public directives (the canonical root, published to GitHub and sent to
+   cloud models) must be PrivacyLevel 0.0. Content with PL > 0 lives in the
+   private overlay "<root>_private" and is cited as sv://directive/<id>.
+   =================================================================== *)
+
+ClaudeDirectivePrivacyLevel::usage =
+  "ClaudeDirectivePrivacyLevel[path] returns the declared PrivacyLevel of a directive file: the maximum of the frontmatter key privacyLevel and a line-start stamp <!-- :CodePrivacyLevel: x --> (or (* ... *)). A file under a directory whose name ends in _private is 1.0 unless it declares a level. Undeclared public files are 0.0.";
+
+ClaudeDirectivePrivateRoot::usage =
+  "ClaudeDirectivePrivateRoot[root] returns the private overlay directory of a directive root: the sibling directory named <root name>_private. It is never published. ClaudeDirectivePrivateRoot[] uses the canonical root.";
+
+ClaudeDirectiveOpaqueId::usage =
+  "ClaudeDirectiveOpaqueId[role, name] returns the opaque id used in sv://directive/<id>: the first 24 lower-case hex digits of SHA-256 of \"directive|\" <> role <> \"|\" <> name (UTF-8). role is \"root\", \"rule\", \"skill\" or \"private\".";
+
+ClaudeDirectiveURI::usage =
+  "ClaudeDirectiveURI[role, name] returns \"sv://directive/\" <> ClaudeDirectiveOpaqueId[role, name].";
+
+ClaudeDirectivePrivateURI::usage =
+  "ClaudeDirectivePrivateURI[name] returns the sv://directive URI of the private note notes/<name>.md in the private overlay. Cite it from a public directive instead of writing the private content there.";
+
+ClaudeDirectivesPrivacyLint::usage =
+  "ClaudeDirectivesPrivacyLint[root] scans every .md/.txt file of a public directive root for content above PrivacyLevel 0.0 (home-directory paths with a real user name, the current $UserName/$MachineName, owner-specific terms from <root>_private/privacy_terms.json and $ClaudeDirectivesPrivacyTerms, SourceVault record ids, e-mail addresses, secret-shaped values, private IPv4 addresses, declared privacyLevel > 0). Returns <|\"Status\" -> \"Clean\"|\"Violations\", \"Root\", \"FilesScanned\", \"MaxLevel\", \"Hits\"|>. Hits never contain the matched text.";
+
+ClaudeDirectivesPrivacyLintText::usage =
+  "ClaudeDirectivesPrivacyLintText[text] returns the lint hits for one text (same rules as ClaudeDirectivesPrivacyLint, without the declared-level check). An empty list means the text is clean.";
+
+$ClaudeDirectivesPrivacyTerms::usage =
+  "$ClaudeDirectivesPrivacyTerms is a list of extra owner-specific lint terms, each <|\"Term\" -> s, \"Level\" -> pl, \"Label\" -> category|>. Keep the values out of public files (set them in localInit or in <root>_private/privacy_terms.json).";
+
 Begin["`Private`"];
 
 $ClaudeDirectivesVersion = "0.1.12-phase35-stage1-provider-generic-resolve";
@@ -2499,7 +2530,9 @@ iDirectiveFileRecord[role_String, root_String, absPath_String] :=
       "FrontMatter"   -> fm,
       "Paths"         -> paths,
       "TokenEstimate" -> ClaudeDirectiveTokenEstimate[raw],
-      "ModifiedTime"  -> mtime
+      "ModifiedTime"  -> mtime,
+      (* 2026-11-07: declared PL (public directives must be 0.0) *)
+      "PrivacyLevel"  -> iDirDeclaredLevel[raw, absPath]["Level"]
     |>];
 
 (* ---- ClaudeDirectiveFileInventory ---- *)
@@ -4118,6 +4151,290 @@ ClaudeDirectiveMigrationReport[
     |>];
 
 ClaudeDirectiveMigrationReport[___] := $Failed;
+
+
+(* ===================================================================
+   Directive privacy (2026-11-07)
+   Spec: claude_directives_privacy_spec_v1_0.md (kept locally, not published).
+   Invariants: public directives are PL 0.0; PL > 0 goes to the private
+   overlay "<root>_private" and is cited as sv://directive/<opaqueId>.
+   The owner-specific lint terms are NOT in this file: they come from the
+   running environment ($UserName/$MachineName), from
+   <root>_private/privacy_terms.json and from $ClaudeDirectivesPrivacyTerms.
+   Hits never echo the matched text (failure messages may reach logs or
+   cloud models).
+   =================================================================== *)
+
+If[! ListQ[$ClaudeDirectivesPrivacyTerms], $ClaudeDirectivesPrivacyTerms = {}];
+
+(* UTF-8 text of a file; "" for an empty file; $Failed when unreadable *)
+iDirReadUTF8[path_String] := Module[{b, s},
+  b = Quiet @ Check[ReadByteArray[path], $Failed];
+  Which[
+    b === EndOfFile, "",
+    ByteArrayQ[b],
+      s = Quiet @ Check[ByteArrayToString[b, "UTF-8"], $Failed];
+      If[StringQ[s], s, $Failed],
+    True, $Failed]];
+iDirReadUTF8[_] := $Failed;
+
+iDirClampPL[x_?NumericQ] := N @ Clip[x, {0, 1}];
+iDirClampPL[_] := Missing["BadValue"];
+
+iDirParsePLValue[v_String] := With[{t = StringTrim[StringReplace[v, "\r" -> ""]]},
+  If[StringMatchQ[t, NumberString], iDirClampPL[ToExpression[t]], Missing["BadValue"]]];
+iDirParsePLValue[v_?NumericQ] := iDirClampPL[v];
+iDirParsePLValue[_] := Missing["BadValue"];
+
+(* canonical stamp only (line start + full comment), same rule as github.wl
+   iCodePrivacyLevel: a bare ":CodePrivacyLevel:" in prose is not a stamp *)
+iDirStampLevel[text_String] := Module[{m},
+  m = StringCases[StringTake[text, UpTo[4096]],
+    StartOfLine ~~ (" " | "\t") ... ~~ ("(*" | "<!--") ~~ WhitespaceCharacter ... ~~
+      ":CodePrivacyLevel:" ~~ WhitespaceCharacter ... ~~ lvl : NumberString ~~
+      WhitespaceCharacter ... ~~ ("*)" | "-->") :> lvl, 1];
+  If[m === {}, Missing["NoStamp"], iDirParsePLValue[First[m]]]];
+iDirStampLevel[_] := Missing["NoStamp"];
+
+(* frontmatter privacyLevel: number, Missing["NotDeclared"] or Missing["BadValue"] *)
+iDirFrontmatterLevel[text_String] := Module[{fm, v},
+  fm = Lookup[iParseFrontmatter[text], "Frontmatter", <||>];
+  If[! AssociationQ[fm], Return[Missing["NotDeclared"]]];
+  v = Lookup[fm, "privacyLevel",
+    Lookup[fm, "privacy_level", Lookup[fm, "PrivacyLevel", Missing["NotDeclared"]]]];
+  If[MissingQ[v], v, iDirParsePLValue[v]]];
+iDirFrontmatterLevel[_] := Missing["NotDeclared"];
+
+iDirUnderPrivateDirQ[path_String] := Module[{segs},
+  segs = Quiet @ Check[FileNameSplit[ExpandFileName[path]], {}];
+  Length[segs] > 1 &&
+    AnyTrue[Most[segs], StringEndsQ[ToLowerCase[#], "_private"] &]];
+iDirUnderPrivateDirQ[_] := False;
+
+(* declared level from already-read text: <|"Level", "Malformed"|> *)
+iDirDeclaredLevel[text_String, path_String] := Module[{st, fm, nums, priv, lvl},
+  st = iDirStampLevel[text];
+  fm = If[StringEndsQ[ToLowerCase[path], ".md"], iDirFrontmatterLevel[text],
+    Missing["NotDeclared"]];
+  nums = Select[{st, fm}, NumericQ];
+  priv = iDirUnderPrivateDirQ[path];
+  lvl = Which[
+    nums =!= {}, Max[nums],
+    priv, 1.,
+    MatchQ[fm, Missing["BadValue"]], 1.,
+    True, 0.];
+  <|"Level" -> N[lvl], "Malformed" -> MatchQ[fm, Missing["BadValue"]]|>];
+
+ClaudeDirectivePrivacyLevel[path_String] := Module[{text},
+  If[! FileExistsQ[path] || DirectoryQ[path], Return[Missing["NotAFile"]]];
+  text = iDirReadUTF8[path];
+  If[! StringQ[text],
+    Return[If[iDirUnderPrivateDirQ[path], 1., Missing["ReadFailed"]]]];
+  iDirDeclaredLevel[text, path]["Level"]];
+ClaudeDirectivePrivacyLevel[_] := Missing["BadArgument"];
+
+ClaudeDirectivePrivateRoot[] := ClaudeDirectivePrivateRoot[Automatic];
+ClaudeDirectivePrivateRoot[Automatic] := Module[{r = iDirectiveResolveRootArg[Automatic]},
+  If[FailureQ[r], r, ClaudeDirectivePrivateRoot[r]]];
+ClaudeDirectivePrivateRoot[root_String] := Module[{segs},
+  segs = FileNameSplit[ExpandFileName[root]];
+  If[Length[segs] < 2, Return[Failure["DirectiveRootInvalid", <|"Given" -> root|>]]];
+  FileNameJoin[Append[Most[segs], Last[segs] <> "_private"]]];
+ClaudeDirectivePrivateRoot[other_] := Failure["DirectiveRootInvalid", <|"Given" -> other|>];
+
+ClaudeDirectiveOpaqueId[role_String, name_String] :=
+  StringTake[ToLowerCase @ Hash[
+    StringToByteArray["directive|" <> role <> "|" <> name, "UTF-8"],
+    "SHA256", "HexString"], 24];
+ClaudeDirectiveURI[role_String, name_String] :=
+  "sv://directive/" <> ClaudeDirectiveOpaqueId[role, name];
+ClaudeDirectivePrivateURI[name_String] := ClaudeDirectiveURI["private", name];
+
+(* ---- lint ---- *)
+
+(* names that are placeholders, not a real account (rule L1) *)
+$iDirPlaceholderNames = {"user", "username", "users", "foo", "bar", "baz", "qux",
+  "alice", "bob", "carol", "dave", "eve", "you", "me", "someone", "example",
+  "name", "yourname", "your-name", "your_name", "myname", "public", "default",
+  "default user", "all users", "xxx", "yyy", "test", "tester", "me.me", "..."};
+
+(* environment values too generic to be identifying (rule L2) *)
+$iDirGenericEnvNames = {"user", "users", "admin", "administrator", "owner",
+  "guest", "default", "public", "localhost", "desktop", "laptop", "root",
+  "test", "home", "work", "runner", "builder", "system"};
+
+(* RegularExpression only: a literal "*" inside a StringMatchQ string pattern
+   acts as a wildcard and made every name look like a placeholder *)
+iDirPlaceholderNameQ[n_String] := Module[{t = StringTrim[n]},
+  Or[t === "",
+    MemberQ[$iDirPlaceholderNames, ToLowerCase[t]],
+    StringMatchQ[t, RegularExpression["[<$%{\\[*].*"]],
+    StringMatchQ[t, RegularExpression["[.\\x{2026}]+"]],
+    StringMatchQ[ToLowerCase[t], RegularExpression["[xyz*.]+"]]]];
+
+iDirNameChars = "[^\\\\/\\s\"'`<>*|:;,()\\[\\]{}]+";
+
+$iDirLintRegexRules := {
+  (* L1 home directories *)
+  {"L1", "user-env", 0.1,
+    RegularExpression["(?i)[\\\\/]users[\\\\/]+(" <> iDirNameChars <> ")"], 1},
+  {"L1", "user-env", 0.1,
+    RegularExpression["(?i)[\\\\/]home[\\\\/]+(" <> iDirNameChars <> ")"], 1},
+  (* L4 SourceVault record ids (full length only; shortened examples pass) *)
+  {"L4", "private-id", 0.1, RegularExpression["nb-src-[0-9a-f]{16}(?![0-9a-f])"], 0},
+  {"L4", "private-id", 0.1, RegularExpression["snap-sha256-[0-9a-f]{64}(?![0-9a-f])"], 0},
+  {"L4", "private-id", 0.1, RegularExpression["svmail-[0-9a-f]{12,}"], 0},
+  (* L5 e-mail *)
+  {"L5", "email", 0.25,
+    RegularExpression["[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}"], 0},
+  (* L6 secret-shaped values *)
+  {"L6", "secret-value", 1.0, RegularExpression["sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}"], 0},
+  {"L6", "secret-value", 1.0, RegularExpression["gh[pousr]_[A-Za-z0-9]{30,}"], 0},
+  {"L6", "secret-value", 1.0, RegularExpression["github_pat_[A-Za-z0-9_]{30,}"], 0},
+  {"L6", "secret-value", 1.0, RegularExpression["xox[abprs]-[A-Za-z0-9-]{10,}"], 0},
+  {"L6", "secret-value", 1.0, RegularExpression["AKIA[0-9A-Z]{16}"], 0},
+  {"L6", "secret-value", 1.0, RegularExpression["AIza[0-9A-Za-z_-]{35}"], 0},
+  {"L6", "secret-value", 1.0, RegularExpression["-----BEGIN [A-Z ]*PRIVATE KEY-----"], 0},
+  {"L6", "secret-value", 1.0,
+    RegularExpression["eyJ[A-Za-z0-9_-]{10,}\\.eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}"], 0},
+  (* L7 private IPv4 *)
+  {"L7", "user-env", 0.1, RegularExpression[
+    "(?<![0-9.])(?:10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|192\\.168\\.\\d{1,3}\\.\\d{1,3}|172\\.(?:1[6-9]|2\\d|3[01])\\.\\d{1,3}\\.\\d{1,3})(?![0-9.])"], 0}};
+
+(* allowed e-mail forms (documentation domains, commit attribution) *)
+iDirAllowedEmailQ[m_String] := Module[{low = ToLowerCase[m], dom},
+  dom = Last[StringSplit[low, "@"], ""];
+  Or[
+    MemberQ[{"example.com", "example.org", "example.net", "example.jp", "localhost"}, dom],
+    StringEndsQ[dom, ".example" | ".test" | ".invalid" | ".localhost" | ".example.com"],
+    MemberQ[{"noreply@anthropic.com", "git@github.com"}, low]]];
+
+(* "sk-xxxxxxxx..." style placeholders: one character dominates *)
+iDirPlaceholderSecretQ[m_String] := Module[{tail, cc},
+  tail = Last[StringSplit[m, "-" | "_"], m];
+  If[StringLength[tail] < 8, Return[False]];
+  cc = Values[CharacterCounts[ToLowerCase[tail]]];
+  Max[cc] >= 0.6 StringLength[tail]];
+
+iDirMask[rule_String, cat_String, m_String] :=
+  "<" <> rule <> " " <> cat <> " " <> ToString[StringLength[m]] <> " chars>";
+
+(* terms: <|"Term", "Level", "Label", "Rule"|> *)
+iDirNormalizeTerm[t_Association, rule_String] := Module[{term, lv},
+  term = Lookup[t, "Term", Lookup[t, "term", None]];
+  lv = iDirParsePLValue[Lookup[t, "Level", Lookup[t, "level", 0.1]]];
+  If[! StringQ[term] || StringLength[StringTrim[term]] < 3, Return[Nothing]];
+  <|"Term" -> StringTrim[term], "Level" -> If[NumericQ[lv], lv, 0.1],
+    "Label" -> ToString @ Lookup[t, "Label", Lookup[t, "label", "owner-term"]],
+    "Rule" -> rule|>];
+iDirNormalizeTerm[s_String, rule_String] := iDirNormalizeTerm[<|"Term" -> s|>, rule];
+iDirNormalizeTerm[_, _] := Nothing;
+
+iDirTermsFromFile[root_String] := Module[{pr, f, txt, j, lst},
+  pr = ClaudeDirectivePrivateRoot[root];
+  If[! StringQ[pr], Return[{}]];
+  f = FileNameJoin[{pr, "privacy_terms.json"}];
+  If[! FileExistsQ[f], Return[{}]];
+  txt = iDirReadUTF8[f];
+  If[! StringQ[txt], Return[{}]];
+  j = Quiet @ Check[Developer`ReadRawJSONString[txt], $Failed];
+  lst = Which[AssociationQ[j], Lookup[j, "terms", {}], ListQ[j], j, True, {}];
+  If[! ListQ[lst], {}, iDirNormalizeTerm[#, "L3"] & /@ lst]];
+iDirTermsFromFile[_] := {};
+
+iDirEnvTerms[] := Module[{vals},
+  vals = Select[{$UserName, $MachineName},
+    StringQ[#] && StringLength[StringTrim[#]] >= 4 &&
+      ! MemberQ[$iDirGenericEnvNames, ToLowerCase[StringTrim[#]]] &];
+  <|"Term" -> StringTrim[#], "Level" -> 0.1, "Label" -> "user-env", "Rule" -> "L2"|> & /@
+    DeleteDuplicatesBy[vals, ToLowerCase]];
+
+Options[iDirLintTerms] = {"Terms" -> Automatic, "IncludeEnvironment" -> True,
+  "ExtraTerms" -> {}};
+iDirLintTerms[root_, opts:OptionsPattern[iDirLintTerms]] := Module[{t},
+  t = OptionValue["Terms"];
+  If[ListQ[t], Return[iDirNormalizeTerm[#, "L3"] & /@ t]];
+  DeleteDuplicatesBy[Join[
+      If[TrueQ[OptionValue["IncludeEnvironment"]], iDirEnvTerms[], {}],
+      If[StringQ[root], iDirTermsFromFile[root], {}],
+      iDirNormalizeTerm[#, "L3"] & /@
+        If[ListQ[$ClaudeDirectivesPrivacyTerms], $ClaudeDirectivesPrivacyTerms, {}],
+      iDirNormalizeTerm[#, "L3"] & /@
+        If[ListQ[OptionValue["ExtraTerms"]], OptionValue["ExtraTerms"], {}]],
+    ToLowerCase[#["Term"]] &]];
+
+(* hits of one line *)
+iDirLintLine[line_String, lineNo_Integer, terms_List] := Module[{hits = {}, low},
+  Scan[Function[r, Module[{rule, cat, lvl, re, grp, ms},
+      {rule, cat, lvl, re, grp} = r;
+      ms = If[grp === 1,
+        StringCases[line, re :> "$1"],
+        StringCases[line, re]];
+      Scan[Function[m,
+          Which[
+            rule === "L1" && iDirPlaceholderNameQ[m], Null,
+            rule === "L5" && iDirAllowedEmailQ[m], Null,
+            rule === "L6" && iDirPlaceholderSecretQ[m], Null,
+            True, AppendTo[hits, <|"Line" -> lineNo, "Rule" -> rule,
+              "Category" -> cat, "Level" -> lvl, "Match" -> iDirMask[rule, cat, m]|>]]],
+        ms]]],
+    $iDirLintRegexRules];
+  low = ToLowerCase[line];
+  Scan[Function[t,
+      If[StringContainsQ[low, ToLowerCase[t["Term"]]],
+        AppendTo[hits, <|"Line" -> lineNo, "Rule" -> t["Rule"],
+          "Category" -> t["Label"], "Level" -> t["Level"],
+          "Match" -> iDirMask[t["Rule"], t["Label"], t["Term"]]|>]]],
+    terms];
+  hits];
+
+iDirLintTextWithTerms[text_String, terms_List] := Module[{lines},
+  lines = StringSplit[StringReplace[text, "\r\n" -> "\n"], "\n", All];
+  Flatten[MapIndexed[iDirLintLine[#1, First[#2], terms] &, lines], 1]];
+
+Options[ClaudeDirectivesPrivacyLintText] = Options[iDirLintTerms];
+ClaudeDirectivesPrivacyLintText[text_String, opts:OptionsPattern[]] := Module[{root, terms},
+  root = Quiet @ Check[iDirectiveResolveRootArg[Automatic], $Failed];
+  terms = iDirLintTerms[If[StringQ[root], root, None],
+    FilterRules[{opts}, Options[iDirLintTerms]]];
+  iDirLintTextWithTerms[text, terms]];
+ClaudeDirectivesPrivacyLintText[_, ___] := {<|"Line" -> 0, "Rule" -> "Input",
+  "Category" -> "not-a-string", "Level" -> 1.0, "Match" -> "<non-string input>"|>};
+
+Options[ClaudeDirectivesPrivacyLint] = Options[iDirLintTerms];
+ClaudeDirectivesPrivacyLint[] := ClaudeDirectivesPrivacyLint[Automatic];
+ClaudeDirectivesPrivacyLint[rootArg_, opts:OptionsPattern[]] := Module[
+  {root, terms, files, hits = {}},
+  root = iDirectiveResolveRootArg[rootArg];
+  If[FailureQ[root],
+    Return[<|"Status" -> "Failed", "Reason" -> "DirectiveRootNotFound",
+      "Root" -> rootArg, "FilesScanned" -> 0, "MaxLevel" -> Missing[], "Hits" -> {}|>]];
+  terms = iDirLintTerms[root, FilterRules[{opts}, Options[iDirLintTerms]]];
+  files = Sort @ FileNames[{"*.md", "*.txt"}, root, Infinity];
+  Scan[Function[f, Module[{rel, text, decl, fileHits},
+      rel = iDirectiveRelativePath[root, f];
+      text = iDirReadUTF8[f];
+      If[! StringQ[text],
+        (* unreadable = cannot prove PL 0.0: fail closed *)
+        AppendTo[hits, <|"File" -> rel, "Line" -> 0, "Rule" -> "Read",
+          "Category" -> "unreadable", "Level" -> 1.0, "Match" -> "<unreadable file>"|>],
+        decl = iDirDeclaredLevel[text, f];
+        If[decl["Level"] > 0 || TrueQ[decl["Malformed"]],
+          AppendTo[hits, <|"File" -> rel, "Line" -> 0, "Rule" -> "L8",
+            "Category" -> If[TrueQ[decl["Malformed"]], "malformed-declaration",
+              "declared-private"],
+            "Level" -> Max[decl["Level"], If[TrueQ[decl["Malformed"]], 1., 0.]],
+            "Match" -> "<declared privacyLevel>"|>]];
+        fileHits = Map[Prepend[#, "File" -> rel] &,
+          iDirLintTextWithTerms[text, terms]];
+        hits = Join[hits, fileHits]]]],
+    files];
+  <|"Status" -> If[hits === {}, "Clean", "Violations"],
+    "Root" -> root,
+    "FilesScanned" -> Length[files],
+    "TermCount" -> Length[terms],
+    "MaxLevel" -> If[hits === {}, 0., Max[Lookup[hits, "Level", 0.]]],
+    "Hits" -> hits|>];
 
 End[]; (* `Private` *)
 EndPackage[];

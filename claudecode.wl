@@ -4631,6 +4631,17 @@ $iEpilogRebuildDone = False;
    NBAccess\:516c\:958b\:306e $NBConfidentialSymbols \:306e\:4e21\:65b9\:3092\:540c\:671f\:3059\:308b\:3002
    \:5c06\:6765\:306f\:30bb\:30eb\:3054\:3068\:306e PrivacyLevel \:3092\:5c0e\:5165\:3059\:308b\:4e88\:5b9a\:3060\:304c\:3001
    \:73fe\:6642\:70b9\:3067\:306f\:79d8\:5bc6\:5909\:6570\:306f\:4e00\:5f8b 1.0 \:3068\:3059\:308b\:3002 *)
+(* 2026-11-07: 機密変数名と本文の照合は NBAccess`NBTextMentionsQ に寄せる (α と \[Alpha]、
+   $ で始まる名前)。古い NBAccess が読み込まれたままでも判定が素通りしないよう、無ければここで照合する。 *)
+iNamesMentionedQ[text_String, names_List] :=
+  With[{r = Quiet @ NBAccess`NBTextMentionsQ[text, names]},
+    If[BooleanQ[r], r,
+      AnyTrue[names, StringQ[#] && # =!= "" &&
+        StringContainsQ[text, RegularExpression["(?<![\\p{L}\\p{N}$])" <>
+          StringReplace[#, c : Characters["\\^$.|?*+()[]{}"] :> "\\" <> c] <>
+          "(?![\\p{L}\\p{N}$])"]] &]]];
+iNamesMentionedQ[___] := False;
+
 iRegisterConfidentialVar[name_String] := (
   $confidentialSymbols[name] = True;
   NBAccess`NBRegisterConfidentialVar[name, 1.0];
@@ -4952,10 +4963,7 @@ iConfidentialCellEpilog[] := Quiet @ Module[
       If[ListQ[assigns] && Length[assigns] > 0,
         rhsVars = DeleteDuplicates[Flatten[Last /@ assigns]];
         isDependent = Length[Intersection[rhsVars, confKeys]] > 0,
-        isDependent = AnyTrue[confKeys,
-          StringContainsQ[inputText,
-            RegularExpression["(?<![\\p{L}\\p{N}$])" <> # <>
-              "(?![\\p{L}\\p{N}$])"]] &]
+        isDependent = iNamesMentionedQ[inputText, confKeys]
       ];
       (* 機密生成ヘッド (SourceVault 等が NBAccess に登録) の呼び出しも依存秘密。
          snaps = SourceVaultSearchMailSnapshots[...] のような手入力コードの
@@ -6233,6 +6241,11 @@ iClaudeActiveLLMJobCount[] :=
    headless ($FrontEnd === Null) は probe が常に True で挙動不変。
    2026-10-10: ボタン処理中 (iClaudeFEHeldExternallyQ) も probe を投げずに同じく見送る。
    共有 tick が旗を見た直後に押されたボタンの FE 往復へ、予約済みのこの起動が重なる隙を塞ぐ *)
+(* プリエンプティブなタスク (共有 polling tick / DAG tick 等) の中で評価されているか。
+   この中で同期の FE 往復をすると、FE がカーネルを待っている瞬間に重なって待ち合いになる *)
+iClaudeInPreemptiveTaskQ[] :=
+  TrueQ[$iClaudeInLegacyTask] || TrueQ[$iClaudeInTickInstance];
+
 iClaudeScheduleTickInstance[kk_String, fn_] :=
   iScheduleAtAsync[
     Module[{t0 = AbsoluteTime[]},
@@ -6241,9 +6254,11 @@ iClaudeScheduleTickInstance[kk_String, fn_] :=
         If[AssociationQ[$claudeProgress] && KeyExistsQ[$claudeProgress, kk] &&
            AssociationQ[$claudeProgress[kk]],
           $claudeProgress[kk]["tickInFlightAt"] = None],
-        (* FE 応答あり: 通常実行 *)
+        (* FE 応答あり: 通常実行。
+           2026-11-06: handler の間は $iClaudeInTickInstance を立てる (プリエンプティブなタスクの印)。
+           ClaudeQuerySync 等はこれを見て FE 往復 (InputNotebook / WindowStatusArea 表示) を省く *)
         iClaudeFreezeLog["tick-start", kk];
-        Quiet @ Check[fn[], Null];
+        Block[{$iClaudeInTickInstance = True}, Quiet @ Check[fn[], Null]];
         iClaudeFreezeLog["tick-end",
           kk <> " " <> ToString[Round[AbsoluteTime[] - t0, 0.1]] <> "s"];
         If[AssociationQ[$claudeProgress] && KeyExistsQ[$claudeProgress, kk] &&
@@ -7378,11 +7393,7 @@ iCodeRefsConfidential[heldExpr_, confVarNames_List] :=
     If[Length[confVarNames] === 0, Return[False]];
     exprStr = Quiet @ Check[ToString[heldExpr, InputForm], ""];
     If[!StringQ[exprStr] || exprStr === "", Return[False]];
-    AnyTrue[confVarNames,
-      StringQ[#] &&
-      StringContainsQ[exprStr,
-        RegularExpression[
-          "(?<![\\p{L}\\p{N}\\$])" <> # <> "(?![\\p{L}\\p{N}\\$])"]] &]
+    iNamesMentionedQ[exprStr, confVarNames]
   ];
 
 iCodeRefsConfidential[___] := False;
@@ -15215,6 +15226,27 @@ iWebGuardDeclareContext[prov_, model_, url_] :=
     Null];
 iWebGuardDeclareContext[___] := Null;
 
+(* 課金 API か (Phase 28 Paid フラグ。未登録は provider 名で: zai=z.ai / kimi=Moonshot も課金)。
+   2026-11-06: iQueryViaAPI から切り出し (ClaudeOrchestrator の非同期起動も使う) *)
+iClaudePaidModelQ[prov_String, model_] :=
+  Module[{caps, capEntry, p = ToLowerCase[prov]},
+    caps = If[ValueQ[ClaudeDirectives`$ClaudeModelCapabilities] &&
+              AssociationQ[ClaudeDirectives`$ClaudeModelCapabilities],
+      ClaudeDirectives`$ClaudeModelCapabilities, <||>];
+    capEntry = Lookup[caps, Key[{p, model}], <||>];
+    If[AssociationQ[capEntry] && KeyExistsQ[capEntry, "Paid"],
+      TrueQ[capEntry["Paid"]],
+      MemberQ[{"anthropic", "openai", "zai", "kimi"}, p]]];
+iClaudePaidModelQ[___] := False;
+
+(* いま評価しているノートブック (無ければ入力中のノートブック) が課金 API を許可しているか。
+   headless (NotebookObject が無い) は常に False。FE に問い合わせる (ClaudeOrchestrator は
+   前面評価の間に 1 回だけ呼び、tick の中からは呼ばない) *)
+iClaudePaidAPIAllowedHereQ[] :=
+  Module[{targetNb = Quiet[EvaluationNotebook[]]},
+    If[Head[targetNb] =!= NotebookObject, targetNb = Quiet[InputNotebook[]]];
+    TrueQ @ Quiet @ NBAccess`NBGetNotebookPaidAPIAllowed[targetNb]];
+
 iQueryViaAPI[provider_String, model_String, prompt_String,
              customURL_String:"", opts:OptionsPattern[]] :=
   Module[{apiKey, url, prov = ToLowerCase[provider],
@@ -15300,24 +15332,13 @@ iQueryViaAPI[provider_String, model_String, prompt_String,
        仕様: 課金 API 呼び出しは paidAPIAllowed を許可したノートブックからの
        直接実行のみ。headless (service/wolframscript) は NotebookObject が
        無いため常に拒否。claudecode/lmstudio は上で処理済み (非課金・対象外)。 *)
-    Module[{caps, capEntry, isPaid},
-      caps = If[ValueQ[ClaudeDirectives`$ClaudeModelCapabilities] &&
-                AssociationQ[ClaudeDirectives`$ClaudeModelCapabilities],
-        ClaudeDirectives`$ClaudeModelCapabilities, <||>];
-      capEntry = Lookup[caps, Key[{prov, model}], <||>];
-      isPaid = Which[
-        AssociationQ[capEntry] && KeyExistsQ[capEntry, "Paid"],
-          TrueQ[capEntry["Paid"]],
-        True,
-          (* 未登録: provider 名で fallback (zai=z.ai / kimi=Moonshot も課金 API) *)
-          MemberQ[{"anthropic", "openai", "zai", "kimi"}, prov]
-      ];
+    (* 2026-11-06: 判定は iClaudePaidModelQ / iClaudePaidAPIAllowedHereQ に切り出した
+       (ClaudeOrchestrator の非同期起動が同じ判定を使う)。中身は従来と同じ *)
+    Module[{isPaid},
+      isPaid = iClaudePaidModelQ[prov, model];
       If[isPaid,
-        Module[{targetNb, nbAllowed},
-          targetNb = Quiet[EvaluationNotebook[]];
-          If[Head[targetNb] =!= NotebookObject,
-            targetNb = Quiet[InputNotebook[]]];
-          nbAllowed = TrueQ @ Quiet @ NBAccess`NBGetNotebookPaidAPIAllowed[targetNb];
+        Module[{nbAllowed},
+          nbAllowed = iClaudePaidAPIAllowedHereQ[];
           If[!nbAllowed,
             Return[
               "Error: このノートブックでは課金 API 呼び出しが禁止されています (NBAccess)。\n" <>
@@ -16797,11 +16818,16 @@ ClaudeProcessList[] := ClaudeProcessList[All];
    FE が直接管理し、非同期でも確実に再描画されるためローカル tick に変更。 *)
 ClaudeProcessList[typesArg_] :=
   DynamicModule[{tp = iClaudeNormalizeTaskTypes[typesArg], tick = 0},
-    (* tick を明示依存にし、SynchronousUpdating -> False を外す。手動更新のみ
-       (UpdateInterval 無し) なので同期再評価でも FE フリーズ再発の心配は無く、
-       「更新」ボタン (Preemptive tick++) で確実に再描画される。 *)
+    (* tick を明示依存にする (TrackedSymbols :> {tick})。更新は手動のみ (UpdateInterval 無し)。
+       2026-11-06: SynchronousUpdating -> False に戻す。「手動更新だけなら同期でも固まらない」は
+       誤りだった: 同期 Dynamic は表示のたびに FE がカーネルの返事を待つので、カーネルが
+       プリエンプティブなタスク (DAG tick の中の同期 LLM 呼び出し等) で数分塞がっていると、
+       一覧を出した瞬間に FE ごと止まる (ClaudeEval→Orchestrator 非同期実行中に再現)。
+       プロセス一覧は「何がカーネルを塞いでいるか」を見るための道具なので、塞がっていても
+       FE を止めてはいけない。非同期なら待つ間は灰色の枠のまま。tick は DynamicModule の
+       局所変数なので非同期でも更新は届く (グローバル tick で届かなかった件とは別)。 *)
     Dynamic[tick; iClaudeProcessListPanel[tp, ((tick++) &)],
-      TrackedSymbols :> {tick}]];
+      TrackedSymbols :> {tick}, SynchronousUpdating -> False]];
 
 (* ============================================================
    ClaudeAbort: \:5b9f\:884c\:4e2d\:306e\:5168 Claude \:30bf\:30b9\:30af\:3092\:505c\:6b62
@@ -17213,10 +17239,7 @@ iResponseTaintedQ[args___] :=
       If[TrueQ[NBAccess`NBTextUsesConfidentialHead[txt]],
         Return[True, Module]];
       ks = Keys[NBAccess`NBGetConfidentialVars[]];
-      ks =!= {} && AnyTrue[ks,
-        StringContainsQ[txt,
-          RegularExpression[
-            "(?<![\\p{L}\\p{N}$])" <> # <> "(?![\\p{L}\\p{N}$])"]] &]],
+      ks =!= {} && iNamesMentionedQ[txt, ks]],
     False];
 
 Options[ClaudeQuerySync] = {
@@ -17250,8 +17273,9 @@ ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
     modelSpec = iClaudeApplyTaskClassToModel[
       OptionValue["TaskClass"], OptionValue[Model]];
     If[FailureQ[modelSpec], Return[modelSpec, Module]];
-    (* BreakPtr: fresh kernel でも notebook タグから同期 *)
-    iLLMBreakpointSyncFromNotebook[Quiet @ EvaluationNotebook[]];
+    (* BreakPtr: fresh kernel でも notebook タグから同期 (タスクの中では FE に触らない) *)
+    If[! iClaudeInPreemptiveTaskQ[],
+      iLLMBreakpointSyncFromNotebook[Quiet @ EvaluationNotebook[]]];
     privLevel = Replace[OptionValue[PrivacyLevel], Automatic -> 0.0];
     $iClaudeRequestPrivacyLevel = privLevel;   (* web guard 文脈申告用 (次の申告で消費) *)
     useFallback = TrueQ[OptionValue[Fallback]];
@@ -17312,9 +17336,14 @@ ClaudeQuerySync[prompt_String, opts:OptionsPattern[]] :=
           ". Configure $ClaudePrivateModel or pass a local model via Model."],
         Module]];
 
-    (* \:9032\:6357\:8868\:793a\:7528\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3092\:53d6\:5f97 *)
-    nb = Quiet[InputNotebook[]];
-    If[Head[nb] =!= NotebookObject, nb = Quiet[EvaluationNotebook[]]];
+    (* \:9032\:6357\:8868\:793a\:7528\:30ce\:30fc\:30c8\:30d6\:30c3\:30af\:3092\:53d6\:5f97
+       2026-11-06: プリエンプティブなタスク (DAG tick 等) の中から呼ばれたときは進捗表示をしない
+       (nb = None)。表示は InputNotebook / CurrentValue[WindowStatusArea] の FE 往復で、FE が
+       カーネルを待っている瞬間に重なると待ち合いになる。しかも同期呼び出しの間は 1 秒ごとの
+       表示タスクも回らないので、タスクの中では表示の役にも立たない *)
+    nb = If[iClaudeInPreemptiveTaskQ[], None,
+      Module[{n = Quiet[InputNotebook[]]},
+        If[Head[n] =!= NotebookObject, Quiet[EvaluationNotebook[]], n]]];
     startTime = AbsoluteTime[];
 
     (* \:8868\:793a\:30e9\:30d9\:30eb *)
@@ -25542,16 +25571,198 @@ iDocEnApplyCanonicalLicense[content_String, enPath_String] :=
       StringRiffle[Join[Take[lines, r[[1]] - 1], {"## License", "", jaBody},
         Drop[lines, r[[2]]]], "\n"]]];
 
+(* === 公開 doc の PrivacyLevel 0.0 関所 (2026-11-07) ===
+   <pkg>_info/docs は公開リポジトリへ載るので、Claude Directives と同じく PL 0.0 でなければ
+   ならない。iSafeWriteDoc の書き込み直前 (stamp 付与後の最終本文) に Claude Directives の
+   lint (ClaudeDirectives`ClaudeDirectivesPrivacyLintText、規則 L1〜L7) を掛ける。
+   CodePrivacyLevel > 0 の doc (stamp 付き = 公開の関所で止まる非公開 doc) は対象外。
+   既存の公開 doc には例示のメール・LAN アドレス・実イベント名などの当たりが多数あり、
+   LLM は既存 doc とソースを写し直すので、当たりで書き込みを止めると再試行→スキップが
+   続いて doc が更新されなくなる。そこで当たりの種類で扱いを分ける ("Redact" 既定):
+     分類 user-env の L1〜L3 (home パスの実ユーザー名・$UserName/$MachineName・
+       privacy_terms.json の環境固有語) → 置換して書く。置換しても意味が変わらない語だけ。
+       L1 は名前部分を $iDocPrivacyHomeToken に、L2/L3 は語を含む ASCII 語ごと
+       $iDocPrivacyRedactToken に。どの語を消すかは lint に 1 語ずつ問い合わせて決める
+       (lint が拾わない語は消さない)。置換後にまだ残れば拒否 (fail-closed)。
+     L6 (秘密値の形) → 書き込み拒否 ($Failed。再試行・スキップは既存の規則に従う)。
+     その他 (実イベント名・所有者の識別語・SV id・メール・私的 IP) → 警告して書く。
+       置換すると本文の意味が変わるので人が一般化する。
+   $iDocPrivacyLintMode: "Redact" | "Warn" (置換せず警告、L6 は拒否) | "Block" (当たりが
+   あれば拒否) | "Off"。lint を読み込めないときは警告して書く (fail-open: docs 生成の流れを
+   止めない)。表示・理由文・$iDocLastPrivacyGate に一致文字列は出さない (規則・分類・行・件数のみ)。 *)
+If[!MemberQ[{"Redact", "Warn", "Block", "Off"}, $iDocPrivacyLintMode],
+  $iDocPrivacyLintMode = "Redact"];
+If[!ListQ[$iDocPrivacyRedactCategories], $iDocPrivacyRedactCategories = {"user-env"}];
+If[!StringQ[$iDocPrivacyRedactToken], $iDocPrivacyRedactToken = "(redacted)"];
+If[!StringQ[$iDocPrivacyHomeToken], $iDocPrivacyHomeToken = "username"];
+If[!AssociationQ[$iDocLastPrivacyGate], $iDocLastPrivacyGate = <||>];
+
+(* lint の L1 と同じ形 (名前の文字クラスは claudecode_directives.wl の iDirNameChars) *)
+$iDocPrivacyHomeRegex = RegularExpression[
+  "(?i)([\\\\/](?:users|home)[\\\\/]+)([^\\\\/\\s\"'`<>*|:;,()\\[\\]{}]+)"];
+
+iDocPrivacyLintAvailableQ[] :=
+  Length[Names["ClaudeDirectives`ClaudeDirectivesPrivacyLintText"]] > 0 &&
+    TrueQ[ToExpression["ClaudeDirectives`ClaudeDirectivesPrivacyLintText", InputForm,
+      Function[s, Length[DownValues[s]] > 0, HoldAll]]];
+
+iDocEnsurePrivacyLint[] := Module[{f},
+  If[TrueQ[iDocPrivacyLintAvailableQ[]], Return[True]];
+  f = If[StringQ[Global`$packageDirectory],
+    FileNameJoin[{Global`$packageDirectory, "claudecode_directives.wl"}], None];
+  If[StringQ[f] && FileExistsQ[f],
+    Quiet @ Check[Block[{$CharacterEncoding = "UTF-8"}, Get[f]], Null]];
+  TrueQ[iDocPrivacyLintAvailableQ[]]];
+
+(* lint の当たり (一致文字列は含まない)。lint 自体の失敗は $Failed *)
+iDocPrivacyLintHits[text_String] := Module[{r},
+  r = Quiet @ Check[
+    ToExpression["ClaudeDirectives`ClaudeDirectivesPrivacyLintText"][text], $Failed];
+  If[ListQ[r] && AllTrue[r, AssociationQ], r, $Failed]];
+
+(* 置換で消す当たりか: 規則 L1〜L3 かつ分類が $iDocPrivacyRedactCategories *)
+iDocPrivacyRedactableHitQ[h_Association] :=
+  MemberQ[{"L1", "L2", "L3"}, Lookup[h, "Rule", ""]] &&
+    MemberQ[$iDocPrivacyRedactCategories, Lookup[h, "Category", ""]];
+iDocPrivacyRedactableHitQ[_] := False;
+
+iDocPrivacyTermString[a_Association] := Lookup[a, "Term", Lookup[a, "term", None]];
+iDocPrivacyTermString[s_String] := s;
+iDocPrivacyTermString[_] := None;
+
+(* 置換候補の語 = lint と同じ出どころ ($UserName/$MachineName、
+   <root>_private/privacy_terms.json、ClaudeDirectives`$ClaudeDirectivesPrivacyTerms)。
+   公開 API だけで読む。どれを実際に消すかは iDocPrivacyRedactTerms が lint に問う *)
+iDocPrivacyCandidateTerms[] := Module[{root, pr, f, txt, j, fileTerms = {}, extra},
+  root = Quiet @ Check[
+    ToExpression["ClaudeDirectives`ClaudeResolveDirectiveRoot"][Automatic], $Failed];
+  pr = If[StringQ[root], Quiet @ Check[
+    ToExpression["ClaudeDirectives`ClaudeDirectivePrivateRoot"][root], $Failed], $Failed];
+  f = If[StringQ[pr], FileNameJoin[{pr, "privacy_terms.json"}], None];
+  If[StringQ[f] && FileExistsQ[f],
+    txt = Quiet @ Check[ByteArrayToString[ReadByteArray[f], "UTF-8"], $Failed];
+    j = If[StringQ[txt], Quiet @ Check[Developer`ReadRawJSONString[txt], $Failed], $Failed];
+    fileTerms = Which[AssociationQ[j], Lookup[j, "terms", {}], ListQ[j], j, True, {}];
+    If[!ListQ[fileTerms], fileTerms = {}]];
+  extra = Quiet @ ToExpression["ClaudeDirectives`$ClaudeDirectivesPrivacyTerms"];
+  If[!ListQ[extra], extra = {}];
+  DeleteDuplicatesBy[
+    Select[StringTrim /@ Select[
+        iDocPrivacyTermString /@ Join[{$UserName, $MachineName}, fileTerms, extra], StringQ],
+      StringLength[#] >= 3 &],
+    ToLowerCase]];
+
+(* 語 t を含む語: t の端が ASCII 英数字なら同じ文字種の続きも含める
+   ("abc" が "abc128" の一部なら "abc128" ごと)。日本語へは広げない *)
+iDocPrivacyTermRegex[t_String] := Module[{w = "[A-Za-z0-9_]"},
+  RegularExpression["(?i)" <>
+    If[StringMatchQ[StringTake[t, 1], RegularExpression[w]], w <> "*", ""] <>
+    "\\Q" <> StringReplace[t, "\\E" -> "\\E\\\\E\\Q"] <> "\\E" <>
+    If[StringMatchQ[StringTake[t, -1], RegularExpression[w]], w <> "*", ""]]];
+
+iDocPrivacyHomeNameFlaggedQ[name_String] := Module[{h = iDocPrivacyLintHits["/Users/" <> name]},
+  ListQ[h] && AnyTrue[h, Lookup[#, "Rule", ""] === "L1" && iDocPrivacyRedactableHitQ[#] &]];
+
+(* 戻り値 {本文, 置換件数} *)
+iDocPrivacyRedactHome[text_String] := Module[{r},
+  r = Reap[StringReplace[text, $iDocPrivacyHomeRegex :>
+    If[iDocPrivacyHomeNameFlaggedQ["$2"],
+      Sow[1]; "$1" <> $iDocPrivacyHomeToken,
+      "$1" <> "$2"]]];
+  {First[r], Total[Flatten[Last[r]]]}];
+
+iDocPrivacyRedactTerms[text_String] := Module[{out = text, n = 0, cands},
+  cands = Select[iDocPrivacyCandidateTerms[], StringContainsQ[text, #, IgnoreCase -> True] &];
+  (* 長い語から: 短い語が長い語の一部だけを先に置換しないように *)
+  Scan[Function[t, Module[{h = iDocPrivacyLintHits[t], re},
+      If[ListQ[h] && AnyTrue[h,
+          MemberQ[{"L2", "L3"}, Lookup[#, "Rule", ""]] && iDocPrivacyRedactableHitQ[#] &],
+        re = iDocPrivacyTermRegex[t];
+        n += Length[StringCases[out, re]];
+        out = StringReplace[out, re -> $iDocPrivacyRedactToken]]]],
+    SortBy[cands, -StringLength[#] &]];
+  {out, n}];
+
+(* "L3 real-activity x2 (行 12,40); L5 email x1 (行 7)" — 一致文字列は含めない。
+   外部ワーカーのログでも化けないよう ASCII の x *)
+iDocPrivacyHitSummary[hits_List] := StringRiffle[
+  KeyValueMap[Function[{k, hs},
+      k[[1]] <> " " <> k[[2]] <> " x" <> ToString[Length[hs]] <> " (" <>
+        iL["行 ", "line "] <>
+        StringRiffle[ToString /@ Take[Union[Lookup[#, "Line", 0] & /@ hs], UpTo[5]], ","] <> ")"],
+    GroupBy[hits, {ToString @ Lookup[#, "Rule", "?"], ToString @ Lookup[#, "Category", "?"]} &]],
+  "; "];
+
+iDocPrivacyGateDone[destPath_String, mode_, status_String, text_String, extra_Association] := (
+  $iDocLastPrivacyGate = Join[<|"Path" -> destPath, "Mode" -> mode, "Status" -> status|>, extra];
+  Join[<|"Status" -> status, "Text" -> text|>, extra]);
+
+(* 戻り値 <|"Status" -> "Clean"|"Redacted"|"Warned"|"Blocked"|"Skipped"|"LintUnavailable",
+   "Text" -> 書き込む本文, "Reason", "Hits" (Blocked なら拒否理由の当たり、他は警告の当たり),
+   "Redacted" -> 置換件数|> *)
+iDocPrivacyGate[destPath_String, text_String, packageName_String] := Module[
+  {mode = $iDocPrivacyLintMode, lvl, hits, out = text, nHome = 0, nTerm = 0,
+   blocking, warning, name = FileNameTake[destPath], summary},
+  If[mode === "Off",
+    Return[iDocPrivacyGateDone[destPath, mode, "Skipped", text, <|"Reason" -> "Off"|>]]];
+  lvl = Quiet @ Check[iDocEffectivePrivacyLevel[destPath, packageName], 0];
+  If[NumericQ[lvl] && lvl > 0,
+    Return[iDocPrivacyGateDone[destPath, mode, "Skipped", text, <|"Reason" -> "PrivateDoc"|>]]];
+  hits = If[TrueQ[iDocEnsurePrivacyLint[]], iDocPrivacyLintHits[text], $Failed];
+  If[hits === $Failed,
+    Print[iL["\:26a0 iSafeWriteDoc: PrivacyLevel の検査 (ClaudeDirectivesPrivacyLintText) を使えないため検査せずに書き込みます (",
+      "\:26a0 iSafeWriteDoc: privacy lint unavailable; writing without the PrivacyLevel check ("] <> name <> ")"];
+    Return[iDocPrivacyGateDone[destPath, mode, "LintUnavailable", text, <||>]]];
+  If[hits === {},
+    Return[iDocPrivacyGateDone[destPath, mode, "Clean", text, <|"Hits" -> {}, "Redacted" -> 0|>]]];
+  If[mode === "Redact" && AnyTrue[hits, iDocPrivacyRedactableHitQ],
+    {out, nHome} = iDocPrivacyRedactHome[out];
+    {out, nTerm} = iDocPrivacyRedactTerms[out];
+    hits = iDocPrivacyLintHits[out];
+    If[hits === $Failed,
+      hits = {<|"Line" -> 0, "Rule" -> "Lint", "Category" -> "lint-failed", "Level" -> 1.0|>}]];
+  blocking = Select[hits, Switch[mode,
+      "Block", True,
+      "Redact", Lookup[#, "Rule", ""] === "L6" || iDocPrivacyRedactableHitQ[#],
+      _, Lookup[#, "Rule", ""] === "L6"] &];
+  warning = Select[hits, !MemberQ[blocking, #] &];
+  If[blocking =!= {},
+    summary = iDocPrivacyHitSummary[blocking];
+    Print[iL["\:26a0 iSafeWriteDoc: 公開 doc に PrivacyLevel 0.0 を超える内容 (",
+        "\:26a0 iSafeWriteDoc: content above PrivacyLevel 0.0 in a public doc ("] <>
+      name <> "): " <> summary <> iL["。書き込みを拒否しました。", ". Write rejected."]];
+    Return[iDocPrivacyGateDone[destPath, mode, "Blocked", text,
+      <|"Reason" -> "PrivacyLevel " <> summary, "Hits" -> blocking,
+        "Redacted" -> nHome + nTerm|>]]];
+  If[nHome + nTerm > 0,
+    Print[iL["iSafeWriteDoc: 公開 doc の環境固有の語を一般化しました (",
+        "iSafeWriteDoc: generalized environment-specific terms in a public doc ("] <>
+      name <> "): " <> ToString[nHome + nTerm] <> iL[" か所", " place(s)"]]];
+  If[warning =!= {},
+    Print[iL["\:26a0 iSafeWriteDoc: 公開 doc に PrivacyLevel 0.0 を超える可能性 (",
+        "\:26a0 iSafeWriteDoc: possible content above PrivacyLevel 0.0 in a public doc ("] <>
+      name <> "): " <> iDocPrivacyHitSummary[warning] <>
+      iL["。書き込みは続けます (手で一般化してください)。", ". Written anyway; generalize by hand."]]];
+  iDocPrivacyGateDone[destPath, mode,
+    Which[nHome + nTerm > 0, "Redacted", warning =!= {}, "Warned", True, "Clean"], out,
+    <|"Hits" -> warning, "Redacted" -> nHome + nTerm|>]];
+
 (* \:5b89\:5168\:306a\:30c9\:30ad\:30e5\:30e1\:30f3\:30c8\:66f8\:304d\:8fbc\:307f: \:691c\:8a3c \[RightArrow] \:30af\:30ea\:30fc\:30f3\:30a2\:30c3\:30d7 \[RightArrow] \:66f8\:304d\:8fbc\:307f\:3002
    \:7121\:52b9\:306a\:5fdc\:7b54\:306e\:5834\:5408\:306f\:30d5\:30a1\:30a4\:30eb\:3092\:4e00\:5207\:5909\:66f4\:305b\:305a $Failed \:3092\:8fd4\:3059\:3002 *)
 iSafeWriteDoc[destPath_String, response_String] :=
-  Module[{cleaned},
+  Module[{cleaned, privacyGate},
     If[!iIsValidDocContent[response],
       Return[$Failed]];
     cleaned = iNormalizeDocHead[iCleanDocResponse[response]];
     (* 日英切替行の保全 (3 引数版と同じ, 2026-10-08) *)
     cleaned = iDocRestoreLangSwitch[destPath, cleaned];
     cleaned = iDocApplyPrivacyStamp[destPath, cleaned, iDocPackageFromPath[destPath]];
+    (* 公開 doc の PrivacyLevel 0.0 関所 (3 引数版と同じ, 2026-11-07) *)
+    privacyGate = iDocPrivacyGate[destPath, cleaned, iDocPackageFromPath[destPath]];
+    If[privacyGate["Status"] === "Blocked",
+      $iDocLastFailReason = Lookup[privacyGate, "Reason", "PrivacyLevel"];
+      Return[$Failed]];
+    cleaned = privacyGate["Text"];
     iDocEnSeedBaseline[destPath];
     (* Export "Text" は Windows で \n を \r\n に変換するので、CRLF の内容は \r\r\n になる *)
     cleaned = StringReplace[cleaned, "\r\n" -> "\n"];
@@ -25563,7 +25774,7 @@ iSafeWriteDoc[destPath_String, response_String] :=
    packageName \:3092\:4f7f\:3063\:3066 (1) \:30b5\:30a4\:30ba\:9000\:884c (2) \:30bf\:30a4\:30c8\:30eb\:6574\:5408\:6027 \:3092\:691c\:8a3c\:3059\:308b\:3002 *)
 iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
   Module[{cleaned, existingContent, existingLen, newLen, docFileName,
-          existingTitle, newTitle, apiReason},
+          existingTitle, newTitle, apiReason, privacyGate},
     $iDocLastFailReason = "";   (* \:8a3a\:65ad\:7528: \:6210\:529f\:6642\:306f\:7a7a\:3001\:5931\:6557\:6642\:306b\:5177\:4f53\:7406\:7531\:3092\:8a18\:9332 *)
     (* \:57fa\:672c\:7684\:306a\:30b3\:30f3\:30c6\:30f3\:30c4\:691c\:8a3c *)
     If[!iIsValidDocContent[response],
@@ -25693,6 +25904,13 @@ iSafeWriteDoc[destPath_String, response_String, packageName_String] :=
     cleaned = iNormalizeDocHead[cleaned];
     (* CodePrivacyLevel 継承: 非公開ソース (>0) の doc に stamp を付ける *)
     cleaned = iDocApplyPrivacyStamp[destPath, cleaned, packageName];
+    (* 公開 doc の PrivacyLevel 0.0 関所 (2026-11-07): 環境固有の語は置換、秘密値の形は拒否、
+       その他は警告 (iDocPrivacyGate)。stamp 付き (非公開) doc は素通り *)
+    privacyGate = iDocPrivacyGate[destPath, cleaned, packageName];
+    If[privacyGate["Status"] === "Blocked",
+      $iDocLastFailReason = Lookup[privacyGate, "Reason", "PrivacyLevel"];
+      Return[$Failed]];
+    cleaned = privacyGate["Text"];
     (* en/ 追従の基準: 書き換え前の日本語版を「現行 en/ の訳元」として記録 (未記録時のみ) *)
     iDocEnSeedBaseline[destPath];
     (* Export "Text" は Windows で \n を \r\n に変換する。CRLF の応答 (既存ファイルの
@@ -42660,6 +42878,13 @@ iAdapterSelectProvider[prompt_String, routeAdvice_Association, useFallback_] :=
 (* \[HorizontalLine]\[HorizontalLine] Prompt \:69cb\:7bc9 (adapter \:7528) \[HorizontalLine]\[HorizontalLine]
    \:65e7 ClaudeEval \:4e92\:63db: iClaudeSysPrompt[] \:3092\:30d9\:30fc\:30b9\:306b\:3001
    expression-proposal \:30eb\:30fc\:30d7\:56fa\:6709\:306e\:30eb\:30fc\:30eb\:3092\:8ffd\:52a0\:30bb\:30af\:30b7\:30e7\:30f3\:3068\:3057\:3066\:7d71\:5408\:3002 *)
+(* 2026-11-06: 組み立て済みのプロンプトをそのまま使う口。ClaudeOrchestrator の非同期起動が
+   QueryProviderAsync の provider 別の起動 (LM Studio / llama.cpp / zai / kimi / ツールループ) だけを
+   借りるために "RawPrompt" を渡す。条件付きの定義なので一般の定義より前に置く (順序で効く) *)
+iAdapterBuildPrompt[contextPacket_Association /;
+    StringQ[Lookup[contextPacket, "RawPrompt", None]], _] :=
+  contextPacket["RawPrompt"];
+
 iAdapterBuildPrompt[contextPacket_Association, convState_Association] :=
   Module[{parts = {}, input, cells, prevResult, selectedIdx, turnHistory,
           totalCellCount, maxTurnHistoryDetail = 3,

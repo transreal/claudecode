@@ -5,7 +5,7 @@ description: メール検索・一覧の最終出力は必ずメール専用 Vie
 
 # 106 — メール一覧は SourceVaultMailSearchIndexView で出力する (手組み禁止)
 
-**必須**: メール一覧の最終出力は `SourceVaultMailSearchIndexView[query, opts]` (✉本文/☰スレッド付き) か `SourceVaultMailView`。素の `Dataset`/`Grid`/`Column` で件名一覧を手組みしない (本文を開けない)。複数キーワード OR は query をリストに: `SourceVaultMailSearchIndexView[{"科研","KAKENHI"}, "MBox"->"univ", ...]`。自前 `Select` した行リストも `SourceVaultMailSearchIndexView[rows]` で表示する。
+**必須**: メール一覧の最終出力は `SourceVaultMailSearchIndexView[query, opts]` (✉本文/☰スレッド付き) か `SourceVaultMailView`。素の `Dataset`/`Grid`/`Column` で件名一覧を手組みしない (本文を開けない)。複数キーワード OR は query をリストに: `SourceVaultMailSearchIndexView[{"会議","meeting"}, "MBox"->"univ", ...]`。自前 `Select` した行リストも `SourceVaultMailSearchIndexView[rows]` で表示する。
 
 ## 詳細
 
@@ -26,7 +26,7 @@ description: メール検索・一覧の最終出力は必ずメール専用 Vie
 query は**文字列リスト**を受け付ける (件名/要約のいずれかに部分一致 = OR):
 
 ```mathematica
-SourceVaultMailSearchIndexView[{"科研", "科研費", "KAKENHI", "学振"},
+SourceVaultMailSearchIndexView[{"会議", "打ち合わせ", "meeting"},
   "MBox" -> "univ", "DateFrom" -> DatePlus[Today, {-2, "Month"}],
   "Limit" -> Infinity]
 ```
@@ -49,7 +49,7 @@ Dataset[KeyTake[#, {"Date", "Subject"}] & /@ hit]  (* ❌ 手組み Dataset 禁�
 
 ## 背景
 
-result3/result6 (2026-08-11):「univの直近2か月間の科研に関するメール」で LLM が
+2026-08-11 の事例:「<mbox> の直近2か月間の <話題> に関するメール」で LLM が
 自前 `Select` + 素の `Dataset` を生成し、✉/☰ の無い一覧になって
 ユーザーが本文を参照できなかった。core/View 分離原則 (検索は連想リストを返す
 core と Dataset+UI の View のペア) に従い、一覧の最終出力は View に統一する。

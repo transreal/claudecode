@@ -13,7 +13,7 @@ tier: procedure
 | PrivacyLevel | 保存先 | LLM処理 |
 |---|---|---|
 | ≤ 0.5 | `$packageDirectory/claude_attachments/pdfindex/<collection>/` | クラウドLLM OK |
-| > 0.5 | `$dropbox/udb/pdfindex/<collection>/` | `$ClaudePrivateModel` のみ |
+| > 0.5 | `$pdfIndexBaseDir/<collection>/` (既定 `$packageDirectory/pdfindex_private`) | `$ClaudePrivateModel` のみ |
 
 ## ClaudeEval/ClaudeQuery からの利用
 

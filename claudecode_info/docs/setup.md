@@ -308,12 +308,13 @@ ClaudeCode`$ClaudePaletteProviders = All;
 
 登録簿（`$ClaudePaletteProviders` 等）は「環境に存在する provider」を列挙するだけで、「このマシン自身でどのローカル LLM エンジンを動かすか」までは決めません。そのため、例えば LM Studio を動かているマシンでパレットの `P:` を回すと `llamacpp` も選べてしまい、自機の localhost を指す想定外のサーバへ接続してしまう事故が起こり得ます。
 
-`$ClaudeLocalLLMProvider` / `$ClaudeMachineLocalLLMProvider`（2026-09-08 追加）は、この事故を「自機の localhost を指す接続」に限定して塞ぐ仕組みです。排他の判定は接続先が自機かどうかで行われ、provider 名では行われません。LAN 上の別機（例えば `raptorlake` で動く `llama-server`）を指す指定外 provider は、URL で明示すれば従来どおり使用できます。クラウド provider（`claudecode` / `anthropic` / `openai` / `zai` / `kimi`）は対象外です。
+`$ClaudeLocalLLMProvider` / `$ClaudeMachineLocalLLMProvider`（2026-09-08 追加）は、この事故を「自機の localhost を指す接続」に限定して塞ぐ仕組みです。排他の判定は接続先が自機かどうかで行われ、provider 名では行われません。LAN 上の別機（例えば別マシン `pc-b` で動く `llama-server`）を指す指定外 provider は、URL で明示すれば従来どおり使用できます。クラウド provider（`claudecode` / `anthropic` / `openai` / `zai` / `kimi`）は対象外です。
 
 ```mathematica
-(* localInit.wl（Needs["ClaudeCode`"] の前）にマシン別対応表を書く例 *)
+(* localInit.wl（Needs["ClaudeCode`"] の前）にマシン別対応表を書く例。
+   "pc-a" / "pc-b" は各マシンの $MachineName に置き換える *)
 ClaudeCode`$ClaudeMachineLocalLLMProvider = <|
-  "strixhalo128" -> "lmstudio", "raptorlake" -> "llamacpp"|>;
+  "pc-a" -> "lmstudio", "pc-b" -> "llamacpp"|>;
 
 (* 特定のマシンに限らず、このカーネルで明示的に 1 つへ絞る場合 *)
 $ClaudeLocalLLMProvider = "lmstudio"   (* "lmstudio" | "llamacpp" | "freetoken" *)

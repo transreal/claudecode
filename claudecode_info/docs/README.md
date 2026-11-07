@@ -252,7 +252,7 @@ ClaudeCodexSandboxStatus[]
 
 (* LM Studio のローカルモデルを使用(Model オプションで直接指定) *)
 ClaudeEval["階乗を計算して",
-  Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
+  Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.x.x:1234"}]
 
 (* $ClaudeModel を LM Studio に直接設定(すべての呼び出しを LM Studio で実行) *)
 $ClaudePrivateModel = {"lmstudio", "qwen/qwen3.6-27b", "http://127.0.0.1:1234"}
@@ -603,7 +603,7 @@ ClaudeEval["タスクの説明"]   (* 再び CLI 経由 *)
 $ClaudeFallbackModels = {
   {"anthropic", "claude-opus-5"},
   {"openai", "gpt-5.5"},
-  {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}
+  {"lmstudio", "openai/gpt-oss-20b", "http://192.168.x.x:1234"}
 };
 
 (* Fallback で自動的に使われる *)
@@ -611,7 +611,7 @@ ClaudeEval["階乗を計算して", Fallback -> True]
 
 (* Model オプションで直接指定 *)
 ClaudeEval["1から10までのフィボナッチ数を計算して",
-  Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.2.106:1234"}]
+  Model -> {"lmstudio", "openai/gpt-oss-20b", "http://192.168.x.x:1234"}]
 
 (* $ClaudeModel に直接設定してすべての呼び出しを LM Studio で実行 *)
 $ClaudePrivateModel = {"lmstudio", "qwen/qwen3.6-27b", "http://127.0.0.1:1234"}
@@ -655,7 +655,7 @@ $ClaudePrivateModel = {"llamacpp", "モデル名", "http://127.0.0.1:8080"};
 $ClaudeModel = $ClaudePrivateModel
 
 (* 接続先を変更する場合 *)
-$ClaudeLlamaCppBaseURL = "http://192.168.2.106:8080"
+$ClaudeLlamaCppBaseURL = "http://192.168.x.x:8080"
 ```
 
 同一マシンで LM Studio と llama.cpp を同時に起動すると資源競合(GPU/メモリの取り合い)が起きるため、`$ClaudeLocalLLMProvider`(2026-09-08 追加)で、そのマシン自身が動かすローカル LLM エンジンを `"lmstudio"` / `"llamacpp"` / `"freetoken"` のいずれか一つに明示的に排他できます。

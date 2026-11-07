@@ -40,7 +40,7 @@ WebSearch オプションの利用をユーザーに促すルール。
 ClaudeEval 完了時に表示される ContinueEval リンクは、元の ClaudeEval 呼び出しで
 指定されたオプション（デフォルトと異なるもののみ）を自動的に引き継ぐ。
 
-例: `ClaudeEval["...", WebSearch -> False, Model -> "claude-sonnet-4-20250514"]`
-→ ContinueEval リンク: `ContinueEval["", WebSearch -> False, Model -> "claude-sonnet-4-20250514"]`
+例: `ClaudeEval["...", WebSearch -> False, Model -> "claude-sonnet-5-5"]`
+→ ContinueEval リンク: `ContinueEval["", WebSearch -> False, Model -> "claude-sonnet-5-5"]`
 
 デフォルト値と同じオプションは省略される（例: `WebSearch -> True` はデフォルトなので省略）。

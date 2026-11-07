@@ -1,6 +1,6 @@
 ---
 name: maildb-operations
-description: Use when the user asks about email, mail, メール, 〆切, deadline, 受信, inbox, 返信, reply, IMAP, or references a mail database (univ, hu2022, apple, etc.). 正準システムは SourceVault mail サブシステム (SourceVault_maildb.wl, context SourceVault`): SourceVaultMailEnsureLoaded / SourceVaultMailView / SourceVaultSearchMailSnapshots / SourceVaultInferMailDerivedBatch / SourceVaultMailFetchNew / SourceVaultRegisterMailAccount。旧 maildb.wl は maildb_legacy.wl に改名され参照専用 (mailEnsureLoaded/showMails/searchFromMails/mailAskLLM は新規コードで使わない)。Security routing: privacy > 0.5 は $ClaudePrivateModel (ローカル LLM)。
+description: Use when the user asks about email, mail, メール, 〆切, deadline, 受信, inbox, 返信, reply, IMAP, or references a mail database by its mbox name (e.g. univ; list them with SourceVaultMailAvailableShards). 正準システムは SourceVault mail サブシステム (SourceVault_maildb.wl, context SourceVault`): SourceVaultMailEnsureLoaded / SourceVaultMailView / SourceVaultSearchMailSnapshots / SourceVaultInferMailDerivedBatch / SourceVaultMailFetchNew / SourceVaultRegisterMailAccount。旧 maildb.wl は maildb_legacy.wl に改名され参照専用 (mailEnsureLoaded/showMails/searchFromMails/mailAskLLM は新規コードで使わない)。Security routing: privacy > 0.5 は $ClaudePrivateModel (ローカル LLM)。
 ---
 
 # メール操作ガイド (正準: SourceVault mail サブシステム)

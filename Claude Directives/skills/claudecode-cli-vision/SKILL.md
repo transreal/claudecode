@@ -79,7 +79,7 @@ result = Quiet[
 
 ## 性能特性
 
-実測 (SourceVault.wl, Stage 4C ClaudeVision backend, page 1 of arXiv 1992-WOOC):
+実測 (SourceVault.wl, Stage 4C ClaudeVision backend, ある論文 PDF の 1 ページ目):
 
 - PyMuPDF rasterization (page → PNG 300 DPI): ~0.7 秒
 - 上半分 OCR: ~15 秒

@@ -373,7 +373,7 @@ llama.cpp llama-server の既定 base URL。OpenAI 互換 /v1/chat/completions �
 ### $ClaudeMachineLocalLLMProvider
 型: Association, 初期値: <||>
 マシン名 ($MachineName、大文字小文字は無視) → そのマシン自身で動かすローカル LLM エンジンの対応表。表に無いマシンは "lmstudio"。$ClaudeLocalLLMProvider が String / All のときはそちらが優先。LAN 上の別機のサーバはこの表の管轄外 (URL で指定すれば使える)。$ClaudePaletteProviders / $ClaudePalettePrivateProviders に lmstudio と llamacpp を両方登録したままでも、自機を指す方だけが表で指定した 1 つに絞られる (登録簿 = 環境に存在するもの、表 = 自機で動かすもの)。
-例 (localInit.wl、Needs["ClaudeCode`"] の前に置く): ClaudeCode`$ClaudeMachineLocalLLMProvider = <|"strixhalo128" -> "lmstudio", "raptorlake" -> "llamacpp"|>;
+例 (localInit.wl、Needs["ClaudeCode`"] の前に置く): ClaudeCode`$ClaudeMachineLocalLLMProvider = <|"pc-a" -> "lmstudio", "pc-b" -> "llamacpp"|>; ("pc-a" / "pc-b" は各マシンの $MachineName に置き換える)
 
 ### ClaudeLocalLLMProvider[] → String | All
 このマシン自身で動かすローカル LLM エンジンの provider 名 ("lmstudio" 等) を返す。排他解除 ($ClaudeLocalLLMProvider = All) のときは All。解決順は $ClaudeLocalLLMProvider を参照。
@@ -453,7 +453,7 @@ LLM に問い合わせてテキスト応答をノートブックセルに出力�
 Options: Fallback -> False, WebFetch -> False, WebSearch -> True, Model -> Automatic, PrivacySpec -> Automatic, AutoPrivate -> False, AutoEvaluate -> False, Timeout -> Automatic, Integrations -> Automatic
 
 ### ClaudeQuerySync[task, opts]
-ClaudeQuery の同期バージョン。セルへの出力なしに文字列を返す。TaskClass 経由のティア解決・Validator による応答検証と自動エスカレーションに対応。
+ClaudeQuery の同期バージョン。セルへの出力なしに文字列を返す。TaskClass 経由のティア解決・Validator による応答検証と自動エスカレーションに対応。共有 polling tick (ClaudeRegisterPollingTick) の tickFn などプリエンプティブなタスクの中から呼ばれたときは、ステータスバーの経過時間表示 (WindowStatusArea) と、ノートブックに保存された BreakPtr 設定の読み取りを行わない (FE がカーネルを待っている瞬間に FE 往復が重なると FE とカーネルが待ち合って固まるため。2026-11-06)。
 → String | $Failed
 Options: Fallback -> False, Model -> Automatic, PrivacySpec -> Automatic, PrivacyLevel -> Automatic, Timeout -> Automatic, "TaskClass" -> Automatic (バックエンド選択に $ClaudeLLMTierTable を使用), "Validator" -> None (validator[response_String] -> True | Failure[tag,...]; 失敗時 AllowEscalation な class は 1 回だけティアエスカレーションする)
 
@@ -703,7 +703,7 @@ Options: TaskTypes -> All
 → Null
 
 ### ClaudeProcessList[]
-実行中プロセス/タスクの一時停止・停止操作付きインタラクティブパネルを表示する。
+実行中プロセス/タスクの一時停止・停止操作付きインタラクティブパネルを表示する。自動更新はせず、「更新」ボタンと停止・一時停止の操作で再描画する。再描画は非同期 (SynchronousUpdating -> False) で、カーネルが塞がっている間 (DAG tick の中の同期 LLM 呼び出し等) は枠が灰色のまま待ち、FE を止めない (2026-11-06)。
 → Dynamic
 
 ## 添付・Web
@@ -772,12 +772,12 @@ Web 検索を実行し結果をテキストで返す。Anthropic API の web_sea
 ## ドキュメント生成
 
 ### ClaudeCreateDocumentation[packageName, opts]
-パッケージの包括的ドキュメント一式 (api.md, overview.md, README.md 等) を生成する。リミット到達時に自動停止し再実行で未生成分のみ続行する。README.md は最後に生成される。
+パッケージの包括的ドキュメント一式 (api.md, overview.md, README.md 等) を生成する。リミット到達時に自動停止し再実行で未生成分のみ続行する。README.md は最後に生成される。各ファイルの書き込みは ClaudeUpdateDocumentation と同じ公開 doc の PrivacyLevel 0.0 関所を通る (2026-11-07)。
 → True | $Failed
 Options: Fallback -> False, References -> {} (URL/書籍リスト。README.md 参照文献セクションに追加), Demos -> {} (デモ URL リスト。README.md に反映), Disclaimer -> {} (免責事項テキストリスト。README.md のみ), License -> "" (ライセンス文字列。空で GitHubREST`$GitHubLicenseHolder 非空なら MIT 自動挿入), Acknowledgments -> {} (謝辞テキストリスト。README.md のみ), IncludeAuxiliaryAPIs -> Automatic
 
 ### ClaudeUpdateDocumentation[packageName, instruction, opts]
-既存ドキュメントを instruction に従って部分更新する。既定では生成パイプライン全体を外部 wolframscript ワーカーで実行し FrontEnd を塞がない ($ClaudeDocUpdateExternal を参照)。非同期連鎖で進行するため $ClaudeDocUpdateStaleSeconds 超のロックは自動解放される。英語版 docs/en/ も追従生成される (2026-10-08)。
+既存ドキュメントを instruction に従って部分更新する。既定では生成パイプライン全体を外部 wolframscript ワーカーで実行し FrontEnd を塞がない ($ClaudeDocUpdateExternal を参照)。非同期連鎖で進行するため $ClaudeDocUpdateStaleSeconds 超のロックは自動解放される。英語版 docs/en/ も追従生成される (2026-10-08)。公開 doc の PrivacyLevel 0.0 関所 (2026-11-07): _info/docs 以下の doc は公開リポジトリへ載るため、各ファイルの書き込み直前 (stamp 付与後の最終本文) に Claude Directives の privacy lint (ClaudeDirectives の ClaudeDirectivesPrivacyLintText、規則 L1〜L7。未ロードならパッケージフォルダの claudecode_directives.wl を読み込む) を掛ける。CodePrivacyLevel > 0 の非公開 doc (stamp 付き) は対象外。既定の "Redact" モードでは、環境固有の語 (lint の分類 user-env の L1〜L3: home パス中のユーザー名、$UserName / $MachineName の値、Claude Directives の privacy_terms.json や ClaudeDirectives の $ClaudeDirectivesPrivacyTerms に登録した語) を置換して書く (home パスの名前部分は "username"、その他は語を含む英数字の並びごと "(redacted)"。lint が当たりとしない語は消さない)。置換後も残れば書き込まない。秘密値の形 (L6) は書き込みを拒否して $Failed を返す (再試行・スキップは他の検査で拒否したときと同じ)。それ以外の当たり (実在のイベント名・所有者を識別する語・SourceVault の id・メールアドレス・私的 IP アドレス等) は置換すると本文の意味が変わるので、警告を表示したうえで書き込み、人が一般化する。モードは内部変数 $iDocPrivacyLintMode (Private 文脈) で切り替える: "Warn" (置換せず警告、L6 は拒否) / "Block" (当たりがあれば拒否) / "Off" (検査しない)。lint を読み込めないときは警告を出して検査せずに書く。警告と拒否理由には一致した文字列を出さず、規則・分類・行番号・件数だけを示す (直近の判定は内部変数 $iDocLastPrivacyGate)。
 → True | $Failed
 Options: Fallback -> False, References -> {}, Demos -> {}, Disclaimer -> {}, Acknowledgments -> {}, License -> "", TargetFiles -> Automatic, Mode -> "Update", Baseline -> "LastDocUpdate"
 
@@ -1271,7 +1271,7 @@ $ClaudeRuntimeAsyncExecution の判定に関わらず非同期実行を強制す
 ランタイムブリッジが、パースできない ```mathematica``` 提案コードをそのままテキストのみに縮退させてノートブックに壊れたコードを貼り付ける代わりに、行ごとの括弧欠陥一覧を添えて修復ターンとしてモデルに送り返すかどうか。また、ロード済みコンテキストに存在せず System シンボルから編集距離1のヘッド (StringEndQ のようなタイポ) も承認ダイアログではなく修復ターンに回す。修復回数はランタイムの MaxValidationRepairs 予算に制限される。False で 2026-08-29 以前の挙動 (即テキスト縮退/承認ダイアログ) に戻す。
 
 ### ClaudeBuildRuntimeAdapter[nb, opts]
-ノートブック nb 用のランタイムアダプター Association を構築する。ClaudeStartRuntime / ClaudeEvalViaRuntime で内部使用する。
+ノートブック nb 用のランタイムアダプター Association を構築する。ClaudeStartRuntime / ClaudeEvalViaRuntime で内部使用する。アダプターの "QueryProviderAsync" (と Provider 未指定時の "QueryProvider") に渡す context packet が "RawPrompt" -> String を持つときは、プロンプトを組み立てずにその文字列をそのまま送る (ClaudeOrchestrator の非同期起動が provider 別の起動処理だけを借りるための口。2026-11-06)。
 → Association
 Options: "AccessLevel" -> 0.5, "Secrets" -> {}, "MaxContinuations" -> 3, "SyncProvider" -> True, "Provider" -> Automatic, "Fallback" -> False, "Model" -> Automatic, "Timeout" -> Automatic ($ClaudeTimeout に解決), "ExecutionTimeoutSeconds" -> 30 (NBExecuteHeldExpr の TimeConstraint 既定値。adapter の "DefaultTimeoutSeconds" キーに保持。LLM proposal に ExpectedSeconds があればそちらを優先。優先順: proposal["ExpectedSeconds"] > adapter["DefaultTimeoutSeconds"] > 30)
 
@@ -1375,7 +1375,7 @@ ClaudeEval の文字列タスクを、旧来の自然言語ディスパッチよ
 ## ポーリング・スケジューリング
 
 ### ClaudeRegisterPollingTick[key, tickFn, opts]
-$iSharedPollingTask の各 tick で呼ばれる tickFn を key で登録する。共有ポーリングタスクが未起動なら自動起動する。
+$iSharedPollingTask の各 tick で呼ばれる tickFn を key で登録する。共有ポーリングタスクが未起動なら自動起動する。tickFn の評価中はプリエンプティブなタスクとして扱われ、その中から呼んだ ClaudeQuerySync は進捗表示などの FE 往復を省く (2026-11-06)。
 → Association (<|"Status"->"Registered", "Key"->key|>)
 Options: "Phase" -> "external" (デバッグラベル), "Caller" -> "External" (呼び出し元識別子), "Priority" -> 0, "Suppressible" -> False (True で ClaudeBeginHighPriority 中はスキップされる), "RunInline" -> False
 
@@ -1452,7 +1452,7 @@ spec キー: "ConfigFn" -> Function[] (サーバー到達可能時は <|"Url"->.
 → True | False
 
 ### Confidential[expr]
-機密データのラッパーヘッド (HoldFirst)。AutoPrivate -> True 時に $ClaudePrivateModel へのルーティングをトリガーする。
+機密データのラッパーヘッド (HoldFirst)。AutoPrivate -> True 時に $ClaudePrivateModel へのルーティングをトリガーする。機密変数名の照合 (機密変数を参照する Input セルの Output を依存秘密にする判定と、LLM 応答・生成コードが機密変数を参照するときに書き込んだセルを自動で機密マークする判定) は NBAccess の NBTextMentionsQ で行い、$ で始まる名前や、本文側で `\[Alpha]` と綴られたギリシャ文字の名前 (α) も検出する (2026-11-07。NBTextMentionsQ の無い古い NBAccess では、名前を正規表現としてエスケープした識別子境界の照合で代える)。
 例: Confidential[secretData = Import["secret.csv"]]
 
 ### NonConfidential[expr]

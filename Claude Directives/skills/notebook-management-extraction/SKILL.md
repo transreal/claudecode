@@ -44,7 +44,7 @@ Deterministic index (Stage 9 P0):
   - SourceVaultFindNotebooks["OpenTodos" -> True]
   - SourceVaultFindNotebooks["NextReview" -> "Overdue"]
   - SourceVaultFindNotebooks["Deadline" -> "ThisWeek"]
-  - SourceVaultFindNotebooks["Keywords" -> {"オンライン語り交流会"}]
+  - SourceVaultFindNotebooks["Keywords" -> {"交流会"}]
   → LLM 不要、低遅延、再現可能
 
 LLM-backed summary (Stage 9 Phase 2 で実装予定):
@@ -76,7 +76,7 @@ P0 では deterministic 側だけ。これだけで「今週レビューすべ�
 
 ```mathematica
 inits = Import[path, "Initialization"]
-(* → {<|"Keywords" -> {...}, "Deadline" -> DateObject[{2026,5,13}, "Day"],
+(* → {<|"Keywords" -> {...}, "Deadline" -> DateObject[{2026,1,15}, "Day"],
         "NextReview" -> ..., "Status" -> "Todo"|>} *)
 assoc = First[inits];
 (* whitelist 後付け検証 *)
@@ -147,13 +147,13 @@ MatchQ[c, Cell[_, _String, ___]]
 9. TodoCellStatusHeuristicOnly            - TaggingRules なし、StrikeThrough だけで判定 (添付で発生)
 ```
 
-添付 `20260516-第14回オンライン語り交流会.nb` (2026-05-19 時点) では:
+実在のイベント準備ノート 1 冊 (締切を数日過ぎた時点) では:
 
 | Lint | 発生 |
 |---|---|
 | `HeaderStatusTodoButNoOpenTodos` | ✓ Header `"Status" -> "Todo"` だが Todo "参加登録" は StrikeThrough |
-| `DeadlinePast` | ✓ Deadline 2026-05-13 < today 2026-05-19 |
-| `NextReviewPast` | ✓ NextReview 2026-05-13 < today |
+| `DeadlinePast` | ✓ Deadline < today |
+| `NextReviewPast` | ✓ NextReview < today |
 | `TodoCellStatusHeuristicOnly` | ✓ TaggingRules なし、StrikeThrough のみ |
 
 これだけで「review dashboard 必須」と即判定可能。

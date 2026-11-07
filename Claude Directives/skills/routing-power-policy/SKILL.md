@@ -37,7 +37,7 @@ clobber しない）。保存するのは `iCycleRoutingPolicy`（パレット�
 ## 電源検出（Windows）
 
 `ClaudeCode`Private`iDetectACPower[]`（~30秒キャッシュ）→ `iDetectACPowerRaw[]` が
-`RunProcess` で PowerShell を1行実行。**3方式すべて実機（ASUS ProArt PX13）で検証済**：
+`RunProcess` で PowerShell を1行実行。**3方式すべて実機（Windows ノート PC）で検証済**：
 
 - `root\wmi BatteryStatus` の **`PowerOnline`**（True=AC / False=Battery）← 採用。AC連動の最も意味的に正しい指標。
 - `Win32_Battery` の `BatteryStatus`（1=放電/バッテリー、2=AC、6-9=充電中=AC）。

@@ -710,7 +710,7 @@ Button[label,
 
 非同期・headless 実行のために独立カーネル (`wolframscript` / `MathKernel` プロセス) や subkernel (`LaunchKernels`) を spawn するとき、Wolfram ライセンスの**有限な同時起動枠**を超えると、新規カーネルは起動直後に unregistered で即死する。**health は緑のまま** status 文字列が `Running` で固着し、「動いているはずなのに結果が来ない」フリーズ・wedge の原因になる。これは「2 ライセンス＝2席」のような単純な話ではない。
 
-### 実測値（strixhalo128, 2026-06-26）
+### 実測値の一例（Professional ライセンスの開発機, 2026-06-26）
 
 | プロパティ | 値 | 意味 |
 |---|---|---|
@@ -726,11 +726,11 @@ Button[label,
 - **独立プロセスより subkernel を優先する。** 独立 `wolframscript` プロセスはプロセス枠 4 を消費する。`LaunchKernels` の subkernel は subprocess 枠 16（潤沢）を使う。headless 非同期実行は subkernel 寄せが正解。`$ClaudeParallelKernelCount` で subkernel 数を調整できる。
 - **プロセス枠と subprocess 枠を会計上分けて扱う。** 両者は別カウント。`SubkernelAsync` と `WolframScriptProcess` を同じ「席」として数えない。
 - **silent death を Running 固着にしない。** spawn した job の生存は heartbeat / pid alive で判定し、一定時間 heartbeat の無い `Running` は terminal failure (`BackendDiedSilently` 相当) に落とす。`SourceVaultMCPRunningQ` を `State` 文字列単独から `PidAlive` AND に直した修正と同原則。
-- **2 つの FE を別 PC で開いても WolframScript は起動できる**（枠 4 のうち 2 本しか使わない）。「2 FE で headless 不可」は誤り。逼迫の原因は積み上がったカーネルであって FE の数ではない。
+- **FE を複数 PC で開いていても WolframScript は起動できる**（FE はプロセス枠を 1 本ずつしか使わない）。「2 FE で headless 不可」は誤り。逼迫の原因は積み上がったカーネルであって FE の数ではない。
 
 ### 未確認事項
 
-`$MaxLicenseProcesses = 4` が **PC ごと (activation 単位) か、両 PC 共有 (account global) か**は未確定。standalone Professional activation なら通常マシンごと。複数 PC でカーネル spawn を設計するときは、各 PC で `$MaxLicenseProcesses` を実測して per-machine か共有かを確認する。
+`$MaxLicenseProcesses` が **PC ごと (activation 単位) か、複数 PC で共有 (account global) か**は未確定。standalone Professional activation なら通常マシンごと。複数 PC でカーネル spawn を設計するときは、各 PC で `$MaxLicenseProcesses` を実測して per-machine か共有かを確認する。
 
 詳細は memory `wolfram-license-limits`、関連: `skills/sourcevault-service-mcp-lifecycle`（席枯渇でサービスカーネル即死 / health 緑のまま）。
 

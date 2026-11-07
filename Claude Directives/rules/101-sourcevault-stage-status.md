@@ -199,7 +199,7 @@ SourceVault の運用が始まると `notebooks/` 配下のストアは日々の
 - Sync の web source (URL / arXiv) 実 fetch は未実装 (鮮度トークンの抽象枠のみ)。Orchestrator 経由の非同期実行も未対応 (現状は同期)
 - Relink の UUID 照合は notebook に UUID が埋め込まれている場合のみ発動。既存 notebook には `SourceVaultEnsureNotebookUUIDFolder[$onWork]` で一括付与してから使う。UUID 付与は notebook の mtime を変えるため「UUID 付与 → 全件 index → 以降安定」の順序で行う
 - モデルレジストリの取得モデルは `Class` (Heavy/Mid/Light) と `Intent` が `Unknown`/`Null`。Intent ベース lookup (`iCompiledLookupModel`) に乗せるには分類ステップが必要
-- `iSVSymbolicPath` が旧 PC の Dropbox パス (`C:\Users\imai_\Dropbox\On Work\...` 等) を `{"$onWork", ...}` に正規化できない。`$SourceVaultCloudRoots` に旧ルートのエイリアスを登録できれば、複数 PC をまたいだ二重登録を未然に防げる (現状は Relink の StaleDuplicate 判定で事後的に掃除)
+- `iSVSymbolicPath` が旧 PC の Dropbox パス (`C:\Users\<user>\Dropbox\On Work\...` 等) を `{"$onWork", ...}` に正規化できない。`$SourceVaultCloudRoots` に旧ルートのエイリアスを登録できれば、複数 PC をまたいだ二重登録を未然に防げる (現状は Relink の StaleDuplicate 判定で事後的に掃除)
 - `SourceVaultIngest` 時の UUID 自動付与 (取り込み元フォルダのファイルにも UUID を付ける)
 - NBAccess へのパス正規化展開 (Step 5 の `iSVSymbolicPath` 正規化を NBAccess `NBFileSpec` 等にも適用)
 

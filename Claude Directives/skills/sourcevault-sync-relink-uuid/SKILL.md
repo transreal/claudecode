@@ -43,8 +43,8 @@ notebook を first-class source として扱う SourceVault で、ソースの�
 
 設計の核心 (rule 103 に直結):
 
-- **移動判定はシンボリックパス解決ベース** — 「移動したか」は `OriginalPath` の生 `FileExistsQ` でなく、record の `SymbolicPath` を `iSVResolvePath` で現 PC 解決して実在判定する。別 PC のパス差 (`C:\Users\imai_\...` vs `F:\Dropbox\...`) を移動と誤検出しない
-- **強い証拠と弱い証拠を分ける** — UUID / 内容ハッシュ一致は自動適用するが、ファイル名一致 (`NameOnly`) は弱い証拠なので `ApplyNameOnly -> True` のときのみ適用。既定はレポートのみ。連番ファイル群 (`計算と自然 01`〜`25`) の誤マッチ防止
+- **移動判定はシンボリックパス解決ベース** — 「移動したか」は `OriginalPath` の生 `FileExistsQ` でなく、record の `SymbolicPath` を `iSVResolvePath` で現 PC 解決して実在判定する。別 PC のパス差 (`C:\Users\<user>\...` vs `D:\Dropbox\...`) を移動と誤検出しない
+- **強い証拠と弱い証拠を分ける** — UUID / 内容ハッシュ一致は自動適用するが、ファイル名一致 (`NameOnly`) は弱い証拠なので `ApplyNameOnly -> True` のときのみ適用。既定はレポートのみ。連番ファイル群 (`講義 01`〜`25`) の誤マッチ防止
 - **StaleDuplicate 判定** — マッチ先が既に別の現役 record の指す実ファイルなら、それは「移動」でなく「旧 PC index の残骸」。Relink 開始時に「全現役 record の実ファイルパス集合」(`livePathSet`) を構築し、マッチ先がそこに含まれるかを**実パスで**判定 (NotebookRef のハッシュ衝突を避ける)。`DeleteStale -> True` で残骸 record を削除 (既定 False は非破壊マーク `RelinkStatus -> "StaleDuplicate"`)
 - **非破壊** — `DryRun` 既定 `True`。`DryRun -> False` でも旧 record は削除せず `Superseded` マークのみ (`DeleteStale` を除く)
 - 戻り値に `ByMethod` (UUID / ContentHash / NameOnly 別件数)、`StaleDuplicateCount`、`StaleDeletedCount`

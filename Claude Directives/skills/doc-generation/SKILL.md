@@ -212,7 +212,7 @@ README.md は以下の構造を**この順序で**持たなければならない
 ## トークン消費の最適化
 
 ### $ClaudeDocModel（ドキュメント専用モデル）
-- デフォルト: `"claude-sonnet-4-20250514"` — ドキュメント生成は Sonnet クラスで十分
+- デフォルト: `$iModelSonnet` (claudecode.wl のモデル登録の Sonnet。具体的なモデル名はここに書かない) — ドキュメント生成は Sonnet クラスで十分
 - `$ClaudeDocModel = ""` で `$ClaudeModel` と同じモデルを使用
 - Create/Update/AutoApiUpdate の全フローで自動適用される
 

@@ -150,7 +150,7 @@ Options: "Role" -> Role 名, "MaxRules" -> Integer (既定 8、always-on を超�
 Automatic は ClaudeFindDirectiveRoots で正準 root を解決、無ければ Failure["DirectiveRootNotFound"]。String は実在ディレクトリを検証 (非実在は DirectiveRootNotFound、非 String は DirectiveRootInvalid)。
 
 ### ClaudeDirectiveFileInventory[root, opts] → {record...} | Failure
-root (ディレクトリ String または Automatic) のファイルインベントリをソート済リストで返す。各 record スキーマ: Role ("RootInstruction"|"Rule"|"Skill"|"Other"), RelativePath, LogicalPath, AbsolutePath, ContentHash ("sha256-<hex>"), ByteCount, LineCount, Name, Title, Description, FrontMatter, Paths, TokenEstimate, ModifiedTime。
+root (ディレクトリ String または Automatic) のファイルインベントリをソート済リストで返す。各 record スキーマ: Role ("RootInstruction"|"Rule"|"Skill"|"Other"), RelativePath, LogicalPath, AbsolutePath, ContentHash ("sha256-<hex>"), ByteCount, LineCount, Name, Title, Description, FrontMatter, Paths, TokenEstimate, ModifiedTime, PrivacyLevel (宣言 PrivacyLevel。`ClaudeDirectivePrivacyLevel` と同じ規則。公開 directive は 0.0)。
 Options: "IncludeOther" -> True (rule/skill 以外の top-level *.md を含めるか)
 
 ### ClaudeDirectiveRepositoryInventory[root] → {record...}
@@ -161,6 +161,37 @@ DirectiveRepositoryManifest を返す。キー: Kind, CanonicalFormat, Root, Fil
 
 ### ClaudeDirectiveRepositoryHash[root] → String
 リポジトリの ManifestHash 文字列のみを返す。
+
+## Directive privacy (PrivacyLevel 0.0 の維持, 2026-11-07)
+正準 directive ルートは GitHub の公開リポジトリへ反映され、cloud LLM のシステムプロンプトと SourceVault MCP の directive ツールにも PrivacyLevel 0.0 として渡る。PL > 0 の内容は兄弟ディレクトリ `<root>_private` (公開しない私的ノート置き場) へ置き、公開 directive からは `sv://directive/<id>` で引用する。検出語のうち所有者固有のものはこのパッケージに書かず、実行環境と `<root>_private/privacy_terms.json` から得る。
+
+### ClaudeDirectivesPrivacyLint[root, opts] → Association
+公開 directive ルートの全 .md/.txt を検査し、PrivacyLevel 0.0 を超える記述を返す。root は String または Automatic (`ClaudeDirectivesPrivacyLint[]` も可)。
+検出規則: L1 実ユーザー名を含むホームディレクトリのパス (`<user>`・`alice`・`...` などのプレースホルダは対象外) / L2 実行環境の `$UserName`・`$MachineName` / L3 所有者固有語 (`<root>_private/privacy_terms.json`、`$ClaudeDirectivesPrivacyTerms`、"ExtraTerms") / L4 SourceVault の実 ID (`nb-src-` + 16 桁、`snap-sha256-` + 64 桁、`svmail-` + 12 桁以上) / L5 メールアドレス (example ドメイン等は対象外) / L6 秘密の値の形 / L7 プライベート IPv4 / L8 公開ファイルでの privacyLevel > 0 の宣言・不正な宣言。読めないファイルは違反として扱う (fail-closed)。
+→ `<|"Status" -> "Clean"|"Violations"|"Failed", "Root", "FilesScanned", "TermCount", "MaxLevel", "Hits" -> {<|"File" (相対パス), "Line", "Rule", "Category", "Level", "Match"|>...}|>`。"Match" は一致した文字列そのものを含まない (`<L1 user-env 5 chars>` の形)。
+Options: "Terms" -> Automatic (リストを与えると環境・ファイルの語の代わりに使う), "IncludeEnvironment" -> True, "ExtraTerms" -> {}
+
+### ClaudeDirectivesPrivacyLintText[text, opts] → {hit...}
+1 つの文字列に L1〜L7 を適用した Hits を返す ({} なら Clean)。自動生成した directive (TurnWiki の evolved-turn ルール) を書き込む前の検査に使う。Options は ClaudeDirectivesPrivacyLint と同じ。
+
+### ClaudeDirectivePrivacyLevel[path] → Real | Missing
+ファイルの宣言 PrivacyLevel: frontmatter `privacyLevel` と行頭スタンプ `<!-- :CodePrivacyLevel: x -->` / `(* :CodePrivacyLevel: x *)` (先頭 4 KB) の最大値を [0, 1] に丸める。名前が `_private` で終わるディレクトリの中で宣言が無いものは 1.0、不正な値は 1.0、宣言の無い公開ファイルは 0.0。本文中でスタンプ記法を説明しているだけの行はスタンプとみなさない。
+
+### ClaudeDirectivePrivateRoot[root] → String | Failure
+私的ノート置き場 `<root の名前>_private` (root の兄弟ディレクトリ) のパスを返す。`ClaudeDirectivePrivateRoot[]` は正準 root を使う。私的ノートは `notes/<name>.md` に frontmatter `privacyLevel` 付きで置く (無ければ 1.0)。
+
+### ClaudeDirectiveOpaqueId[role, name] → String
+`"directive|" <> role <> "|" <> name` (UTF-8) の SHA-256 小文字 16 進の先頭 24 文字。role は "root" (name "CLAUDE")、"rule" (ファイル名の stem)、"skill" (skill フォルダ名)、"private" (私的ノートの stem)。名前から内容を推測できない。SourceVault 側の directive アダプタと同じ式。
+
+### ClaudeDirectiveURI[role, name] → String
+`"sv://directive/" <> ClaudeDirectiveOpaqueId[role, name]`。
+
+### ClaudeDirectivePrivateURI[name] → String
+私的ノート `notes/<name>.md` の `sv://directive/<id>`。公開 directive にはこの URI だけを書き、内容は書かない。SourceVault の `sourcevault_get` が宣言 PL に応じて解放する (PL < 0.5 は release gate を通る principal に、PL >= 0.5 は grant を持つローカル principal にだけ)。
+
+### $ClaudeDirectivesPrivacyTerms
+型: List, 初期値: {}
+lint の追加語 `<|"Term" -> s, "Level" -> pl, "Label" -> category|>` のリスト。値そのものは公開ファイルに書かず、localInit か `<root>_private/privacy_terms.json` で与える。
 
 ## Rule 派生メタデータ・分類 (Phase 1.1a)
 ### ClaudeDirectiveRuleDerivedMetadata[ruleRecord, opts] → Association

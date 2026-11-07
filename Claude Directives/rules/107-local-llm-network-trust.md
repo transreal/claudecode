@@ -13,7 +13,7 @@ paths:
 ## 前提（なぜ 1.0 を許しているか）
 
 - `lmstudio` / `freetoken` は既定で localhost。プロセス間通信であり外に出ない。
-- `llamacpp` (llama.cpp llama-server) は **LAN 上の別ホスト**で動く（例: 自宅 LAN の専用機）。自宅内の信頼機器という運用判断で `NBAccess` の `$iProviderMaxAccessLevel` に `1.0` を登録している。
+- `llamacpp` (llama.cpp llama-server) は **LAN 上の別ホスト**で動くことがある（例: 信頼済み LAN 上の専用機）。信頼機器という運用判断で `NBAccess` の `$iProviderMaxAccessLevel` に `1.0` を登録する構成がありうる。
 - **llama-server は平文 HTTP である。** TLS 終端は無く、API キーは `Authorization` ヘッダに平文で流れる。守っているのは「そのサブネットに攻撃者がいない」という前提だけ。
 
 ## 自動で効く強制制限（2026-08-29 実装）
@@ -24,7 +24,7 @@ paths:
 - サブネットは第 3 オクテットまで（/24 相当）の一致で見る。**ホスト名や IPv6 は判定できないので `"Unknown"` = Remote 扱い**（安全側）。
 - クラウド provider には適用しない（別途 0.49/0.25 の上限があるため）。
 - 上限値は `$NBRemoteLocalLLMAccessCeiling`（既定 0.25）。
-- **効くのは確認を通す経路だけである。** `ClaudeQuerySync` は `PrivacyLevel` を渡したときに確かめるが、`ClaudeQueryBg` と URL を取り出して直接 HTTP で送る経路は PL を受け取らないので自分では確かめない。そうした経路の呼び出し側は、送信前に `ClaudeCode`ClaudeLocalLLMAccessCheck[model, pl]`（距離の上限だけを見る。localhost・クラウドは True）を呼び、`Failure["AccessLevelExceeded"]` なら送らない。PL が分からない機密用の経路は pl = 1.0 とする。2026-11-06 時点で入っている経路: 翻訳ノート（`SourceVaultMakePaperNotebook`）、要約ハブ（`iCallSummaryLLM`）、メール推論、Eagle の Local、mining（同期・非同期）、ResoniteRealtime の非ノート経路、ClaudePackageManager の handler LLM、ClaudeOrchestrator の queryFn、PDFIndex の秘密部分。旧 `maildb_legacy.wl` は未対応。
+- **効くのは確認を通す経路だけである。** `ClaudeQuerySync` は `PrivacyLevel` を渡したときに確かめるが、`ClaudeQueryBg` と URL を取り出して直接 HTTP で送る経路は PL を受け取らないので自分では確かめない。そうした経路の呼び出し側は、送信前に `ClaudeCode`ClaudeLocalLLMAccessCheck[model, pl]`（距離の上限だけを見る。localhost・クラウドは True）を呼び、`Failure["AccessLevelExceeded"]` なら送らない。PL が分からない機密用の経路は pl = 1.0 とする。2026-11-07 時点で入っている経路: 翻訳ノート（`SourceVaultMakePaperNotebook`）、要約ハブ（`iCallSummaryLLM`）、メール推論、Eagle の Local、mining（同期・非同期）、ResoniteRealtime の非ノート経路、ClaudePackageManager の handler LLM、ClaudeOrchestrator の queryFn、PDFIndex の秘密部分、旧 maildb（`maildb_legacy.wl` のローカル LLM・埋め込み・`ClaudeQuery` 予備経路。`mailAskLLM` は止めた部分を戻り値の `"accessDenied"` に残す）。この一覧に無い経路 (旧来のものを含む) は確認が入っていないとみなし、その経路を触るときに確認を足す。確認がまだ入っていないと分かった経路の具体名は私的ノート `sv://directive/22d4f6e6376dfe1564145ac5` (PL 0.3、公開しない) に記録する。
 - 送信経路を新しく足すときは、この確認を一緒に入れる。URL の無い spec は `ClaudeResolvedModelSpec` が実際の送信先を補ってから判定する（補わないと距離判定が働かない）。
 
 ### 同一サブネットも既定では信用しない
@@ -74,7 +74,7 @@ paths:
 ## 判断
 
 - 迷ったら 0.5。0.5 なら機密（PL >= 0.5）は送られず、cloud-safe 相当の内容だけが流れる。取り返しがつかないのは送ってしまった側だけである。
-- 上限 1.0 は「そのホストに秘密データを渡してよい」という宣言であり、ツールループ経由で SourceVault の中身（メール本文・セッションログ・私的文書）が実際に別ホストへ渡る。2026-08-29 の実測で PrivacyLevel 0.85 と判定されたセルが llamacpp へ送られている。これは設定どおりの挙動であって、事故ではない — だからこそ設定を意識して選ぶ。
+- 上限 1.0 は「そのホストに秘密データを渡してよい」という宣言であり、ツールループ経由で SourceVault の中身（メール本文・セッションログ・私的文書）が実際に別ホストへ渡る。PrivacyLevel 0.5 以上と判定されたセルもそのまま llamacpp へ送られる。これは設定どおりの挙動であって、事故ではない — だからこそ設定を意識して選ぶ。
 - 機体を持ち出す運用（ノート PC）では、サブネットが変わるたびにこの判断が変わる。恒久的に安全な設定は「上限 0.5 を既定にし、信頼できるサブネットにいる間だけ 1.0 へ上げる」であり、常時 1.0 はその機体が動かない前提でのみ妥当。
 
 ## 参照

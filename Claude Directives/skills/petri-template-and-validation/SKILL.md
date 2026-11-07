@@ -1,11 +1,11 @@
 ---
 name: petri-template-and-validation
-description: 自由文プロンプトから LLM が直接 Petri net を生成する現方式を、テンプレートベース生成 + 検証ノード入りメタワークフローに置き換える長期設計提案。proposePetriNet 自体を Petri net で表現し、validation / fault-injection simulation / approval を transition として組み込む構想。Imai 先生の構想記録 (引き継ぎ事項)。
+description: 自由文プロンプトから LLM が直接 Petri net を生成する現方式を、テンプレートベース生成 + 検証ノード入りメタワークフローに置き換える長期設計提案。proposePetriNet 自体を Petri net で表現し、validation / fault-injection simulation / approval を transition として組み込む構想。ユーザーの構想記録 (引き継ぎ事項)。
 ---
 
 # Petri net 生成のテンプレート化 + メタワークフロー化 (設計提案)
 
-本 skill は **未実装の長期設計提案** を記録する引き継ぎ書類。Imai 先生
+本 skill は **未実装の長期設計提案** を記録する引き継ぎ書類。ユーザー
 (Stage B Migration 進行中) の構想を skill として保存することで、後続
 セッションが当時の議論を再構築せずに着手できるようにする。
 

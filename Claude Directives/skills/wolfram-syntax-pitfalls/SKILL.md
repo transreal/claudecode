@@ -532,7 +532,7 @@ Module[{cell = Cell["foo", "Input", ExpressionUUID -> "abc"]},
 ### 罠 #28: `ImportString[str, "RawJSON"]` は Windows path のバックスラッシュを含む JSON で `$Failed` を返す
 
 ```mathematica
-json = "{\"OriginalPath\":\"C:\\\\Users\\\\imai_\\\\Dropbox\\\\foo.nb\"}";
+json = "{\"OriginalPath\":\"C:\\\\Users\\\\alice\\\\Dropbox\\\\foo.nb\"}";
 StringLength[json]   (* 正常な JSON 文字列 *)
 ImportString[json, "RawJSON"]
 (* → $Failed *)
