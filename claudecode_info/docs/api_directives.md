@@ -85,7 +85,7 @@ frontmatter に `tier:` が無い rule に仮定される tier。
 $ClaudeDirectiveLevelOverrides: Association, `{provider,model} | provider | model -> level`。ClaudeResolveDirectiveLevel で最優先に解決され、ClaudeSetDirectiveLevelOverride で書き込む。$ClaudeDirectiveLevelResolver: None | `f[{provider,model}] -> level | None`。適応層のフック (ClaudeOrchestrator`TurnWiki` が directive-levels.json を読む関数をここに登録)。$ClaudeDirectiveDefaultLevel: "Standard"。override/resolver/能力表/Class いずれも決められない場合の既定値。
 
 ### ClaudeResolveDirectiveLevel[modelSpec] → `<|"Level", "Source", "Provider", "Model"|>`
-Source は "override"|"resolver"|"capability"|"class"|"default"。解決順: `$ClaudeDirectiveLevelOverrides` (tuple > "prov/model" > model > provider) → `$ClaudeDirectiveLevelResolver` (適応層のフック。TurnWiki が `directive-levels.json` を読む関数を登録) → 能力表 `DirectiveLevel` → Class 由来 (Ultra→Minimal, Heavy→Standard, 他→Full) → `$ClaudeDirectiveDefaultLevel`。
+Source は "override"|"resolver"|"capability"|"class"|"default" (bundle 経由で明示指定時は "option")。解決順: `$ClaudeDirectiveLevelOverrides` (tuple > "prov/model" > model > provider) → `$ClaudeDirectiveLevelResolver` (適応層のフック。TurnWiki が `directive-levels.json` を読む関数を登録) → 能力表 `DirectiveLevel` → Class 由来 (Ultra→Minimal, Heavy→Standard, 他→Full) → `$ClaudeDirectiveDefaultLevel`。
 
 ### ClaudeSetDirectiveLevelOverride[modelSpec, level | None] → key
 override の登録/解除 (None で削除)。正規化済みキーを返す。
@@ -94,7 +94,7 @@ override の登録/解除 (None で削除)。正規化済みキーを返す。
 純関数。RuleTier は tier 文字列を返す。AppliesToModelQ は `models:`/`exclude_models:` が modelSpec を除外しない限り True。ApplyDirectiveLevel は policy に従って rule を落とすか `"Projection" -> "Full" | "Index"` を付ける。
 
 ### ClaudeDirectiveBundleDiagnostics[modelSpec, taskHint, opts] → Association
-bundle の DirectiveMeta (DirectiveLevel, LevelSource, ProjectionMode, RuleProjections, RuleTiers, DroppedByLevel, DroppedByModel, EstimatedTokens, ProjectedChars) を投影せずに返す診断。
+bundle の DirectiveMeta (DirectiveLevel, LevelSource, ProjectionMode, RuleProjections, RuleTiers, DroppedByLevel, DroppedByModel, EstimatedTokens, ProjectedChars) を投影せずに返す診断。選択・除外された rule 名と tier、推定トークン数を含む。
 
 ### ClaudeResolveDirectiveBundle の追加オプション
 `"DirectiveLevel" -> Automatic | level` (明示指定は Source "option")、`"ToolAccess" -> False | True` (呼び出し側がディレクティブ取得ツール `sourcevault_directives` / `sourcevault_directive_body` を持つツールループを回すとき True: 投影末尾に「名前だけ列挙した rule/skill はツールで取れ」の案内を付ける)。bundle は `"DirectiveLevel"`, `"ToolAccess"` を持ち、DirectiveMeta に `ModelSpec`, `ModelGeneration`, `LevelSource`, `RuleProjections`, `RuleTiers`, `DroppedByLevel`, `DroppedByModel` が加わる。`ClaudeBuildDirectivePromptForSingle[modelSpec, taskHint, opts]` はタプルと同オプションを受ける。
@@ -116,8 +116,8 @@ SKILL.md 先頭の YAML frontmatter を解析。`<|"Frontmatter"->Association, "
 ## Bundle / Projection
 ### ClaudeResolveDirectiveBundle[opts]
 task / role / model に応じた directive bundle を返す。
-→ Association `<|"ClaudeMD"->..., "ActiveRules"->..., "ActiveSkills"->..., "ProjectionMode"->..., "TokenBudget"->..., "DirectiveMeta"->...|>`
-Options: "Role" -> "Plan"|"Draft"|"Verify"|"Commit"|"Explore"|"Reduce"|None, "Model" -> モデル名 (capability テーブル参照キー), "Mode" -> "Full"|"Summary"|"Index"|"Lazy"|Automatic, "TaskHint" -> String (skill 選別に使用), "TokenBudget" -> Integer|Automatic
+→ Association `<|"ClaudeMD"->..., "ActiveRules"->..., "ActiveSkills"->..., "ProjectionMode"->..., "TokenBudget"->..., "DirectiveMeta"->...|>`。ハーネス対象指定時は `HarnessTarget` ("Codex"|"ClaudeCLI"|None), `HarnessProvider`, `HarnessMaterializationMode`, `DirectiveRoot`, `DirectiveRepositoryManifestHash` も bundle に加わる (Target -> "Prompt" 時は従来互換)。
+Options: "Role" -> "Plan"|"Draft"|"Verify"|"Commit"|"Explore"|"Reduce"|None, "Model" -> モデル名 (capability テーブル参照キー), "Mode" -> "Full"|"Summary"|"Index"|"Lazy"|Automatic, "TaskHint" -> String (skill 選別に使用), "TokenBudget" -> Integer|Automatic, "MaxSkills" -> Integer|Automatic (Automatic 時は $ClaudeRoleMaxSkills を採用), "DirectiveLevel" -> Automatic|level, "ToolAccess" -> False|True
 
 ### ClaudeProjectDirectives[bundle] → String
 ### ClaudeProjectDirectives[bundle, mode] → String
@@ -172,7 +172,7 @@ DirectiveRepositoryManifest を返す。キー: Kind, CanonicalFormat, Root, Fil
 Options: "Terms" -> Automatic (リストを与えると環境・ファイルの語の代わりに使う), "IncludeEnvironment" -> True, "ExtraTerms" -> {}
 
 ### ClaudeDirectivesPrivacyLintText[text, opts] → {hit...}
-1 つの文字列に L1〜L7 を適用した Hits を返す ({} なら Clean)。自動生成した directive (TurnWiki の evolved-turn ルール) を書き込む前の検査に使う。Options は ClaudeDirectivesPrivacyLint と同じ。
+1 つの文字列に L1〜L7 を適用した Hits を返す ({} なら Clean。宣言レベル検査 L8 は行わない)。自動生成した directive (TurnWiki の evolved-turn ルール) を書き込む前の検査に使う。Options は ClaudeDirectivesPrivacyLint と同じ。
 
 ### ClaudeDirectivePrivacyLevel[path] → Real | Missing
 ファイルの宣言 PrivacyLevel: frontmatter `privacyLevel` と行頭スタンプ `<!-- :CodePrivacyLevel: x -->` / `(* :CodePrivacyLevel: x *)` (先頭 4 KB) の最大値を [0, 1] に丸める。名前が `_private` で終わるディレクトリの中で宣言が無いものは 1.0、不正な値は 1.0、宣言の無い公開ファイルは 0.0。本文中でスタンプ記法を説明しているだけの行はスタンプとみなさない。
@@ -197,7 +197,7 @@ lint の追加語 `<|"Term" -> s, "Level" -> pl, "Label" -> category|>` のリ�
 ### ClaudeDirectiveRuleDerivedMetadata[ruleRecord, opts] → Association
 rule インベントリ record (Role->"Rule") から Codex ハーネス用メタデータを導出。正準 rule frontmatter は description/summary/trigger を持たない前提で、Title (見出し) と paths frontmatter から決定的に導出する。
 → `<|"Title", "Summary", "Description", "Trigger", "DescriptionSource" ("derived-from-paths-and-heading"|"override"|"fallback"), "Paths"|>`
-Options: "RuleMetadataOverrides" -> <||> (rule Name キーの per-rule オーバーライド Association)
+Options: "RuleMetadataOverrides" -> <||> (rule Name キーの per-rule オーバーライド Association。"Trigger"/"Description" キーを持つと DescriptionSource は "override")
 
 ### ClaudeDirectiveClassifyRule[ruleRecord, opts] → Association
 rule record をハーネス具現化向けに分類。
@@ -214,7 +214,7 @@ Options: "HarnessMaterializationMode" -> Automatic, "AgentsMdTargetMaxBytes" -> 
 生成 AGENTS.md 先頭の HTML コメント provenance ヘッダを返す。meta は DirectiveRepositoryManifestHash, SourceVaultSnapshotId, HarnessMaterializationMode を持ちうる Association。
 
 ### ClaudeDirectiveMaterializeCodexHarness[bundle, targetDir, opts] → Association
-ClaudeDirectiveHarnessPlan を実行し Codex ハーネスを具現化。`.agents/skills` 下の rule/skill SKILL.md、`.agents/directive-index.json`、AGENTS.md、provenance ファイルを固定順で書く。正準リポジトリは変更しない。
+ClaudeDirectiveHarnessPlan を実行し Codex ハーネスを具現化。`.agents/skills` 下の rule/skill SKILL.md、`.agents/directive-index.json`、AGENTS.md、provenance ファイルを固定順で書く。正準リポジトリは変更しない。既存 skill の SKILL.md は Codex ローダー向けに name/description を引用符付きで再構築 (description 欠落時は本文の最初の H1 かスキル名から導出)、本文は不変。
 → 具現化レポート (WrittenFiles, AgentsMd, Index, GeneratedSkills, ProvenanceFiles, Warnings, Plan)。DryRun->True ではファイルを書かずプランを返す。
 Options: ClaudeDirectiveHarnessPlan の全 Options に加え "GenerateDirectiveIndex", "GenerateProvenance", "CommandPolicyMaterialization", "DryRun" -> False, "FailOnAgentsMdOverflow"
 
@@ -226,7 +226,7 @@ Options: "HarnessMaterializationMode" -> Automatic, "SourceVaultSnapshotId" -> M
 ## マイグレーションゲート (Phase 2.5)
 ### ClaudeDirectiveCompareCanonicalAndClaudeHarness[directiveRoot, claudeDir] → Association
 正準 Claude Directives リポジトリと legacy .claude/ ハーネスを正規化論理パス (CLAUDE.md, rules/<name>.md, skills/<name>/SKILL.md) で比較。
-→ `<|"CanonicalEquivMap", "LegacyEquivMap", "FilesOnlyInCanonical", "FilesOnlyInLegacy", "FilesChanged", "LegacyHarnessOnlyFiles" (settings.json 等、等価性から除外), "CanonicalDirExists", "LegacyDirExists"|>`
+→ `<|"CanonicalEquivMap", "LegacyEquivMap", "FilesOnlyInCanonical", "FilesOnlyInLegacy", "FilesChanged", "LegacyHarnessOnlyFiles" (settings.json 等、等価性から除外), "CanonicalDirExists", "LegacyDirExists"|>`。引数が String 2 つでない場合は $Failed。
 
 ### ClaudeDirectiveMigrationReport[directiveRoot, claudeDir] → Association | Failure
 マイグレーションゲート。legacy .claude/ ハーネスが正準リポジトリと等価かを報告。

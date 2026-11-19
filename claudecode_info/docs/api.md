@@ -79,7 +79,14 @@ LLMGraphDAG スナップショットの保存ディレクトリ。
 
 ### $ClaudeDocApiMaxBytes
 型: Integer | Infinity, 初期値: 128000
-ClaudeUpdateDocumentation が API リファレンス (api.md / api_*.md、en/ を含む) を LLM の 1 回の応答で再生成してよい既存ファイルの上限バイト数。これを超える API doc は LLM に投げずにスキップし、旧ファイルをそのまま残す (出力上限で途中切れした応答が書き込まれるのを防ぐ)。補助モジュール <pkg>_<aux>.wl に分けて api_<aux>.md に分割するか、手で追記する。Infinity でこの検査を無効にする。あわせて、API doc の書き込み口では、旧版の見出しにあった公開シンボル (ソースに ::usage があるもの) が消えた応答・25% を超えて縮んだ応答・末尾に LLM の地の文が残った応答を書き込まない。
+ClaudeUpdateDocumentation が API リファレンス (api.md / api_*.md、en/ を含む) を LLM の 1 回の応答で再生成してよい既存ファイルの上限バイト数。これを超える API doc は LLM に投げずにスキップし、旧ファイルをそのまま残す (出力上限で途中切れした応答が書き込まれるのを防ぐ)。補助モジュール <pkg>_<aux>.wl に分けて api_<aux>.md に分割するか、手で追記する。Infinity でこの検査を無効にする。doc を最後に記録したときのソースが見つかれば、全体を書き直す代わりに差分更新する ($ClaudeDocApiPatch)。あわせて、API doc の書き込み口では、旧版の見出しにあった公開シンボル (ソースに ::usage があるもの) が消えた応答・25% を超えて縮んだ応答・末尾に LLM の地の文が残った応答を書き込まない。
+
+### $ClaudeDocApiPatch
+型: True | False | Automatic, 初期値: Automatic
+ClaudeUpdateDocumentation が API リファレンス (api.md / api_*.md) を差分更新するかどうか。差分更新では、doc を最後に記録したときのソース (内容ハッシュが docs/.aux_source_hashes.json の記録と一致する版) と今のソースの差分・::usage の増減・doc の見出しの一覧だけを LLM に渡し、変わった節の置換・挿入・削除の指示だけを返させて今の doc に当てる。当てた全文は通常の書き込み検査を通してから書く。Automatic = $ClaudeDocApiMaxBytes を超えて丸ごとは書き直せない API doc だけ差分更新する。True = すべての API doc を差分更新する。False = 使わない (大きい API doc は従来どおりスキップ)。記録時のソースが見つからないときは差分更新せず飛ばす。
+
+### ClaudeDocApiPatchableQ[packageName] → True | False
+packageName の api.md を差分更新できる (doc を最後に記録したときのソースが見つかる) とき True。ClaudeDocApiPatchableQ[packageName, "api_<aux>.md"] は補助モジュールの API doc について調べる。$ClaudeDocApiPatch が False のときは常に False。
 
 ### $ClaudeDocUpdateStaleSeconds
 型: Number, 初期値: 1800
@@ -828,6 +835,50 @@ ContextPlan の ToolDefinitions ゲート (Mode -> "None") が効いている間
 ### $ClaudeCloudToolLoopTools
 型: List, 初期値: {"sourcevault_directives", "sourcevault_directive_body"}
 クラウド API ツールループ ($ClaudeCloudToolLoop) でモデルに公開するツール名リスト。既定は CLAUDE.md/rules/skills 取得ツールのみ (PrivacyLevel 0.0)。SourceVault のデータツール (メール等) はここに列挙されない限りスキーマにも実行許可にも載らない。
+
+### $ClaudeLocalToolLoopTools
+型: List, 初期値: {22 件のツール名}
+ローカル OpenAI 互換プロバイダー (llamacpp / freetoken / lmstudio) がクライアント側ツールループで見て呼べる SourceVault MCP ツール名の明示 allow-list。読み取り専用の 21 件に sourcevault_web_search を加えた 22 件で構成される。外向き通信・永続書込・実行・権限変更のツール (deposit、feedback_submit、submit_web_search、web_search、slidedeck、request_access など 8 件) は除外される。sourcevault_web_search の問い合わせは SourceVault の webguard を通り、結果は UNTRUSTED 境界でモデルに渡される。クラウドプロバイダーには $ClaudeCloudToolLoopTools が使われる。
+
+### $ClaudeGroundingCheck
+型: True | False, 初期値: True
+ローカル LLM のツールループで裏付けの検査を行うか。依頼文 (利用者が入力した部分) が外部の事実を求めているのに、ウェブで確かめた根拠が 1 件も無いまま回答が返ったとき、1 回だけモデルに差し戻す ($ClaudeGroundingSendBack)。それでも根拠が無ければ回答の先頭に「外部で未確認」の印を付ける ($ClaudeGroundingNotice)。外部の事実を求めているかは決まった規則で判定する (ウェブ・インターネットで調べる依頼、時刻表・料金・営業時間・学年暦など時点で変わる公開の事実)。検索の障害・機密を読んだ会話で外部検索が使えないときは差し戻さず、印だけを付ける。結果は $ClaudeLastGrounding。依頼文がウェブのホストを名指ししてその中身を求めているとき (規則 NamedHost) は、そのホストを取得したかも見る。一度も開こうとせずに別のホストの資料で答えたら 1 回差し戻し、開けなかったホストは印に書く。
+
+### $ClaudeGroundingSendBack
+型: True | False, 初期値: True
+裏付けの無い回答を 1 回だけモデルに差し戻すか。False なら差し戻さず、印を付けるだけ。
+
+### $ClaudeGroundingClaimCheck
+型: True | False, 初期値: True
+回答の中身を、取得した資料と照合するか (G2・G3)。G2: 回答の数値・日付・時刻・地名 (都道府県と市) が、検索結果・取得したページ・内部の資料・依頼文・プロンプトに出てくるかを文字で照合する。照合できた 4 件以上のうち、資料にあるものが半分に満たなければ判定を Partial に下げる (差し戻しはしない)。G3: 回答が挙げた URL が、検索結果・取得したページ・依頼文に出たものかを見る。出ていない URL があれば判定を Partial に下げ、差し戻しの枠が残っていれば 1 回だけ差し戻す。結果は回答の先頭の印と $ClaudeLastGrounding の ClaimsChecked / ClaimsSupported / Cited / CitedVerified に出る。False なら V3 の判定 (G1) のまま。
+
+### $ClaudeGroundingNotice
+型: "All" | "Problems" | None, 初期値: "All"
+裏付けの検査の結果を回答の先頭に書き添えるか。"All" = 未確認のときも、ウェブの資料を取得して作成したときも書く。"Problems" = 未確認のときだけ書く。None = 書かない (結果は $ClaudeLastGrounding に残る)。
+
+### $ClaudeLastGrounding
+型: Association | None
+直近の裏付けの検査の記録。Status・Needs・Rule・Searches・SearchesWithResults・SearchesEmpty・SearchesRefused・BackendFailures・Fetched・FetchFailed・Hosts・Internal・SentBack・RequestHosts・RequestHostsOpened・RequestHostsFailed・RequestHostsNotOpened・FallbackSearches・PartialReason・ClaimsChecked・ClaimsSupported・Cited・CitedVerified・FetchRefused・AtUTC を持つ。Status は Grounded (ウェブの資料を取得した) / Partial (PartialReason: InternalOnly = 内部の資料だけ、CitationsNotSeen = 挙げた URL に見ていないものがある、ClaimsNotInSources = 数値・日付・地名の半分以上が資料に無い) / Ungrounded (根拠なし) / BackendUnavailable (検索の障害) / WebNotAvailable (この会話では外部検索が使えない)。RequestHosts は依頼文が名指ししたホスト。検索語や本文は含まない。FallbackSearches は通常の検索サービスが使えず予備の経路で結果を得た検索の回数。
+
+### $ClaudePreflightCheck
+型: True | False, 初期値: True
+ツールループに依頼を投入する前に、依頼に要る能力が今の会話で使えるかを確かめるか。確かめるのは外部の検索と取得。依頼文がウェブの事実を求めているか (裏付けの検査と同じ規則)、ツールの一覧に検索があるか、会話が機密を読んでいるか、検索サービスが直近に障害だったかを調べる (通信しない)。結果は最初のメッセージの末尾に「この会話で使えるもの」として短く書き添える (依頼文のあるループだけ)。使えない能力があるときは、その部分は「確認できなかった」と答えるよう依頼に明記し、所有者には状態欄に 1 行で知らせる。False で検査も書き添えもしない。結果は $ClaudeLastPreflight。
+
+### $ClaudeLastPreflight
+型: Association | None
+直近の投入前の検査の記録。Outcome・HasRequest・NeedsWeb・Rule・WebSearch・WebFetch・Stage・Backend・AtUTC を持つ。Outcome は NoRequest (依頼文の無いループ) / NotNeeded (ウェブの事実を求めていない) / Sufficient (使える) / Degraded (通常の検索が障害で予備の経路で調べる) / Insufficient (この会話では使えない)。WebSearch は Available / Fallback / Unavailable (障害で予備の経路も無い) / Restricted (機密を読んだ会話) / NoTool (ツールが渡されていない)。依頼文や検索語は含まない。
+
+### $ClaudeResearcher
+型: True | False, 初期値: True
+機密を読んだ会話 (段 2) で検索が使えず、依頼がウェブの事実を求めているとき、調べる係を走らせるか。V11 (2026-11-14) から段 2 の検索は既定で大手の検索エンジンだけに送って通す (方針 PrivateStageSearch "EnginesOnly")。調べる係が走るのは、方針を "Deny" にして段 2 の検索を止めたときだけ (予備の経路)。調べる係は同じモデルの別のツールループで、入力は利用者が入力した依頼文だけ (会話の履歴・ノートブックの中身・ツールの結果は渡さない)。使えるツールはウェブ検索とページの取得だけで、機密を読むツールは持たない。走るのは 1 つの依頼に 1 回。依頼文そのものが機密のときは走らない。False で使わない。結果は $ClaudeLastResearch。
+
+### $ClaudeResearcherMaxRounds
+型: Integer, 初期値: 4
+調べる係のツールの往復の上限。上限に達したら、ツールなしでもう 1 往復してメモを書かせる。
+
+### $ClaudeLastResearch
+型: Association | None
+直近の調べる係の記録。Outcome・When・Searches・SearchesWithResults・Fetched・Hosts・BackendFailures・SearchesRefused・NotesChars・NotesFrom・Rounds・Seconds・Error・AtUTC を持つ。Outcome は Notes (メモを得た) / NothingFound (検索したが結果が無い) / Failed (モデルの応答を得られない)。When は Start (会話の開始時) / EnteredRestrict (途中で機密を読んだ直後)。NotesFrom は Model (モデルが書いたメモ) / RawResults (メモが空で検索結果の抜粋を渡した)。走らせなかったときは <|Outcome -> Skipped, Why|> (Why は RequestPrivate = 依頼文そのものが機密、など)。依頼文・検索語・メモの本文は含まない。
 
 ### ClaudeEffectiveDirectiveLevel[] → Association
 現在のターンが受ける DirectiveLevel (Minimal/Standard/Full, ClaudeDirectives) とその根拠、実効モデル (`$iClaudeEvalCurrentModelSpec` → privacy 要求レベル ≥0.5 なら `$ClaudePrivateModel` → `$ClaudeModel`)、ツールによるディレクティブ取得可否 (`ToolAccess`)。`iClaudeSysPrompt[]` は 2026-09-08 からこの実効モデル (タプル) で投影する (旧版は `ToString[$ClaudeModel]` の `"{lmstudio, qwen3.8-27b}"` を能力表に渡していて常に不一致だった)。

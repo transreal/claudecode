@@ -1530,6 +1530,9 @@ ClaudeLoadDirectiveRepository[root_String] :=
     rulesDir = FileNameJoin[{root, "rules"}];
     ruleFiles = If[DirectoryQ[rulesDir],
       Sort @ FileNames["*.md", rulesDir], {}];
+    (* Inc2 (03 v0.4 §7.1 LoadVerify、2026-11-10): Directives は手編集が正常な群。読込の直前に基準ハッシュと照合し、
+       不一致は警告の Finding を出して読み込む (拒否しない)。SourceVault_integrity.wl 未ロードなら照合しない *)
+    iCDLoadVerifyWarn /@ Prepend[ruleFiles, claudeMDPath];
     rules = iLoadRuleFile /@ ruleFiles;
     rules = Select[rules, AssociationQ];
     
@@ -2410,6 +2413,11 @@ ClaudeBuildDirectivePromptForSingle[___] := "";
    =================================================================== *)
 
 (* ---- root argument resolution (spec 5.3) ---- *)
+
+(* Inc2 (03 v0.4 §7.1 LoadVerify): Directives の読込前照合 (警告のみ、読込は続行)。結果の Finding は SourceVault_integrity.wl 側に残る *)
+iCDLoadVerifyWarn[path_] :=
+  If[StringQ[path] && FileExistsQ[path] && Length[DownValues[SourceVault`SourceVaultIntegrityLoadVerify]] > 0,
+    Quiet @ Check[SourceVault`SourceVaultIntegrityLoadVerify[path, "Directive"], Null], Null];
 
 ClaudeResolveDirectiveRoot[Automatic] :=
   Module[{roots = ClaudeFindDirectiveRoots[]},
